@@ -74,23 +74,20 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017
+- status: ready
+- task_id: common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: F4 PR230 e6725a165cd8f116a964926cdfceaa9334590491 design B + F4-owned lifecycle provider/surface implementation pending; POSTONA client PR197/211/217/221 ancestry; H5 reauthentication contract read-only; F5 prior PR233 499a9e1f security guard stack independent
-- blocker: F4 provider runtime path/signature and ancestry/changed-path isolation must be confirmed in preflight; Phase12 PR233 security recheck separate; production NO_GO
-- slot_use: POSTONA G1 stale enrollment after service end, G2 same-user session turnover support within F5-owned ServiceEnrollmentGate and gate-only tests
-- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016/
-- review_required: focused F4/F5 joint Auth and cross-user integration review after implementation only
-- latest_result: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; gate-side epoch refresh PR235 head 9480f24b Draft stacked on PR230 (e6725a16); 355 app tests, fail-before 15/19 then 19/19, tsc+lint clean, gate/seam mutants 13/13; seam to F4 provider NOT connected (LIFECYCLE_SIGNAL_CONNECTED=false) so G1 stays open in product until F4 provider lands; mocked harness only, no managed access; F4+F5 joint focused review pending.
-
-- l5_verdict_20261017: PASS_SOURCE_CANDIDATE / INTEGRATION_PENDING / PRODUCTION_NO_GO. PR235 exact HEAD 9480f24b68c209f6bf33b499dc11824cf4595fdd; implementer-reported local 355 app tests, 19/19 gate tests, 13/13 mutants, TS/lint PASS. F4 provider export missing; F5 seam remains disconnected and actual G1 product behavior unresolved. F4/F5 integrated tests and one focused Auth/cross-user review required before release. No merge/deploy.
+- dependencies: J2 V2 CHANGES_REQUIRED P2x2; joint PR238 b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6; F5 PR235 9480f24b; F4 PR236 605d8776
+- blocker: gate embedded stale AccountDeletionScreen and stale reactivate_x_autopost_service click callback; managed Auth and production NO_GO
+- slot_use: F5-only gate P2x2 repair; preserve F4 provider/surface and unrelated Phase12 PR233
+- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017/
+- review_required: no automatic repeated whole-scope J2 review; source regression and G4 handoff
 
 ## F6
 - slot: F6
