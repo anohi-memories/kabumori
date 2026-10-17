@@ -1,0 +1,97 @@
+control	(none)	unchanged	OK
+function	public.begin_social_mobile_x_oauth_connection(p_state_hash text, p_redirect_uri text, p_expires_at timestamp with time zone)	dropped	OK
+function	public.complete_social_mobile_x_oauth_connection(p_oauth_state_id uuid, p_platform_user_id text, p_handle text, p_access_token text, p_refresh_token text)	dropped	OK
+function	public.consume_social_mobile_x_oauth_state(p_state_hash text)	dropped	OK
+function	public.ensure_my_profile()	dropped	FAIL P4 COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE
+function	public.fixture_login(p_user uuid, p_profile boolean, p_activity boolean)	dropped	OK
+function	public.fixture_user_with_workspace(p_user uuid, p_prefix text)	dropped	OK
+function	public.social_mobile_account_deletion_acquire(p_user_id uuid, p_expected_scope text, p_apple_required boolean, p_lease_seconds integer)	dropped	OK
+function	public.social_mobile_account_deletion_blocker(p_user_id uuid, p_workspace text)	dropped	OK
+function	public.social_mobile_account_deletion_credential_set(p_workspace text)	dropped	OK
+function	public.social_mobile_account_deletion_credentials(p_user_id uuid, p_lease uuid)	dropped	OK
+function	public.social_mobile_account_deletion_finalize(p_user_id uuid, p_lease uuid)	dropped	OK
+function	public.social_mobile_account_deletion_fingerprint(p_secret_id uuid)	dropped	OK
+function	public.social_mobile_account_deletion_guard()	blocked:cannot drop function social_mobile_account_deletion_guard() because ot	(not tested)
+function	public.social_mobile_account_deletion_hold(p_user_id uuid, p_lease uuid)	dropped	OK
+function	public.social_mobile_account_deletion_mark_apple_revoked(p_user_id uuid, p_lease uuid)	dropped	OK
+function	public.social_mobile_account_deletion_mark_x_revoked(p_user_id uuid, p_lease uuid, p_revoked jsonb)	dropped	OK
+function	public.social_mobile_account_deletion_operator_resolve(p_user_id uuid, p_action text)	dropped	OK
+function	public.social_mobile_account_deletion_ownership_problem(p_workspace text)	dropped	OK
+function	public.social_mobile_account_deletion_preview(p_user_id uuid)	dropped	OK
+function	public.social_mobile_account_deletion_purge(p_user_id uuid, p_lease uuid)	dropped	OK
+function	public.social_mobile_account_deletion_record(p_user_id uuid, p_step text, p_reason_code text)	dropped	OK
+function	public.social_mobile_account_deletion_release(p_user_id uuid, p_lease uuid)	dropped	OK
+function	public.social_mobile_account_deletion_scope(p_user_id uuid)	dropped	OK
+function	public.social_mobile_account_deletion_subject(p_user_id uuid)	dropped	FAIL P1 COMMON_ACCOUNT_PREFLIGHT_FUNCTION_MISMATCH:public.social_mobile_account_deletion_subject(uuid)
+function	public.social_mobile_account_deletion_to_operator(p_user_id uuid, p_reason text)	dropped	OK
+function	public.social_mobile_account_deletion_workspace(p_user_id uuid)	dropped	FAIL P1 COMMON_ACCOUNT_PREFLIGHT_FUNCTION_MISMATCH:public.social_mobile_account_deletion_workspace(uuid)
+function	public.social_mobile_account_deletion_workspace_lock(p_workspace text)	dropped	OK
+table	public.brand_settings	dropped	OK
+table	public.daily_content_plans	dropped	OK
+table	public.interaction_post_metrics	dropped	OK
+table	public.post_execution_logs	dropped	OK
+table	public.posting_windows	dropped	OK
+table	public.publish_claims	dropped	OK
+table	public.published_content_fingerprints	dropped	OK
+table	public.scheduled_posts	blocked:cannot drop table scheduled_posts because other objects depend on it	(not tested)
+table	public.social_mobile_account_deletion_audit	dropped	OK
+table	public.x_account_refresh_rollout	dropped	OK
+table	public.x_account_refresh_state_v2	dropped	OK
+trigger	public.brand_memberships.social_mobile_deletion_guard	dropped	OK
+trigger	public.brands.social_mobile_deletion_guard	dropped	OK
+trigger	public.post_execution_logs.social_mobile_deletion_guard	dropped	OK
+trigger	public.posting_windows.social_mobile_deletion_guard	dropped	OK
+trigger	public.publish_claims.social_mobile_deletion_guard	dropped	OK
+trigger	public.published_content_fingerprints.social_mobile_deletion_guard	dropped	OK
+trigger	public.scheduled_posts.social_mobile_deletion_guard	dropped	OK
+trigger	public.social_account_oauth_states.social_mobile_deletion_guard	dropped	OK
+trigger	public.social_accounts.social_mobile_deletion_guard	dropped	OK
+trigger	public.x_account_refresh_rollout.social_mobile_deletion_guard	dropped	OK
+trigger	public.x_account_refresh_state_v2.social_mobile_deletion_guard	dropped	OK
+column	public.alert_category_settings.category	dropped	OK
+column	public.alert_settings.push_enabled	dropped	OK
+column	public.brands.created_at	dropped	OK
+column	public.brands.display_name	dropped	OK
+column	public.brands.is_active	dropped	OK
+column	public.brands.publish_mode	dropped	OK
+column	public.brands.updated_at	dropped	OK
+column	public.device_push_tokens.expo_push_token	dropped	OK
+column	public.device_push_tokens.id	dropped	OK
+column	public.notifications.id	dropped	OK
+column	public.notifications.tracked_stock_id	dropped	OK
+column	public.personalized_reports.id	dropped	OK
+column	public.profiles.display_name	dropped	OK
+column	public.social_account_oauth_states.code_verifier_vault_secret_id	dropped	OK
+column	public.social_account_oauth_states.consumed_at	dropped	OK
+column	public.social_account_oauth_states.created_at	dropped	OK
+column	public.social_account_oauth_states.expires_at	dropped	OK
+column	public.social_account_oauth_states.id	dropped	OK
+column	public.social_account_oauth_states.redirect_uri	dropped	OK
+column	public.social_account_oauth_states.social_account_id	dropped	OK
+column	public.social_account_oauth_states.state_hash	dropped	OK
+column	public.social_accounts.created_at	dropped	OK
+column	public.social_accounts.handle	dropped	OK
+column	public.social_accounts.id	blocked:cannot drop column id of table social_accounts because other objects d	(not tested)
+column	public.social_accounts.last_connection_error_code	dropped	OK
+column	public.social_accounts.oauth_client_ref	dropped	OK
+column	public.social_accounts.platform	dropped	FAIL P6 COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE
+column	public.social_accounts.platform_user_id	dropped	OK
+column	public.social_accounts.publish_enabled	dropped	OK
+column	public.social_accounts.updated_at	dropped	OK
+column	public.social_accounts.vault_access_token_secret_id	dropped	OK
+column	public.social_accounts.vault_refresh_token_secret_id	dropped	OK
+column	public.social_accounts.verified_at	dropped	OK
+column	public.social_mobile_account_deletions.apple_required	dropped	OK
+column	public.social_mobile_account_deletions.apple_revoked_at	dropped	OK
+column	public.social_mobile_account_deletions.created_at	dropped	OK
+column	public.social_mobile_account_deletions.credential_set	dropped	OK
+column	public.social_mobile_account_deletions.lease_expires_at	dropped	OK
+column	public.social_mobile_account_deletions.lease_token	dropped	OK
+column	public.social_mobile_account_deletions.operator_reason	dropped	OK
+column	public.social_mobile_account_deletions.resume_state	dropped	OK
+column	public.social_mobile_account_deletions.revoked_fingerprints	dropped	OK
+column	public.social_mobile_account_deletions.scope	dropped	OK
+column	public.social_mobile_account_deletions.state	dropped	OK
+column	public.social_mobile_account_deletions.updated_at	dropped	OK
+column	public.tracked_stocks.id	blocked:cannot drop column id of table tracked_stocks because other objects de	(not tested)
+column	public.tracked_stocks.is_active	dropped	OK
