@@ -633,3 +633,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-ai-f6-postona-ai-ledger-quota-idempotency-design-20261017`; L6 PASS_DESIGN/SOURCE_ONLY/PRODUCTION_NO_GO, Draft PR241 head `84cfcd4c0b9916bed0f5e2897f24f6ffd4c443e6`.
 - original_path `.agent_v2/tasks/F6.md`, archive_path `.agent_v2/archive/2026-10-17-f6-pr241-ledger-design.md`; original/archive Git blob `0f0a7ab10cd3727ad94484ccfadcc57263f06c5f`, 10732 chars, readback equality verified; archive creation commit `a40a4478049cb6c4854d071d9ffae71d51a5832c`.
 - Independent SHA256/MANIFEST NOT_VERIFIED; append-only archive preserved.
+
+- 2026-10-17 | F10 | `orchestration-v3-pr229-n1-n2-focused-correction-f10-20261017` | PR229 N1/N2 fixes L10 done, rereview PASS | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-pr229-n1-n2-focused-correction-f10-20261017/` | SHA256 `55f2e70e25bd69fb252fef0e8924c03d542d9657941e2d2493239ab35aa47c6c`; verified original blob and full UTF-8 restore.
