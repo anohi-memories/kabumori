@@ -11,7 +11,7 @@
 
 1. **主体はブランドではなく利用者**。POSTONA のブランド ID（`u_` で始まる文字列）は、台帳の主体にも bridge の主体にも使わない。相談と試し投稿は JWT で確かめた利用者、会社員AIらぼは system、利用者のブランドの予約投稿は「ブランドの owner を DB で確かめる新しい RPC」で利用者に結びつける（その RPC ができるまで、予約投稿は今の OpenAI のまま）
 2. **二重送信の防止は、台帳の schema に新しい表 `ai_ledger.consumer_calls` を足す**（H5 bridge の保存の口を、DB で原子的に実装する）。完了を失った呼び出しは「処理中」のまま残し、復旧で「中身の無い UNKNOWN の印」で閉じる。**送り直しは絶対にしない**。モデルの出力は 24 時間だけ置き、その後は印に置き換える
-3. **上限は台帳の枠で守る**。利用者ごと（1 日・1 か月）と POSTONA 全体（1 か月）の両方を入れる（台帳は合う枠を**全部**満たさないと断る）。1 回の上限は bridge の `maxTotalCostUsd`
+3. **上限は台帳の枠で守る**。機能ごとに、利用者ごと（1 日・1 か月）と機能全体（1 か月）の枠を入れる（台帳は合う枠を**全部**満たさないと断る）。枠はすべて provider・model・application・feature・主体の種類まで絞り、広い枠は作らない（広い枠は、自分の枠の無い機能まで通してしまうため）。POSTONA 全体の天井は Anthropic の Console の workspace の上限。1 回の上限は bridge の `maxTotalCostUsd`
 4. **利用権は bridge の `authorize` で確かめる**。POSTONA の利用権は今の `service_entitlements` の `x_autopost`（POSTONA のサービス）が `active` で、共通アカウントが `active` であること。利用者の JWT で読む（service role は読めない）
 5. **切り替えは機能ごとのフラグ**。既定は今の OpenAI。戻すときもフラグ。順番は 相談 → 試し投稿 → 会社員AIらぼ → 予約投稿
 6. **アカウント削除**: 保存の場所の行は削除の時に消す。台帳の利用者 ID は、削除の時に、元に戻せない別の値に置き換える（台帳は追記専用なので、制御された関数を足す）。共通アカウントの削除の手順に組み込む（F5 / G5）
@@ -88,22 +88,31 @@
 |---|---|---|
 | 1 回 | bridge の登録（`maxTotalCostUsd`）と枠の `max_usd_per_call` | 1 回の上限額（送る前に最大額で確かめる） |
 | 利用者 | 台帳の枠（`per_user`、日本時間の日・月） | 利用者ごとの回数と金額 |
-| POSTONA 全体 | 台帳の枠（`application = postona`、月） | POSTONA 全部の金額（暴走の止め） |
+| 機能全体 | 台帳の枠（`per_user` なし、月） | 機能ごとの全利用者の合計（暴走の止め） |
+| POSTONA 全体 | Anthropic の Console の workspace の上限（台帳の外） | 全部の機能の合計の天井 |
 
-- 台帳は合う枠を全部満たす必要があるので、利用者の枠と全体の枠が両方効く
+- 台帳は合う枠を全部満たす必要があるので、利用者の枠と機能全体の枠が両方効く（`ai_ledger_reserve` は合う枠のうち 1 つでも超えたら `CALL_LIMIT` / `COST_LIMIT` / `PER_CALL_LIMIT` で断る）
+- **広い枠（例: application = postona だけ）は作らない**。台帳は「合う枠が 1 つでもあれば判定に進む」ので、広い枠があると、自分の枠の無い機能や model（例: Opus の新しい機能）まで広い枠の額の中で通ってしまう。すべての枠を provider・model・application・feature・主体の種類まで絞ると、枠の無い呼び出しは `NO_MATCHING_POLICY` で断られる（許可の一覧として働く）。共通AI基盤の最初の枠と同じ決まり（`supabase/tests/ai_provider_budget_ledger_initial_policies.sql` の冒頭、`PHASE1D_ACTIVATION_RUNBOOK.md` の「広い範囲のポリシーと許可リストは両立しない」）。POSTONA 全体の上限を台帳で持つには「合っても、それだけでは許可にならない上限専用の枠」が要る（台帳の migration の変更。今回は案だけ）
+- 利用者ごとの枠（`per_user`）は利用者の無い呼び出し（system）には合わないので、会社員AIらぼには system の枠を別に置く
+- POSTONA 全体の天井は台帳では表さず、Anthropic の Console の workspace の上限で守る（本番には上限を付けられる専用の workspace が要る。既定の workspace には付けられない）
 - 回数は「送信の回数」。課金の可能性がある失敗は送り直さないので、1 回の依頼 = 1 回（429 / 529 の送り直しを許すロールだけ例外）
 - 上限に当たったら bridge は `BUDGET_DENIED`。相談は新しいコード `CONSULT_QUOTA_EXCEEDED`（#239 §2.2）、投稿は失敗にする（今の OpenAI に自動で戻さない）
 
-枠の案（**数字はすべて案。本番の DB の変更は別承認**。#239 の §2 の表では、Haiku の 1 回の上限額は相談 $0.0044・投稿 $0.0019 以下。多めの見積もり）:
+枠の案（**数字はすべて案。本番の DB の変更は別承認**。#239 の §2 の表では、Haiku の 1 回の上限額は相談 $0.0044・投稿 $0.0019 以下。多めの見積もり）。すべて provider `anthropic`・model `claude-haiku-5-5`・application `postona` に絞った上で:
 
-| policy_key（案） | 範囲 | 期間 | 回数 | 金額 | 1 回 |
+| policy_key（案） | feature / 主体の種類 / 分け方 | 期間 | 回数 | 金額 | 1 回 |
 |---|---|---|---|---|---|
-| `anthropic.postona.consult.user.daily` | postona / consult / user / per_user | 日 | 30 | $0.20 | $0.05 |
+| `anthropic.postona.consult.user.daily` | consult / user / per_user | 日 | 30 | $0.20 | $0.05 |
 | `anthropic.postona.consult.user.monthly` | 同上 | 月 | 300 | $2.00 | $0.05 |
-| `anthropic.postona.preview.user.daily` | postona / brand_post_preview / user / per_user | 日 | 10 | $0.05 | $0.02 |
-| `anthropic.postona.scheduled.user.daily` | postona / brand_post_scheduled / user / per_user | 日 | 6 | $0.03 | $0.02 |
-| `anthropic.postona.ai_lab.system.daily` | postona / ai_lab_post / system | 日 | 12 | $0.10 | $0.02 |
-| `anthropic.postona.all.monthly` | provider anthropic / application postona | 月 | 30,000 | $30.00 | $0.05 |
+| `anthropic.postona.consult.all.monthly` | consult / user / 全利用者 | 月 | 20,000 | $20.00 | $0.05 |
+| `anthropic.postona.preview.user.daily` | brand_post_preview / user / per_user | 日 | 10 | $0.05 | $0.02 |
+| `anthropic.postona.preview.all.monthly` | brand_post_preview / user / 全利用者 | 月 | 5,000 | $3.00 | $0.02 |
+| `anthropic.postona.scheduled.user.daily` | brand_post_scheduled / user / per_user | 日 | 6 | $0.03 | $0.02 |
+| `anthropic.postona.scheduled.all.monthly` | brand_post_scheduled / user / 全利用者 | 月 | 5,000 | $3.00 | $0.02 |
+| `anthropic.postona.ai_lab.system.daily` | ai_lab_post / system | 日 | 12 | $0.10 | $0.02 |
+| `anthropic.postona.ai_lab.system.monthly` | ai_lab_post / system | 月 | 400 | $2.00 | $0.02 |
+
+- 機能全体の月の金額の合計は $28.00（案）。Console の workspace の上限はこれより少し上に置く
 
 ### 3.2 利用権（bridge の `authorize`）
 
@@ -251,5 +260,5 @@ create table ai_ledger.consumer_calls (
 
 ## 7. 未決と NOT_VERIFIED
 
-- 未決: 枠の数字、AI を別の有料の追加にするか（新しい `service_key`）、ブランドごとの上限が要るか（案 B）、保存の場所の TS の実装の担当、台帳の利用者 ID の保持期間と POSTONA だけの削除のときの扱い、`complete` の結果の保持時間（24 時間の案）
+- 未決: 枠の数字、POSTONA 全体の上限を台帳で持つか（上限専用の枠。台帳の migration の変更）、AI を別の有料の追加にするか（新しい `service_key`）、ブランドごとの上限が要るか（案 B）、保存の場所の TS の実装の担当、台帳の利用者 ID の保持期間と POSTONA だけの削除のときの扱い、`complete` の結果の保持時間（24 時間の案）
 - NOT_VERIFIED: 今の本番の台帳の行、本番の `brands` の定義（migration に無い）、#238 の後の利用権のふるまい、F5 の `4638891f` の RPC の中身、Anthropic のデータの保持の条件、実際の請求
