@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
-import { THREADS_CONNECT_FUNCTION } from '@/domain/threads-connect';
+import { THREADS_CONNECT_FUNCTION, threadsCallbackDelivery, type ThreadsCallbackDelivery } from '@/domain/threads-connect';
 import type { ThreadsConnectStarterDeps } from '@/features/threads-connect/threads-connect-starter';
 import { supabase } from '@/lib/supabase';
 
@@ -17,10 +17,24 @@ export function configuredThreadsCallback(): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+/** How the HTTPS callback returns into THIS build on THIS device (app config + platform; see the domain rule). */
+export function threadsCallbackDeliveryHere(): ThreadsCallbackDelivery {
+  const config = Constants.expoConfig as { ios?: { associatedDomains?: unknown }; android?: { intentFilters?: unknown } } | null | undefined;
+  return threadsCallbackDelivery({
+    platform: Platform.OS,
+    iosVersion: Platform.Version,
+    callback: configuredThreadsCallback(),
+    associatedDomains: config?.ios?.associatedDomains,
+    androidIntentFilters: config?.android?.intentFilters,
+  });
+}
+
 /** The real dependencies of the connect flow. `session` is read at every step (never cached). */
 export function productionThreadsConnectDeps(session: () => { userId: string; token: string } | null): ThreadsConnectStarterDeps {
+  const delivery = threadsCallbackDeliveryHere();
   return {
-    registeredCallback: configuredThreadsCallback(),
+    registeredCallback: delivery.ok ? delivery.callback : null,
+    unavailableCode: delivery.ok ? undefined : delivery.code,
     session,
     async invoke(body, token) {
       if (!supabase) return { ok: false, payload: { error: 'AUTH_REQUIRED' } };
@@ -39,10 +53,10 @@ export function productionThreadsConnectDeps(session: () => { userId: string; to
       }
       return { ok: false, payload: null };
     },
-    // iOS: a private auth session, so the person picks the Threads account instead of silently reusing the
-    // last one (the same choice as the X connect flow; the browser may decline it).
+    // iOS: a private auth session (the person picks the Threads account; same choice as X) that catches the HTTPS
+    // return through the universal-link callback (iOS 17.4+, Associated Domains). Android: the verified App Link.
     openAuthSession: (url, redirectUrl) =>
-      WebBrowser.openAuthSessionAsync(url, redirectUrl, Platform.OS === 'ios' ? { preferEphemeralSession: true } : undefined),
+      WebBrowser.openAuthSessionAsync(url, redirectUrl, delivery.ok ? delivery.authSessionOptions : undefined),
     dismissAuthSession: () => {
       try {
         WebBrowser.dismissAuthSession();

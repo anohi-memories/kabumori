@@ -1,4 +1,5 @@
-import { handler } from "../../candidates/postona_threads_auth_runtime/disabled_entry.ts";
-// Source-only hard-disabled entry. No secrets/SDK/connection/env constructed, even when imported.
-export { handler };
+import { createThreadsConnectEntry } from "../_shared/social/threads_connect_entry.ts";
+// Wired through the F4 entry adapter. While the static source gates are closed (as in source), `handler` IS H5's
+// hard-disabled handler: no secrets/SDK/connection/env constructed, even when imported.
+export const handler = createThreadsConnectEntry();
 if (import.meta.main) Deno.serve(handler);

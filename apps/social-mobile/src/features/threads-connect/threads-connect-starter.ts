@@ -12,6 +12,8 @@ import {
 export type ThreadsConnectStarterDeps = {
   /** The registered HTTPS callback (app config); null until it is configured and its app link verified. */
   registeredCallback: string | null;
+  /** Why there is no usable callback on this device (default CALLBACK_NOT_CONFIGURED). */
+  unavailableCode?: 'CALLBACK_NOT_CONFIGURED' | 'UNIVERSAL_LINK_UNSUPPORTED';
   /** The signed-in person RIGHT NOW (read at every step, never cached). */
   session(): { userId: string; token: string } | null;
   /** POST to the connect function with this bearer; ok=false carries the error body. */
@@ -56,7 +58,7 @@ export function createThreadsConnectStarter(deps: ThreadsConnectStarterDeps): Th
 
 async function run(deps: ThreadsConnectStarterDeps): Promise<ThreadsConnectStart> {
   const registered = deps.registeredCallback;
-  if (!isRegisteredCallback(registered)) return { kind: 'unavailable', code: 'CALLBACK_NOT_CONFIGURED' };
+  if (!isRegisteredCallback(registered)) return { kind: 'unavailable', code: deps.unavailableCode ?? 'CALLBACK_NOT_CONFIGURED' };
   const starter = deps.session();
   if (!starter) return { kind: 'failed', code: 'AUTH_REQUIRED', reconcile: false };
 
