@@ -92,11 +92,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-pr256-policy-pii-erasure-p2-fix-20261017
 - owner: claude
-- next_owner: chatgpt
-- blocker: PR256 independent Claude CHANGES_REQUIRED P2 policy_key/note PII remains after erasure, P3x3; F6 focused offline source fix only; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_SOURCE_FIX PR261: P2 policy PII and P3a/P3b guarded; P3c rollback preflight embed pending; F5/G5 deletion integration, privacy retention, managed checks and production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
