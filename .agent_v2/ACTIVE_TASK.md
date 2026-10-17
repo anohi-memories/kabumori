@@ -153,18 +153,18 @@
 
 ## F10
 - slot: F10
-- status: review_required
+- status: done
 - task_id: orchestration-v3-issue244-integration-preflight-f10-20261017
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
 - dependencies: Issue #244; Draft PR #229; protected Draft PR #172; prior task archived
-- blocker: V3 cutover/main merge/pilot write NO_GO until preflight/history preservation/30-slot consistency checked
-- slot_use: V3 Issue244 independent read-only integration preflight and migration candidate design
+- blocker: L10 PASS_PREFLIGHT / V3_CUTOVER_NO_GO — legacy final snapshot stale, rules/pilot authorization and F2/L8 issues pending
+- slot_use: V3 Issue244 migration preflight and plan accepted at L10; F10 done/unreserved; PR248 Draft
 
 ## J1
 - slot: J1
