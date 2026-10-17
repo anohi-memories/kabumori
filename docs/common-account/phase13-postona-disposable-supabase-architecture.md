@@ -34,7 +34,7 @@ What this phase found that changes the plan (none is fixed here; each has an own
 
 | # | Finding | Evidence | Consequence |
 | --- | --- | --- | --- |
-| **F-1** | **The Phase 12 baseline contract is incomplete.** It was extracted from the Phase 1 preflight only. A local oracle (remove one baseline object, apply the chain, see who refuses) shows two more apply-time prerequisites: the function **`public.ensure_my_profile()`** (P4 refuses with `COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE`) and the column **`public.social_accounts.platform`** (P6 refuses with `COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE`). | [D] section 4.3, `phase13-prerequisite-oracle.tsv` | G3b would pass and the run would still STOP at P4 / P6. Fail-closed, but the baseline export and the contract must be extended **before** any production read is requested (D-1). |
+| **F-1** | **The Phase 12 baseline contract is incomplete.** It was extracted from the Phase 1 preflight only. A local oracle (remove one baseline object, apply the chain, see who refuses) shows two more apply-time prerequisites: the function **`public.ensure_my_profile()`** (P4 refuses with `COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE`) and the column **`public.social_accounts.platform`** (P6 refuses with `COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE`). | [D] section 4.3, `phase13-prerequisite-oracle.tsv` | G3b would pass and the run would still STOP at P4 / P6. Fail-closed, but the baseline export and the contract must be extended **before** any production read is requested (D-1). **Resolved in source by the next F5 task (baseline contract v2, `docs/common-account/phase13-baseline-contract-v2.md`):** the contract now covers both, plus `auth.uid()` (found by a static audit); no production read was requested. |
 | **F-2** | `withdraw_postona` asks the **legacy** Edge function `social-mobile-account-delete` for its X-saga preview; any answer other than scope `social_only` gives `409 X_CLEANUP_UNSUPPORTED`. A POSTONA-only person (no Kabumori profile) gets scope `social_and_login` and is refused even with the real function (F3's R2′). | [O] `supabase/functions/account-delete/lifecycle_logic.ts:748`, `supabase/functions/account-delete/http.ts:189–192`; [R] `docs/common-account/phase10-x-ack-snapshot.md:179` | M12 on a disposable needs either F3's real saga (it contains the X revoke call and the login-deleting scope) or an **inert, reviewed stand-in**. This plan chooses the stand-in for the first managed pass (D-2); its source does not exist yet. |
 | **F-3** | F4's preflight (#243) requires **both** `kabumori-social://auth-callback` and `kabumori-social://oauth-callback` in the project's Auth redirect list, no wildcard. The app passes only `auth-callback` to Auth and enables `appendPkceFlowIdToRedirects`. | [O] `apps/social-mobile/src/domain/auth-flows.ts:15,17`, `apps/social-mobile/src/lib/auth-client-flows.ts:61,91`, `apps/social-mobile/src/lib/supabase.ts:52`; #243 doc §2 (`external`, pinned) | Whether a hosted Auth accepts an **exact** entry when a flow id is appended is a managed-only unknown (Q-1). Phase 11 and #243 do not agree on the list; this plan resolves it as a managed check, not by guessing. |
 | **F-4** | This Mac has the Supabase CLI but **no Docker**, so a local Supabase stack (real GoTrue / PostgREST / Edge runtime at no cost) cannot run here. | [D] section 13 (`command -v`) | The cheaper first stage needs an external action; the hosted project stays the default (D-3). |
@@ -129,23 +129,25 @@ A1 alone cannot build a baseline (it stores hashes, not text); A2 alone cannot p
 Both are needed, and the contract digest A1 produced from production must equal the contract digest G3b reads from the
 disposable **after** A2 is applied.
 
-### 4.3 The contract is incomplete: what the chain needs beyond the Phase 12 list (finding F-1)
+### 4.3 The contract was incomplete: what the chain needs beyond the Phase 12 list (finding F-1; resolved by contract v2)
 
 `supabase/tests/common_account_phase13_prerequisite_oracle.sh` takes the Phase 11 model baseline (fixtures plus the three real
 prerequisite migrations, **no chain file**), removes one object in a fresh copy, applies P1..P10 in release order and records the
 first refusal. The control (nothing removed) accepts the whole chain. Over 96 candidates (evidence file
 `docs/common-account/phase13-prerequisite-oracle.tsv`, pinned by digest in `phase13-migration-dag.json` → `oracle`): 23 functions,
 10 tables, 11 triggers and 44 columns could be removed with **no** refusal; four removals were refused, and **two of those four
-are not in the contract** (section 5, generated table). Four more objects cannot be dropped alone (they have dependents); they
+were not in the contract when this plan was written** (section 5, generated table: contract v2 covers all four now). Four more objects cannot be dropped alone (they have dependents); they
 are listed as "not tested".
 
 What the oracle cannot see, stated: runtime dependencies of plpgsql bodies (late bound), the type / nullability / default of an
 object that is present, and the real production catalog (never read). So it proves *necessity at apply time* of the two extra
 objects; it does not prove everything else is unnecessary at run time — the managed M-steps decide that (Q-7).
 
-**Required follow-up (D-1; owner F5; no code is touched by this task):** add to `supabase/preflight/managed_disposable/baseline_requirements.ts`
-the shape of `public.ensure_my_profile()` (the check P4 makes at apply time) and the existence of `public.social_accounts.platform`
-(the check P6 makes); extend A2 accordingly; regenerate `baseline_provenance.json` and `plan.lock.json`. Evidence that production
+**Follow-up D-1 (done by the next F5 task, source only; see `docs/common-account/phase13-baseline-contract-v2.md`):**
+`supabase/preflight/managed_disposable/baseline_requirements.ts` now READS from the chain files' own preflights the shape of
+`public.ensure_my_profile()` (the check P4 makes at apply time), the existence and type of `public.social_accounts.platform` (the
+check P6 makes) and `auth.uid()` (P3b and P4); A2's object list follows; `baseline_provenance.json` and `plan.lock.json` are
+regenerated. The text below is the evidence the follow-up started from. Evidence that production
 has the original `ensure_my_profile()`: the 2026-10-07 read-only preflight recorded its hash as identical to the reviewed source
 [R, `docs/common-account/phase2-production-apply.md`].
 
@@ -220,12 +222,12 @@ Indirect cron (rewrites existing job commands from Vault; no host in its text):
 
 Control (unmodified model baseline, whole chain): **OK**. Candidates removed one at a time: function 27, table 11, trigger 11, column 47.
 
-| removed object | kind | first refusal | file that refuses | in the Phase 12 contract |
+| removed object | kind | first refusal | file that refuses | covered by the baseline contract |
 | --- | --- | --- | --- | --- |
-| `public.ensure_my_profile()` | function | P4: `COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE` | `20261012130000_common_account_core_service_fence.sql` | **NO — gap** |
+| `public.ensure_my_profile()` | function | P4: `COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE` | `20261012130000_common_account_core_service_fence.sql` | yes |
 | `public.social_mobile_account_deletion_subject()` | function | P1: `COMMON_ACCOUNT_PREFLIGHT_FUNCTION_MISMATCH` | `20261001150000_common_account_lifecycle_foundation.sql` | yes |
 | `public.social_mobile_account_deletion_workspace()` | function | P1: `COMMON_ACCOUNT_PREFLIGHT_FUNCTION_MISMATCH` | `20261001150000_common_account_lifecycle_foundation.sql` | yes |
-| `public.social_accounts.platform` | column | P6: `COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE` | `20261013120000_common_account_service_deletion_ownership.sql` | **NO — gap** |
+| `public.social_accounts.platform` | column | P6: `COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE` | `20261013120000_common_account_service_deletion_ownership.sql` | yes |
 
 Not testable alone (they have dependents): `public.social_mobile_account_deletion_guard`, `public.scheduled_posts`, `public.social_accounts.id`, `public.tracked_stocks.id`.
 
@@ -236,7 +238,7 @@ Not testable alone (they have dependents): `public.social_mobile_account_deletio
 1. The six production versions that are not in the repository, and the repository files that are not in the production history
    [R, `docs/common-account/phase2-production-apply.md`]: the DAG is about the repository's files; production's own history is
    read only by A1 / A2.
-2. The two prerequisites of F-1 until the contract is extended and checked against production.
+2. The three prerequisites of F-1 (now in contract v2) until they are checked against production by the first inventory.
 3. Neighbouring production migrations that were pending on 2026-10-07 (`20261003120000`, `20261006160000`, `20261006160100`,
    `20261006160200`) and `20261007150000`: their state now is **[U]**; none of them touches an object of the chain except
    `social_accounts` (`20261007150000`), whose shape A1 / A2 supply.
@@ -465,9 +467,9 @@ may be approved early, but the project is not needed until the baseline exists.
 - **Open decisions:** D-1 … D-5 (section 1). Q-1 (redirect pattern) and CA-1 … CA-6 (cost, capacity) need external confirmation.
 - **Requests to other owners:** **F3 / G3** — the contract of the X-saga stand-in and the server closure of the legacy
   `social-mobile-account-delete` (R2′, F3-L1); **F4** — whether `oauth-callback` belongs in Auth's redirect list (#243) and the
-  Threads task's timing; **F5 (next TASK)** — extend the contract and the baseline export (F-1), pin the stand-in, add M14 /
+  Threads task's timing; **F5** — (done in source: contract v2 for F-1) pin the stand-in, add M14 /
   M15 / X-1…X-7 to the plan.
-- **Blockers that remain:** BG1 (the production inventory is not taken), the two contract gaps, the stand-in does not exist, no
+- **Blockers that remain:** BG1 (the production inventory is not taken; contract v2 is source-only and unchecked against production), the stand-in does not exist, no
   disposable project, no Docker for a local stack, the #233 recheck is pending, D1 whole-ID deletion consent, G3 T13, F3
   legacy and R2′, and everything in section 8 marked managed-only.
 - **Safety boundaries kept:** no project, inventory, migration, OAuth, SNS, AI, mail, external HTTP, merge or deploy; production
@@ -477,6 +479,8 @@ may be approved early, but the project is not needed until the baseline exists.
   approvals when the owner is ready.
 
 ## 13. What was executed for this document (offline; exact commands and outputs)
+
+*(This section records the run for the plan itself, at PR #250. The stacked contract-v2 change re-ran the suites and added its own proofs: `docs/common-account/phase13-baseline-contract-v2.md` section 7; the test counts below are those of PR #250.)*
 
 All commands ran in `/Users/yuya/Developer/kabumori-f5-arch` (a clean worktree of #233), in a scratch local PostgreSQL 17 with
 fake data, or in a detached read-only scratch checkout of #243's head, with no network and no credential. Outputs are quoted from

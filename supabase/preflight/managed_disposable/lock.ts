@@ -3,7 +3,7 @@
 // helpers. A file whose bytes differ is never sent (runner.ts); a file that gained a dynamic statement, a write target
 // or any blocking finding is refused. Regenerate deliberately with `cli.ts --write-lock` and review the diff: a
 // changed digest means a changed migration, a changed `reviewed` list means a changed effect.
-import { extractRequirements, PREFLIGHT_MIGRATION } from './baseline_requirements.ts';
+import { buildRequirements } from './baseline_requirements.ts';
 import type { Lock, Reviewed } from './runner.ts';
 import { dynamicFunctionNames, indirectDynamicCalls, networkFunctionNames, scanSql } from './sql_scan.ts';
 
@@ -38,11 +38,12 @@ export async function buildLock(
       indirectDynamic: indirectDynamicCalls(scan, dynamicNames),
     };
   }
-  // what the chain requires of the baseline: read out of the Phase 1 preflight itself, so a changed preflight is a changed lock.
-  // (An unreadable preflight leaves it out; the baseline read-back step then STOPs on "no requirements" rather than passing.)
+  // what the chain requires of the baseline: read out of the Phase 1 preflight AND the later chain preflights (contract version 2),
+  // so a changed preflight is a changed lock. (An unreadable preflight leaves it out; the baseline read-back step then STOPs on
+  // "no requirements" rather than passing.)
   let requirements: Lock['requirements'];
   try {
-    requirements = extractRequirements(read(PREFLIGHT_MIGRATION));
+    requirements = buildRequirements(read);
   } catch {
     requirements = undefined;
   }

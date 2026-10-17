@@ -119,11 +119,12 @@ test('the eight production-calling cron migrations and the one indirect rewriter
   for (const node of dag.chain) assert.deepEqual(scanSqlForForeignTargets(read(node.file), 'a'.repeat(20)), [], `${node.id} is clean to send`);
 });
 
-test('the baseline facts of the document are the provenance record: 17 relations, 3 unknown, 6 columns, 4 foreign keys', () => {
+test('the baseline facts of the document are the provenance record: 17 relations, 3 unknown, 7 unknown columns (6 + platform), 4 foreign keys', () => {
   const requirements = provenance.requirements;
-  assert.deepEqual([requirements.relations.length, requirements.columns.length, requirements.foreignKeys.length, requirements.functions.length], [17, 26, 14, 2]);
+  // 26 columns and 2 functions in the Phase 1 lists; contract v2 (Phase 13 D-1) adds social_accounts.platform and ensure_my_profile()
+  assert.deepEqual([requirements.relations.length, requirements.columns.length, requirements.foreignKeys.length, requirements.functions.length], [17, 27, 14, 3]);
   assert.deepEqual([...provenance.unknown.relations].sort(), ['public.brands', 'public.social_account_oauth_states', 'public.social_accounts']);
-  assert.equal(provenance.unknown.columns.length, 6);
+  assert.equal(provenance.unknown.columns.length, 7);
   assert.equal(provenance.unknown.foreignKeys.length, 4);
   assert.deepEqual(provenance.createdButNotReplayable, ['public.brand_memberships', 'public.social_mobile_account_deletions']);
   const classes = Object.values(dag.baseline.knownCreators).map((entry) => entry.class);
@@ -135,7 +136,7 @@ test('the baseline facts of the document are the provenance record: 17 relations
 
 // ---- 2. the prerequisite oracle and the contract gap -----------------------------------------------------------------------
 
-test('the oracle evidence: control OK, 96 candidates, four refusals of which exactly two are outside the Phase 12 contract', async () => {
+test('the oracle evidence: control OK, 96 candidates, four refusals; the contract (v2) now covers all four', async () => {
   const lines = tsv.split('\n').filter((row) => row !== '');
   assert.equal(lines.length, 97);
   assert.equal(dag.oracle.sha256, await sha256Hex(tsv));
@@ -145,17 +146,21 @@ test('the oracle evidence: control OK, 96 candidates, four refusals of which exa
   assert.deepEqual(dag.oracle.failing.map((row) => `${row.chainId} ${row.object.replace(/\(.*$/u, '')}`).sort(), [
     'P1 public.social_mobile_account_deletion_subject', 'P1 public.social_mobile_account_deletion_workspace', 'P4 public.ensure_my_profile', 'P6 public.social_accounts.platform',
   ]);
-  assert.deepEqual(dag.oracle.failing.filter((row) => !row.coveredByContract).map((row) => row.object.replace(/\(.*$/u, '')).sort(), ['public.ensure_my_profile', 'public.social_accounts.platform']);
+  // the oracle found two the Phase 12 contract did not cover; Phase 13 D-1 extended the contract (baseline_contract_v2_test.ts)
+  assert.deepEqual(dag.oracle.failing.filter((row) => !row.coveredByContract), []);
   // the document quotes these numbers
   const none = (kind: string) => dag.oracle.candidates[kind].tested - dag.oracle.candidates[kind].refused;
   assert.match(doc, new RegExp(`${none('function')} functions,\\s+${none('table')} tables, ${none('trigger')} triggers and ${none('column')} columns could be removed`, 'u'));
   assert.deepEqual([none('function'), none('table'), none('trigger'), none('column')], [23, 10, 11, 44]);
 });
 
-test('GAP PIN: the Phase 12 contract does not yet cover ensure_my_profile() or social_accounts.platform (D-1); fix both before any production read, then update this pin', () => {
-  const requirements = lock.requirements as { functions: string[]; columns: { relation: string; column: string }[] };
-  assert.ok(!requirements.functions.some((signature) => signature.includes('ensure_my_profile')));
-  assert.ok(!requirements.columns.some((column) => column.relation === 'public.social_accounts' && column.column === 'platform'));
+test('CONTRACT PIN (Phase 13 D-1): the baseline contract now covers ensure_my_profile() and social_accounts.platform, read from the chain files\' own preflights', () => {
+  const requirements = lock.requirements as { contractVersion: number; functions: string[]; columns: { relation: string; column: string }[]; functionShapes: { signature: string }[]; platformFunctions: { signature: string }[] };
+  assert.equal(requirements.contractVersion, 2);
+  assert.ok(requirements.functions.includes('public.ensure_my_profile()'));
+  assert.ok(requirements.columns.some((column) => column.relation === 'public.social_accounts' && column.column === 'platform'));
+  assert.deepEqual(requirements.functionShapes.map((shape) => shape.signature), ['public.ensure_my_profile()']);
+  assert.deepEqual(requirements.platformFunctions.map((fn) => fn.signature), ['auth.uid()']);
   assert.match(doc, /\*\*D-1\*\*/u);
   assert.ok(read('supabase/migrations/20261012130000_common_account_core_service_fence.sql').includes('COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE'));
   assert.ok(read('supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql').includes('COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE'));

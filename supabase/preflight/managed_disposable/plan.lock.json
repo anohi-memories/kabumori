@@ -306,6 +306,11 @@
         "type": "text"
       },
       {
+        "relation": "public.social_accounts",
+        "column": "platform",
+        "type": "text"
+      },
+      {
         "relation": "public.social_mobile_account_deletions",
         "column": "user_id",
         "type": "uuid"
@@ -488,8 +493,67 @@
       }
     ],
     "functions": [
+      "public.ensure_my_profile()",
       "public.social_mobile_account_deletion_subject(uuid)",
       "public.social_mobile_account_deletion_workspace(uuid)"
+    ],
+    "contractVersion": 2,
+    "functionShapes": [
+      {
+        "signature": "public.ensure_my_profile()",
+        "returns": "uuid",
+        "securityDefiner": false,
+        "replacedBy": {
+          "chainId": "P4",
+          "marker": "private.account_lifecycle_service_state_refusal(uuid,text)"
+        }
+      }
+    ],
+    "platformFunctions": [
+      {
+        "signature": "auth.uid()",
+        "returns": "uuid"
+      }
+    ],
+    "prerequisites": [
+      {
+        "kind": "column",
+        "object": "public.social_accounts.platform",
+        "neededBy": [
+          "P6 20261013120000_common_account_service_deletion_ownership.sql"
+        ],
+        "refusals": [
+          "COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE"
+        ],
+        "checked": "exists (not dropped)",
+        "expected": "type text -- P6 only requires the column to exist; its code treats it as text (jsonb_object_agg key, jsonb_agg ... order by). The type is the one the G4 multi-provider preflight describes for production; nullability and default stay in the fingerprint, not in the requirement."
+      },
+      {
+        "kind": "function_shape",
+        "object": "public.ensure_my_profile()",
+        "neededBy": [
+          "P4 20261012130000_common_account_core_service_fence.sql"
+        ],
+        "refusals": [
+          "COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE"
+        ],
+        "checked": "exists with no argument, returns uuid, invoker rights (not security definer)",
+        "expected": "only until P4 has run (its marker private.account_lifecycle_service_state_refusal(uuid,text) exists): P4 replaces the legacy bootstrap by a security-definer wrapper of the Phase 2 start (P9 replaces it again); until P4 has run, the baseline shape (invoker rights) is what P4 checks"
+      },
+      {
+        "kind": "platform_function",
+        "object": "auth.uid()",
+        "neededBy": [
+          "P3b 20261010051938_common_account_service_write_guard.sql",
+          "P4 20261012130000_common_account_core_service_fence.sql"
+        ],
+        "refusals": [
+          "COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_FOUNDATION_MISSING",
+          "COMMON_ACCOUNT_WRITE_GUARD_PREFLIGHT_FOUNDATION_MISSING"
+        ],
+        "checked": "exists",
+        "expected": "returns uuid -- P1 already calls it when it creates a policy or an SQL body, and P3b / P4 refuse without it; the chain compares it with uuid columns (the Phase 13 local run: without it P1 stops with \"function auth.uid() does not exist\", returning text with \"operator does not exist: text = uuid\"). Only existence and return type are part of the contract: owner, body and ACL are the platform's own business and vary with its version"
+      }
     ]
   }
 }

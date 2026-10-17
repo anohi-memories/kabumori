@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { extractRequirements, PREFLIGHT_MIGRATION } from './baseline_requirements.ts';
+import { buildRequirements } from './baseline_requirements.ts';
 import { classify, compareColumns, functionProvenance, type Provenance, relationProvenance } from './provenance.ts';
 
 const root = new URL('../../../', import.meta.url);
@@ -51,7 +51,7 @@ test('the committed provenance report is current: requirements, classes and the 
   for (const entry of Deno.readDirSync(new URL('supabase/migrations/', root))) {
     if (entry.isFile && entry.name.endsWith('.sql')) migrations[entry.name] = read(`supabase/migrations/${entry.name}`);
   }
-  const requirements = extractRequirements(read(PREFLIGHT_MIGRATION));
+  const requirements = buildRequirements(read);
   assert.deepEqual(committed.requirements, requirements, 'regenerate: common_account_phase12_baseline_report_run.sh --write');
   const fresh = classify(requirements, migrations);
   assert.deepEqual(committed.relations.map((r) => ({ name: r.name, class: r.class, createdBy: r.createdBy, alteredBy: r.alteredBy })), fresh.relations);

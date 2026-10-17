@@ -6,9 +6,10 @@
 //   * scan them for secret-shaped text (defence in depth: the query is meant to emit none),
 //   * canonicalise them and take a digest (deterministic: the same schema is the same bytes),
 //   * cut the CONTRACT SUBSET -- exactly what the common-account chain needs from the baseline, nothing else,
-//   * check the subset against the requirements the Phase 1 preflight states, and compare its digest with the digest
+//   * check the subset against the requirements the chain's preflights state (the Phase 1 lists plus, since Phase 13, the
+//     baseline objects the later files refuse without: contract version 2), and compare its digest with the digest
 //     the owner approved. Any difference is a STOP; nothing is repaired or synthesised.
-import { ADDITIONAL_PLATFORM_REQUIREMENTS, isPlatformRelation, type Requirements } from './baseline_requirements.ts';
+import { ADDITIONAL_PLATFORM_REQUIREMENTS, CONTRACT_VERSION, isCurrentContract, isPlatformRelation, type Requirements } from './baseline_requirements.ts';
 import { normalize, splitStatements } from './sql_scan.ts';
 
 export const KINDS = [
@@ -97,6 +98,16 @@ export function parseInventory(text: string): Line[] {
 }
 
 export type Finding = { code: string; subject: string; detail: string };
+
+/**
+ * A value read out of an inventory, as it may appear in a message: a short plain identifier-like token, never secret-shaped.
+ * (The inventory query only emits catalog names, and verifyInventory scans the raw output first; this keeps a finding free of
+ * an echoed value even for a caller that has not scanned.)
+ */
+export const shown = (value: unknown): string => {
+  const text = String(value);
+  return text.length <= 64 && /^[A-Za-z0-9_ .,()[\]"-]*$/u.test(text) && secretFindings(text).length === 0 ? text : '<not shown>';
+};
 
 const SHA256 = /^[0-9a-f]{64}$/u;
 
@@ -303,6 +314,11 @@ export function contractSubset(lines: readonly Line[], requirements: Requirement
   const needed = neededColumns(requirements);
   const relations = new Set(needed.keys());
   const functions = new Set(requirements.functions.map(compact));
+  // a baseline function that a chain file REPLACES (ensure_my_profile(), P4): its security mode and body become the chain's,
+  // so the fingerprint keeps only the attributes the chain leaves alone -- the digest stays the same before and after
+  const replaced = new Set((requirements.functionShapes ?? []).filter((shape) => shape.replacedBy).map((shape) => compact(shape.signature)));
+  // functions of the managed platform (auth.uid()): existence and return type only; owner, body and ACL follow the platform's version
+  const platformFunctions = new Set((requirements.platformFunctions ?? []).map((fn) => compact(fn.signature)));
   const schemas = new Set([...requirements.schemas, ...[...relations].map(schemaOf)]);
   const roles = new Set(requirements.roles);
   const foreignKeys = new Set(requirements.foreignKeys.map((key) => `${key.relation}|${key.columns.join(',')}|${key.references}|${key.referencedColumns.join(',')}`));
@@ -340,7 +356,9 @@ export function contractSubset(lines: readonly Line[], requirements: Requirement
         break;
       }
       case 'function':
-        if (functions.has(compact(line.key))) out.push({ ...line, a: pick(a, ['kind', 'language', 'security_definer', 'volatility', 'owner', 'returns', 'config', 'acl', 'body_sha256']) });
+        if (replaced.has(compact(line.key))) out.push({ ...line, a: pick(a, ['kind', 'language', 'volatility', 'owner', 'returns', 'config', 'acl']) });
+        else if (functions.has(compact(line.key))) out.push({ ...line, a: pick(a, ['kind', 'language', 'security_definer', 'volatility', 'owner', 'returns', 'config', 'acl', 'body_sha256']) });
+        else if (platformFunctions.has(compact(line.key))) out.push({ ...line, a: pick(a, ['kind', 'returns']) });
         break;
       default:
         break;
@@ -352,9 +370,25 @@ export function contractSubset(lines: readonly Line[], requirements: Requirement
 // ---- requirements --------------------------------------------------------------------------------------------------
 
 /** Compares an inventory (full, or the subset) with what the Phase 1 preflight and the later preflights require. */
-export function checkRequirements(lines: readonly Line[], requirements: Requirements): Finding[] {
+/** The markers (functions a chain file creates) of the replaced baseline functions that exist in these lines: the chain has got that far. */
+export function chainMarkersPresent(lines: readonly Line[], requirements: Requirements): Set<string> {
+  const present = new Set(lines.filter((line) => line.k === 'function').map((line) => compact(line.key)));
+  return new Set((requirements.functionShapes ?? []).flatMap((shape) => (shape.replacedBy && present.has(compact(shape.replacedBy.marker)) ? [compact(shape.signature)] : [])));
+}
+
+/**
+ * `chainOwned`: signatures of replaced baseline functions whose replacing chain file has already run (see chainMarkersPresent).
+ * Their security mode is then the chain's and is not asserted; kind and return type always are. A caller that passes the
+ * SUBSET (which carries no marker function) must derive this from the FULL lines, as verifyInventory does.
+ */
+export function checkRequirements(lines: readonly Line[], requirements: Requirements, chainOwned?: ReadonlySet<string>): Finding[] {
   const findings: Finding[] = [];
   const add = (code: string, subject: string, detail: string) => findings.push({ code, subject, detail });
+  if (!isCurrentContract(requirements)) {
+    // a lock built before Phase 13 (or by hand) states a smaller contract: it is never read as the current one
+    add('CONTRACT_VERSION', 'baseline contract', `the requirements are not baseline contract version ${CONTRACT_VERSION}: regenerate the plan lock (cli.ts --write-lock)`);
+    return findings;
+  }
   const byKey = (kind: Kind) => new Map(lines.filter((line) => line.k === kind).map((line) => [line.key, line]));
   const schemas = byKey('schema');
   const roles = byKey('role');
@@ -366,12 +400,12 @@ export function checkRequirements(lines: readonly Line[], requirements: Requirem
   for (const relation of requirements.relations) {
     const found = relations.get(relation);
     if (!found) add('RELATION_MISSING', relation, 'a required relation is absent');
-    else if (found.a.relkind !== 'r' && found.a.relkind !== 'p') add('RELATION_KIND', relation, `a required relation is relkind ${String(found.a.relkind)}, not a table`);
+    else if (found.a.relkind !== 'r' && found.a.relkind !== 'p') add('RELATION_KIND', relation, `a required relation is relkind ${shown(found.a.relkind)}, not a table`);
   }
   for (const item of [...requirements.columns, ...ADDITIONAL_PLATFORM_REQUIREMENTS]) {
     const found = columns.get(`${item.relation}.${item.column}`);
     if (!found) add('COLUMN_MISSING', `${item.relation}.${item.column}`, 'a required column is absent');
-    else if (found.a.type !== item.type) add('COLUMN_TYPE', `${item.relation}.${item.column}`, `type ${String(found.a.type)}, required ${item.type}`);
+    else if (found.a.type !== item.type) add('COLUMN_TYPE', `${item.relation}.${item.column}`, `type ${shown(found.a.type)}, required ${item.type}`);
   }
   for (const key of requirements.foreignKeys) {
     const subject = `${key.relation}(${key.columns.join(',')})->${key.references}(${key.referencedColumns.join(',')})`;
@@ -381,9 +415,30 @@ export function checkRequirements(lines: readonly Line[], requirements: Requirem
       return fk !== null && fk.columns.join(',') === key.columns.join(',') && fk.references === key.references && fk.referenced_columns.join(',') === key.referencedColumns.join(',');
     });
     if (!match) add('FOREIGN_KEY_MISSING', subject, 'a required foreign key is absent');
-    else if ((match.a.fk as { on_delete: string }).on_delete !== key.onDelete) add('FOREIGN_KEY_ON_DELETE', subject, `ON DELETE ${(match.a.fk as { on_delete: string }).on_delete}, required ${key.onDelete}`);
+    else if ((match.a.fk as { on_delete: string }).on_delete !== key.onDelete) add('FOREIGN_KEY_ON_DELETE', subject, `ON DELETE ${shown((match.a.fk as { on_delete: string }).on_delete)}, required ${key.onDelete}`);
   }
   for (const signature of requirements.functions) if (!functions.has(compact(signature))) add('FUNCTION_MISSING', signature, 'a required function is absent');
+  // Phase 13: the shape a chain file checks (P4 refuses ensure_my_profile unless it has no argument, returns uuid, invoker rights)
+  const owned = chainOwned ?? chainMarkersPresent(lines, requirements);
+  for (const shape of requirements.functionShapes) {
+    const found = functions.get(compact(shape.signature));
+    if (!found) {
+      if (!requirements.functions.includes(shape.signature)) add('FUNCTION_MISSING', shape.signature, 'a required function is absent');
+      continue;
+    }
+    if (found.a.kind !== 'f') add('FUNCTION_KIND', shape.signature, `a required function is kind ${shown(found.a.kind)}, not an ordinary function`);
+    // a function the chain replaces is not fingerprinted by body, so a body that reaches out (cron / net / vault / a URL / a host) is refused outright
+    const mentions = found.a.mentions as Record<string, unknown> | undefined;
+    if (shape.replacedBy && mentions && Object.values(mentions).some((value) => value === true)) add('FUNCTION_MENTIONS', shape.signature, 'the body of a function the chain replaces mentions cron / net / vault / a URL / a Supabase host');
+    if (found.a.returns !== shape.returns) add('FUNCTION_SHAPE', shape.signature, `returns ${shown(found.a.returns)}, required ${shape.returns}`);
+    // the security mode is read from the FULL inventory line (the subset drops it for a function the chain replaces)
+    if (!owned.has(compact(shape.signature)) && 'security_definer' in found.a && found.a.security_definer !== shape.securityDefiner) add('FUNCTION_SHAPE', shape.signature, `security_definer ${shown(found.a.security_definer)}, required ${String(shape.securityDefiner)}`);
+  }
+  for (const platform of requirements.platformFunctions) {
+    const found = functions.get(compact(platform.signature));
+    if (!found) add('PLATFORM_FUNCTION_MISSING', platform.signature, 'a function of the managed platform that the chain needs is absent');
+    else if (found.a.kind !== 'f' || found.a.returns !== platform.returns) add('PLATFORM_FUNCTION_SHAPE', platform.signature, `kind ${shown(found.a.kind)} returns ${shown(found.a.returns)}, required an ordinary function returning ${platform.returns}`);
+  }
   return findings;
 }
 
@@ -408,7 +463,11 @@ export async function verifyInventory(output: string, requirements: Requirements
   const shape = validateShape(lines);
   if (shape.length > 0) return stopWith(`the inventory violates its own contract: ${summary(shape)}`, shape);
   const subset = contractSubset(lines, requirements);
-  const missing = checkRequirements(subset, requirements);
+  // twice: the subset (what is hashed must provide everything required) and the FULL lines (they alone carry the security mode of a
+  // function the chain replaces); a finding is reported once
+  const owned = chainMarkersPresent(lines, requirements);
+  const missing = [...checkRequirements(subset, requirements, owned), ...checkRequirements(lines, requirements, owned)]
+    .filter((finding, index, all) => all.findIndex((other) => other.code === finding.code && other.subject === finding.subject && other.detail === finding.detail) === index);
   if (missing.length > 0) return stopWith(`the baseline does not provide what the chain requires: ${summary(missing)}`, missing);
   const canonical = await canonicalize(subset);
   if (canonical.digest !== approvedDigest) {

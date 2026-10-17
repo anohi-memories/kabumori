@@ -6,7 +6,7 @@
 //
 //   deno run --allow-read --allow-write --allow-run=psql --allow-env baseline_report.ts --write <file>
 //   deno run ...                                                               baseline_report.ts --check <file>
-import { extractRequirements, PREFLIGHT_MIGRATION } from './baseline_requirements.ts';
+import { buildRequirements } from './baseline_requirements.ts';
 import { canonicalize, checkRequirements, contractSubset, type Line, parseInventory, validateShape } from './inventory.ts';
 import { buildProvenance, type InventoryEvidence, type ReplayResult, type WorldColumn, type WorldFacts } from './provenance.ts';
 import { sha256Hex } from './lock.ts';
@@ -73,7 +73,7 @@ if (!fixtureDb || !replayDb) throw new Error('P12_FIXTURE_DB and P12_REPLAY_DB a
 
 const migrationFiles = [...Deno.readDirSync(new URL('supabase/migrations/', root))].filter((e) => e.isFile && e.name.endsWith('.sql')).map((e) => e.name).sort();
 const migrations: [string, string][] = migrationFiles.map((name) => [name, Deno.readTextFileSync(new URL(`supabase/migrations/${name}`, root))]);
-const requirements = extractRequirements(Deno.readTextFileSync(new URL(PREFLIGHT_MIGRATION, root)));
+const requirements = buildRequirements((path) => Deno.readTextFileSync(new URL(path, root)));
 
 const INVENTORY_QUERY = new URL('supabase/preflight/managed_disposable/inventory/schema_inventory.sql', root);
 

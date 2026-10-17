@@ -4,7 +4,7 @@
 // against the inventory's closed attribute lists, free of secret-shaped text, byte-for-byte deterministic, free of side
 // effects, and sensitive to a real change. Fake data and local sockets only: nothing here can reach a managed project.
 import { canonicalize, checkInventorySql, contractSubset, diffInventories, type Line, parseInventory, secretFindings, stableStringify, validateShape, verifyInventory } from './inventory.ts';
-import type { Requirements } from './baseline_requirements.ts';
+import { CONTRACT_VERSION, type Requirements } from './baseline_requirements.ts';
 
 const env = (name: string) => {
   const value = Deno.env.get(name);
@@ -166,6 +166,8 @@ const requirements: Requirements = {
   schemas: [], roles: ['authenticated'], relations: ['public.p12_sentinel_rows'],
   columns: [{ relation: 'public.p12_sentinel_rows', column: 'secret_note', type: 'text' }, { relation: 'public.p12_sentinel_rows', column: 'id', type: 'bigint' }],
   foreignKeys: [], functions: ['public.p12_sentinel_fn(uuid)'],
+  // contract v2 (Phase 13): this proof's world needs none of the three Phase 13 baseline objects
+  contractVersion: CONTRACT_VERSION, functionShapes: [], platformFunctions: [], prerequisites: [],
 };
 const approved = (await canonicalize(contractSubset(parseInventory(await inventory('reader')), requirements))).digest;
 const verdict = async () => verifyInventory(await inventory('reader'), requirements, approved);

@@ -316,7 +316,7 @@ export function renderTables(dag: Dag): string {
     '',
     `Control (unmodified model baseline, whole chain): **${dag.oracle.control}**. Candidates removed one at a time: ${Object.entries(dag.oracle.candidates).map(([kind, row]) => `${kind} ${row.tested + row.notTested}`).join(', ')}.`,
     '',
-    '| removed object | kind | first refusal | file that refuses | in the Phase 12 contract |',
+    '| removed object | kind | first refusal | file that refuses | covered by the baseline contract |',
     '| --- | --- | --- | --- | --- |',
     ...dag.oracle.failing.map((row) => `| \`${row.object.replace(/\(.*$/u, row.kind === 'function' ? '()' : '')}\` | ${row.kind} | ${row.chainId}: \`${row.refusal.split(':')[0]}\` | \`${(row.sourceFile ?? '?').split('/').pop()}\` | ${row.coveredByContract ? 'yes' : '**NO — gap**'} |`),
     '',

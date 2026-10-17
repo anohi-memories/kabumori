@@ -456,7 +456,8 @@
       "public.social_account_oauth_states.brand_id",
       "public.social_account_oauth_states.initiated_by_user_id",
       "public.social_accounts.brand_id",
-      "public.social_accounts.connection_status"
+      "public.social_accounts.connection_status",
+      "public.social_accounts.platform"
     ],
     "unknownForeignKeys": [
       "public.brand_memberships(brand_id)->public.brands(id) on delete c",
@@ -1922,7 +1923,7 @@
         "chainId": "P4",
         "refusal": "COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE",
         "sourceFile": "supabase/migrations/20261012130000_common_account_core_service_fence.sql",
-        "coveredByContract": false
+        "coveredByContract": true
       },
       {
         "kind": "function",
@@ -1946,7 +1947,7 @@
         "chainId": "P6",
         "refusal": "COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE",
         "sourceFile": "supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql",
-        "coveredByContract": false
+        "coveredByContract": true
       }
     ],
     "notTested": [

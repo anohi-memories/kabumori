@@ -159,6 +159,9 @@ test('verifyInventory: PASS on the approved contract, STOP on no approval / secr
   assert.notEqual(drift.digest, approved);
 });
 
+// a Phase 1 helper (a definer in the synthetic world); the Phase 13 additions have their own tests (baseline_contract_v2_test.ts)
+const PHASE1_FUNCTION = 'public.social_mobile_account_deletion_subject(uuid)';
+
 test('the boundary of the contract is explicit: a change OUTSIDE it is not drift, a change INSIDE it always is', async () => {
   const approved = await approvedDigest();
   const outside = synthetic({ tweak: (l) => { if (l.k === 'trigger') l.a.def_sha256 = H(42); if (l.k === 'column' && l.key === 'public.profiles.unrelated_note') l.a.type = 'jsonb'; } });
@@ -166,8 +169,8 @@ test('the boundary of the contract is explicit: a change OUTSIDE it is not drift
   const inside: [string, (l: Line) => void][] = [
     ['owner of a required table', (l) => { if (l.k === 'relation' && l.key === 'public.profiles') l.a.owner = 'someone_else'; }],
     ['RLS of a required table', (l) => { if (l.k === 'relation' && l.key === 'public.profiles') l.a.rls = false; }],
-    ['body of a required function', (l) => { if (l.k === 'function' && l.key === requirements.functions[0].replace(/\s+/gu, '')) l.a.body_sha256 = H(77); }],
-    ['security mode of a required function', (l) => { if (l.k === 'function' && l.key === requirements.functions[0].replace(/\s+/gu, '')) l.a.security_definer = false; }],
+    ['body of a required function', (l) => { if (l.k === 'function' && l.key === PHASE1_FUNCTION) l.a.body_sha256 = H(77); }],
+    ['security mode of a required function', (l) => { if (l.k === 'function' && l.key === PHASE1_FUNCTION) l.a.security_definer = false; }],
     ['primary key of a required table', (l) => { if (l.k === 'constraint' && l.key === 'public.profiles.profiles_pkey') l.a.def_sha256 = H(78); }],
     ['default of a required column', (l) => { if (l.k === 'column' && l.key === 'public.brands.id') l.a.default_sha256 = H(79); }],
     ['ACL of a required table', (l) => { if (l.k === 'relation' && l.key === 'public.profiles') l.a.acl = ['PUBLIC:SELECT']; }],
