@@ -92,11 +92,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-pr234-escaped-keyword-guard-fix-20261017
 - owner: claude
-- next_owner: chatgpt
-- blocker: FIXED_SOURCE_ONLY Draft PR #237 (d0c85b3e, base PR234 2ba13ee1): escapedKeywordEdges decodes every \\u-escaped name in the raw text and refuses any containing import/export/from (code, comments, literals; lexer- and rawEdges-independent); lexer reads type-alias {...} close as end of type; 7 real-file mutations missed by all 17 PR234 guard tests now refused (Deno 2.9.6: several escaped forms run, deno check TS1260); no deployable file newly refused; no allowlist widening, A1/ledger untouched; provider147 bridge27 market324 merged508 PASS, 9 mutants killed; shared 5 type errors + 1 permission block NOT_RERUN; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_SOURCE_FIX PR237; source-only candidate accepted, no independent security certification; merge/deploy/production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
