@@ -635,3 +635,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - Independent SHA256/MANIFEST NOT_VERIFIED; append-only archive preserved.
 
 - 2026-10-17 | F10 | `orchestration-v3-pr229-n1-n2-focused-correction-f10-20261017` | PR229 N1/N2 fixes L10 done, rereview PASS | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-pr229-n1-n2-focused-correction-f10-20261017/` | SHA256 `55f2e70e25bd69fb252fef0e8924c03d542d9657941e2d2493239ab35aa47c6c`; verified original blob and full UTF-8 restore.
+
+## F5 PR240 J2 V2 P2x2 completed TASK archive — 2026-10-17
+- task_id: `common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017`; L5 PASS_SOURCE_FIX / PRODUCTION_NO_GO; PR240 Draft head `5e462ba73be691c80f75198d57782626f1d241cc`.
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017/files/.agent_v2/tasks/F5.md`.
+- size: 13886 bytes; SHA256: `870a151a03d1ef954daf11a2ccaf37644000005d0be2a9a14535d8f756592b85`; original/archive Git blob: `613352853abee5daa675c7b48b076fadd1e3c817`.
+- read-back: exact UTF-8 and Git blob match; MANIFEST.md and SHA256SUMS stored, archive append-only. Subsequent F5 task is sandbox architecture source-only design.
