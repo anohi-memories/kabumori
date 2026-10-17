@@ -1,0 +1,12 @@
+# F5 D-1 completed archive
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-baseline-contract-extend-20261017/files/.agent_v2/tasks/F5.md
+- task_id: common-account-f5-phase13-baseline-contract-extend-20261017
+- size_bytes: 21023
+- SHA256: d4eba107b1ee18e3aeb3ca2ac9b82dc6de381985fb45d3e99dded73d62c65ce3
+- original_blob: 1d24dbc76c58813ac8ef62133a8b09f20316439e
+- restored_blob: 1d24dbc76c58813ac8ef62133a8b09f20316439e
+- previous_commit: 1f99f4711194748ed9222e23c76edaaa179195bb
+- implementation_PR: https://github.com/anohi-memories/kabumori/pull/254
+- restore: identical bytes and Git blob on readback, 2026-10-17
+- append_only: true
