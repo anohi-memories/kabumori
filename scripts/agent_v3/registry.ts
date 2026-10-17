@@ -37,10 +37,14 @@ export interface SlotDef {
 
 export type Header = Record<string, string>;
 export type ReadFile = (path: string) => string | null;
+// path -> git blob id of every file under a directory prefix at the base commit (one listing call).
+export type BlobIds = (prefix: string) => Map<string, string>;
+export type IndexPlan = { mode: "incremental" | "full"; reason?: string };
 export type ChangeSet = {
   files: Map<string, string | null>;
   expectations: Map<string, Header>; // slot -> key fields that must read back from the published ref
   message: string;
+  index?: IndexPlan; // how the derived index in `files` was produced
 };
 
 export class PlanError extends Error {
@@ -158,7 +162,32 @@ export function headersDigest(defs: SlotDef[], read: ReadFile): string {
   return sha256(canonicalJson(defs.map((d) => [d.slot, keyFields(parseHeader(read(d.taskPath)))])));
 }
 
-export function deriveIndex(defs: SlotDef[], read: ReadFile): string {
+// Git's blob id of a file's UTF-8 bytes ("missing" when the file does not exist). The index records it per
+// slot, so a TASK that changed without the index being re-derived is visible from one directory listing.
+export function gitBlobId(text: string | null): string {
+  if (text === null) return "missing";
+  const bytes = new TextEncoder().encode(text);
+  return createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
+}
+
+const ROW_FIELDS = [...KEY_FIELDS, "owner", "recommended_model", "task_blob", "task_path", "report_path"] as const;
+
+function rowFor(d: SlotDef, text: string | null): Header {
+  const h = parseHeader(text);
+  const row: Header = {};
+  for (const k of KEY_FIELDS) row[k] = h[k] ?? "";
+  row.owner = h.owner ?? d.owner;
+  row.recommended_model = h.recommended_model ?? "";
+  row.task_blob = gitBlobId(text);
+  row.task_path = d.taskPath;
+  row.report_path = d.reportPath ?? `${d.taskPath}#report`;
+  return row;
+}
+
+// One renderer for both the full derivation and the incremental update, so the two can only differ in
+// which rows they start from. The digest covers the key fields of every row (as before).
+function renderIndex(defs: SlotDef[], rows: Map<string, Header>): string {
+  const digest = sha256(canonicalJson(defs.map((d) => [d.slot, keyFields(rows.get(d.slot)!)])));
   const lines = [
     "# Active Tasks Index (agent_v3, derived)",
     "",
@@ -167,20 +196,55 @@ export function deriveIndex(defs: SlotDef[], read: ReadFile): string {
     "This file is derived. The canonical state of each slot is the header of its TASK file. If this index",
     "disagrees with a TASK header, the TASK header wins and this index is stale.",
     "",
-    `- source_digest: ${headersDigest(defs, read)}`,
+    `- source_digest: ${digest}`,
     "",
   ];
   for (const d of defs) {
-    const h = parseHeader(read(d.taskPath));
+    const row = rows.get(d.slot)!;
     lines.push(`## ${d.slot}`);
-    for (const k of KEY_FIELDS) lines.push(`- ${k}: ${h[k] ?? ""}`);
-    lines.push(`- owner: ${h.owner ?? d.owner}`);
-    lines.push(`- recommended_model: ${h.recommended_model ?? ""}`);
-    lines.push(`- task_path: ${d.taskPath}`);
-    lines.push(`- report_path: ${d.reportPath ?? `${d.taskPath}#report`}`);
+    for (const k of ROW_FIELDS) lines.push(`- ${k}: ${row[k]}`);
     lines.push("");
   }
   return lines.join("\n");
+}
+
+export function deriveIndex(defs: SlotDef[], read: ReadFile): string {
+  return renderIndex(defs, new Map(defs.map((d) => [d.slot, rowFor(d, read(d.taskPath))])));
+}
+
+// The index for a change set that rewrites some TASK files. Normally only the changed rows are replaced in
+// the base index (reading the changed TASKs, the index and one listing of tasks/). The base index is used
+// only if it is exactly in derived form, every row's task_blob matches the listing, the listing agrees with
+// the verified read of each changed TASK, and each changed row matches that TASK's header. Anything else
+// (missing, hand-edited, old format, a TASK changed by another writer without the index) is never patched:
+// the whole index is re-derived from every TASK header instead, and the reason is reported.
+export function planIndex(defs: SlotDef[], root: string, read: ReadFile, files: Map<string, string | null>, blobs?: BlobIds): { text: string; plan: IndexPlan } {
+  const full = (reason: string) => ({ text: deriveIndex(defs, overlay(read, files)), plan: { mode: "full" as const, reason } });
+  if (!blobs) return full("no tasks/ listing available");
+  const indexText = read(indexPath(root));
+  if (indexText === null) return full("index missing");
+  const parsed = parseIndex(indexText);
+  const rows = new Map<string, Header>();
+  for (const d of defs) {
+    const p = parsed.get(d.slot);
+    if (!p || ROW_FIELDS.some((k) => !(k in p))) return full(`index row ${d.slot} missing or incomplete`);
+    rows.set(d.slot, Object.fromEntries(ROW_FIELDS.map((k) => [k, p[k]])));
+  }
+  if (renderIndex(defs, rows) !== indexText) return full("index is not in derived form (hand-edited, stale digest or old format)");
+  const listed = blobs(`${root}/tasks/`);
+  for (const d of defs) {
+    const actual = listed.get(d.taskPath) ?? "missing";
+    if (rows.get(d.slot)!.task_blob !== actual) return full(`${d.slot} TASK changed without the index (blob ${actual.slice(0, 12)})`);
+  }
+  const changed = defs.filter((d) => files.has(d.taskPath));
+  for (const d of changed) {
+    const before = read(d.taskPath);
+    if (gitBlobId(before) !== (listed.get(d.taskPath) ?? "missing")) return full(`listing disagrees with the verified read of ${d.taskPath}`);
+    const want = rowFor(d, before);
+    if (ROW_FIELDS.some((k) => rows.get(d.slot)![k] !== want[k])) return full(`index row ${d.slot} does not match its TASK`);
+    rows.set(d.slot, rowFor(d, files.get(d.taskPath)!));
+  }
+  return { text: renderIndex(defs, rows), plan: { mode: "incremental" } };
 }
 
 export function parseIndex(text: string | null): Map<string, Header> {
@@ -385,6 +449,7 @@ export function planTaskWrite(
   expect: Expect,
   reportText: string | null,
   message: string,
+  blobs?: BlobIds,
 ): ChangeSet {
   assertSafeRoot(root);
   const def = slotDef(defs, slot);
@@ -408,8 +473,9 @@ export function planTaskWrite(
     if (!def.reportPath) throw new PlanError("invalid", `${slot} keeps its Report inside the TASK file`);
     files.set(def.reportPath, reportText);
   }
-  files.set(indexPath(root), deriveIndex(defs, overlay(read, files)));
-  return { files, expectations: new Map([[slot, keyFields(after)]]), message };
+  const index = planIndex(defs, root, read, files, blobs);
+  files.set(indexPath(root), index.text);
+  return { files, expectations: new Map([[slot, keyFields(after)]]), message, index: index.plan };
 }
 
 // Plan the archive of a done slot and its reset to idle, as one change set: byte copies of the TASK (and
@@ -424,6 +490,7 @@ export function planArchive(
   expect: Expect,
   baseCommit: string,
   date: string,
+  blobs?: BlobIds,
 ): ChangeSet {
   assertSafeRoot(root);
   const def = slotDef(defs, slot);
@@ -464,7 +531,8 @@ export function planArchive(
   files.set(historyIndexPath(root), `${history}| ${date} | ${slot} | ${expect.task_id} | ${clean(result)} | ${dir} |\n`);
   files.set(def.taskPath, idleTemplate(def, root));
   if (def.reportPath) files.set(def.reportPath, idleReport(def));
-  files.set(indexPath(root), deriveIndex(defs, overlay(read, files)));
+  const index = planIndex(defs, root, read, files, blobs);
+  files.set(indexPath(root), index.text);
   const idle = keyFields(parseHeader(idleTemplate(def, root)));
-  return { files, expectations: new Map([[slot, idle]]), message: `agent_v3(${slot}): archive ${expect.task_id} and reset to idle` };
+  return { files, expectations: new Map([[slot, idle]]), message: `agent_v3(${slot}): archive ${expect.task_id} and reset to idle`, index: index.plan };
 }

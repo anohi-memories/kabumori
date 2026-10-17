@@ -130,6 +130,15 @@ export class GitBackend implements Backend {
     return this.must(["ls-tree", "-r", "--name-only", commit, "--", prefix]).split("\n").filter((p) => p.startsWith(prefix));
   }
 
+  blobIds(commit: string, prefix: string): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const line of this.must(["ls-tree", "-r", commit, "--", prefix]).split("\n")) {
+      const m = line.match(/^\d+ blob ([0-9a-f]{40})\t(.+)$/);
+      if (m && m[2].startsWith(prefix)) out.set(m[2], m[1]);
+    }
+    return out;
+  }
+
   changedPaths(base: string, commit: string): string[] {
     return this.must(["diff-tree", "--no-commit-id", "--name-only", "-r", base, commit]).split("\n").filter(Boolean);
   }

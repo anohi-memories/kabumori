@@ -49,6 +49,7 @@ function staleFirstHead(inner: Backend, stale: string): Backend {
     read: (c, p) => inner.read(c, p),
     commit: (b, f, m) => inner.commit(b, f, m),
     list: (c, p) => inner.list(c, p),
+    blobIds: (c, p) => inner.blobIds(c, p),
     changedPaths: (b, c) => inner.changedPaths(b, c),
     publish: (r, n, e) => inner.publish(r, n, e),
     contains: (h, c) => inner.contains(h, c),

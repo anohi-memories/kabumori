@@ -108,7 +108,7 @@ export function expectAt(w: World, slot: string, commit = headAt(w)): Expect {
 }
 
 export function write(backend: Backend, slot: string, text: string, expect: Expect, ref = MAIN_REF, reportText: string | null = null, options = OPTS): Outcome {
-  return runTransaction(backend, DEFS, ref, (read) => planTaskWrite(DEFS, ROOT, read, slot, text, expect, reportText, `fixture ${slot}`), options);
+  return runTransaction(backend, DEFS, ref, (read, _base, _list, blobs) => planTaskWrite(DEFS, ROOT, read, slot, text, expect, reportText, `fixture ${slot}`, blobs), options);
 }
 
 export function changedFiles(w: World, commit: string): string[] {
@@ -121,6 +121,7 @@ export function wrap(inner: Backend): Backend {
     head: (r) => inner.head(r),
     read: (c, p) => inner.read(c, p),
     list: (c, p) => inner.list(c, p),
+    blobIds: (c, p) => inner.blobIds(c, p),
     changedPaths: (b, c) => inner.changedPaths(b, c),
     commit: (b, f, m) => inner.commit(b, f, m),
     publish: (r, n, e) => inner.publish(r, n, e),
@@ -228,7 +229,7 @@ export class FakeGitHub {
         return json(200, { type: "file", path: target, sha, size: bytes.length, encoding: "base64", content: Buffer.from(bytes).toString("base64") });
       }
       const under = [...tree.keys()].filter((p) => p.startsWith(`${target}/`));
-      return under.length ? json(200, under.map((p) => ({ path: p, type: "file" }))) : json(404, { message: "Not Found" });
+      return under.length ? json(200, under.map((p) => ({ path: p, type: "file", sha: tree.get(p) }))) : json(404, { message: "Not Found" });
     }
     if (method === "GET" && (m = path.match(/^git\/commits\/([0-9a-f]+)$/))) {
       const c = this.commits.get(m[1]);

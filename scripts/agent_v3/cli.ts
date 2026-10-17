@@ -98,12 +98,12 @@ export function main(argv: string[]): number {
     const report = typeof args["report-file"] === "string" ? readFileSync(args["report-file"], "utf8") : null;
     const expect = expectFrom(args);
     const message = need(args, "message");
-    outcome = runTransaction(backend, defs, ref, (read) => planTaskWrite(defs, root, read, slot, task, expect, report, message), options);
+    outcome = runTransaction(backend, defs, ref, (read, _base, _list, blobs) => planTaskWrite(defs, root, read, slot, task, expect, report, message, blobs), options);
   } else if (command === "archive") {
     const slot = need(args, "slot");
     const expect = { ...expectFrom({ ...args, "expect-status": "done" }) };
     const date = need(args, "date");
-    outcome = runTransaction(backend, defs, ref, (read, base, list) => planArchive(defs, root, read, list, slot, expect, base, date), options);
+    outcome = runTransaction(backend, defs, ref, (read, base, list, blobs) => planArchive(defs, root, read, list, slot, expect, base, date, blobs), options);
   } else {
     throw new Error(`unknown command ${command}`);
   }

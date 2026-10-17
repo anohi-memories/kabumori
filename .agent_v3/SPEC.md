@@ -19,7 +19,15 @@ V3は、v2（`.agent_v2/`）の「軽量TASK・独立Report・append-only archiv
 ## 2. 正本は1つ、索引は派生物
 
 - slotの状態（`task_id` / `owner` / `slot` / `status` / `next_owner` / `start_code` / `completion_code` / `return_to` / `recommended_model` ほか）は、TASKファイル先頭の `- key: value` 行だけに書く。これが唯一の正本。
-- `ACTIVE_TASK.md` は、全TASKヘッダーから機械的に作る派生物。先頭に生成マーカーと、生成元ヘッダーのdigest（`source_digest`、SHA256）を持つ。
+- `ACTIVE_TASK.md` は、全TASKヘッダーから機械的に作る派生物。先頭に生成マーカーと、生成元ヘッダーのdigest（`source_digest`、SHA256）を持つ。各slotの行には、主要項目・owner・推薦モデル・パスに加えて、TASKファイルのgit blob id（`task_blob`）を持つ（2026-10-17、差分更新のため）。
+- **索引は差分で更新する**（2026-10-17）。普段の書き込み（登録・開始・Report・完了・archive）では、読むのは変更するslotのTASK（とCodex枠のReport）、索引、`tasks/` の一覧1回だけで、他のslotのTASKは読まない。変更するslotの行だけを差し替え、digestを計算し直す。次のどれかに当てはまれば、差分更新はせずに、全TASKヘッダーから索引を作り直す（理由は結果の `index.reason` に残す。壊れた索引を部分更新で隠さない）。
+  - 索引が無い、slotの行が欠けている・項目が足りない（`task_blob` の無い古い形式を含む）。
+  - 索引が、その行から作った派生物と1バイトでも違う（手編集、digestの不一致）。
+  - 一覧のblob idと、索引の `task_blob` が違う（索引を作り直さずにTASKだけが書かれた）。
+  - 一覧のblob idと、検証済みの読み取り（サイズとblob SHAを照合済み）で得た変更対象TASKのblob idが違う。
+  - 変更対象slotの行が、そのTASKのヘッダーと違う。
+  - 一覧の項目が不正（パスやblob idの形式）なら、`INTEGRITY_FAILED_STOPPED` で止める。
+  - 変更対象でないslotの行だけが、blob idを保ったまま書き換えられていた場合は、差分更新では見つからない。単独 `F` などの `verify`（全TASKを読む）が `INDEX_MISMATCH` として見つけ、そのslotへの次の書き込みで作り直される。
 - 索引とTASKヘッダーが食い違ったら、**TASKヘッダーが正しく、索引が古い**とみなす。「どちらが正しいか」を人が判断する場面を作らない。
 - `verify` は、ヘッダーの形式（必須項目、slotと完了コードの1対1、statusの値、割当中の `return_to` と推薦モデル）、索引との一致、digest、手編集の有無を読み取りだけで確認する。v2の索引にも `--legacy-v2` で同じ検査をかけられる（digestの検査は省く）。
 - ヘッダーの解析は、先頭のUTF-8 BOMとCRLF改行を許容する。ヘッダー部分に字下げされた `- key:` 行があると、項目として読まれずに見落とされるため、書き込み時に拒否する。
@@ -41,7 +49,7 @@ V3は、v2（`.agent_v2/`）の「軽量TASK・独立Report・append-only archiv
 3. **commitを作る**: baseだけを親にした1つのcommit。作ったcommitを読み直す。計画した全ファイルが入っていなければ `PARTIAL_DETECTED`、計画に無い変更が含まれていれば `UNPLANNED_CHANGE_DETECTED` で止める（どちらも公開しない）。
 4. **公開する（CAS）**: fast-forwardの場合だけrefを進める。force push、`--force-with-lease`、GitHub APIの `force:true` は使わない。
 5. **答えで分ける**（詳しくは「9. 公開の答えの分類」）:
-   - `stale`（refが動いた、同時更新に負けた）: 新しいheadから手順2をやり直す（最大3回）。別slotの書き込みと重なっただけなら、索引を作り直して通る。同じslotが変わっていれば手順2で止まる。回数を使い切ったら `STALE_BASE_RETRY_EXHAUSTED`。
+   - `stale`（refが動いた、同時更新に負けた）: 新しいheadから手順2をやり直す（最大3回）。別slotの書き込みと重なっただけなら、新しいheadの索引（相手の変更を含む）に自分の行を差分で入れ直して通る。同じslotが変わっていれば手順2で止まる。回数を使い切ったら `STALE_BASE_RETRY_EXHAUSTED`。
    - 明示的な「いいえ」（権限・方針・hookの拒否など）: refは動いていないので停止。
    - 「不明」（5xx、応答の途中切れ、成功に見えるが新しいshaが無いなど）: 要求は**送り直さない**。refを1回読んで、自分のcommitが含まれていれば手順6へ進み、含まれていなければ `PUBLISHED_UNVERIFIED`。
 6. **読み戻す**: 3つを分けて確かめる。

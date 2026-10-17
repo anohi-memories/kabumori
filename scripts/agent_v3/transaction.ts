@@ -1,4 +1,4 @@
-import { assertSafeRoot, assertWithinRoot, type ChangeSet, keyFields, type ListFiles, parseHeader, PlanError, type ReadFile, type SlotDef } from "./registry.ts";
+import { assertSafeRoot, assertWithinRoot, type BlobIds, type ChangeSet, type IndexPlan, keyFields, type ListFiles, parseHeader, PlanError, type ReadFile, type SlotDef } from "./registry.ts";
 
 // One registration = one commit. The backend builds a commit on an exact base and publishes it with a
 // compare-and-swap (fast-forward only, never force). A stale base is re-planned from the new head a bounded
@@ -18,6 +18,7 @@ export interface Backend {
   head(ref: string): string;
   read(commit: string, path: string): string | null;
   list(commit: string, prefix: string): string[]; // paths under a directory prefix; [] only when nothing exists there
+  blobIds(commit: string, prefix: string): Map<string, string>; // path -> git blob id under a directory prefix (one listing)
   changedPaths(base: string, commit: string): string[];
   commit(base: string, files: Map<string, string | null>, message: string): string;
   publish(ref: string, newCommit: string, expectedOld: string): PublishResult;
@@ -95,6 +96,7 @@ export type Outcome = {
   commit: string | null;
   detail: string;
   readback?: Record<string, { expected: Record<string, string>; actual: Record<string, string> }>;
+  index?: IndexPlan; // how the published index was produced (incremental, or full with the reason)
 };
 
 export const MAIN_REF = "refs/heads/main";
@@ -119,7 +121,7 @@ function fail(code: OutcomeCode, ref: string, attempts: number, base: string | n
   return { code, registered: false, ref, attempts, base, commit, detail: redact(detail) };
 }
 
-export type Planner = (read: ReadFile, base: string, list: ListFiles) => ChangeSet;
+export type Planner = (read: ReadFile, base: string, list: ListFiles, blobs: BlobIds) => ChangeSet;
 
 export type TransactionOptions = {
   root: string; // every planned path must live under this V3 root
@@ -158,7 +160,7 @@ export function runTransaction(backend: Backend, defs: SlotDef[], ref: string, p
     try {
       base = backend.head(ref);
       const at = base;
-      const plan = planner((p) => backend.read(at, p), at, (prefix) => backend.list(at, prefix));
+      const plan = planner((p) => backend.read(at, p), at, (prefix) => backend.list(at, prefix), (prefix) => backend.blobIds(at, prefix));
       assertWithinRoot(plan.files.keys(), options.root);
       commit = backend.commit(at, plan.files, plan.message);
       // The commit object must hold every planned file exactly, and nothing else may differ from the base.
@@ -254,5 +256,6 @@ function readBack(backend: Backend, defs: SlotDef[], ref: string, attempts: numb
     commit,
     detail: onMain ? `published ${commit} and read back from ${ref} at ${head}` : `written to ${ref} only; main is unchanged`,
     readback,
+    ...(plan.index ? { index: plan.index } : {}),
   };
 }

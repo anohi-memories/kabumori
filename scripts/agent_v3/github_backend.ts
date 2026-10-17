@@ -135,14 +135,43 @@ export class GitHubBackend implements Backend {
     return content;
   }
 
+  // One directory listing per commit and prefix (commits are immutable), shared by list() and blobIds().
+  private readonly listings = new Map<string, unknown[] | "missing" | "file">();
+
+  private listing(commit: string, prefix: string): unknown[] | "missing" | "file" {
+    const dir = prefix.replace(/\/$/, "");
+    const key = `${commit}:${dir}`;
+    if (this.listings.has(key)) return this.listings.get(key)!;
+    const r = this.call("GET", `contents/${dir.split("/").map(encodeURIComponent).join("/")}?ref=${commit}`);
+    if (r.status !== 200 && r.status !== 404) throw new Error(`list ${dir}@${commit} -> ${r.status}`);
+    const out = r.status === 404 ? "missing" : Array.isArray(r.json) ? r.json : "file";
+    if (/^[0-9a-f]{40}$/.test(commit)) this.listings.set(key, out);
+    return out;
+  }
+
   // Entries directly under a directory prefix (files or sub-directories); empty means nothing exists there.
   list(commit: string, prefix: string): string[] {
+    const l = this.listing(commit, prefix);
+    if (l === "missing") return [];
+    if (l === "file") return [prefix.replace(/\/$/, "")]; // the prefix is itself a file: occupied
+    return l.map((e) => String(field(e, "path")));
+  }
+
+  // Blob ids of the files directly under a directory prefix, from the same listing. The listing itself is not
+  // hash-verified, so the planner cross-checks it against the verified read of every TASK it changes.
+  blobIds(commit: string, prefix: string): Map<string, string> {
+    const l = this.listing(commit, prefix);
+    const out = new Map<string, string>();
+    if (l === "missing" || l === "file") return out;
     const dir = prefix.replace(/\/$/, "");
-    const r = this.call("GET", `contents/${dir.split("/").map(encodeURIComponent).join("/")}?ref=${commit}`);
-    if (r.status === 404) return [];
-    if (r.status !== 200) throw new Error(`list ${dir}@${commit} -> ${r.status}`);
-    if (!Array.isArray(r.json)) return [dir]; // the prefix is itself a file: occupied
-    return r.json.map((e) => String(field(e, "path")));
+    for (const e of l) {
+      if (field(e, "type") !== "file") continue;
+      const path = String(field(e, "path"));
+      const sha = String(field(e, "sha"));
+      if (!path.startsWith(`${dir}/`) || !/^[0-9a-f]{40}$/.test(sha)) throw new IntegrityError(`listing of ${dir}@${commit} has a bad entry`);
+      out.set(path, sha);
+    }
+    return out;
   }
 
   changedPaths(base: string, commit: string): string[] {
