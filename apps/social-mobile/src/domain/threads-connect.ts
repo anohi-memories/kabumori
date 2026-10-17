@@ -102,6 +102,63 @@ export function isRegisteredCallback(value: unknown): value is string {
   }
 }
 
+/**
+ * How the HTTPS callback can come back into THIS build (Threads only registers HTTPS redirect URIs; X keeps its
+ * custom scheme). Pure: the inputs are the app config and the platform.
+ * - iOS: only iOS 17.4+ can catch an HTTPS return in the auth session (ASWebAuthenticationSession `.https(host:path:)`,
+ *   used by expo-web-browser only with `preferUniversalLinks: true`), and only with the Associated Domains
+ *   entitlement for that host (`ios.associatedDomains` contains `applinks:<host>`). Older iOS falls back to a
+ *   scheme-only session that would never return: refused up front (UNIVERSAL_LINK_UNSUPPORTED), never left waiting.
+ * - Android: a verified App Link (`android.intentFilters`: VIEW, autoVerify, https + host, and a path covering the
+ *   callback) brings the return to the app; the auth session itself needs no extra option.
+ * - Anything else, or anything missing: CALLBACK_NOT_CONFIGURED (nothing is started).
+ */
+export type ThreadsAuthSessionOptions = { preferEphemeralSession: true; preferUniversalLinks: true };
+export type ThreadsCallbackDelivery =
+  | { ok: true; callback: string; authSessionOptions?: ThreadsAuthSessionOptions }
+  | { ok: false; code: 'CALLBACK_NOT_CONFIGURED' | 'UNIVERSAL_LINK_UNSUPPORTED' };
+
+const iosAtLeast = (version: unknown, major: number, minor: number): boolean => {
+  const match = /^(\d+)(?:\.(\d+))?/u.exec(String(version ?? ''));
+  if (!match) return false;
+  const [maj, min] = [Number(match[1]), Number(match[2] ?? 0)];
+  return maj > major || (maj === major && min >= minor);
+};
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  (typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null);
+
+export function threadsCallbackDelivery(input: {
+  platform: string; iosVersion?: unknown; callback: unknown; associatedDomains?: unknown; androidIntentFilters?: unknown;
+}): ThreadsCallbackDelivery {
+  if (!isRegisteredCallback(input.callback)) return { ok: false, code: 'CALLBACK_NOT_CONFIGURED' };
+  const callback = input.callback;
+  const url = new URL(callback);
+  if (url.port !== '') return { ok: false, code: 'CALLBACK_NOT_CONFIGURED' };
+  if (input.platform === 'ios') {
+    const domains = Array.isArray(input.associatedDomains) ? input.associatedDomains : [];
+    if (!domains.includes(`applinks:${url.hostname}`)) return { ok: false, code: 'CALLBACK_NOT_CONFIGURED' };
+    if (!iosAtLeast(input.iosVersion, 17, 4)) return { ok: false, code: 'UNIVERSAL_LINK_UNSUPPORTED' };
+    return { ok: true, callback, authSessionOptions: { preferEphemeralSession: true, preferUniversalLinks: true } };
+  }
+  if (input.platform === 'android') {
+    const filters = Array.isArray(input.androidIntentFilters) ? input.androidIntentFilters : [];
+    const verified = filters.some((entry) => {
+      const filter = asRecord(entry);
+      if (!filter || filter.autoVerify !== true || filter.action !== 'VIEW') return false;
+      const data = Array.isArray(filter.data) ? filter.data : [filter.data];
+      return data.some((item) => {
+        const d = asRecord(item);
+        if (!d || d.scheme !== 'https' || d.host !== url.hostname) return false;
+        if (typeof d.path === 'string') return d.path === url.pathname;
+        if (typeof d.pathPrefix === 'string') return url.pathname.startsWith(d.pathPrefix);
+        return false;
+      });
+    });
+    return verified ? { ok: true, callback } : { ok: false, code: 'CALLBACK_NOT_CONFIGURED' };
+  }
+  return { ok: false, code: 'CALLBACK_NOT_CONFIGURED' };
+}
+
 /** Only the official authorize endpoint, the five documented parameters, our callback and both scopes. */
 export function isThreadsAuthorizationUrl(value: unknown, registeredCallback: string): value is string {
   if (typeof value !== 'string' || value.length > 2048) return false;
@@ -172,6 +229,7 @@ export const CONNECT_FAILURE_COPY: Record<string, string> = {
   SESSION_CHANGED: '接続の途中でログイン中のアカウントが変わったため、中止しました。',
   CALLBACK_INVALID: 'Threadsからの戻り先を確認できなかったため、中止しました。もう一度お試しください。',
   CALLBACK_NOT_CONFIGURED: 'Threadsとの接続の準備（戻り先の設定）がまだ整っていません。',
+  UNIVERSAL_LINK_UNSUPPORTED: 'このiOSのバージョンでは、Threadsとの接続に対応していません（iOS 17.4以降が必要です）。',
   IN_PROGRESS: '接続の処理がすでに進んでいます。',
   START_REFUSED: 'Threadsとの接続を始められませんでした。時間をおいて、もう一度お試しください。',
   CALLBACK_REFUSED: '接続を完了できませんでした。もう一度最初から接続してください。',
