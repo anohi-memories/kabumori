@@ -346,6 +346,27 @@ function rawEdges(text: string, covered: ReadonlySet<number>): ImportEdge[] {
   return edges;
 }
 
+/** A name written with \u escapes (ECMAScript allows escapes in identifiers, never in keywords). */
+const ESCAPED_NAME = /(?:[\p{ID_Start}$_]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})(?:[\p{ID_Continue}$]|\\u[0-9a-fA-F]{4}|\\u\{[0-9a-fA-F]+\})*/gu;
+
+/**
+ * Module keywords written with \u escapes anywhere in the RAW text (PR234 review, 2026-10-17): `\u0069mport(...)`,
+ * `\u{69}mport(...)`, `export * fr\u006fm "..."`. A keyword may not contain an escape, yet Deno's transpiler runs
+ * some of these forms (`deno run` loads the module, `deno check` reports TS1260), and rawEdges only looks for the
+ * literal word. So every escaped name whose decoded text contains import / export / from is refused ("<unparsed>"),
+ * in code, comments and literals alike and whatever the lexer guessed: this scan does not use the lexer.
+ */
+function escapedKeywordEdges(text: string): ImportEdge[] {
+  if (!text.includes("\\u")) return [];
+  const edges: ImportEdge[] = [];
+  for (const m of text.matchAll(ESCAPED_NAME)) {
+    if (m[0].includes("\\") && /import|export|from/u.test(decodeName(m[0]))) {
+      edges.push({ specifier: null, names: ["<unparsed>"], statement: true });
+    }
+  }
+  return edges;
+}
+
 // ---- Lexer and module-edge parser (F6 J1 R1b / R1c, 2026-10-16; PR231 review, 2026-10-17) ----------------------
 // The module is split into tokens the way an ECMAScript / TypeScript lexer does: white space, line terminators and
 // comments are trivia (a block comment ends at its FIRST "*/"); string, template, regex and number literals are single
@@ -354,10 +375,12 @@ function rawEdges(text: string, covered: ReadonlySet<number>): ImportEdge[] {
 // The lexer has one context guess: does "/" start a regex or divide? It follows the language's rules as far as a
 // tokenizer can (a regex after an operator or "(", after keywords such as return / typeof / case / default, after the
 // ")" of if / while / for / with (not of a property named if), after "of" only inside a for (...), after the "}" of a
-// block or of a function / class DECLARATION; division after a name, a literal, ")", "]", the "}" of an object literal
+// block, of a function / class DECLARATION or of a type alias's `{ ... }`; division after a name, a literal, ")", "]",
+// the "}" of an object literal
 // or of a function / class EXPRESSION, and after TypeScript's x!). A guess can still be wrong for contrived code, so
 // the parser's edges are never the only detector: rawEdges reads every import / from keyword of the raw text on its
-// own and adds every candidate the parser did not read from code. Malformed input (an unterminated string, template,
+// own and adds every candidate the parser did not read from code, and escapedKeywordEdges refuses every module keyword
+// written with \u escapes, which rawEdges cannot see. Malformed input (an unterminated string, template,
 // regex or comment, unbalanced brackets, an unknown character) makes the whole file unparsed: refused.
 // This is a static CI check of the source, not a runtime sandbox.
 
@@ -431,6 +454,21 @@ function lexModule(text: string): Lexed {
     return before?.kind === "punct" && (before.value === "." || before.value === "?.");
   };
   const nameValue = (token: Token | undefined) => token?.kind === "name" ? token.value : null;
+  // Whether tokens[index] ends `type Name` or `type Name<...>` (a TypeScript type alias, just before its "=").
+  const typeAliasBefore = (index: number): boolean => {
+    let j = index;
+    if (tokens[j]?.kind === "punct" && (tokens[j] as { value: string }).value === ">") {
+      let depth = 0;
+      for (; j >= 0; j -= 1) {
+        const token = tokens[j];
+        if (token.kind === "punct" && token.value === ">") depth += 1;
+        else if (token.kind === "punct" && token.value === "<") depth -= 1;
+        if (depth === 0) break;
+      }
+      j -= 1;
+    }
+    return nameValue(tokens[j]) !== null && nameValue(tokens[j - 1]) === "type" && !isProperty(j - 1);
+  };
   // Whether the innermost bracket holds statements (the top level of the module does too).
   const inStatements = () => open.length === 0 || STATEMENT_BRACES.has(open.at(-1)!);
   // Whether a statement may start after `prev` (so `function` / `class` there is a declaration).
@@ -551,7 +589,9 @@ function lexModule(text: string): Lexed {
     } else if (punct === "{") {
       const level = open.length;
       let kind: string;
-      if (pendingBody !== null && pendingBody.depth === level && !(prev?.kind === "punct" && TYPE_POSITION_PUNCTUATORS.has(prev.value)) &&
+      // tokens: ... type Name [<...>] = {   (the "{" is already pushed, so the name or ">" is at length - 3)
+      if (prev?.kind === "punct" && prev.value === "=" && typeAliasBefore(tokens.length - 3)) kind = "{typelit";
+      else if (pendingBody !== null && pendingBody.depth === level && !(prev?.kind === "punct" && TYPE_POSITION_PUNCTUATORS.has(prev.value)) &&
         !(prev?.kind === "name" && (prev.value === "extends" || prev.value === "implements"))) {
         kind = pendingBody.expression ? "{fexpr" : "{block";
         pendingBody = null;
@@ -567,10 +607,11 @@ function lexModule(text: string): Lexed {
       regexAllowed = true;
     } else if (punct === ")" || punct === "]" || punct === "}") {
       const top = pop();
-      const expected = punct === ")" ? ["(", "(if", "(for"] : punct === "]" ? ["["] : ["{block", "{expr", "{fexpr"];
+      const expected = punct === ")" ? ["(", "(if", "(for"] : punct === "]" ? ["["] : ["{block", "{expr", "{fexpr", "{typelit"];
       if (top === undefined || !expected.includes(top)) return fail(`unbalanced ${punct}`);
       lastCloseWasControl = top === "(if" || top === "(for";
-      regexAllowed = lastCloseWasControl || top === "{block";
+      // A type cannot be divided: a "/" right after a type alias's "{ ... }" starts the next statement.
+      regexAllowed = lastCloseWasControl || top === "{block" || top === "{typelit";
       if (pendingBody !== null && open.length < pendingBody.depth) pendingBody = null;
     } else if (punct === "!") {
       // After an expression "!" is TypeScript's non-null assertion (`x! / 2` divides); otherwise it is logical not.
@@ -719,8 +760,9 @@ const edgeCache = new Map<string, readonly ImportEdge[]>();
 
 /**
  * Every module edge of a file: the edges the parser reads from the code tokens (exact names), plus every candidate of
- * the raw scan the parser did not read (rawEdges: comments, literals, or code a wrong "/" guess hid). A file the lexer
- * cannot read is refused as a whole ("<unparsed>") and every raw candidate still counts.
+ * the raw scan the parser did not read (rawEdges: comments, literals, or code a wrong "/" guess hid), plus a refusal
+ * for every escaped module keyword (escapedKeywordEdges). A file the lexer cannot read is refused as a whole
+ * ("<unparsed>") and every raw candidate still counts.
  */
 function importEdges(text: string): readonly ImportEdge[] {
   const cached = edgeCache.get(text);
@@ -733,6 +775,7 @@ function importEdges(text: string): readonly ImportEdge[] {
     const parsed = moduleEdges(lexed.tokens);
     edges = [...parsed.edges, ...rawEdges(text, parsed.covered)];
   }
+  edges.push(...escapedKeywordEdges(text));
   edgeCache.set(text, edges);
   return edges;
 }
@@ -1482,6 +1525,80 @@ test("PR231 review: a regex / division guess can neither hide an import nor let 
   assert.deepEqual(unresolvedImports(tree), unresolvedImports(real));
   assert.deepEqual(providerImports(tree), providerImports(real));
   assert.equal(lexModule(ordinary).error, null);
+});
+
+test("PR234 review: module keywords written with \\u escapes are refused wherever they appear", async () => {
+  const real = await functionsTree;
+  const withFiles = (...files: Array<readonly [string, string]>) => new Map([...real, ...files]);
+  const bridgeSource = real.get(BRIDGE)!;
+  const unresolved = (tree: Tree, path: string, label: string) =>
+    assert.ok(unresolvedImports(tree).some((item) => item.startsWith(`${path}: `)), `${path} (${label}): not refused`);
+
+  // 1. The exact review reproduction and the forms Deno 2.9.6 actually runs (`deno run` loads the module, `deno
+  //    check` reports TS1260). The type literal used to make the lexer read the next "/" as a division and hide the
+  //    rest of the line in a string; the escaped keyword is refused anyway, by a scan that does not use the lexer.
+  const hidden = (statement: string) => `type T = { a: 1 }\n/'/.test("x"); ${statement} /'/.test("y");`;
+  for (const code of [
+    String.raw`type T = { a: 1 }/'/.test("x"); void \u0069mport("../ai_provider/mod.ts"); /'/.test("y");`,
+    hidden(String.raw`void \u0069mport("../ai_provider/mod.ts");`),
+    hidden(String.raw`void \u{69}mport("../ai_provider/mod.ts");`),
+    hidden(String.raw`void \u{0069}mport("../ai_provider/mod.ts");`),
+    hidden(String.raw`void \u0069\u006D\u0070\u006F\u0072\u0074("../ai_provider/mod.ts");`),
+    hidden(String.raw`void i\u006dport("../ai_provider/mod.ts");`),
+    hidden(String.raw`export * fr\u006fm "../ai_provider/mod.ts";`),
+    hidden(String.raw`export { findModelSpec } \u0066rom "../ai_provider/mod.ts";`),
+    hidden(String.raw`\u0065xport * from "../ai_provider/mod.ts";`),
+    hidden(String.raw`\u0069mport "../ai_provider/mod.ts";`),
+    String.raw`type T = { a: 1 }; void \u0069mport("../ai_provider/mod.ts");`,
+  ]) {
+    unresolved(withFiles([BRIDGE, `${bridgeSource}\n${code}\n`]), BRIDGE, code);
+    assert.ok(escapedKeywordEdges(code).length > 0, `escaped scan: ${code}`);
+  }
+
+  // 2. The lexer reads "/" after a type alias's "{ ... }" as a regex now, so the escaped keyword is also seen as code.
+  for (const code of [
+    `type T = { a: 1 }\n/'/.test("x");`,
+    `export type U = { b: 2 }\n/'/.test("y");`,
+    `type G<X extends string> = { c: X }\n/'/.test("z");`,
+  ]) {
+    const lexed = lexModule(code);
+    assert.equal(lexed.error, null, code);
+    assert.equal(lexed.tokens.filter((token) => token.kind === "regex").length, 1, code);
+  }
+  const asCode = lexModule(hidden(String.raw`void \u0069mport("../ai_provider/mod.ts");`));
+  assert.ok(asCode.tokens.some((token) => token.kind === "name" && token.escaped && token.value === "import"), "the parser sees the escaped name");
+  for (const [code, count] of [
+    [`const o = { a: 1 } / 2 / 3;`, 0],
+    [`type V = string;\nconst w = { a: 1 } / 2 / 3;`, 0],
+    [`const type = 1; const z = type / 2 / 3;`, 0],
+  ] as const) {
+    assert.equal(lexModule(code).tokens.filter((token) => token.kind === "regex").length, count, code);
+  }
+
+  // 3. In comments, strings and templates an escaped keyword is refused too (conservative: code or text cannot be
+  //    told apart reliably, so text never gets the benefit of the doubt).
+  for (const text of [
+    String.raw`export const note = "\u0069mport('./x.ts')";`,
+    String.raw`// \u{69}mport("./x.ts")` + "\nexport const n = 1;",
+    String.raw`export const only = "export * fr\u006fm './x.ts'";`,
+    String.raw`export const t = ` + "`" + String.raw`\u0065xport * fr\u006fm "./x.ts"` + "`;",
+  ]) {
+    unresolved(withFiles(["x-new-fn/index.ts", `${text}\n`]), "x-new-fn/index.ts", text);
+  }
+
+  // 4. Escapes that do not spell a module keyword stay accepted (strings, regexes, identifiers, templates).
+  const ordinary = [
+    String.raw`export const kana = "\u3042\u3044";`,
+    String.raw`export const space = /\u3000/u;`,
+    String.raw`const caf\u00e9 = 1;`,
+    String.raw`export const total = caf\u00e9 + 1;`,
+    "export const smile = `" + String.raw`\u{1F600}` + "`;",
+    String.raw`export const capital = "\u0049mport";`,
+  ].join("\n");
+  assert.deepEqual(escapedKeywordEdges(ordinary), []);
+  const tree = withFiles(["x-new-fn/index.ts", ordinary]);
+  assert.deepEqual(unresolvedImports(tree), unresolvedImports(real));
+  assert.deepEqual(providerImports(tree), providerImports(real));
 });
 
 test("J1 R1: ordinary imports stay accepted (no false refusal)", async () => {
