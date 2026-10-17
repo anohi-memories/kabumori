@@ -1,0 +1,113 @@
+# J2 Report — PR238 限定レビュー
+- task_id: postona-j2-pr238-auth-cross-user-review-20261017
+- slot: J2
+- status: review_required
+- next_owner: chatgpt
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: V2
+- recommended_model: Sol（高）
+- target: PR238 HEAD b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6
+- result: **CHANGES_REQUIRED / P2×2 / PRODUCTION_NO_GO**
+- production: NO_GO
+- inspection_main: 6129f0a4b5d15010f444be14d7bd3e407da50904
+- commit_hash: 7ce01ea7b2e615006afdb7aecb5e0d1c1610cdd1 (review content commit)
+- push: SUCCESS — origin/main includes review content commit; GitHub main Report/TASK exact content and ACTIVE J2 section read-back PASS
+- merge: not_performed
+- deploy: not_performed
+
+## Scope / start gate
+
+2026-10-17 JST、fresh origin/mainのJ2 TASK/Report・新旧ACTIVE/CURRENT・ルールとPR HEADを確認。前回のかぶモリ停止レビューとは**別task_id**。返却先は上記POSTONA G4ちゃ。推薦Sol（高）。独立clean checkout `/private/tmp/j2-pr238-review-20261017.Oc3EpW` に対象HEADを固定し、製品コードを変更せず、PR235＋236の統合結果だけを1回限定レビューした。過去PR全体の再監査なし。
+
+| 対象 | 検証したexact HEAD | 状態 |
+| --- | --- | --- |
+| PR238 統合候補 | `b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6` | OPEN / Draft / unmerged |
+| PR235 F5ゲート | `9480f24b68c209f6bf33b499dc11824cf4595fdd` | OPEN / Draft / unmerged |
+| PR236 F4 Provider/Surface | `605d8776c6be2e33ec247af7c82a99270cf32b82` | OPEN / Draft / unmerged |
+| 共通base PR230 | `e6725a165cd8f116a964926cdfceaa9334590491` | 比較基準、変更しない |
+
+PR238のServiceEnrollmentGateはPR235とbyte差分なし、F4のapp/onboarding/lifecycle runtimeはPR236とbyte差分なし。新seamはF4の `useServiceLifecycleEpoch` をstateless re-exportしconnected=true。統合元の所有境界を超える書換えなし。F4/F5完了待ち情報、F6/F7の別ready案件、旧G/H doneを確認し、他slotのcheckout/ソース/状態を変更していない。
+
+## Finding 1 — P2：ゲート自身の管理入口だけ旧埋め込み画面が残り、再認証後の成功応答で画面を失う
+
+- 場所: `apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx:157–169`、同ファイルの末尾管理リンク（deletionOpenFor）。
+- 担当: **F5（ゲート）＋F4（統合・入口）**。
+- 状況: login-methods/onboarding入口は外側のServiceLifecycleSurfaceへ移ったが、ゲートの「利用終了・共通IDの管理」は `deletionOpenFor` と内側AccountDeletionScreenのまま。ready判定が埋め込み画面より先なので、新しいログインへのread-backがactiveになるとchildrenを返し、終了画面を取り除く。
+
+### 実ソースでの独立再現
+
+1. A1で自動利用権確認をofflineにする → gateのerror画面（アプリ閉鎖）。
+2. そのgateにある管理リンクを押す → 埋め込みAccountDeletionScreenを表示。
+3. 本人確認で同じ人の新ログインA2へ変わる。**直後の1フレームでは画面が残る**。
+4. A2の利用権確認をactiveで返し、非同期処理をsettleする。
+5. gateはAPPを返し、埋め込み画面が消える。外側surfaceも開かれていない。本人確認・確認文等の途中フローを維持できない。
+
+独立安全assert `inline(a) || a.view.screen` がFAIL。外側surfaceから開いた対照は同じ新ログイン＋active応答でも画面が残りPASS。既存統合テストのembedded-endケースは、ENDEDを返す条件下で新ログイン直後のshapeのみ比較し、成功read-back後まで待っていないため68件の既存テストでは検出されない。
+
+これは新規cross-user漏洩ではなく、**統合時に残ったG2未完了経路**。F5側文書§5-5とF4設計§6/§7にも、surface接続後にゲート内の写しを置換する手順がある。最小修正案は、この管理入口も既存lifecycle.open(currentUserId)へ統一し、埋め込み画面/deletionOpenForを除去すること。blocked/error/reenrollからの入口が到達可能で、再認証後にactive/ended/errorのいずれを返しても外側画面が保持されることを確認する。**本レビューでは修正していない**。
+
+## Finding 2 — P2：古い再登録ハンドラは送信前に最新owner/epoch/requestを照合しない
+
+- 場所: 同 `service-enrollment-gate.tsx:127–137`（終了応答後の140/146では最新ownerを照合しているが、送信前にはない）。
+- 担当: **F5（利用登録ゲート）**、F4は限定統合テストを追加。
+- 根因: reenrollはクロージャに保存されたview/userId/loginId/epoch同士を比較するだけ。古いonPressを保持すると、後からcurrentOwner/requestが更新されてもこの比較を通過し、`enrollment.explicit` が旧トークンでreactivate RPCを送る。応答破棄の柵は送信済み副作用を取り消さない。
+
+### 独立負面ケース2件（すべてfake RPC）
+
+1. A1/epoch0/reenroll_required(version3) の登録ボタンonPressを保持 → Aのbumpでepoch1へ進め、再確認を完了 → 旧onPressを実行。
+   - 期待: 旧世代の登録要求0。
+   - 実測: `reactivate_x_autopost_service` **1件**、`p_expected_lifecycle_version:3`、旧A1トークン。epoch1の新しい選択なしでも旧要求を送る。
+2. 同じ旧A1ハンドラを保持 → Bへ切替えてBの描画/read-backを完了 → 旧onPress実行。
+   - 実測: reactivate **1件**、**A1トークンでありBトークンではない**。Bの権利書換えやtoken混線を実証したものではないが、現在のUI所有者を離れたAへの要求が送れる。
+
+**既存問題との分離:** PR230 baseの実ゲートをscratchに読み、同じA→B→旧onPressの対照を実行して1件送信されることを確認した。したがってユーザー切替形は**PR238で新規混入したregressionではない**。今回追加されたepoch/利用終了境界でも同じ送信前の欠落が残るため、「古い同意・状態の破棄／意図しない再登録」の限定調査結果として返す。
+
+再現は実TSXをtranspileしたhook harnessで保持したcallbackを直接呼ぶ負面検証。**実端末で古いネイティブイベントが配送されることや、実サーバーで登録状態が変わることは未検証**。通常のrenderやbumpだけから自動reactivateが起きることは観測していない。攻撃成功やサーバーBOLAとは主張しない。
+
+最小修正案: requestを進める／loadingへ変更する／explicitを呼ぶ**前に**、そのクリックのuser/login/epochが最新currentOwnerと一致し、view.requestが最新requestであることを確認し、古いハンドラは何もしない。既存の送信後ownerチェック、固定token、lifecycle-version CAS、二重クリック抑止は維持する。新しい人/ログイン/epochだけでなく同一ownerの新しいretry決定でも旧ハンドラを拒否するテストを追加。**ソース修正なし**。
+
+## 通過した範囲
+
+- G1成功終了/既終了だけが1回bumpし、対象本人のepoch変更で古いreadyを描画時点で破棄→現在login tokenで自動利用権再確認。signalだけでreadyを許可しない。
+- offline/500/不正応答はfail closed。旧epoch・旧loginの遅い応答で他ユーザーや新世代のreadyが復活しない。
+- 他ユーザーへのbump拒否、A→B/nullでsurfaceを閉じ、Aへ戻っても自動再表示しない。外側surfaceは同一人物の新ログインで維持する。
+- screenのuser/session binding変更で確認文・同意・結果を破棄し、新loginのpreview/本人確認を使う既存正常経路が通る。
+- bump/refreshのみではreactivateを送らない。現行ボタンの明示選択は現在のlifecycle_versionで1回。G2旧埋め込み経路と旧ハンドラ保持ケースは上記の例外としてFAIL。
+- AuthProvider/共通Auth/RPC/サーバー、publish flags、X/Threads投稿・資格情報・権利データは変更しない。baseにある `POSTONA_END_SOURCE_ENABLED` OFFと全ID削除利用不可の方針は緩和していない。
+
+## tests — 独立実測
+
+| テスト | 結果 |
+| --- | --- |
+| `service-enrollment-lifecycle.test.mjs` | 19/19 PASS |
+| `service-lifecycle.test.mjs` | 12/12 PASS |
+| `service-end-g1-g2-integration.test.mjs` | 9/9 PASS |
+| `service-enrollment.test.mjs` | 28/28 PASS |
+| 既存限定suite計 | **68/68 PASS** |
+| 独立負面＋対照6件 | **3 PASS /3 FAIL**（上記P2×2に集約） |
+| PR230 base分類対照 | **1/1 PASS**（既存の旧A callback送信を再現、safeという意味ではない） |
+| `git diff --check base..PR238` | PASS |
+
+実行条件: Deno2.9.6のNode互換テストランナー、`--no-config --no-lock --cached-only --node-modules-dir=none --no-check --deny-net --deny-env --deny-write --deny-run --allow-read`。TypeScript6.0.3は既存インストールをread-only再利用、scratch import-map＋CommonJS wrapper経由。依存インストール0、package/lock変更0。環境は空のメモリfakeへ置換し、Auth/server/fetchは合成のみ。初回の直接TS.jsマップはCJS default export解決でload前に4suiteエラーとなったため、**scratch wrapperのみ**で修正後68/68を実測（製品不具合として数えない）。npm/Nodeネイティブ実行、全app regression、tsc/lint/build、実React renderer/Expo/端末/実Auth/managed環境は今回の限定レビューでは未実行。過去Reportの全件成功を自分の測定結果として流用しない。
+
+```text
+deno test --no-config --no-lock --no-prompt --cached-only --node-modules-dir=none --no-check --deny-net --deny-env --deny-write --deny-run --allow-read --preload=/private/tmp/j2-pause-offline-env-20261015.ts --import-map=/private/tmp/j2-pr238-import-map-20261017.json tests/service-enrollment-lifecycle.test.mjs tests/service-lifecycle.test.mjs tests/service-end-g1-g2-integration.test.mjs tests/service-enrollment.test.mjs
+```
+
+独立scratch evidence（製品repoへ追加しない。主要手順・結果は本Report本文にも保存）:
+- `/private/tmp/j2-pr238-adverse-20261017_test.mjs` SHA256 `385dfc40f1518ba1a832bdbd1646958cda347be19261ceb12d23c07184768282`
+- `/private/tmp/j2-pr238-assembled-helper-20261017.mjs` SHA256 `c8faac9d59895fb10bebcb636eb1f118f7218aa8e68ac83aae5e2c93a1771c6c`
+- `/private/tmp/j2-pr238-base-control-20261017_test.mjs` SHA256 `ea5d9791906f0c0e09f8585c098dad34b0cfcef50f5c13a0a070634d1b67c620`
+
+## changed_files / remaining_issues / safety_checks
+
+変更は `.agent_v2/reports/J2.md`、`.agent_v2/tasks/J2.md`、`.agent_v2/ACTIVE_TASK.md`の**J2節のみ**。他slot/元PR HEAD/製品コード変更0。本番/managed read/write0、DB/schema/RLS/RPC/migration/Cron/settings/secrets/OAuth変更0、merge/deploy0、実Auth/AI/OpenAI/X/Threads/Push/API/課金/投稿0。秘密値・実トークンの表示0。正式baseの `?? supabase/.temp/` と既存の他checkoutを保護。
+
+次工程: G4ちゃがF5/F4へ上記ゲート範囲だけの最小修正を割り当てる。旧PR全体やサーバーAuthを再設計しない。G2の成功read-backまでの画面維持、送信前の最新owner/世代、正常クリック・失敗・遅延応答の限定回帰を確認する。本番・旧削除経路/managed Auth/全ID削除のrelease gateは引き続きNO_GO。TASK/Report/ACTIVEをreview_required / next_owner chatgptで返却し、共有内容はpublish後read-backで確認する。
+
+返却先：**POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ V2 を送ってください。**
+
+## Publication receipt
+- Review content `7ce01ea7b2e615006afdb7aecb5e0d1c1610cdd1` pushed normally to origin/main (fast-forward from `6129f0a4b5d15010f444be14d7bd3e407da50904`); no force push.
+- GitHub mainからReport/TASKを全内容一致でread-back、ACTIVEはJ2節一致で確認。review_required / next_owner chatgpt維持。今回の3ファイル以外のcommit変更なし。
+- 対象PR238 HEADはpublish直前も `b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6` 不変。source checkout clean、実API/本番/merge/deploy0。最終receiptも反映後read-backで確認する。
