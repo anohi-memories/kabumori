@@ -157,18 +157,18 @@
 
 ## F10
 - slot: F10
-- status: done
-- task_id: orchestration-v3-issue244-integration-preflight-f10-20261017
+- status: ready
+- task_id: orchestration-v3-final-legacy-snapshot-and-pilot-readiness-f10-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: Issue #244; Draft PR #229; protected Draft PR #172; prior task archived
-- blocker: L10 PASS_PREFLIGHT / V3_CUTOVER_NO_GO — legacy final snapshot stale, rules/pilot authorization and F2/L8 issues pending
-- slot_use: V3 Issue244 migration preflight and plan accepted at L10; F10 done/unreserved; PR248 Draft
+- dependencies: Issue #244; Draft PR248; Draft PR229; protected/stale PR172; previous F10 archived
+- blocker: legacy final snapshot and rules readiness pending; V3 main merge/G-H pilot NO_GO
+- slot_use: old agent final append-only snapshot Draft and V3 lightweight pilot go/no-go preparation
 
 ## J1
 - slot: J1
