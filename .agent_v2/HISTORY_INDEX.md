@@ -700,3 +700,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - 2026-10-17 | F3 | `postona-f3-x-oauth-t13-reservation-owner-guard-20261017` | L3 PASS_SOURCE_CANDIDATE / PROD NO_GO; Draft PR257 HEAD 005d7ecc | `.agent_v2/archive/2026-10-17-F3-postona-f3-x-oauth-t13-reservation-owner-guard-20261017` | 20410 bytes; SHA256 `62f8e4e5b8e707f1a572d8424ec59ed399c695d91298875399f18653f86900fa`; original blob `734e2559`; exact restore verified.
 
 - 2026-10-17 | 旧.agent最終snapshot | PR #252 MERGED `383f82d4039daef26acaf0866750d05bef4bdddc` | `.agent_v2/archive/2026-10-17-legacy-agent-final-cae7aa4e/` | 33 original files; MANIFEST / SHA256SUMS 33/33 / RESTORE_RESULT 33/33 PASS; origin main `cae7aa4e8d90dc58b314dec5430187ddbb7fda08`; append-only,旧基盤は維持。
+
+## F4 POSTONA Threads credential rotation CAS archive — 2026-10-17
+- task_id: `postona-f4-threads-credential-rotate-cas-sql-contract-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `4846b1bb`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-credential-rotate-cas-sql-contract-20261017/F4.md`
+- bytes: 16263; SHA256: `278bcc9de05851af623c1cac85c4fba8fff978ae5e9bcbf8ae697794b0e0f591`; original_blob: `3cb9e7793bab17be6452ab2370f6f1ee1c40c4ce`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-pr251-android-intent-filter-p2-fix-20261017`). L4 accepted, PR258 `713955b5371cf4f1de4681ecec1737e1ccc7d4cd`, not applied, production and pilot NO_GO.
