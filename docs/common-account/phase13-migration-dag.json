@@ -1,0 +1,2027 @@
+{
+  "version": 1,
+  "kind": "postona-disposable-supabase-migration-dag",
+  "rules": [
+    "A migration file is applied to a disposable project only if it is a chain node below, byte-identical to its sha256, with no blocking scanner finding.",
+    "No other repository migration is ever applied: what they created is carried by the digest-pinned schema-only baseline export, and 8 of them name the production host with cron.schedule + net.http_post.",
+    "P1 and P2 are recorded as applied to production; P3a..P10 are unmerged Draft source. Nothing here is a production approval.",
+    "Missing DDL (public.brands, public.social_accounts, public.social_account_oauth_states) is never inferred: it is listed as unknown until a separately approved schema-only inventory supplies it.",
+    "`supabase db push`, `supabase link` and \"apply every migration\" are never used."
+  ],
+  "chain": [
+    {
+      "id": "P1",
+      "order": 1,
+      "file": "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql",
+      "sha256": "e632214b5602c12ee73d9a7475af36791138099a1a7fdba7e8fb521afc01cde3",
+      "bytes": 79352,
+      "marker": "public.start_kabumori_service()",
+      "production": "applied",
+      "appliedEvidence": {
+        "file": ".agent/CURRENT_STATE.md",
+        "phrase": "## Final K5 — Common-account Phase 1 foundation applied PASS — 2026-10-06",
+        "summary": "applied exactly once by the G5 production window of 2026-10-06 (closed 14:58 JST); postflight exact"
+      },
+      "createsRelations": [
+        "private.account_lifecycle_managed_checkpoints",
+        "private.account_lifecycle_operations",
+        "private.account_lifecycle_settings",
+        "public.common_accounts",
+        "public.service_entitlements"
+      ],
+      "definesFunctions": [
+        "private.account_lifecycle_account_changed",
+        "private.account_lifecycle_authorization_problems",
+        "private.account_lifecycle_backfill",
+        "private.account_lifecycle_builtin_checkpoints",
+        "private.account_lifecycle_deletion_blockers",
+        "private.account_lifecycle_footprint",
+        "private.account_lifecycle_guard_account_delete",
+        "private.account_lifecycle_guard_checkpoint_registry",
+        "private.account_lifecycle_guard_entitlement_identity",
+        "private.account_lifecycle_invalidate_readiness",
+        "private.account_lifecycle_lock",
+        "private.account_lifecycle_managed_ownership",
+        "private.account_lifecycle_readiness_refusal",
+        "private.account_lifecycle_required_checkpoints",
+        "private.account_lifecycle_requirements_changed",
+        "private.account_lifecycle_requirements_valid",
+        "private.account_lifecycle_settings_changed",
+        "private.account_lifecycle_start_service",
+        "private.account_lifecycle_touch_account",
+        "private.account_lifecycle_touch_entitlement",
+        "private.account_lifecycle_touch_settings",
+        "public.abort_common_account_deletion",
+        "public.abort_service_deletion",
+        "public.begin_common_account_deletion",
+        "public.begin_service_deletion",
+        "public.clear_common_account_deletion_checkpoint",
+        "public.common_account_deletion_eligibility",
+        "public.finish_service_deletion",
+        "public.prepare_common_account_auth_delete",
+        "public.record_common_account_deletion_checkpoint",
+        "public.start_kabumori_service",
+        "public.start_x_autopost_service",
+        "public.withdraw_kabumori_service"
+      ],
+      "requires": {
+        "chain": [],
+        "baseline": [
+          "auth.identities",
+          "auth.users",
+          "public.admin_users",
+          "public.alert_category_settings",
+          "public.alert_settings",
+          "public.brand_memberships",
+          "public.brands",
+          "public.device_push_tokens",
+          "public.notifications",
+          "public.personalized_reports",
+          "public.profiles",
+          "public.social_account_oauth_states",
+          "public.social_accounts",
+          "public.social_mobile_account_deletions",
+          "public.tracked_stocks",
+          "storage.buckets",
+          "storage.objects"
+        ],
+        "platform": [
+          "auth.users",
+          "auth.identities",
+          "auth.uid()",
+          "storage.*"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": [
+          "DATA_WRITE",
+          "DYNAMIC_SQL"
+        ]
+      }
+    },
+    {
+      "id": "P2",
+      "order": 2,
+      "file": "supabase/migrations/20261006230000_common_account_service_start_intent.sql",
+      "sha256": "2c736e5aa70c61bf5563eee185d226fbde2c7f37f034c262f5e4b31f81888fa4",
+      "bytes": 11959,
+      "marker": "public.reactivate_kabumori_service(bigint)",
+      "production": "applied",
+      "appliedEvidence": {
+        "file": ".agent/tasks/CLAUDE_TASK_5.md",
+        "phrase": "### Phase 2 production apply — 2026-10-07（APPLIED_PASS）",
+        "summary": "applied exactly once by the G5 production window of 2026-10-07 (Stage A COMMIT 13:47:09 JST); read-backs ALL PASS"
+      },
+      "createsRelations": [],
+      "definesFunctions": [
+        "private.account_lifecycle_active_answer",
+        "private.account_lifecycle_reactivate_service",
+        "private.account_lifecycle_service_refusal",
+        "private.account_lifecycle_start_service",
+        "public.reactivate_kabumori_service",
+        "public.reactivate_x_autopost_service"
+      ],
+      "requires": {
+        "chain": [
+          "P1"
+        ],
+        "baseline": [
+          "auth.users",
+          "public.profiles"
+        ],
+        "platform": [
+          "auth.users",
+          "auth.uid()"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ]
+      }
+    },
+    {
+      "id": "P3a",
+      "order": 3,
+      "file": "supabase/migrations/20261009120000_common_account_deletion_completion.sql",
+      "sha256": "fd340765dd1aa8891b4391573568c36741701b762be928964e19d020aee3b68c",
+      "bytes": 44588,
+      "marker": "public.claim_common_account_deletion(uuid,uuid,integer)",
+      "production": "draft",
+      "createsRelations": [
+        "private.account_lifecycle_release_gates"
+      ],
+      "definesFunctions": [
+        "private.account_lifecycle_gate_open",
+        "private.account_lifecycle_owned_operation",
+        "private.account_lifecycle_residue",
+        "private.account_lifecycle_storage_inventory",
+        "public.begin_common_account_deletion_external_step",
+        "public.claim_common_account_deletion",
+        "public.common_account_deletion_release_gate",
+        "public.common_account_deletion_storage_objects",
+        "public.complete_common_account_deletion",
+        "public.prepare_owned_common_account_auth_delete",
+        "public.record_common_account_deletion_error",
+        "public.release_common_account_deletion_claim",
+        "public.renew_common_account_deletion_claim",
+        "public.resolve_common_account_deletion_external_step",
+        "public.set_owned_common_account_deletion_checkpoint",
+        "public.settle_common_account_deletion_external_step"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P2"
+        ],
+        "baseline": [
+          "auth.identities",
+          "auth.users",
+          "storage.buckets",
+          "storage.objects"
+        ],
+        "platform": [
+          "auth.users",
+          "auth.identities",
+          "storage.*"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": [
+          "DATA_WRITE",
+          "DYNAMIC_SQL"
+        ]
+      }
+    },
+    {
+      "id": "P3b",
+      "order": 4,
+      "file": "supabase/migrations/20261010051938_common_account_service_write_guard.sql",
+      "sha256": "d6db1c1343a409ab169c4c4821ca8b6f1159621a80dd8544bda21c7efc2f5e4a",
+      "bytes": 9660,
+      "marker": "private.account_lifecycle_assert_active_service_write(uuid,text)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "private.account_lifecycle_assert_active_service_write"
+      ],
+      "requires": {
+        "chain": [
+          "P1"
+        ],
+        "baseline": [],
+        "platform": [
+          "auth.sessions",
+          "auth.uid()"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": []
+      }
+    },
+    {
+      "id": "P4",
+      "order": 5,
+      "file": "supabase/migrations/20261012130000_common_account_core_service_fence.sql",
+      "sha256": "88dd4507b9b2c2d07d9c9d03fd1853d470fcbedf2c06d778a0d94a5d2e8a40e0",
+      "bytes": 15177,
+      "marker": "private.account_lifecycle_service_state_refusal(uuid,text)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "private.account_lifecycle_service_insert_fence",
+        "private.account_lifecycle_service_state_refusal",
+        "public.ensure_my_profile"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P2",
+          "P3b"
+        ],
+        "baseline": [
+          "public.profiles"
+        ],
+        "platform": [
+          "auth.uid()"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": []
+      }
+    },
+    {
+      "id": "P5",
+      "order": 6,
+      "file": "supabase/migrations/20261012230000_common_account_service_brand_state.sql",
+      "sha256": "3131444556e5d56f54e476cf2e428f176a2099abcdd342b36642a659327f6efd",
+      "bytes": 11759,
+      "marker": "public.common_account_brand_service_state(text,text)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "private.account_lifecycle_assert_brand_service_active",
+        "private.account_lifecycle_brand_owner",
+        "private.account_lifecycle_service_state_readonly",
+        "public.common_account_brand_service_state"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P4"
+        ],
+        "baseline": [
+          "auth.users",
+          "public.brand_memberships",
+          "public.brands"
+        ],
+        "platform": [
+          "auth.users"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": []
+      }
+    },
+    {
+      "id": "P6",
+      "order": 7,
+      "file": "supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql",
+      "sha256": "ce10e9736812292630b99da7d2636a1d9d48b11cddbbd1701dd5919c26ad5f68",
+      "bytes": 35627,
+      "marker": "public.claim_service_deletion(uuid,text,uuid,uuid,uuid,integer)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "private.account_lifecycle_abort_service_deletion",
+        "private.account_lifecycle_cleanup_authorized",
+        "private.account_lifecycle_finish_service_deletion",
+        "private.account_lifecycle_owned_service_operation",
+        "public.abort_owned_service_deletion",
+        "public.abort_service_deletion",
+        "public.acknowledge_owned_remote_unverified",
+        "public.claim_service_deletion",
+        "public.common_account_provider_snapshot",
+        "public.finish_owned_service_deletion",
+        "public.finish_service_deletion",
+        "public.record_owned_service_deletion_provider_result",
+        "public.release_service_deletion_claim",
+        "public.renew_service_deletion_claim"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P3a",
+          "P4",
+          "P5"
+        ],
+        "baseline": [
+          "public.social_accounts"
+        ],
+        "platform": []
+      },
+      "scanner": {
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ]
+      }
+    },
+    {
+      "id": "P8",
+      "order": 8,
+      "file": "supabase/migrations/20261013140000_common_account_service_reconciliation_facts.sql",
+      "sha256": "5745621a188f30ec3ff6c40ca8bebb2b450b0bc2dba53d94a62fc4aebfe3ad9f",
+      "bytes": 10737,
+      "marker": "public.common_account_service_end_result(uuid,text)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "public.common_account_service_end_result",
+        "public.record_owned_service_deletion_reconciliation"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P6"
+        ],
+        "baseline": [],
+        "platform": []
+      },
+      "scanner": {
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ]
+      }
+    },
+    {
+      "id": "P9",
+      "order": 9,
+      "file": "supabase/migrations/20261015090000_common_account_enrollment_session_fence.sql",
+      "sha256": "129d8b803bb375435d3fdc307ff844acb0a5e31df4021ee3d8c5be8239b81060",
+      "bytes": 13989,
+      "marker": "private.account_lifecycle_enrollment_fence(uuid,boolean)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "private.account_lifecycle_enrollment_fence",
+        "public.ensure_my_profile",
+        "public.reactivate_kabumori_service",
+        "public.reactivate_x_autopost_service",
+        "public.start_kabumori_service",
+        "public.start_x_autopost_service"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P2",
+          "P3b",
+          "P8"
+        ],
+        "baseline": [],
+        "platform": [
+          "auth.sessions",
+          "auth.uid()"
+        ]
+      },
+      "scanner": {
+        "blocking": [],
+        "review": []
+      }
+    },
+    {
+      "id": "P10",
+      "order": 10,
+      "file": "supabase/migrations/20261015120000_common_account_x_unconfirmed_snapshot_record.sql",
+      "sha256": "766e6fce56ef56c2ede40f77b870bcef7600f83701130ba6324dbc0fc2ff0a27",
+      "bytes": 9323,
+      "marker": "public.record_owned_service_deletion_x_unconfirmed(uuid,text,uuid,uuid,integer,text)",
+      "production": "draft",
+      "createsRelations": [],
+      "definesFunctions": [
+        "public.record_owned_service_deletion_x_unconfirmed"
+      ],
+      "requires": {
+        "chain": [
+          "P1",
+          "P6",
+          "P8"
+        ],
+        "baseline": [],
+        "platform": []
+      },
+      "scanner": {
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ]
+      }
+    }
+  ],
+  "baseline": {
+    "requiredRelations": [
+      "auth.identities",
+      "auth.users",
+      "public.admin_users",
+      "public.alert_category_settings",
+      "public.alert_settings",
+      "public.brand_memberships",
+      "public.brands",
+      "public.device_push_tokens",
+      "public.notifications",
+      "public.personalized_reports",
+      "public.profiles",
+      "public.social_account_oauth_states",
+      "public.social_accounts",
+      "public.social_mobile_account_deletions",
+      "public.tracked_stocks",
+      "storage.buckets",
+      "storage.objects"
+    ],
+    "unknownRelations": [
+      "public.brands",
+      "public.social_account_oauth_states",
+      "public.social_accounts"
+    ],
+    "unknownColumns": [
+      "public.brands.code_profile_key",
+      "public.brands.id",
+      "public.social_account_oauth_states.brand_id",
+      "public.social_account_oauth_states.initiated_by_user_id",
+      "public.social_accounts.brand_id",
+      "public.social_accounts.connection_status"
+    ],
+    "unknownForeignKeys": [
+      "public.brand_memberships(brand_id)->public.brands(id) on delete c",
+      "public.social_account_oauth_states(brand_id)->public.brands(id) on delete a",
+      "public.social_account_oauth_states(initiated_by_user_id)->auth.users(id) on delete c",
+      "public.social_accounts(brand_id)->public.brands(id) on delete a"
+    ],
+    "createdButNotReplayable": [
+      "public.brand_memberships",
+      "public.social_mobile_account_deletions"
+    ],
+    "knownCreators": {
+      "auth.identities": {
+        "class": "platform_managed",
+        "createdBy": [],
+        "alteredBy": []
+      },
+      "auth.users": {
+        "class": "platform_managed",
+        "createdBy": [],
+        "alteredBy": []
+      },
+      "public.admin_users": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260901064201"
+        ],
+        "alteredBy": []
+      },
+      "public.alert_category_settings": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260913140000"
+        ],
+        "alteredBy": []
+      },
+      "public.alert_settings": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260901061217"
+        ],
+        "alteredBy": [
+          "20260911200000",
+          "20260913140000"
+        ]
+      },
+      "public.brand_memberships": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260918120000"
+        ],
+        "alteredBy": []
+      },
+      "public.brands": {
+        "class": "absent_from_repository",
+        "createdBy": [],
+        "alteredBy": []
+      },
+      "public.device_push_tokens": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260903160000"
+        ],
+        "alteredBy": []
+      },
+      "public.notifications": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260901061217"
+        ],
+        "alteredBy": [
+          "20260912100000"
+        ]
+      },
+      "public.personalized_reports": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260911230000"
+        ],
+        "alteredBy": []
+      },
+      "public.profiles": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260901061217"
+        ],
+        "alteredBy": []
+      },
+      "public.social_account_oauth_states": {
+        "class": "repository_altered_only",
+        "createdBy": [],
+        "alteredBy": [
+          "20260919120000"
+        ]
+      },
+      "public.social_accounts": {
+        "class": "repository_altered_only",
+        "createdBy": [],
+        "alteredBy": [
+          "20260924023133",
+          "20261007150000"
+        ]
+      },
+      "public.social_mobile_account_deletions": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260928160000"
+        ],
+        "alteredBy": []
+      },
+      "public.tracked_stocks": {
+        "class": "repository_created",
+        "createdBy": [
+          "20260901061217"
+        ],
+        "alteredBy": []
+      },
+      "storage.buckets": {
+        "class": "platform_managed",
+        "createdBy": [],
+        "alteredBy": []
+      },
+      "storage.objects": {
+        "class": "platform_managed",
+        "createdBy": [],
+        "alteredBy": []
+      }
+    }
+  },
+  "excluded": {
+    "total": 110,
+    "buckets": {
+      "cron_net_production_host": [
+        "20260908110000_add_important_news_publish_ready_cron.sql",
+        "20260910163500_add_send_push_notifications_dispatch_cron.sql",
+        "20260916100000_mic_phase1b_automation_cron.sql",
+        "20260919090000_mic_fx_phase1_automation_cron.sql",
+        "20260921090000_mic_equity_index_phase1_automation_cron.sql",
+        "20260923090000_mic_macro_indicators_phase1a_automation_cron.sql",
+        "20260924093000_mic_estat_activation_and_gated_macro_cron.sql",
+        "20260930090000_mic_scenario_automation_cron_phase3c.sql"
+      ],
+      "cron_indirect": [
+        "20260923110440_important_news_monitor_caller_auth.sql"
+      ],
+      "vault_reference": [
+        "20260919120000_social_mobile_x_oauth_onboarding.sql",
+        "20260923120000_social_mobile_history_access_token_reader.sql",
+        "20260924170000_x_autopost_phase1e_claim_bound_credential_reader.sql",
+        "20260925120000_x_autopost_phase1h_dispatch_resume.sql",
+        "20260925140000_x_account_credential_refresh_core.sql",
+        "20260925150000_x_autopost_phase1i_account_refresh.sql",
+        "20260926032054_x_account_refresh_rollout_authority.sql",
+        "20260928160000_social_mobile_account_deletion_candidate.sql"
+      ],
+      "url_literal_seed": [
+        "20260829010000_add_useful_tips.sql",
+        "20260829030000_add_morning_report.sql",
+        "20260830022321_fix_and_add_us_premarket_report.sql",
+        "20260830093000_add_us_premarket_report.sql",
+        "20260830100000_add_important_news_monitor_foundation.sql",
+        "20260830110000_add_tdnet_company_ir_sources.sql",
+        "20260911090000_app_severity_news_feed.sql",
+        "20260912090000_add_market_intelligence_core_phase1a.sql",
+        "20260918090000_mic_fx_phase1_usdjpy.sql",
+        "20260919195155_important_news_shadow_phase1.sql",
+        "20260921221336_mic_fed_fomc_statement_phase2b2.sql",
+        "20260924090000_mic_macro_indicators_phase1b_estat_cpi.sql"
+      ],
+      "other_blocking": [
+        "20260929090000_news_discovery_observer.sql"
+      ],
+      "review_only": [
+        "20260828190000_create_tips.sql",
+        "20260828203000_create_post_scheduler.sql",
+        "20260828213000_expand_tips_catalog.sql",
+        "20260828223000_create_interaction_posts.sql",
+        "20260828225000_expand_interaction_topics.sql",
+        "20260828234000_add_interaction_collision_avoidance.sql",
+        "20260829050000_add_close_report.sql",
+        "20260830084000_enable_daily_useful_tips.sql",
+        "20260830112826_restore_missing_close_report_dependency.sql",
+        "20260830130000_add_important_news_post_generation.sql",
+        "20260830140000_add_important_news_x_publish.sql",
+        "20260901044548_add_morning_greeting_schedule.sql",
+        "20260903060000_add_morning_report_retry.sql",
+        "20260905010000_enable_morning_greeting_auto_dispatch.sql",
+        "20260911200000_market_critical_alerts_dedupe.sql",
+        "20260911230000_personalized_reports.sql",
+        "20260912100000_harden_push_notification_claims.sql",
+        "20260913090000_add_market_intelligence_state_layer_phase1b.sql",
+        "20260913140000_broad_news_visibility_notification_presets.sql",
+        "20260914090000_mic_phase1b_hardening_fred_freshness_grace.sql",
+        "20260915090000_mic_phase1b_hardening_stale_after_threshold.sql",
+        "20260916090000_mic_phase1b_fred_cadence_fix.sql",
+        "20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql",
+        "20260919100000_market_report_data_packets_phase1.sql",
+        "20260920090000_mic_equity_index_phase1.sql",
+        "20260920100000_market_report_packets_phase2.sql",
+        "20260921133533_mic_fed_target_range_rates.sql",
+        "20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql",
+        "20260922090000_mic_macro_indicators_phase1a.sql",
+        "20260923050259_mic_fed_ai_usage_receipt_phase2b5i.sql",
+        "20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql",
+        "20260924023133_x_autopost_phase1b_account_bound_queue.sql",
+        "20260924100000_ensure_my_profile.sql",
+        "20260924150000_mic_state_evidence_phase2c1.sql",
+        "20260924160000_x_autopost_phase1d_claim_domain_partition.sql",
+        "20260924180000_x_autopost_phase1f_atomic_completion.sql",
+        "20260925090000_x_autopost_phase1g_multistep_completion.sql",
+        "20260928120000_mic_scenario_layer_phase3a.sql",
+        "20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql",
+        "20261003090000_social_mobile_publish_permission_boundary.sql",
+        "20261004090000_ai_lab_topic_claims.sql",
+        "20261006160000_vault_account_brand_post_completion.sql",
+        "20261006160100_social_mobile_publish_settings_reader.sql",
+        "20261006160200_x_account_publish_authority.sql",
+        "20261007120000_market_report_generation_traces.sql",
+        "20261007150000_postona_social_accounts_multi_provider.sql",
+        "20261007173000_ai_lab_topic_evergreen_capacity.sql"
+      ],
+      "clean": [
+        "20260828220000_add_scheduled_difficulty.sql",
+        "20260828231000_create_oauth_token_store.sql",
+        "20260828235500_add_target_question_format.sql",
+        "20260830022244_add_us_premarket_report.sql",
+        "20260830120000_add_important_news_ai_judgement.sql",
+        "20260830141000_separate_important_news_x_published_at.sql",
+        "20260901061217_add_kabumori_mvp_tables.sql",
+        "20260901064201_add_admin_dashboard_access.sql",
+        "20260903120000_add_publish_claims.sql",
+        "20260903150000_kabumori_grants.sql",
+        "20260903160000_add_device_push_tokens.sql",
+        "20260903170000_add_stocks_master_sync_runs.sql",
+        "20260904010000_add_important_news_generation_issues.sql",
+        "20260904170000_add_posting_windows_admin_update.sql",
+        "20260904180000_add_market_macro_source_type.sql",
+        "20260904190000_add_useful_tip_generation_diagnostics.sql",
+        "20260904200000_add_breaking_market_source_type.sql",
+        "20260904210000_add_generation_claim_and_voice_retry.sql",
+        "20260905140638_get_my_important_stock_news.sql",
+        "20260910200000_include_published_in_important_stock_news_feed.sql",
+        "20260911120000_market_relevance_news_feed.sql",
+        "20260911150000_news_feed_presentation_fields.sql",
+        "20260911170000_news_app_copy_ja.sql",
+        "20260912180000_news_coverage_classification.sql",
+        "20260918120000_social_mobile_brand_memberships.sql",
+        "20260921115317_important_news_search_diagnostics.sql",
+        "20260922045046_social_mobile_content_settings_candidate.sql",
+        "20260922093000_mic_central_bank_decision_event_type_phase2b3.sql",
+        "20260922100000_mic_fed_statement_diffs_phase2b5.sql",
+        "20260922110000_important_news_app_copy_v2_source_backed_candidates.sql",
+        "20260923035652_allow_gpt6_important_news_model_metadata.sql",
+        "20260928123000_add_daily_kabumori_tip_rpc.sql",
+        "20261003120000_social_mobile_content_settings_hardening.sql"
+      ]
+    },
+    "files": [
+      {
+        "file": "supabase/migrations/20260828190000_create_tips.sql",
+        "sha256": "da79f3c724f8bbc62941fe87a44958e6f05a93df64631a06ecfb684191e83b2b",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828203000_create_post_scheduler.sql",
+        "sha256": "6be6d6bd561e4e7d6888fdae938074510b8a336fd6db4b79f48ef41945ab88a2",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828213000_expand_tips_catalog.sql",
+        "sha256": "7c0c02f82f1349f42bc2ec5c64f2808e85d096a0d58aeb0caa473361354098e2",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828220000_add_scheduled_difficulty.sql",
+        "sha256": "d70c208d327646914174d3d03ffaf2d110ad27e13afed5cd348d5b3172fbdcde",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828223000_create_interaction_posts.sql",
+        "sha256": "226cc48511d8a02400604a6bccc438e50346d291e197d2117afa7a961ce13cd8",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828225000_expand_interaction_topics.sql",
+        "sha256": "b5e81b4ac51d4882162c1db603ad5ca0bf813869369ba01eeed8640751377a26",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828231000_create_oauth_token_store.sql",
+        "sha256": "3888b40491fb49dc6ac359697c6f0796d0e646237278b6977c5f968a42c082de",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828234000_add_interaction_collision_avoidance.sql",
+        "sha256": "ec9bdb75714906dc0ea8dd51ac8dbe84090db0ace2af53e5fb4a331c6ef297de",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260828235500_add_target_question_format.sql",
+        "sha256": "6212da8b2143dbe226814323238fc5e3db64c56de385743741d19ed99e574f0d",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260829010000_add_useful_tips.sql",
+        "sha256": "4e92fcbac53bcf3b62682cf2fb3b67689683ba9536aa0166a1c22d35e49dc049",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260829030000_add_morning_report.sql",
+        "sha256": "dce10138ffc4dd10307aac3a0eacf5b37301e134e32a9eaa4b4fb8c8a115b9c4",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260829050000_add_close_report.sql",
+        "sha256": "a0db15682d63c2c08e3c6ebcf00e2837b88b84d5c8275ac6b5f233c691018172",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830022244_add_us_premarket_report.sql",
+        "sha256": "14f1a23c855435e084a3d59e8acc9cc1cfa0af89b407939afbb48a63d7132ba9",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830022321_fix_and_add_us_premarket_report.sql",
+        "sha256": "3d02eb61fa9419ad8cce79218b85fa963304bae72c814946a3c44d364bf22c6b",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830084000_enable_daily_useful_tips.sql",
+        "sha256": "6e86e158fd996c3b55202d103da7abba16f4c0e9e08a0cef056a5873bb3bf462",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE",
+          "TOP_LEVEL_SELECT"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830093000_add_us_premarket_report.sql",
+        "sha256": "62db5a40b1989ac20bc3277097e5fb6d8dfca4e437678091d0f7639275d8d6f4",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830100000_add_important_news_monitor_foundation.sql",
+        "sha256": "aab22ab663e33d8a37b94eb2d68c269461f11a154d41f2288f93fd1f5298d493",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830110000_add_tdnet_company_ir_sources.sql",
+        "sha256": "1bd8c9e9ac216c10cd786b70f99dfa041bcb6ac8ea8ea91aa130762815546051",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE",
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830112826_restore_missing_close_report_dependency.sql",
+        "sha256": "beb81eaaff06e6127297fbcae5ce3d057bfa67e316f8e60903a7dfd336700df3",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830120000_add_important_news_ai_judgement.sql",
+        "sha256": "aa3b12319ccaed03affa8feaba7ee5ce1d892153b9eaffce5db598923e37396a",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830130000_add_important_news_post_generation.sql",
+        "sha256": "0e2ef218a981ddc10b2abf08a8e669536a3c9d22093c10a3a0459678e9f16974",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830140000_add_important_news_x_publish.sql",
+        "sha256": "1c864aa4b112a3d3f4e4c9f606f6ecbb80e40d98a978e4b036fffc157eb1a528",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260830141000_separate_important_news_x_published_at.sql",
+        "sha256": "5fbefbe9b8410a4e47baedd072383cd28f326fb6a5ec0004d902f355f58b9239",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260901044548_add_morning_greeting_schedule.sql",
+        "sha256": "161b67736f74e6d4077e7196be1584af03e1872feb56ef07ad2239493fc6b8a6",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260901061217_add_kabumori_mvp_tables.sql",
+        "sha256": "642719651611d7bb8026758e70cd28f622cbff9b758649e01c032d23512df60d",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": [
+          "public.alert_settings",
+          "public.notifications",
+          "public.profiles",
+          "public.tracked_stocks"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260901064201_add_admin_dashboard_access.sql",
+        "sha256": "9652ad4a3496246ae3a63f486c4c006232ee94648b573f55bf001d22428345dd",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": [
+          "public.admin_users"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260903060000_add_morning_report_retry.sql",
+        "sha256": "9988d0b19fda5e6cf5e0e2601e4a54dbd1cf76735579924e93792788893a104d",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260903120000_add_publish_claims.sql",
+        "sha256": "da9cfe4a8fa5583b028a2b29af309492a0339f3d198fd804aa7610c4afb12075",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260903150000_kabumori_grants.sql",
+        "sha256": "3e73ac3c70c3812b5e314556079aa607c4f1f317f701f4bdcad7b0bdb8cf425e",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260903160000_add_device_push_tokens.sql",
+        "sha256": "9b97f0a8dba6fc6d11ba7487113cff4dc2f11e0bd03f990284c7ffb77fa28156",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": [
+          "public.device_push_tokens"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260903170000_add_stocks_master_sync_runs.sql",
+        "sha256": "f210ab7bc7be6975d6925fab4bdb3a456dbae4c1ee59247b74022cdb3532f8f5",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260904010000_add_important_news_generation_issues.sql",
+        "sha256": "c6c9f9e45016c3081bc6b3b1c648868e81a88e9df521f78cf1841cb27b70d231",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260904170000_add_posting_windows_admin_update.sql",
+        "sha256": "d2e4cb44e094836ef95f1f0ee23c9afb6fc5c3f02dcb5132807b568d69c42e8d",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260904180000_add_market_macro_source_type.sql",
+        "sha256": "25a649e1eec54d84a064ee9f14c442a29f0c13786075b0ec13a4dde00e2bbe41",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260904190000_add_useful_tip_generation_diagnostics.sql",
+        "sha256": "2ef1533df6c4b347faf6ef04a2db0c9fd41fb7048ced43430f3554433a7f2881",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260904200000_add_breaking_market_source_type.sql",
+        "sha256": "7cabb0c5618c900cafd257a31883ac6c73d4808e9273b672040fb4e55135244c",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260904210000_add_generation_claim_and_voice_retry.sql",
+        "sha256": "b56a32f9d22320631aeeb955a5a3412d25e4f85482ced47881ed4c148856f56f",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260905010000_enable_morning_greeting_auto_dispatch.sql",
+        "sha256": "71bf94ca1a28f43d6b299ac703faf1e6dfb9b582c63dae0bb8da755148463e37",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260905140638_get_my_important_stock_news.sql",
+        "sha256": "c02c5a3c54c279990d681118d5836e16a63a000448f535c56941cf5f34cdf271",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260908110000_add_important_news_publish_ready_cron.sql",
+        "sha256": "173e2f896e8abbe2a78db61c6b1b5c75e5186ea0d100ba35807dc6f776946f8f",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260910163500_add_send_push_notifications_dispatch_cron.sql",
+        "sha256": "1c0a1e3fcd825667fc0fb8bcb0899fd5efbe3dfe5afdc791bcb4d16c6543eb12",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260910200000_include_published_in_important_stock_news_feed.sql",
+        "sha256": "e326b01746d8bbb070a9a26ebf0c45476f4b344e91e0ed1b27998ab56e6e4def",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260911090000_app_severity_news_feed.sql",
+        "sha256": "fb3217a008683df44c89c0afa445ca3e913e4443aebc219e19ec10f15e4cf808",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260911120000_market_relevance_news_feed.sql",
+        "sha256": "6f0ba79e5f744b66b63161636ea4d1cab076f7b282a9672d87d7913fb017b0b5",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260911150000_news_feed_presentation_fields.sql",
+        "sha256": "b2cb1476d7469667aaabca7c4d312198ed1a9da2160b154aaa536d1de840fbc2",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260911170000_news_app_copy_ja.sql",
+        "sha256": "7d55fc14ace556d70193c5ac6f1bdd957c3fbaf99cc957ac97a524a299815e64",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260911200000_market_critical_alerts_dedupe.sql",
+        "sha256": "bc1d52e33c57b6542ea2142c6a5ceb6426d075c23e22c71436eef01069d4bc20",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.alert_settings"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260911230000_personalized_reports.sql",
+        "sha256": "109e02e87a4f0d7203c6cb6bdb915c5746576780683ab300bb5c4d7570b3d169",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.personalized_reports"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260912090000_add_market_intelligence_core_phase1a.sql",
+        "sha256": "9642b4a5aae356a133a3afb1e4482a37e3383fcedf118a3da0d05ef8da80cf83",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260912100000_harden_push_notification_claims.sql",
+        "sha256": "c2088daa2e80474c160acf579ef5573ced2880811327c87939a1105b6b1f6a22",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.notifications"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260912180000_news_coverage_classification.sql",
+        "sha256": "88cc9cf1d3ce4ecdaa9d03ebac1fecce7ac9e650214a62f8a7daab67d19b6cbc",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260913090000_add_market_intelligence_state_layer_phase1b.sql",
+        "sha256": "f66ec8c6bece1a24754b81e0264fb92a9ce3718a2881f78eb3b27eecf18610aa",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260913140000_broad_news_visibility_notification_presets.sql",
+        "sha256": "4795a0fdafcfe990459d90d2395264fd2abbba2ac56c2c8154076a4b81e72ef2",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.alert_category_settings",
+          "public.alert_settings"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260914090000_mic_phase1b_hardening_fred_freshness_grace.sql",
+        "sha256": "e5962dcfcae3a75ced4c672c9cd513170b5a0a7b772c0c0a41307ba672064f25",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260915090000_mic_phase1b_hardening_stale_after_threshold.sql",
+        "sha256": "630b12c55986bda9e14abfc9fea7cb9080b2884e21b86897079c344e237c36b0",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260916090000_mic_phase1b_fred_cadence_fix.sql",
+        "sha256": "29d04caef9cf47926143df2aea8348aa0a0ce316cc65684d72fb878fb87ee937",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260916100000_mic_phase1b_automation_cron.sql",
+        "sha256": "08946046f5faac78adb1f5b0c58f3dda891a0ba2e503f874514a9a58a1d019ad",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "TOP_LEVEL_SELECT"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260917120000_broad_news_phase5_all_useful_scope_and_run_diagnostics.sql",
+        "sha256": "36fc88c280f66b6ea5ec815bd6da37131098e054a03807ce08535580f983782a",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260918090000_mic_fx_phase1_usdjpy.sql",
+        "sha256": "72123af0b4e5639b267ce8336f99481fcfac581a368b813fc28b77e5e3afd8db",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260918120000_social_mobile_brand_memberships.sql",
+        "sha256": "a74e70c42d0b10bd773dd614c70f59e807e6b08a8da90afaa05dee2fd09321fd",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": [
+          "public.brand_memberships"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260919090000_mic_fx_phase1_automation_cron.sql",
+        "sha256": "5058ae5c1534a241f47bad640b6ddadc6c59fb0047699b5d3956cef78e1f7952",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "TOP_LEVEL_SELECT"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260919100000_market_report_data_packets_phase1.sql",
+        "sha256": "6c2a520b3b7c283f7a38871ac14dbabb4336f69f3724fd92cf57a9f683f65aca",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql",
+        "sha256": "b778e142d6efb07a6239958a3edf38d08a2e1a07f0c58beab8298a2bd204bcab",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.social_account_oauth_states"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260919195155_important_news_shadow_phase1.sql",
+        "sha256": "e600f2cf5f16eb29d4297cef9d7c110a422806436000e1ae2f39c01550ddf8b2",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260920090000_mic_equity_index_phase1.sql",
+        "sha256": "6fa17cbb7e689ab0b8d30000573b0b82f3a53cac5b63d52301299d5ed4aae30a",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260920100000_market_report_packets_phase2.sql",
+        "sha256": "7f07457752d39783deb90c6d0c6627f47d33760995503e6ae53e494be4a0ba47",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260921090000_mic_equity_index_phase1_automation_cron.sql",
+        "sha256": "d123957b3ef157689543cef3d3e334668aa45dc74d1660e21161eb93fe9ba5b9",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "TOP_LEVEL_SELECT"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260921115317_important_news_search_diagnostics.sql",
+        "sha256": "728c9ca1cedd526df26b4e32a087089826955061c35dba77be588ce7f079e2ec",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260921133533_mic_fed_target_range_rates.sql",
+        "sha256": "d9b7dfdbfe30f3a35e2b5dee94acafe166dff7fc9353e13a4d06d6da4550d6b0",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260921221336_mic_fed_fomc_statement_phase2b2.sql",
+        "sha256": "66356bc5de90074b927c1ce5edfac580fc870f0278666b3e6930e56896ba518d",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql",
+        "sha256": "5a63f8c3a7a4dc606845dfb5ce4e8ee23bea8d0572ff07fb434d0890ba678462",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260922045046_social_mobile_content_settings_candidate.sql",
+        "sha256": "b1167065e4177492b1139071055e89da2bf9db12b0e43e20dada1af07a996fdb",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260922090000_mic_macro_indicators_phase1a.sql",
+        "sha256": "b472a9ec1c87112a66f7018f3c61e9c119e66ba0768a30b87e3cdd7a79377e6c",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260922093000_mic_central_bank_decision_event_type_phase2b3.sql",
+        "sha256": "63a2d3ed247952654ad99a4dc356f64793533e8985f658cd9df6f1f4ada4e62e",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260922100000_mic_fed_statement_diffs_phase2b5.sql",
+        "sha256": "435122c5c176db0a28101c1d2616cecaed4cd932b35da4d61a8f02313b3be42c",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260922110000_important_news_app_copy_v2_source_backed_candidates.sql",
+        "sha256": "736c2d188e4ce8c83e64e7ca78136056ab27fb8023a900f5f3110460c6645be7",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260923035652_allow_gpt6_important_news_model_metadata.sql",
+        "sha256": "5f95ea972c7a561a67f66501d2c303e3f82ee38cf27facabfbd2941cbd4bce7a",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260923050259_mic_fed_ai_usage_receipt_phase2b5i.sql",
+        "sha256": "7a8ebb1eceb4abdfd89142cf529c9f2569ef727fa5b11038800826359b1f2b58",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260923090000_mic_macro_indicators_phase1a_automation_cron.sql",
+        "sha256": "1d7dda2ae660423c05241bf8f755b6fdbd721cb12c5258cfb3852f78f52140bf",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "TOP_LEVEL_SELECT"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260923102327_x_autopost_phase0_brand_scoped_uniqueness.sql",
+        "sha256": "4150f0735993bbdcaad2c735f5965b6d8af4c8cc4e6a827798e1f0b6936cfd9d",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260923110440_important_news_monitor_caller_auth.sql",
+        "sha256": "0890c07e2b6daa9f41264880b94662a6b53824c0a727baa3ced1e8a0b6039e1c",
+        "bucket": "cron_indirect",
+        "blocking": [
+          "CRON_REFERENCE",
+          "VAULT_REFERENCE"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260923120000_social_mobile_history_access_token_reader.sql",
+        "sha256": "0f1ce8fdfbb54cac1ec156c9fb8dce10735e2a1b963df64de1004a7d849e192e",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924023133_x_autopost_phase1b_account_bound_queue.sql",
+        "sha256": "e52566a8295b1b99832add070b76826e64ce9a78e2e797ee9dba300409692981",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.social_accounts"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260924090000_mic_macro_indicators_phase1b_estat_cpi.sql",
+        "sha256": "61260e4043c28b9681b5f68f3dee3efa71581a895abba1148ad504fc81b0b470",
+        "bucket": "url_literal_seed",
+        "blocking": [
+          "URL_FRAGMENT",
+          "URL_LITERAL"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924093000_mic_estat_activation_and_gated_macro_cron.sql",
+        "sha256": "df0d43b4a3c6508aad12fb7f5f41a1e44721e5d34fd1f7674e4fb760d71d0afd",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924100000_ensure_my_profile.sql",
+        "sha256": "65de26c8c1057194a0ba1615220fd23fc5eaab679ffedc47f350d500aa8c3679",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924150000_mic_state_evidence_phase2c1.sql",
+        "sha256": "3245a4256d375dc319581d217ffa053c8dc195713d705de9eecf5078a5cd3cb6",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924160000_x_autopost_phase1d_claim_domain_partition.sql",
+        "sha256": "48315bad5bd314c24dc201bd264394b301329637a49a233ff2791adf91aa83f1",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924170000_x_autopost_phase1e_claim_bound_credential_reader.sql",
+        "sha256": "5e530043bd37ca13b0e49926beff39199ef70b08677e61223cc2ff774e0ddc63",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260924180000_x_autopost_phase1f_atomic_completion.sql",
+        "sha256": "7a44cb4a94c61789ea68dedc2a3f2c0f2a51e4a528d0ecdd05a8e3366d294bbe",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260925090000_x_autopost_phase1g_multistep_completion.sql",
+        "sha256": "c50e32eef2621b33700e7fefd6d3e46f5816bb0af6e832e4f99f0f4cdb3d47d7",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260925120000_x_autopost_phase1h_dispatch_resume.sql",
+        "sha256": "b821cd88339e1645032bd751a897619314067b8f492d44935d9f8a58fa1b8021",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260925140000_x_account_credential_refresh_core.sql",
+        "sha256": "5839cf4f7ac7d2ff8f58bd75eace9a7eb20b409f2408ff49017f7aea655f2755",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260925150000_x_autopost_phase1i_account_refresh.sql",
+        "sha256": "68843df769d66a29ccf790b3cbce6ca8176ca77ca25cea01db5e4b5e75778eed",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260926032054_x_account_refresh_rollout_authority.sql",
+        "sha256": "75eb5f855eed84e28a09e89ea6decf6d352c9fed2a08b0790a53582eebd2b5e9",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260928120000_mic_scenario_layer_phase3a.sql",
+        "sha256": "e9d5576c94bd2a0890ddc66387ff8cd7299fbd8cdc0220425a25479d09ac920c",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260928123000_add_daily_kabumori_tip_rpc.sql",
+        "sha256": "425f1e33276c8766a223775f56cd15e79aa551fd87ab0603c1fef020f04872e1",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql",
+        "sha256": "7481078f91e87447216a2ae93e0c12b78ce6a68801205f4fdd74bb9bd6588657",
+        "bucket": "vault_reference",
+        "blocking": [
+          "VAULT_REFERENCE"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": [
+          "public.social_mobile_account_deletions"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20260929090000_news_discovery_observer.sql",
+        "sha256": "ec52c63780d692a2713c4e5fbcd87516131639c866483627e8320c27f7b9d024",
+        "bucket": "other_blocking",
+        "blocking": [
+          "UNTRUSTED_LANGUAGE",
+          "URL_FRAGMENT"
+        ],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20260930090000_mic_scenario_automation_cron_phase3c.sql",
+        "sha256": "b1d5422111d2ed7361d83500064c31b1e6eb4884ec5419854b1e01bf45d04c6b",
+        "bucket": "cron_net_production_host",
+        "blocking": [
+          "CRON_REFERENCE",
+          "FOREIGN_PROJECT_HOST",
+          "NET_REFERENCE",
+          "SUPABASE_HOST_REFERENCE",
+          "URL_FRAGMENT",
+          "URL_LITERAL",
+          "VAULT_REFERENCE"
+        ],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql",
+        "sha256": "36b8b2bfdfdd5d42ed0022838b7404f3f13c2a072b39db58cbeff25e52542421",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql",
+        "sha256": "b2ed7c756663d35b796c31138d4ab3e7fdea18107182bbd814a4f2e659c95f03",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE",
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261003120000_social_mobile_content_settings_hardening.sql",
+        "sha256": "83d44ccfd51bcd8fcd78d31236fa52d1d8f90c6642f12c5bb1586f9d1497467e",
+        "bucket": "clean",
+        "blocking": [],
+        "review": [],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261004090000_ai_lab_topic_claims.sql",
+        "sha256": "30d8504173160f1dc9c3d7d1cf323d9890129d1ff117c2448aa1b2516629c09c",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE",
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261006160000_vault_account_brand_post_completion.sql",
+        "sha256": "8b1ce351841f76e4897a79c30109205c1248bce5a243053f3817024413f66d4d",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261006160100_social_mobile_publish_settings_reader.sql",
+        "sha256": "a6940288c9766fa3a3d5e39cbbdfabe3266a1ce854688d1292cdfda590974da1",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261006160200_x_account_publish_authority.sql",
+        "sha256": "ab19ffd8ee1f92b6b9c7fcb1cd914354787be3c9e29f6a9ea4c4556e0373248f",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261007120000_market_report_generation_traces.sql",
+        "sha256": "f7eb5707fb9695ee6a94c5e2bc9f9eaa3ad4660a67e94f1ad62cb5b07984622b",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      },
+      {
+        "file": "supabase/migrations/20261007150000_postona_social_accounts_multi_provider.sql",
+        "sha256": "0eb641350199ff1f5d0d34b899861127430db2671964b4a34747cea84015a9c9",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": [
+          "public.social_accounts"
+        ]
+      },
+      {
+        "file": "supabase/migrations/20261007173000_ai_lab_topic_evergreen_capacity.sql",
+        "sha256": "263cec3f7fc779f00cf9ea7f947c6baf58aa1e2e44805ed8888815ba3c47e23e",
+        "bucket": "review_only",
+        "blocking": [],
+        "review": [
+          "DATA_WRITE",
+          "DYNAMIC_SQL"
+        ],
+        "requiredRelationEffects": []
+      }
+    ]
+  },
+  "oracle": {
+    "file": "docs/common-account/phase13-prerequisite-oracle.tsv",
+    "sha256": "ca3dfdd0e25f714b14d289d7b2f9bb2c989e4a0538926b4687878e6673a2edef",
+    "control": "OK",
+    "candidates": {
+      "function": {
+        "tested": 26,
+        "refused": 3,
+        "notTested": 1
+      },
+      "table": {
+        "tested": 10,
+        "refused": 0,
+        "notTested": 1
+      },
+      "trigger": {
+        "tested": 11,
+        "refused": 0,
+        "notTested": 0
+      },
+      "column": {
+        "tested": 45,
+        "refused": 1,
+        "notTested": 2
+      }
+    },
+    "failing": [
+      {
+        "kind": "function",
+        "object": "public.ensure_my_profile()",
+        "chainId": "P4",
+        "refusal": "COMMON_ACCOUNT_CORE_FENCE_PREFLIGHT_ENSURE_MY_PROFILE_SHAPE",
+        "sourceFile": "supabase/migrations/20261012130000_common_account_core_service_fence.sql",
+        "coveredByContract": false
+      },
+      {
+        "kind": "function",
+        "object": "public.social_mobile_account_deletion_subject(p_user_id uuid)",
+        "chainId": "P1",
+        "refusal": "COMMON_ACCOUNT_PREFLIGHT_FUNCTION_MISMATCH:public.social_mobile_account_deletion_subject(uuid)",
+        "sourceFile": "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql",
+        "coveredByContract": true
+      },
+      {
+        "kind": "function",
+        "object": "public.social_mobile_account_deletion_workspace(p_user_id uuid)",
+        "chainId": "P1",
+        "refusal": "COMMON_ACCOUNT_PREFLIGHT_FUNCTION_MISMATCH:public.social_mobile_account_deletion_workspace(uuid)",
+        "sourceFile": "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql",
+        "coveredByContract": true
+      },
+      {
+        "kind": "column",
+        "object": "public.social_accounts.platform",
+        "chainId": "P6",
+        "refusal": "COMMON_ACCOUNT_SERVICE_OWNERSHIP_PREFLIGHT_SHAPE",
+        "sourceFile": "supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql",
+        "coveredByContract": false
+      }
+    ],
+    "notTested": [
+      {
+        "kind": "function",
+        "object": "public.social_mobile_account_deletion_guard()"
+      },
+      {
+        "kind": "table",
+        "object": "public.scheduled_posts"
+      },
+      {
+        "kind": "column",
+        "object": "public.social_accounts.id"
+      },
+      {
+        "kind": "column",
+        "object": "public.tracked_stocks.id"
+      }
+    ]
+  },
+  "external": [
+    {
+      "path": "apps/social-mobile/docs/postona-sandbox-preflight.md",
+      "pr": 243,
+      "commit": "60e4a4c059a9d7304e5a48a7b3219ab801e822ae",
+      "blob": "3009556572d9746c4a7bee852be7c1a98afad5f7",
+      "role": "F4 non-production isolation preflight: documentation"
+    },
+    {
+      "path": "apps/social-mobile/scripts/postona-sandbox-preflight.mjs",
+      "pr": 243,
+      "commit": "60e4a4c059a9d7304e5a48a7b3219ab801e822ae",
+      "blob": "b2ec507904e38e97cafb7928fafd075d71dfdb82",
+      "role": "F4 non-production isolation preflight: the check script"
+    },
+    {
+      "path": "apps/social-mobile/tests/postona-sandbox-preflight.test.mjs",
+      "pr": 243,
+      "commit": "60e4a4c059a9d7304e5a48a7b3219ab801e822ae",
+      "blob": "dafe903e5ed72a39f151d10a9a76811600a4b786",
+      "role": "F4 preflight: its 15 offline tests"
+    },
+    {
+      "path": "apps/social-mobile/src/features/service-enrollment/service-enrollment-gate.tsx",
+      "pr": 240,
+      "commit": "5e462ba73be691c80f75198d57782626f1d241cc",
+      "blob": "951119be47269d7473399ebe0ac1adc8b2c0b0c3",
+      "role": "POSTONA enrollment gate after the J2 V2 fix (G1/G2)"
+    },
+    {
+      "path": "apps/social-mobile/src/features/service-lifecycle/service-lifecycle.tsx",
+      "pr": 236,
+      "commit": "605d8776c6be2e33ec247af7c82a99270cf32b82",
+      "blob": "3066ebc2768d991461c3c180ed33066eebb7313b",
+      "role": "F4 lifecycle provider (per-person epoch, open/close surface)"
+    },
+    {
+      "path": "apps/social-mobile/src/features/service-lifecycle/service-lifecycle-surface.tsx",
+      "pr": 236,
+      "commit": "605d8776c6be2e33ec247af7c82a99270cf32b82",
+      "blob": "b62dde7eb9d450f645120002d66032c763ca3eca",
+      "role": "F4 service-end surface outside the gate"
+    },
+    {
+      "path": "apps/social-mobile/docs/j5-postona-deletion-boundary.md",
+      "pr": 197,
+      "commit": "2171ee4c02ea2eec46562d81595f5460e5507d9d",
+      "blob": "51128c2123ab88b3782c3970424710e85436c17c",
+      "role": "POSTONA client deletion boundary and its staging checklist"
+    }
+  ],
+  "corpus": {
+    "migrations": 120,
+    "networkFunctions": [],
+    "dynamicFunctions": 30
+  }
+}
