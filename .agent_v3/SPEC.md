@@ -1,6 +1,6 @@
 # Agent V3 仕様（候補・未適用）
 
-V3は、v2（`.agent_v2/`）の「軽量TASK・独立Report・append-only archive・HISTORY_INDEX」を引き継ぎ、そのうえでTASK登録の信頼性の問題を直す管理基盤の候補。**現行運用には適用していない。** 正式な適用（パスの昇格、開始コードの切り替え）は別TASKで行う。原因の調査は `EVIDENCE.md`、移行計画は `MIGRATION.md`。
+V3は、v2（`.agent_v2/`）の「軽量TASK・独立Report・append-only archive・HISTORY_INDEX」を引き継ぎ、そのうえでTASK登録の信頼性の問題を直す管理基盤の候補。**現行運用には適用していない。** 正式な適用（`.agent_v3_gh/` の作成と、切り替え表への枠の追加）は、承認の後に別TASKで行う。原因の調査は `EVIDENCE.md`、移行計画は `MIGRATION.md`。
 
 ## 1. 置き場所
 
@@ -14,7 +14,11 @@ V3は、v2（`.agent_v2/`）の「軽量TASK・独立Report・append-only archiv
 | `scripts/agent_v3/` | 登録ツール（`cli.ts`、`registry.ts`、`transaction.ts`、`git_backend.ts`、`github_backend.ts`） |
 | `tests/agent_v3/` | 隔離テスト |
 
-`<root>` は正式適用まで未定（候補: 将来の `.agent/`）。テストでは `.agent_v3_fixture`、GitHub実検証では `.agent_v3_live_fixture` を使い、どちらも専用の場所だけに書く。
+`<root>` は、正式適用では `.agent_v3_gh`（G1〜G10 / H1〜H5、CLIでは `--naming GH`）を使う提案（正式ルールは未承認）。
+
+- 旧 `.agent/` は凍結した履歴として残し、上書き・改名・削除しない。最終snapshotは `.agent_v2/archive/2026-10-17-legacy-agent-final-cae7aa4e/`（PR #252、merge済み）。
+- `.agent_v3/` は仕様と調査の文書の置き場で、rootには使わない（initは、ファイルのあるrootを拒否する）。
+- テストでは `.agent_v3_fixture`、GitHub実検証では `.agent_v3_live_fixture` を使い、どちらも専用の場所だけに書く。
 
 ## 2. 正本は1つ、索引は派生物
 
