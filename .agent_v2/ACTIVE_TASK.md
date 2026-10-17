@@ -94,19 +94,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-postona-ai-ledger-quota-idempotency-design-20261017
+- status: ready
+- task_id: common-ai-f6-postona-consumer-calls-pg-offline-candidate-20261017
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_DESIGN PR241; SQL migration / live DB / RLS / durable call store not yet implemented; source-only, production NO_GO.
+- next_owner: claude
+- blocker: candidate ai_ledger.consumer_calls migration/RPC local-PG-only verification; DB/production/merge/deploy NO_GO, F5/F4 scopes protected
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: PR239 source-only bridge contract, provider stack PR187→198→205→219→222→231→234→237→239; F4+F5 PR238 focused review pending
-- previous_archive: .agent_v2/archive/2026-10-17-f6-pr239-postona-contract-preflight.md
-- slot_use: F6 POSTONA AI ledger quota idempotency SOURCE-ONLY design
+- dependencies: PR241 ledger design and PR239 contract, common provider/bridge Draft stack; POSTONA F4/F5 Auth and production protected
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr241-ledger-design.md
+- slot_use: F6 consumer_calls source-only candidate and isolated local PostgreSQL safety tests
 
 ## F7
 - slot: F7
