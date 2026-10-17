@@ -56,21 +56,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-service-lifecycle-provider-g1-g2-implementation-20261017
+- status: ready
+- task_id: postona-f4-f5-service-end-g1-g2-joint-integration-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: F4 PR230 design B; F5 service-end G1/G2 ready; client PR197/211/217/221; H5 Auth read-only
-- blocker: F4 provider exact contract first -> F5 gate integration -> joint tests; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-service-end-auth-gate-g1-g2-design-20261016/F4.md
-- slot_use: F4-owned ServiceLifecycleProvider/Surface, service-end state continuity and bump contract; no F5 gate edits
-
-- l4_verdict_20261017: PASS_SOURCE_IMPLEMENTATION / JOINT_INTEGRATION_PENDING / PRODUCTION_NO_GO; PR236 605d8776c6be2e33ec247af7c82a99270cf32b82 Draft; focused12/12 app348/348 reported; F5 PR235 integration not yet demonstrated.
+- dependencies: PR236 F4 605d8776; PR235 F5 9480f24b; both Draft; F5 L5 accepted; PR230 design B
+- blocker: assembled-source integration and Auth/cross-user review pending; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-service-lifecycle-provider-g1-g2-implementation-20261017/F4.md
+- slot_use: integrate existing F4 Provider/Surface and F5 gate in isolated integration branch; no duplicate provider implementation
 
 ## F5
 - slot: F5
