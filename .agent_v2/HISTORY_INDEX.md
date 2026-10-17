@@ -731,3 +731,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - `.agent_v2/tasks/J2.md` → `.agent_v2/archive/2026-10-17-J2-postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017/J2.md`: 2302 bytes, SHA256 `c9cd2dbf9ccacc94f318a681ff075c187468483fbc90a68ed32ad66784fc514a`.
 - `.agent_v2/reports/J2.md` → same folder `J2_REPORT.md`: 13798 bytes, SHA256 `7aeccb6ea949fe26100cd2c1681897780f51a9bff42607de62c0f72c1cf0399a`.
 - Original/archive Git blob IDs and exact-byte `git diff --quiet` restoration checks matched; MANIFEST.md, MANIFEST.json, and SHA256SUMS added without changing the archived snapshots.
+
+## F4 POSTONA PR251 Android callback P2 fix archive — 2026-10-17
+- task_id: `postona-f4-pr251-android-intent-filter-p2-fix-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `fba346f4`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-pr251-android-intent-filter-p2-fix-20261017/F4.md`
+- bytes: 7872; SHA256: `c534a672571f95c8a8b0739416288ec08e4c978b2cd21214ec51644820198afe`; original_blob: `976b75fa622f1a40eb4020670b627becd844abad`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017`). L4 accepted, PR260 `8e1534f2fa1d39f8f1c321ed2cf69705fddf1421`, production and pilot NO_GO.
