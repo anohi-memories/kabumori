@@ -31,7 +31,7 @@ TASK: `common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017`�
 | サインアウト／別の人 | 答えを全部捨てる。別の人は何も引き継がない |
 | epoch 変更中に前の要求の答えが遅れて届く | 無視（要求ごとの取り消し・世代・所有者タグの三重で止まる）。**古い `ready` は復活しない** |
 | 再登録クリックの要求が飛んでいる間に信号 | その要求を取り消し、再確認の答えで決める。追加の再登録は送らない |
-| ゲートの再マウント | 閉じた状態から始め、聞き直す。埋め込みの利用終了画面を開いたままにはしない |
+| ゲートの再マウント | 閉じた状態から始め、聞き直す。利用終了画面を自分では描かない（開くのは F4 の surface だけ） |
 | ローカルのモックプレビュー | ゲートせず、信号を無視 |
 
 決めた状態（`view`）はすべて **人・ログイン・epoch** のタグを持つ。どれかが違えば `loading` として扱う。信号は「開ける・閉じる」を決めない。決めるのは常にサーバーの答え。**かぶモリの権利は一切読まず書かない**（ゲートが呼ぶ RPC は `*_x_autopost_service` だけ）。
@@ -57,7 +57,7 @@ TASK: `common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017`�
    `export { useServiceLifecycleEpoch as useLifecycleEpoch } from '@/features/service-lifecycle/service-lifecycle';`
 3. `tests/pending/gate-seam-connect.pending.mjs` が通るのを確かめ、ファイルを消す。`tests/service-enrollment-lifecycle.test.mjs` の seam 契約テスト（未接続を固定している）を接続後の形に更新する。
 4. F4 の pending 仕様の module map に 1 行足して [SPEC G1 / F5 gate] を有効にする（**F4 との調整**）: `'@/features/service-enrollment/lifecycle-epoch': { useLifecycleEpoch: (userId) => (userId ? lifecycle.epochs.get(userId) ?? 0 : 0) }`。
-5. 関門の中の `<AccountDeletionScreen />` と `deletionOpenFor` は、F4 の surface と `open(userId)` が入ってから置き換える（設計 §6 F5-2。今回は surface が無いので **残している**）。
+5. 関門の中の `<AccountDeletionScreen />` と `deletionOpenFor` は、J2 V2 の P2-1 で撤去し、管理入口は F4 の `open(userId)` に統一した（[f5-pr238-j2-v2-gate-p2-fixes.md](f5-pr238-j2-v2-gate-p2-fixes.md)）。
 
 ## 6. F4／コーディネーターへ（相違点・依頼）
 
