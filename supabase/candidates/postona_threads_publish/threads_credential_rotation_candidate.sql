@@ -1,9 +1,10 @@
 -- SOURCE CANDIDATE ONLY. NOT a migration, NOT applied anywhere (F4,
--- postona-f4-threads-credential-rotate-cas-sql-contract-20261017). A PROPOSAL pending H5 (Vault replacement, owner
--- transport, store port) and F5 (lifecycle fence) agreement, and an independent review. Apply as a single reviewed
+-- postona-f4-threads-credential-rotate-cas-sql-contract-20261017; checked-owner binding by F4,
+-- postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017). A PROPOSAL pending H5 (Vault replacement, owner
+-- transport, store port) and F5 (lifecycle decision) agreement, and an independent review. Apply as a single reviewed
 -- file only AFTER the G4 publish stack (threads_credential_custody_candidate.sql -> threads_manual_publish_candidate.sql
--- -> threads_publish_release_candidate.sql) and the F4 writer guards (threads_writer_lifecycle_guards_candidate.sql,
--- whose owner fence it reuses). It changes NONE of those files, tables or functions.
+-- -> threads_publish_release_candidate.sql) and F5's workspace service state (20261012230000). It changes NONE of
+-- those files, tables or functions.
 --
 -- POSTONA Threads: the long-lived token refresh (docs/postona/threads-token-refresh-design.md, Draft PR #255) needs
 -- to replace the expiry record of the stored credential after Meta answered with a refreshed token. The existing
@@ -27,10 +28,18 @@
 --   always: release (a rotate already consumed the lease; a refused or abandoned refresh frees it)
 --
 -- Lock order (the order of connect, disconnect, cleanup and the publish release): the workspace OWNER's lifecycle
--- (F5, public.threads_manual_publish_owner_fence: held to COMMIT when it allows) -> workspace advisory lock ->
+-- (F5's decision for ONE explicit person, private.account_lifecycle_service_state_refusal: its I1 locks held to COMMIT
+-- when it allows) -> workspace advisory lock ->
 -- workspace FOR SHARE -> owner membership FOR SHARE -> Threads account FOR UPDATE (waits for a publish release that
 -- holds it FOR SHARE and for a disconnect / cleanup / reconnect that holds it FOR UPDATE, then reads the committed
 -- row) -> custody FOR UPDATE -> lease FOR UPDATE. Every decision is taken after those waits, by the wall clock.
+--
+-- Checked-owner binding (J2 V2 R1): the person whose lifecycle F5 decided on is chosen BEFORE the decision and passed
+-- to it explicitly -- claim: the workspace owner by F5's own rule (private.account_lifecycle_brand_owner); rotate: the
+-- person the lease was claimed for, never re-resolved. After the workspace locks, the owner membership (held FOR
+-- SHARE, so it cannot change before COMMIT) must be that same person, else OWNER_CHANGED. An owner that changed while
+-- the decision waited, or changed and changed back (ABA), is therefore either refused or is exactly the person
+-- whose lifecycle rows this transaction holds: a lease or a rotation is never given for a person F5 did not decide on.
 --
 -- Answers: {status: claimed | rotated | released | not_held} or {status: refused, code}; a refusal changes nothing.
 --   SERVER_ONLY, REQUEST_INVALID, EXPIRY_INVALID (not in (now, now + 61 days]), EXPIRY_NOT_EXTENDED (not later than
@@ -39,7 +48,7 @@
 --   (a released token may be in use: creating_container / publishing, or a grant that has not ended), LEASE_HELD
 --   (claim: another live lease), LEASE_NOT_HELD (rotate: no lease, another lease, an ended lease, or one already
 --   consumed = a replay), WORKSPACE_CHANGED, OWNER_CHANGED, STALE_CREDENTIAL (the secret or the custody row is not
---   the version claimed: a reconnect, an earlier rotation, other expected values), and the owner fence's
+--   the version claimed: a reconnect, an earlier rotation, other expected values), and F5's decision as
 --   SERVICE_NOT_ACTIVE / WORKSPACE_INACTIVE / ACCOUNT_LIFECYCLE_BLOCKED / BUSY.
 --
 -- Not closed here (and not claimed):
@@ -90,10 +99,10 @@ begin
            and a.attname in ('social_account_id', 'status', 'grant_state', 'grant_expires_at')) <> 4 then
     raise exception 'THREADS_ROTATION_PRECONDITION_PUBLISH_STACK';
   end if;
-  -- F5 through the F4 guards' owner fence, and the decision under it: owned by the table owner, a void / text
-  -- definer function reachable by no API role, directly or through a membership.
-  foreach v_fn in array array[pg_catalog.to_regprocedure('public.threads_manual_publish_owner_fence(text)'),
-                              pg_catalog.to_regprocedure('private.account_lifecycle_assert_brand_service_active(text,text)')] loop
+  -- F5's owner rule and its state decision for one explicit person: owned by the table owner, definer functions
+  -- reachable by no API role, directly or through a membership.
+  foreach v_fn in array array[pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner(text)'),
+                              pg_catalog.to_regprocedure('private.account_lifecycle_service_state_refusal(uuid,text)')] loop
     if v_fn is null
        or (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
        or not (select p.prosecdef from pg_catalog.pg_proc p where p.oid = v_fn)
@@ -155,11 +164,27 @@ language sql volatile security invoker set search_path = '' as $$
            or (t.grant_state is not null and t.grant_expires_at > pg_catalog.clock_timestamp())))
 $$;
 
+-- F5's state decision for ONE explicit person (the I1 lifecycle locks, kept to COMMIT when it allows), as this file's
+-- fixed codes, or null. Same mapping as the publish owner fence.
+create function public.threads_credential_refresh_lifecycle(p_user_id uuid) returns text
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_refusal text := private.account_lifecycle_service_state_refusal(p_user_id, 'x_autopost');
+begin
+  return case
+    when v_refusal is null then null
+    when v_refusal = 'ACCOUNT_LIFECYCLE_BUSY' then 'BUSY'
+    when v_refusal in ('SERVICE_NOT_REGISTERED', 'SERVICE_NOT_ACTIVE', 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND') then 'SERVICE_NOT_ACTIVE'
+    else 'ACCOUNT_LIFECYCLE_BLOCKED' end;
+end;
+$$;
+
 create function public.claim_threads_credential_refresh(p_social_account_id text) returns jsonb
 language plpgsql security invoker set search_path = '' set lock_timeout = '3s' as $$
 declare
   v_brand_id text;
   v_code text;
+  v_checked uuid;
   v_owner uuid;
   v_account public.social_accounts%rowtype;
   v_custody public.threads_account_credential_custody%rowtype;
@@ -172,14 +197,19 @@ begin
   end if;
   select a.brand_id into v_brand_id from public.social_accounts a where a.id = p_social_account_id and a.platform = 'threads';
   if v_brand_id is null then return public.threads_credential_rotation_refused('ACCOUNT_NOT_FOUND'); end if;
-  -- F5 first: the workspace owner's POSTONA, its lifecycle locks before any workspace or account lock.
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
+  -- F5 first, for an EXPLICIT person: the workspace owner by F5's own rule, whose lifecycle locks are taken before
+  -- any workspace or account lock and kept to COMMIT.
+  v_checked := private.account_lifecycle_brand_owner(v_brand_id);
+  if v_checked is null then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
   if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;
   perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
   perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
   if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
   v_owner := public.threads_credential_refresh_owner(v_brand_id);
   if v_owner is null then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
+  -- J2 R1: the owner may have changed while the decision waited. A lease is only for the person decided on.
+  if v_owner is distinct from v_checked then return public.threads_credential_rotation_refused('OWNER_CHANGED'); end if;
   select a.* into v_account from public.social_accounts a where a.id = p_social_account_id for update;
   if v_account.id is null or v_account.platform is distinct from 'threads' then
     return public.threads_credential_rotation_refused('ACCOUNT_NOT_FOUND');
@@ -231,6 +261,7 @@ returns jsonb language plpgsql security invoker set search_path = '' set lock_ti
 declare
   v_brand_id text;
   v_code text;
+  v_checked uuid;
   v_owner uuid;
   v_account public.social_accounts%rowtype;
   v_custody public.threads_account_credential_custody%rowtype;
@@ -250,12 +281,13 @@ begin
   select a.brand_id into v_brand_id from public.social_accounts a where a.id = p_social_account_id and a.platform = 'threads';
   if v_brand_id is null then return public.threads_credential_rotation_refused('ACCOUNT_NOT_FOUND'); end if;
   -- No lease of this account under this id: refused before any lock, so a stray or replayed call never queues on
-  -- the workspace owner's lifecycle rows. Decided again below after the locks.
-  if not exists (select 1 from public.threads_credential_refresh_leases l
-                 where l.social_account_id = p_social_account_id and l.lease_id = p_lease) then
-    return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
-  end if;
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
+  -- the workspace owner's lifecycle rows. Decided again below after the locks. A lease id names one claim, so its
+  -- owner is the person that claim was for.
+  select l.owner_user_id into v_checked from public.threads_credential_refresh_leases l
+   where l.social_account_id = p_social_account_id and l.lease_id = p_lease;
+  if v_checked is null then return public.threads_credential_rotation_refused('LEASE_NOT_HELD'); end if;
+  -- F5 for THAT person, explicitly (never the owner of the moment, which may have changed and changed back).
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
   if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;
   perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
   perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
@@ -279,7 +311,9 @@ begin
     return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
   end if;
   if v_lease.brand_id is distinct from v_account.brand_id then return public.threads_credential_rotation_refused('WORKSPACE_CHANGED'); end if;
-  if v_lease.owner_user_id is distinct from v_owner then return public.threads_credential_rotation_refused('OWNER_CHANGED'); end if;
+  if v_lease.owner_user_id is distinct from v_owner or v_checked is distinct from v_owner then
+    return public.threads_credential_rotation_refused('OWNER_CHANGED');
+  end if;
   -- The compare-and-set: the account, the custody row and the lease all name the version the caller refreshed.
   if v_custody.social_account_id is null
      or v_account.vault_access_token_secret_id is distinct from p_expected_secret_id
@@ -333,6 +367,7 @@ $$;
 revoke all on function public.threads_credential_rotation_refused(text),
                        public.threads_credential_refresh_owner(text),
                        public.threads_credential_publish_in_flight(text),
+                       public.threads_credential_refresh_lifecycle(uuid),
                        public.claim_threads_credential_refresh(text),
                        public.rotate_threads_credential_custody(text, uuid, uuid, timestamptz, timestamptz),
                        public.release_threads_credential_refresh(text, uuid)
@@ -353,6 +388,7 @@ begin
                               (values ('public.threads_credential_rotation_refused(text)'),
                                       ('public.threads_credential_refresh_owner(text)'),
                                       ('public.threads_credential_publish_in_flight(text)'),
+                                      ('public.threads_credential_refresh_lifecycle(uuid)'),
                                       ('public.claim_threads_credential_refresh(text)'),
                                       ('public.rotate_threads_credential_custody(text,uuid,uuid,timestamptz,timestamptz)'),
                                       ('public.release_threads_credential_refresh(text,uuid)')) f(fn)
@@ -361,6 +397,7 @@ begin
      or exists (select 1 from pg_catalog.pg_proc p
                 where p.oid in ('public.threads_credential_refresh_owner(text)'::regprocedure,
                                 'public.threads_credential_publish_in_flight(text)'::regprocedure,
+                                'public.threads_credential_refresh_lifecycle(uuid)'::regprocedure,
                                 'public.claim_threads_credential_refresh(text)'::regprocedure,
                                 'public.rotate_threads_credential_custody(text,uuid,uuid,timestamptz,timestamptz)'::regprocedure,
                                 'public.release_threads_credential_refresh(text,uuid)'::regprocedure)

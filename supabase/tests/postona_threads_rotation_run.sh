@@ -12,16 +12,18 @@
 #    postona_threads_t13_run.sh: G5's lifecycle fixtures and REAL migrations, X + Phase 2a-2, PR #124, the G4
 #    publish stack (custody -> manual publish -> release), the Threads cleanup and disconnect candidates,
 #    postona_threads_t13_fixture.sql and the F4 writer guards. Then:
-#      a. preconditions of the rotation candidate (owner, drifted custody reader / table, F5 fence missing or
-#         reachable by an API role, publish stack missing); re-apply refused;
+#      a. preconditions of the rotation candidate (owner, drifted custody reader / table, F5's state decision
+#         missing or reachable by an API role, publish stack missing); re-apply refused;
 #      b. postona_threads_rotation_behavior.sql (ACL, end to end with the publish release, posts in flight, replay,
 #         cross account / workspace, owner change, every F5 state, reconnect, disconnect, expiry, lease, Vault
 #         failure rollback, server only, deletion cleanup with a lease held, the secret changed under the lease);
 #      c. two-session races: disconnect, reconnect, a publish release, an owner freeze, the same rotate twice, two
 #         claims, a lifecycle row held past the lock timeout, the lock order (lifecycle before workspace) for rotate
-#         and claim, and a
-#         stray lease that must not queue on the owner's lifecycle rows;
-#      d. fail-before: the behavior file fails on the same world WITHOUT the candidate;
+#         and claim, a stray lease that must not queue on the owner's lifecycle rows, and the checked-owner binding
+#         (J2 V2 R1): the owner changes to an ended person while a claim's lifecycle decision waits; the owner changes
+#         back (ABA) while a rotate's decision waits on another person; a lease's owner is rewritten under a rotate;
+#      d. fail-before: the behavior file fails on the same world WITHOUT the candidate, and the three owner-binding
+#         races fail on PR #258's candidate 713955b5371cf4f1de4681ecec1737e1ccc7d4cd (before the J2 R1 fix);
 #      e. mutations of the candidate must FAIL the proof.
 # Requires the git objects of both SHAs. Usage:
 #   THREADS_PGHOST=/private/tmp/<socket-dir> THREADS_PGPORT=<port> THREADS_PGSUPER=<superuser> \
@@ -43,7 +45,8 @@ psql_bin="${PSQL:-psql}"
 fail() { echo "FAIL $*" >&2; exit 1; }
 PR124=c30f246409a77080cbc03aef6c4cb72b5481e125
 PR178=83334a091ded5571cf595fd99d7a035627564735
-for sha in "$PR124" "$PR178"; do
+PR258=713955b5371cf4f1de4681ecec1737e1ccc7d4cd
+for sha in "$PR124" "$PR178" "$PR258"; do
   git -C "$repo" cat-file -e "${sha}^{commit}" 2>/dev/null || fail "missing git objects for $sha (fetch its branch first)"
 done
 
@@ -133,16 +136,17 @@ for f in "$c/postona_threads_oauth_workspace_candidate.sql" "$c/postona_threads_
   [[ "$(apply "$world" "$f")" == applied ]] || fail "$(basename "$f") did not apply on the real G5 world: $(apply "$(copy "why_$RANDOM" "$world")" "$f")"
 done
 as_owner "$world" -f "$t/postona_threads_t13_fixture.sql" > /dev/null
-noguards="$(copy noguards "$world")"
 [[ "$(apply "$world" "$c/postona_threads_lifecycle_guards/threads_writer_lifecycle_guards_candidate.sql")" == applied ]] || fail "F4 guards did not apply"
 echo "PASS world: real G5 (T13 + Phase 4 + F5 + Phase 6) + X + 2a-2 + #124 + publish stack + cleanup + disconnect + F4 guards"
 
 # ---- 2a. Preconditions -------------------------------------------------------------------------------------------
 expect_refused() { local label="$1" db="$2" code="$3" got; got="$(apply "$db" "$candidate")"; [[ "$got" == "$code" ]] || fail "$label: $got"; }
-expect_refused "without the F4 guards' owner fence" "$noguards" THREADS_ROTATION_PRECONDITION_F5
+db="$(copy f5_missing "$world")"
+q "$db" -c "drop function private.account_lifecycle_service_state_refusal(uuid, text)" > /dev/null
+expect_refused "without F5's state decision" "$db" THREADS_ROTATION_PRECONDITION_F5
 db="$(copy f5_reachable "$world")"
-"${as_super[@]}" -d "$db" -c "grant execute on function public.threads_manual_publish_owner_fence(text) to service_role" > /dev/null
-expect_refused "owner fence reachable by service_role" "$db" THREADS_ROTATION_PRECONDITION_F5
+"${as_super[@]}" -d "$db" -c "grant execute on function private.account_lifecycle_service_state_refusal(uuid, text) to service_role" > /dev/null
+expect_refused "F5's state decision reachable by service_role" "$db" THREADS_ROTATION_PRECONDITION_F5
 db="$(copy f5_member "$world")"
 "${as_super[@]}" -d "$db" -c "do \$\$ begin if not exists (select 1 from pg_roles where rolname = 'authenticator') then create role authenticator nologin; end if; end \$\$; grant $owner to authenticator" > /dev/null
 expect_refused "an API role is a member of the owner" "$db" THREADS_ROTATION_PRECONDITION_F5
@@ -160,7 +164,7 @@ db="$(copy as_super "$world")"
 got="$("$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$db" -f "$candidate" 2>&1 || true)"
 got="$(sed -n 's/^.*ERROR: *//p' <<<"$got" | head -1)"
 [[ "$got" == THREADS_ROTATION_PRECONDITION_OWNER ]] || fail "applied by a superuser: $got"
-echo "PASS preconditions (F5 fence missing / reachable / owner membership, reader drift, custody shape, attempts shape, owner)"
+echo "PASS preconditions (F5 decision missing / reachable / owner membership, reader drift, custody shape, attempts shape, owner)"
 
 # ---- 2b/2c. The proof: apply, re-apply refused, behavior, races -------------------------------------------------
 P='00000000-0000-4000-8000-0000000002a1'
@@ -177,9 +181,11 @@ race() {
   [[ "$out" == "ANSWER $want" ]] || { echo "R_${tag} ${out//$'\n'/ }"; return 0; }
   echo PASS
 }
+Q='00000000-0000-4000-8000-0000000002b1'   # another person, the next owner
 race_all() {
-  local base="$1" tag="$2" r out db holder
-  for r in disconnect reconnect release freeze replay claims busy lock_order claim_lock_order stray; do
+  local base="$1" tag="$2" r out db holder races
+  shift 2; races="${*:-disconnect reconnect release freeze replay claims busy lock_order claim_lock_order stray owner_transfer owner_aba lease_owner_rewritten}"
+  for r in $races; do
     db="$(copy "r_${r}_$tag" "$base")"
     q "$db" -c "select rot.setup('$P', 'race$r')" > /dev/null
     case "$r" in
@@ -237,6 +243,33 @@ race_all() {
         out="$(q "$db" -c "select 'ANSWER ' || rot.stray_rotate()" 2>&1)" || true
         wait "$holder" || true
         if [[ "$out" == "ANSWER LEASE_NOT_HELD true" ]]; then out=PASS; else out="R_STRAY_QUEUED ${out//$'\n'/ }"; fi ;;
+      owner_transfer)
+        # J2 V2 R1, as reproduced: the owner P (active) becomes Q (POSTONA ended) while a claim's lifecycle decision
+        # waits on P's row (the holder keeps the documented lifecycle -> workspace order). The claim must be refused
+        # after the wait, no lease may exist, and a later stable claim for Q is refused by F5 (control).
+        q "$db" -c "select public.release_threads_credential_refresh($acct_sql, (select (v::jsonb ->> 'lease')::uuid from rot.ids where k = 'claim')); select t13.login('$Q'); select t13.register('$Q'); select t13.state('$Q', 'ended');" > /dev/null
+        q "$db" -c "begin; update public.common_accounts set status = status where user_id = '$P'; select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$P')); select pg_sleep(1.2); update public.brand_memberships set user_id = '$Q' where brand_id = public.social_mobile_account_deletion_workspace('$P') and user_id = '$P' and role = 'owner'; commit;" > "$tree/hold_ot$tag.log" 2>&1 &
+        holder=$!; sleep 0.3
+        out="$(q "$db" -c "select 'ANSWER ' || rot.timed(format('select rot.claim(%L)', $acct_sql))" 2>&1)" || true
+        if ! wait "$holder" || grep -qi deadlock "$tree/hold_ot$tag.log"; then out="R_OWNER_TRANSFER_HOLDER $(tr '\n' ' ' < "$tree/hold_ot$tag.log")"
+        elif [[ "$out" != "ANSWER OWNER_CHANGED waited" ]]; then out="R_OWNER_TRANSFER ${out//$'\n'/ }"
+        elif [[ "$(q "$db" -c "select count(*) from public.threads_credential_refresh_leases")" != 0 ]]; then out="R_OWNER_TRANSFER_LEASE_LEFT"
+        elif [[ "$(q "$db" -c "select coalesce(rot.claim($acct_sql) ->> 'code', 'claimed')")" != SERVICE_NOT_ACTIVE ]]; then out="R_OWNER_TRANSFER_CONTROL"
+        else out=PASS; fi ;;
+      owner_aba)
+        # The lease was claimed for P; P's POSTONA then ended and the workspace moved to Q (active). While a rotate's
+        # decision would wait on Q's row, the workspace moves back to P. The rotate must decide on P (the lease's
+        # person), never on the owner of the moment: refused, nothing rotated.
+        q "$db" -c "select t13.login('$Q'); select t13.register('$Q'); select t13.state('$P', 'ended'); update public.brand_memberships set user_id = '$Q' where brand_id = public.social_mobile_account_deletion_workspace('$P') and user_id = '$P' and role = 'owner';" > /dev/null
+        out="$(race "$db" "begin; update public.common_accounts set status = status where user_id = '$Q'; select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$P')); select pg_sleep(1.2); update public.brand_memberships set user_id = '$P' where brand_id = public.social_mobile_account_deletion_workspace('$P') and user_id = '$Q' and role = 'owner'; commit;" SERVICE_NOT_ACTIVE "a$tag")"
+        [[ "$out" != PASS ]] || [[ "$(q "$db" -c "select count(*) from public.threads_account_credential_custody c where c.social_account_id = $acct_sql and c.recorded_at > (select (v::jsonb ->> 'custody_recorded_at')::timestamptz from rot.ids where k = 'claim')")" == 0 ]] \
+          || out="R_OWNER_ABA_ROTATED" ;;
+      lease_owner_rewritten)
+        # A direct write moves the lease's person and the workspace to Q (active) while the rotate's decision waits on
+        # P's row: the person decided on (P) is no longer the owner, so the rotate is refused even though the lease
+        # row and the membership now agree with each other.
+        q "$db" -c "select t13.login('$Q'); select t13.register('$Q');" > /dev/null
+        out="$(race "$db" "begin; update public.common_accounts set status = status where user_id = '$P'; select public.social_mobile_account_deletion_workspace_lock(public.social_mobile_account_deletion_workspace('$P')); select pg_sleep(1.2); update public.threads_credential_refresh_leases set owner_user_id = '$Q'; update public.brand_memberships set user_id = '$Q' where brand_id = public.social_mobile_account_deletion_workspace('$P') and user_id = '$P' and role = 'owner'; commit;" OWNER_CHANGED "w$tag")" ;;
     esac
     [[ "$out" == PASS ]] || { echo "$out"; return 0; }
   done
@@ -257,13 +290,23 @@ prove() {
 }
 result="$(prove "$candidate" real)"
 [[ "$result" == PASS ]] || fail "rotation candidate: $result"
-echo "PASS rotation candidate: apply, re-apply refused, behavior (14 sections), races (disconnect, reconnect, publish release, owner freeze, replay, two claims, busy, lock order for rotate and claim, stray lease)"
+echo "PASS rotation candidate: apply, re-apply refused, behavior (14 sections), races (disconnect, reconnect, publish release, owner freeze, replay, two claims, busy, lock order for rotate and claim, stray lease, owner transfer during a claim, owner ABA during a rotate, lease owner rewritten)"
 
 # ---- 2d. Fail-before: the same proof on the same world without the candidate -------------------------------------
 db="$(copy before "$world")"
 before="$(apply "$db" "$t/postona_threads_rotation_fixture.sql")"
 [[ "$before" != applied ]] || fail "fail-before: the fixture applied without the candidate"
 echo "PASS fail-before: without the candidate the proof cannot run (${before:0:110})"
+# J2 V2 R1 fail-before: PR #258's candidate (before the checked-owner binding) on the same world fails each new race.
+mkdir -p "$tree/pr258" && git -C "$repo" show "$PR258:supabase/candidates/postona_threads_publish/threads_credential_rotation_candidate.sql" > "$tree/pr258/candidate.sql"
+echo "$PR258 $(shasum -a 256 "$tree/pr258/candidate.sql" | cut -c1-16) threads_credential_rotation_candidate.sql (fail-before copy)" >> "$tree/ROT_MANIFEST.txt"
+db="$(copy b258 "$world")"
+[[ "$(apply "$db" "$tree/pr258/candidate.sql")" == applied && "$(apply "$db" "$t/postona_threads_rotation_fixture.sql")" == applied ]] || fail "PR #258's candidate did not apply"
+for r in owner_transfer owner_aba lease_owner_rewritten; do
+  got="$(race_all "$db" "b258_$r" "$r")"
+  [[ "$got" != PASS ]] || fail "fail-before: PR #258's candidate passed the $r race (the defect is not reproduced)"
+  echo "PASS fail-before $r on PR #258: ${got:0:150}"
+done
 
 # ---- 2e. Mutations ------------------------------------------------------------------------------------------------
 mutate() {
@@ -278,11 +321,10 @@ mutate() {
   [[ "$got" != PASS ]] || fail "mutation $name was NOT caught"
   echo "PASS mutation $name caught (${got:0:140})"
 }
-mutate no_lease_precheck "  if not exists (select 1 from public.threads_credential_refresh_leases l
-                 where l.social_account_id = p_social_account_id and l.lease_id = p_lease) then
-    return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
-  end if;
-" ""
+mutate no_lease_precheck "  select l.owner_user_id into v_checked from public.threads_credential_refresh_leases l
+   where l.social_account_id = p_social_account_id and l.lease_id = p_lease;
+  if v_checked is null then return public.threads_credential_rotation_refused('LEASE_NOT_HELD'); end if;" "  select l.owner_user_id into v_checked from public.threads_credential_refresh_leases l
+   where l.social_account_id = p_social_account_id;"
 mutate no_lease_id_after_locks "  if v_lease.lease_id is distinct from p_lease or v_lease.lease_expires_at <= v_now then" "  if v_lease.lease_expires_at <= v_now then"
 mutate no_lease_expiry "  if v_lease.lease_id is distinct from p_lease or v_lease.lease_expires_at <= v_now then" "  if v_lease.lease_id is distinct from p_lease then"
 mutate lease_not_consumed "  delete from public.threads_credential_refresh_leases l where l.social_account_id = p_social_account_id and l.lease_id = p_lease;
@@ -298,36 +340,38 @@ mutate no_custody_secret_cas "     or v_custody.vault_secret_id is distinct from
 " ""
 mutate no_verification_check "     or v_lease.custody_recorded_at is distinct from p_expected_recorded_at
      or v_custody.recorded_at < v_account.verified_at then" "     or v_lease.custody_recorded_at is distinct from p_expected_recorded_at then"
-mutate no_owner_check "  if v_lease.owner_user_id is distinct from v_owner then return public.threads_credential_rotation_refused('OWNER_CHANGED'); end if;
-" ""
-mutate rotate_no_owner_fence "    return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
-  end if;
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
-  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;" "    return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
-  end if;"
-mutate rotate_fence_after_row_locks "    return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
-  end if;
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
-  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;
-  perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
-  perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
-  if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;" "    return public.threads_credential_rotation_refused('LEASE_NOT_HELD');
-  end if;
-  perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
-  perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
-  if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
-  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;"
-mutate claim_fence_after_row_locks "  -- F5 first: the workspace owner's POSTONA, its lifecycle locks before any workspace or account lock.
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
+mutate no_owner_check "  if v_lease.owner_user_id is distinct from v_owner or v_checked is distinct from v_owner then" "  if false then"
+mutate rotate_no_checked_binding "  if v_lease.owner_user_id is distinct from v_owner or v_checked is distinct from v_owner then" "  if v_lease.owner_user_id is distinct from v_owner then"
+mutate rotate_no_owner_fence "  -- F5 for THAT person, explicitly (never the owner of the moment, which may have changed and changed back).
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
+  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;" ""
+mutate rotate_fences_current_owner "  -- F5 for THAT person, explicitly (never the owner of the moment, which may have changed and changed back).
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);" "  v_code := public.threads_credential_refresh_lifecycle(private.account_lifecycle_brand_owner(v_brand_id));"
+mutate rotate_fence_after_row_locks "  -- F5 for THAT person, explicitly (never the owner of the moment, which may have changed and changed back).
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
   if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;
   perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
   perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
   if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;" "  perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
   perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
   if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
   if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;"
+mutate claim_fence_after_row_locks "  v_checked := private.account_lifecycle_brand_owner(v_brand_id);
+  if v_checked is null then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
+  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;
+  perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
+  perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
+  if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;" "  perform public.social_mobile_account_deletion_workspace_lock(v_brand_id);
+  perform 1 from public.brands b where b.id = v_brand_id and b.code_profile_key = 'social_mobile_user_v1' for share;
+  if not found then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
+  v_checked := private.account_lifecycle_brand_owner(v_brand_id);
+  if v_checked is null then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
+  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;"
+mutate claim_no_owner_binding "  if v_owner is distinct from v_checked then return public.threads_credential_rotation_refused('OWNER_CHANGED'); end if;
+" ""
 mutate rotate_no_in_flight "  if p_new_expires_at <= v_custody.expires_at then return public.threads_credential_rotation_refused('EXPIRY_NOT_EXTENDED'); end if;
   if public.threads_credential_publish_in_flight(p_social_account_id) then
     return public.threads_credential_rotation_refused('PUBLISH_IN_FLIGHT');
@@ -342,6 +386,7 @@ mutate rotate_not_server_only "returns jsonb language plpgsql security invoker s
 declare
   v_brand_id text;
   v_code text;
+  v_checked uuid;
   v_owner uuid;
   v_account public.social_accounts%rowtype;
   v_custody public.threads_account_credential_custody%rowtype;
@@ -353,6 +398,7 @@ begin
 declare
   v_brand_id text;
   v_code text;
+  v_checked uuid;
   v_owner uuid;
   v_account public.social_accounts%rowtype;
   v_custody public.threads_account_credential_custody%rowtype;
@@ -366,9 +412,9 @@ mutate claim_no_in_flight "  if public.threads_credential_publish_in_flight(p_so
     return public.threads_credential_rotation_refused('PUBLISH_IN_FLIGHT');
   end if;
   select l.* into v_lease" "  select l.* into v_lease"
-mutate claim_no_owner_fence "  -- F5 first: the workspace owner's POSTONA, its lifecycle locks before any workspace or account lock.
-  v_code := public.threads_manual_publish_owner_fence(v_brand_id);
-  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;" ""
+mutate claim_no_owner_fence "  if v_checked is null then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;
+  v_code := public.threads_credential_refresh_lifecycle(v_checked);
+  if v_code is not null then return public.threads_credential_rotation_refused(v_code); end if;" "  if v_checked is null then return public.threads_credential_rotation_refused('WORKSPACE_INACTIVE'); end if;"
 mutate api_grant "-- Postcondition: the lease table" "grant execute on function public.rotate_threads_credential_custody(text, uuid, uuid, timestamptz, timestamptz) to service_role;
 -- Postcondition: the lease table"
 mutate lease_table_readable "-- Postcondition: the lease table" "grant select on table public.threads_credential_refresh_leases to authenticated;
