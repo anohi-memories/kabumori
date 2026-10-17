@@ -647,3 +647,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F4.md` (state at `1aa8160e`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-sandbox-isolation-preflight-20261017/F4.md`
 - bytes: 11043; SHA256: `d3156c7c03fe552bbd05a529478b3d462a95a3286e12e5958713bb471cdc9430`; original_blob: `157d5228bfdc9467e9fa88c76eb40c350cd5c34c`
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-oauth-connect-gap-readiness-20261017`). L4 accepted, PR243 `60e4a4c059a9d7304e5a48a7b3219ab801e822ae`, device smoke BLOCKED_PRECONDITION, production NO_GO.
+
+## F4 POSTONA Threads OAuth gap audit archive — 2026-10-17
+- task_id: `postona-f4-threads-oauth-connect-gap-readiness-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `d9450775`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-connect-gap-readiness-20261017/F4.md`
+- bytes: 10019; SHA256: `c687fb8da5388c5ec6ec74a91b9c1c3cfe5d3e3f370ec67237423493198a9757`; original_blob: `231625d9b05a72805e801744f2cab7ca660139d1`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-oauth-stack-integration-ios-return-20261017`). L4 accepted, PR247 `27e2135c041fb8c37bbf9c68adbe4f6fa66ea5e8`, production NO_GO.
