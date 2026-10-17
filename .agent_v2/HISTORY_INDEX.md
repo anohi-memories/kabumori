@@ -713,3 +713,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F4.md` (state at `4846b1bb`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-credential-rotate-cas-sql-contract-20261017/F4.md`
 - bytes: 16263; SHA256: `278bcc9de05851af623c1cac85c4fba8fff978ae5e9bcbf8ae697794b0e0f591`; original_blob: `3cb9e7793bab17be6452ab2370f6f1ee1c40c4ce`
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-pr251-android-intent-filter-p2-fix-20261017`). L4 accepted, PR258 `713955b5371cf4f1de4681ecec1737e1ccc7d4cd`, not applied, production and pilot NO_GO.
+
+## F5 Phase13 D-2 inert X saga stand-in completed — 2026-10-17
+- task_id: `common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017`, L5 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; Draft PR259 head `422c101aff4bb475db075abf2c0e9423582069ae`.
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/files/.agent_v2/tasks/F5.md`.
+- bytes 21903, SHA256 `a11d31fdd31fa3c44be0a19d195c9e4afd95589923d490968c597073334bdb3f`, original/restored blob `cfded2dabdb48617fa3425be25c42665b7ee4cdf`, exact read-back match, MANIFEST and SHA256SUMS recorded, append-only.
