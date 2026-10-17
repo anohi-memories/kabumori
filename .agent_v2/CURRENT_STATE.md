@@ -1,3 +1,7 @@
+## POSTONA Phase13 D-2 — F5検証専用X saga代役割当（2026-10-17）
+- G4 `D-2_IMPLEMENTATION_GO`, F3/G3 `PASS_CONTRACT_REVIEW` を受け、F5新TASK `common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017` をready/claude、Opus5.5（高）、F5→L5、返却先「共通アカウントG5のちゃ（新F5担当）」として登録。通常XCleanupOutcome.doneを偽装せず、F5検証ハーネスのX saga依存境界だけ差し替え、本番から構造的に隔離、X API/Vault/OAuth/投稿・予約変更/revoke/有料AI/通信=0を必須検証。F3/G3所有X saga、F4 Threads、F6 AI、本番F5 cleanup、migration/Auth/RLS/Edgeは変更禁止。R2'／G3 T13は未解決。PR merge/deploy/実managed Supabaseは禁止、PRODUCTION_NO_GO。
+- 前F5 D-1完了TASK/Report archive: `.agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-baseline-contract-extend-20261017/`、元blob復元一致、MANIFEST/SHA256SUMS/HISTORY_INDEX保存。開始時にfresh origin/main、30枠競合と独立worktreeを必ず再確認（このチャットからはローカルworktreeの状態を独立検証していない）。
+
 ## POSTONA G4 Phase13 D-1承認 — F5 baseline契約拡張割当（2026-10-17）
 - F5 `common-account-f5-phase13-baseline-contract-extend-20261017` ready/claude、Opus5.5（高）、F5→L5、return `共通アカウントG5のちゃ（新F5担当）`。G4 D-1承認：`public.ensure_my_profile()` / `public.social_accounts.platform` のbaseline contract・安全なschema-only export仕様・出所とDDL依存・合成PG17回帰をsource-only修正。前Phase13 F5 TASK/Reportはarchive `.agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/` へ元Git blob完全一致・SHA256/MANIFEST/SHA256SUMS/HISTORY_INDEX保存。D-2 X saga代役はF3/G3契約確認後、D-3 hosted project作成は未承認。Phase12 #233レビューはP2×4限定・実適用前。実Supabase/本番/schema inventory/migration/Auth/Edge/Cron/OAuth/SNS/merge/deployは禁止。開始時にfresh origin/main・独立worktree・新旧30枠の変更対象競合再確認、PRODUCTION_NO_GO。
 
