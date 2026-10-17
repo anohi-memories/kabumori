@@ -91,19 +91,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017
+- status: ready
+- task_id: common-ai-f6-pr256-policy-pii-erasure-p2-fix-20261017
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_CANDIDATE PR256; focused independent review of new ledger trigger exceptions/RPC/concurrency pending; F5 deletion integration, privacy retention, cron, managed verification and production NO_GO.
+- next_owner: claude
+- blocker: PR256 independent Claude CHANGES_REQUIRED P2 policy_key/note PII remains after erasure, P3x3; F6 focused offline source fix only; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: PR249 independent review PASS with P3x5, existing Draft #241/#239 provider stack; F5 Phase13 separate
-- previous_archive: .agent_v2/archive/2026-10-17-f6-pr249-consumer-calls-reviewed.md
-- slot_use: F6 ledger user_id anonymization, deletion and purge contract offline candidate
+- dependencies: PR256 exact HEAD 1830320bd93fcfa458411dcf00f130d87d607d39 on reviewed PR249; F5/G5 deletion integration separate
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr256-erasure-reviewed-changes-required.md
+- slot_use: F6 PR256 P2 privacy residual policy_key/note repair and P3 scoped guards
 
 ## F7
 - slot: F7
