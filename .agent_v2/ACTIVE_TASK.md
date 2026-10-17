@@ -72,23 +72,20 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017
+- status: ready
+- task_id: common-account-f5-postona-disposable-supabase-architecture-plan-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: J2 V2 CHANGES_REQUIRED P2x2; joint PR238 b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6; F5 PR235 9480f24b; F4 PR236 605d8776
-- blocker: gate embedded stale AccountDeletionScreen and stale reactivate_x_autopost_service click callback; managed Auth and production NO_GO
-- slot_use: F5-only gate P2x2 repair; preserve F4 provider/surface and unrelated Phase12 PR233
-- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017/
-- review_required: no automatic repeated whole-scope J2 review; source regression and G4 handoff
-- latest_result: PASS_SOURCE_FIX / PRODUCTION_NO_GO; J2 V2 P2x2 fixed in the F5 gate only, PR240 head 5e462ba7 Draft stacked on PR238 (b8e91ea8); fail-before 18/20 on exact PR238 then 20/20, app suite 396 pass, tsc+lint rc=0, gate mutants 23/23; mocked harness only, no managed access; G4 to check targeted before/after + regression, no automatic J2 rerun.
-
-- l5_verdict: PASS_SOURCE_FIX / G4_INTEGRATION_CONFIRMATION_REQUIRED / PRODUCTION_NO_GO (2026-10-17). PR240 head 5e462ba73be691c80f75198d57782626f1d241cc; implementer reports before 18/20 failing, after 20/20 passing, app 396, mutation 23/23; shared assembled integration-test 1 case updated, G4 should confirm. No merge/deploy/managed operation.
+- dependencies: Phase11 #223, Phase12 #226/#233, F4 preflight #243, POSTONA G1/G2 #240; preserve F4 Threads, F3 X, F6 AI
+- blocker: BG1 missing baseline, BG2 unsafe Cron/HTTP, managed project unapproved; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017/
+- review_required: restricted Phase12 #233 safety check only before future managed apply
+- slot_use: read-only/source-only POSTONA disposable Supabase architecture design; NO project creation, migration, real OAuth/SNS, merge/deploy
 
 ## F6
 - slot: F6
