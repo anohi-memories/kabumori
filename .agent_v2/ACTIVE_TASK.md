@@ -188,19 +188,19 @@
 
 ## J2
 - slot: J2
-- status: idle
-- task_id: none
+- status: ready
+- task_id: postona-j2-pr238-auth-cross-user-review-20261017
 - owner: codex
-- next_owner: none
-- return_to: none
+- next_owner: codex
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
-- recommended_model: none
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: none for new task; independent worktree and conflicts must be checked at new assignment
-- blocker: none in task metadata; prior V2 outcome archived
+- dependencies: PR238 b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6
+- blocker: limited Auth/cross-user source review pending; production NO_GO
 - previous_archive: .agent_v2/archive/2026-10-17-J2-focused-review-closed/
-- slot_use: available for a newly registered distinct task_id only; do not start while idle
+- slot_use: POSTONA G1/G2 joint integration focused review
 
 ## J3
 - slot: J3
