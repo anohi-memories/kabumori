@@ -40,19 +40,19 @@
 
 ## F3
 - slot: F3
-- status: done
-- task_id: postona-f3-x-oauth-t13-reservation-owner-guard-20261017
+- status: ready
+- task_id: postona-f3-publish-enabled-t13-active-service-write-guard-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: G3 OAuth legacy owner; F3 PR224/204; F5 D-2 and T13 contract; G4 Issue131 verified X identity/token port; F4 Threads protected
-- blocker: G4 verified X and token port not connected, F5 D-2 testing only, R2' separate, production NO_GO
-- slot_use: L3 ACCEPTED PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO. PR257 Draft HEAD 005d7ecc (11 new files); developer PG17 PASS/18 mutants; OAuth 26 pass/2 known main failures; G4 verified token, F5 managed T13, enabled publish T13, R2' unresolved. Archive before reuse.
-- previous_archive: .agent_v2/archive/2026-10-17-F3-postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016/
+- dependencies: PR76 set_social_account_publish_enabled, F3 PR257/224/182, F5 T13/Phase13 D-2, G4 verified X PR126 Issue131
+- blocker: G4 X verification/token port, managed F5 T13 integration, R2', production NO_GO
+- slot_use: T13 guard for X publish-enabled ON, preserve OFF and PR182 sending fence; narrow source-only candidate
+- previous_archive: .agent_v2/archive/2026-10-17-F3-postona-f3-x-oauth-t13-reservation-owner-guard-20261017/
 
 ## F4
 - slot: F4
