@@ -42,16 +42,20 @@ function backendFor(args: Record<string, string | true>, writing: boolean): Back
   const kind = typeof args.backend === "string" ? args.backend : "git";
   if (kind === "github") return new GitHubBackend(need(args, "repo"));
   if (kind !== "git") throw new Error(`unknown backend ${kind}`);
-  const git = new GitBackend(need(args, "repo"), typeof args.remote === "string" ? args.remote : "origin");
-  if (writing) {
-    const url = git.remoteUrl();
+  const remote = typeof args.remote === "string" ? args.remote : "origin";
+  if (!writing) return new GitBackend(need(args, "repo"), remote);
+  // Writes go only to the remote's *effective* push destination, verified and then pinned by the backend
+  // (fetch URL == push URL, no pushurl / insteadOf detour, allowed repository), and re-verified before push.
+  const allow = (url: string) => {
     const m = url.match(GITHUB_REMOTE);
     const local = !/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.includes("@");
-    if (m ? !DEFAULT_ALLOWED_REPOS.includes(m[2]) : !(local && args["allow-local-remote"] === true)) {
-      throw new Error(`remote ${redact(url)} is not an allowed destination`);
-    }
+    return m ? DEFAULT_ALLOWED_REPOS.includes(m[2]) : local && args["allow-local-remote"] === true;
+  };
+  try {
+    return new GitBackend(need(args, "repo"), remote, allow);
+  } catch (e) {
+    throw new Error(`remote ${remote} is not an allowed destination: ${redact((e as Error).message)}`);
   }
-  return git;
 }
 
 function expectFrom(args: Record<string, string | true>): Expect {

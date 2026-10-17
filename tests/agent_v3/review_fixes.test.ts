@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { main as cli } from "../../scripts/agent_v3/cli.ts";
-import { classifyPushFailure, GitBackend } from "../../scripts/agent_v3/git_backend.ts";
+import { classifyPushFailure, DestinationError, GitBackend } from "../../scripts/agent_v3/git_backend.ts";
 import { ghTransport, GitHubBackend } from "../../scripts/agent_v3/github_backend.ts";
 import { assertWithinRoot, contentSha256, initRoot, parseHeader, planArchive, planInit, PlanError, planTaskWrite, slotState, validateTaskText } from "../../scripts/agent_v3/registry.ts";
 import { type Backend, checkMaxAttempts, MAIN_REF, redact, runTransaction } from "../../scripts/agent_v3/transaction.ts";
-import { def, DEFS, expectAt, FakeGitHub, freshRead, headAt, OPTS, report, ROOT, sh, staleFirstHead, task, world, wrap, write } from "./helpers.ts";
+import { def, DEFS, expectAt, FakeGitHub, freshRead, headAt, OPTS, readAt, report, ROOT, sh, staleFirstHead, task, world, wrap, write } from "./helpers.ts";
 
 // Regressions for the independent review of PR #229 (H1-H3, M1-M4, L1-L7). Each test pins one failure mode.
 
@@ -406,4 +407,178 @@ test("L7: paths with '..', absolute paths and unusual characters are refused", (
   }
   assert.doesNotThrow(() => assertWithinRoot([`${ROOT}/archive/2026-10-16-F1-fixture-f1-ok-20261016/files/${ROOT}/tasks/F1.md`], ROOT));
   assert.equal(contentSha256(null), "missing");
+});
+
+// ---- N1: the effective push destination ------------------------------------------------------------------
+
+function otherBare(w: { dir: string }): string {
+  const other = join(w.dir, "other.git");
+  spawnSync("git", ["init", "--bare", "--initial-branch=main", other]);
+  return other;
+}
+
+function refsOf(bare: string): string {
+  return spawnSync("git", ["-C", bare, "for-each-ref"], { encoding: "utf8" }).stdout.trim();
+}
+
+test("N1: a pushurl, pushInsteadOf or insteadOf detour to another repository is refused before any push", () => {
+  const w = world();
+  try {
+    const other = otherBare(w);
+    const allowOnlyRemote = (url: string) => url === w.remote;
+    const before = headAt(w);
+    const detours: [string, string[]][] = [
+      ["pushurl", ["config", "remote.origin.pushurl", other]],
+      ["pushurl set to the same URL", ["config", "remote.origin.pushurl", w.remote]], // a separate pushurl is never implicit
+      ["pushInsteadOf", ["config", `url.${other}.pushInsteadOf`, w.remote]],
+      ["insteadOf", ["config", `url.${other}.insteadOf`, w.remote]],
+      ["two push URLs", ["remote", "set-url", "--add", "--push", "origin", w.remote]],
+    ];
+    for (const [name, cfg] of detours) {
+      if (name === "two push URLs") sh(w.b, "remote", "set-url", "--add", "--push", "origin", w.remote);
+      sh(w.b, ...cfg);
+      assert.throws(() => new GitBackend(w.b, "origin", allowOnlyRemote), DestinationError, name);
+      assert.throws(() => cli(["init", "--root", ".agent_v3_n1", "--repo", w.b, "--allow-local-remote", "--allow-main"]), /not an allowed destination/, name);
+      // undo for the next case
+      for (const key of ["remote.origin.pushurl", `url.${other}.pushinsteadof`, `url.${other}.insteadof`]) spawnSync("git", ["-C", w.b, "config", "--unset-all", key]);
+    }
+    assert.equal(refsOf(other), "", "nothing was ever pushed to the unverified repository");
+    assert.equal(headAt(w), before, "and nothing to the allowed one either");
+  } finally {
+    w.cleanup();
+  }
+});
+
+test("N1: a destination that changes after verification stops before pushing", () => {
+  const w = world();
+  try {
+    const other = otherBare(w);
+    const allowOnlyRemote = (url: string) => url === w.remote;
+    const changes: string[][] = [
+      ["config", "remote.origin.pushurl", other],
+      ["config", `url.${other}.pushInsteadOf`, w.remote],
+      ["remote", "set-url", "origin", other],
+    ];
+    for (const change of changes) {
+      const g = new GitBackend(w.b, "origin", allowOnlyRemote); // verified and pinned
+      const before = headAt(w);
+      const text = task("F1", { id: "fixture-f1-toctou-20261017", status: "ready", next: "claude" });
+      const out = runTransaction(g, DEFS, MAIN_REF, (read) => {
+        sh(w.b, ...change); // the config moves between verification and the push
+        return planTaskWrite(DEFS, ROOT, read, "F1", text, expectAt(w, "F1"), null, "m");
+      }, OPTS);
+      assert.equal(out.code, "DESTINATION_REFUSED", `${change.join(" ")}: ${out.detail}`);
+      assert.equal(refsOf(other), "");
+      assert.equal(headAt(w), before);
+      spawnSync("git", ["-C", w.b, "config", "--unset-all", "remote.origin.pushurl"]);
+      spawnSync("git", ["-C", w.b, "config", "--unset-all", `url.${other}.pushinsteadof`]);
+      sh(w.b, "remote", "set-url", "origin", w.remote);
+    }
+  } finally {
+    w.cleanup();
+  }
+});
+
+test("N1: the push goes to the pinned URL even if the remote name changed in the last moment", () => {
+  const w = world();
+  try {
+    const other = otherBare(w);
+    const g = new GitBackend(w.b, "origin", (url) => url === w.remote);
+    const pinned = g.verifiedUrl();
+    sh(w.b, "remote", "set-url", "origin", other);
+    // Simulate the race window: the pre-push re-check still saw the old configuration.
+    (g as unknown as { verifiedUrl: () => string }).verifiedUrl = () => pinned;
+    const out = write(g, "F5", task("F5", { id: "fixture-f5-pinned-push-20261017", status: "ready", next: "claude" }), expectAt(w, "F5"));
+    assert.equal(out.code, "REGISTERED_ON_MAIN", out.detail);
+    assert.equal(refsOf(other), "", "the remote name now points elsewhere, but the write went to the verified URL");
+  } finally {
+    w.cleanup();
+  }
+});
+
+test("N1: an allowed, consistent remote still registers (library and CLI)", () => {
+  const w = world();
+  try {
+    const g = new GitBackend(w.b, "origin", (url) => url === w.remote);
+    const out = write(g, "F2", task("F2", { id: "fixture-f2-allowed-remote-20261017", status: "ready", next: "claude" }), expectAt(w, "F2"));
+    assert.equal(out.code, "REGISTERED_ON_MAIN", out.detail);
+    assert.equal(cli(["init", "--root", ".agent_v3_n1ok", "--repo", w.b, "--allow-local-remote", "--allow-main"]), 0);
+    assert.notEqual(freshRead(w)(".agent_v3_n1ok/ACTIVE_TASK.md"), null);
+  } finally {
+    w.cleanup();
+  }
+});
+
+// ---- N2: BOM / CRLF bytes survive the archive --------------------------------------------------------------
+
+function rawBlob(w: { a: string }, commit: string, path: string): Buffer {
+  return spawnSync("git", ["-C", w.a, "cat-file", "blob", `${commit}:${path}`]).stdout;
+}
+
+test("N2: a BOM + CRLF TASK is archived byte for byte (git backend)", () => {
+  const w = world();
+  try {
+    const g = new GitBackend(w.a);
+    const id = "fixture-f3-bom-archive-20261017";
+    const bom = (status: string, next: string) => "﻿" + task("F3", { id, status, next }).replace(/\n/g, "\r\n");
+    for (const [status, next] of [["ready", "claude"], ["in_progress", "claude"], ["review_required", "chatgpt"], ["done", "none"]]) {
+      assert.equal(write(g, "F3", bom(status, next), expectAt(w, "F3")).code, "REGISTERED_ON_MAIN");
+    }
+    const doneCommit = headAt(w);
+    const original = rawBlob(w, doneCommit, def("F3").taskPath);
+    assert.deepEqual([...original.subarray(0, 3)], [0xef, 0xbb, 0xbf], "the source really starts with a BOM");
+    const expect = expectAt(w, "F3");
+    const out = runTransaction(g, DEFS, MAIN_REF, (read, base, list) => planArchive(DEFS, ROOT, read, list, "F3", expect, base, "2026-10-17"), OPTS);
+    assert.equal(out.code, "REGISTERED_ON_MAIN", out.detail);
+    const dir = `${ROOT}/archive/2026-10-17-F3-${id}`;
+    const archived = rawBlob(w, out.commit!, `${dir}/files/${def("F3").taskPath}`);
+    assert.ok(archived.equals(original), "archive bytes equal the source bytes (BOM and CRLF kept)");
+    const sums = readAt(w, out.commit!)(`${dir}/SHA256SUMS`)!;
+    assert.equal(sums.split(" ")[0], createHash("sha256").update(original).digest("hex"));
+    const manifest = JSON.parse(readAt(w, out.commit!)(`${dir}/MANIFEST.json`)!);
+    assert.equal(manifest.files[0].size, original.length);
+  } finally {
+    w.cleanup();
+  }
+});
+
+test("N2: a BOM done TASK placed by another writer is archived byte for byte (reviewer's case)", () => {
+  const w = world();
+  try {
+    const g = new GitBackend(w.a);
+    const id = "fixture-f4-legacy-bom-20261017";
+    const base = headAt(w);
+    const c = g.commit(base, new Map([[def("F4").taskPath, "\uFEFF" + task("F4", { id, status: "done", next: "none" })]]), "legacy writer: BOM done task");
+    assert.deepEqual(g.publish(MAIN_REF, c, base), { ok: true });
+    const head = headAt(w);
+    const original = rawBlob(w, head, def("F4").taskPath);
+    assert.equal(original.subarray(0, 3).toString("hex"), "efbbbf");
+    const s = slotState(DEFS, (p) => g.read(head, p), "F4");
+    assert.equal(s.task_sha256, createHash("sha256").update(original).digest("hex"), "the backend's view hashes the real bytes");
+    const out = runTransaction(g, DEFS, MAIN_REF, (read, b, list) => planArchive(DEFS, ROOT, read, list, "F4", { task_id: id, status: "done", task_sha256: s.task_sha256 }, b, "2026-10-17"), OPTS);
+    assert.equal(out.code, "REGISTERED_ON_MAIN", out.detail);
+    const archived = rawBlob(w, out.commit!, `${ROOT}/archive/2026-10-17-F4-${id}/files/${def("F4").taskPath}`);
+    assert.equal(archived.subarray(0, 3).toString("hex"), "efbbbf");
+    assert.ok(archived.equals(original));
+  } finally {
+    w.cleanup();
+  }
+});
+
+test("N2: the GitHub backend keeps a BOM and CRLF, and still refuses invalid UTF-8", () => {
+  const files = initRoot(DEFS, ROOT);
+  const bomText = "﻿# x\r\n- task_id: none\r\n";
+  files.set(`${ROOT}/bom.md`, bomText);
+  const fake = new FakeGitHub(files);
+  const gh = new GitHubBackend("o/r", fake.transport, ["o/r"]);
+  const got = gh.read(fake.head(), `${ROOT}/bom.md`)!;
+  assert.equal(got, bomText, "BOM and CRLF are returned unchanged");
+  assert.ok(Buffer.from(got, "utf8").equals(Buffer.from(bomText, "utf8")));
+  fake.fault = (method, path) => {
+    if (method !== "GET" || !path.startsWith(`contents/${ROOT}/bad.md`)) return null;
+    const bytes = Buffer.from([0x66, 0xff, 0xfe]);
+    const sha = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
+    return { status: 200, text: JSON.stringify({ type: "file", sha, size: bytes.length, encoding: "base64", content: bytes.toString("base64") }) };
+  };
+  assert.throws(() => gh.read(fake.head(), `${ROOT}/bad.md`), /not valid UTF-8/);
 });

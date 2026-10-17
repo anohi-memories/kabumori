@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import type { Backend, PublishResult } from "./transaction.ts";
-import { IntegrityError, RefusedError, TransportError } from "./transaction.ts";
+import { decodeUtf8Exact, IntegrityError, RefusedError, TransportError } from "./transaction.ts";
 
 // GitHub backend over the Git Data API, the multi-file alternative to the Contents API (which makes one
 // commit per file, the write pattern behind the partial TASK/ACTIVE updates). blobs -> one tree on the
@@ -50,7 +50,6 @@ export function gitBlobSha(bytes: Uint8Array): string {
   return createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
 }
 
-const UTF8 = new TextDecoder("utf-8", { fatal: true });
 const REFUSAL = /\b(denied|blocked|refused) by (policy|safety)|safety (block|filter)|content policy/i;
 const GET_ATTEMPTS = 3;
 export const DEFAULT_ALLOWED_REPOS = ["anohi-memories/kabumori"];
@@ -128,11 +127,7 @@ export class GitHubBackend implements Backend {
       if (bytes.length !== size || gitBlobSha(bytes) !== sha) {
         throw new IntegrityError(`${path}@${commit}: got ${bytes.length} bytes / ${gitBlobSha(bytes)}, GitHub reports ${String(size)} / ${sha}`);
       }
-      try {
-        content = UTF8.decode(bytes);
-      } catch {
-        throw new IntegrityError(`${path}@${commit} is not valid UTF-8`);
-      }
+      content = decodeUtf8Exact(bytes, `${path}@${commit}`); // keeps a BOM; no silent conversion
     } else {
       throw new Error(`read ${path}@${commit} -> ${r.status}${r.status === 200 ? " (not a file)" : ""}`);
     }

@@ -11,7 +11,7 @@ import { assertSafeRoot, assertWithinRoot, type ChangeSet, keyFields, type ListF
 //          the ref is only *read* to find out.
 export type PublishResult =
   | { ok: true }
-  | { ok: false; kind: "stale" | "permission" | "refused" | "rejected" | "unknown"; detail: string };
+  | { ok: false; kind: "stale" | "permission" | "refused" | "rejected" | "destination" | "unknown"; detail: string };
 
 export interface Backend {
   readonly name: string;
@@ -48,6 +48,23 @@ export class IntegrityError extends Error {
     super(detail);
     this.name = "IntegrityError";
   }
+}
+
+const UTF8_EXACT = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+// Decode without changing a single byte: a leading BOM is kept (TextDecoder strips it by default, which made
+// a BOM file's archive differ from its source), invalid UTF-8 is refused, and the text must re-encode to
+// exactly the bytes that were read.
+export function decodeUtf8Exact(bytes: Uint8Array, what: string): string {
+  let text: string;
+  try {
+    text = UTF8_EXACT.decode(bytes);
+  } catch {
+    throw new IntegrityError(`${what} is not valid UTF-8`);
+  }
+  const back = new TextEncoder().encode(text);
+  if (back.length !== bytes.length || back.some((b, i) => b !== bytes[i])) throw new IntegrityError(`${what} does not round-trip byte for byte`);
+  return text;
 }
 
 export type OutcomeCode =
@@ -159,6 +176,7 @@ export function runTransaction(backend: Backend, defs: SlotDef[], ref: string, p
       if (!published.ok) {
         if (published.kind === "stale") continue; // someone else moved the ref: re-plan from the new head
         if (published.kind === "unknown") return resolveUnknown(backend, defs, ref, attempt, at, commit, plan, published.detail);
+        if (published.kind === "destination") return fail("DESTINATION_REFUSED", ref, attempt, base, commit, published.detail); // nothing was pushed
         const code = published.kind === "permission" ? "PERMISSION_DENIED" : published.kind === "refused" ? "REFUSED_STOPPED" : "PUBLISH_REJECTED";
         return fail(code, ref, attempt, base, commit, published.detail);
       }

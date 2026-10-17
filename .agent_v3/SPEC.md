@@ -22,13 +22,20 @@ V3は、v2（`.agent_v2/`）の「軽量TASK・独立Report・append-only archiv
 - `ACTIVE_TASK.md` は、全TASKヘッダーから機械的に作る派生物。先頭に生成マーカーと、生成元ヘッダーのdigest（`source_digest`、SHA256）を持つ。
 - 索引とTASKヘッダーが食い違ったら、**TASKヘッダーが正しく、索引が古い**とみなす。「どちらが正しいか」を人が判断する場面を作らない。
 - `verify` は、ヘッダーの形式（必須項目、slotと完了コードの1対1、statusの値、割当中の `return_to` と推薦モデル）、索引との一致、digest、手編集の有無を読み取りだけで確認する。v2の索引にも `--legacy-v2` で同じ検査をかけられる（digestの検査は省く）。
-- ヘッダーの読み取りは、先頭のUTF-8 BOMとCRLF改行を許容する。ヘッダー部分に字下げされた `- key:` 行があると、項目として読まれずに見落とされるため、書き込み時に拒否する。読み取った内容が正しいUTF-8でなければ、整合性エラーとして止める。
+- ヘッダーの解析は、先頭のUTF-8 BOMとCRLF改行を許容する。ヘッダー部分に字下げされた `- key:` 行があると、項目として読まれずに見落とされるため、書き込み時に拒否する。
+- ファイルの中身は1バイトも変えずに扱う（N1/N2修正、2026-10-17）。読み取りではBOMを削らずに保持し、読み取った文字列を符号化し直すと元のバイト列と一致することを確かめる。そのため、BOM付き・CRLFのTASKも、archiveとSHA256が原本とバイト一致する。正しいUTF-8でない内容や、一致しない内容は、整合性エラーとして止める。
 
 ## 3. 1件の登録 = 1つのcommit（トランザクション）
 
 登録・開始・Report・承認・archiveのどれも、関係するファイルすべて（TASK、再生成した索引、必要ならReport、archive一式、HISTORY_INDEXの行）を**1つのcommit**にまとめる。手順は次のとおり。
 
-0. **書き込み先を確かめる**: rootは `.agent_v3*` だけ（`.agent` / `.agent_v2` / `.github` などは不可）。変更一式のパスは、すべてそのroot配下の素直な相対パスであること（`..`、絶対パス、空の区切り、空白などの文字は不可）。refは既定で `refs/agent-v3-live-test/*` だけで、`refs/heads/main` は呼び出し側が明示した場合（CLIの `--allow-main`）だけ。GitHubのリポジトリは許可リスト（既定 `anohi-memories/kabumori`）のものだけ。git backendのremoteも、そのリポジトリを指すものだけ（ローカルパスのremoteは `--allow-local-remote` が必要）。外れたら `DESTINATION_REFUSED`。
+0. **書き込み先を確かめる**: rootは `.agent_v3*` だけ（`.agent` / `.agent_v2` / `.github` などは不可）。変更一式のパスは、すべてそのroot配下の素直な相対パスであること（`..`、絶対パス、空の区切り、空白などの文字は不可）。refは既定で `refs/agent-v3-live-test/*` だけで、`refs/heads/main` は呼び出し側が明示した場合（CLIの `--allow-main`）だけ。GitHubのリポジトリは許可リスト（既定 `anohi-memories/kabumori`）のものだけ。git backendでは、remoteの**実際のpush先**を確かめる（N1修正）。条件は次のとおり。
+   - remoteのURLの設定が1つだけで、`pushurl` が設定されていない。
+   - `git remote get-url --all` と `--push --all` が返す実際のfetch先・push先が、どちらも設定されたURLのまま（`insteadOf` / `pushInsteadOf` による書き換えなし。別の許可先へ向ける意図的な書き換えも認めない）。
+   - そのURLが許可されたリポジトリを指す（ローカルパスは `--allow-local-remote` が必要）。
+   - そのURLをそのまま使ったときに書き換える規則も無い。
+
+   確かめたURLに固定し、ls-remote・fetch・pushはremote名ではなくそのURLで行う。push直前にもう一度確かめ、変わっていればpushせずに止める。外れたら `DESTINATION_REFUSED`。
 1. **base を読む**: 対象refの現在のcommit。
 2. **計画する**: baseの内容から変更一式を作る。呼び出し側は「自分が見ていた状態」を `expect` で渡す。中身は、そのslotの `task_id` と `status`、**TASKファイル全体のSHA256（`task_sha256`）**、Codex枠でReportも書くときはReportのSHA256（`report_sha256`、無ければ `missing`）。どれかがbaseと違えば、別の書き手が先に変えたので `CONFLICT_SAME_SLOT` で止める。`task_id` と `status` が同じでも、本文が変わっていれば競合になる。`task_sha256` を渡さない呼び出しは `PLAN_REFUSED`（古い呼び出し方は通さない）。現在の値は `show` で読める。
 3. **commitを作る**: baseだけを親にした1つのcommit。作ったcommitを読み直す。計画した全ファイルが入っていなければ `PARTIAL_DETECTED`、計画に無い変更が含まれていれば `UNPLANNED_CHANGE_DETECTED` で止める（どちらも公開しない）。
