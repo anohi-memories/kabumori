@@ -54,9 +54,34 @@ mutant erase_returns_erased_id behaviour \
 mutant erase_dates_buckets behaviour \
   "s/update ai_ledger.budget_buckets b set user_id = v_erased where/update ai_ledger.budget_buckets b set user_id = v_erased, updated_at = now() where/"
 mutant erase_keeps_policy_enabled behaviour \
-  "s/set scope_user_id = v_erased, enabled = false where/set scope_user_id = v_erased where/"
+  "s/set scope_user_id = v_erased, enabled = false, policy_key/set scope_user_id = v_erased, policy_key/"
 mutant erase_keeps_policy_user behaviour \
-  "s/  update ai_ledger.budget_policies pol set scope_user_id = v_erased, enabled = false where pol.scope_user_id = v_user;\n  get diagnostics v_policies = row_count;/  v_policies := 0;/"
+  "s/  update ai_ledger.budget_policies pol\n     set scope_user_id = v_erased, enabled = false, policy_key = 'erased.' \|\| pol.id::text, note = null\n   where pol.scope_user_id = v_user;\n  get diagnostics v_policies = row_count;/  v_policies := 0;/"
+# P2: policy key / note
+mutant policy_note_kept behaviour \
+  "s/, policy_key = 'erased.' \|\| pol.id::text, note = null/, policy_key = 'erased.' || pol.id::text/"
+mutant policy_key_kept behaviour \
+  "s/, enabled = false, policy_key = 'erased.' \|\| pol.id::text, note = null/, enabled = false, note = null/"
+mutant no_stray_mention_refusal behaviour \
+  "s/  if v_mentions > 0 then/  if false then/"
+mutant no_key_conflict_check behaviour \
+  "s/  if exists \(select 1 from ai_ledger.budget_policies pol\n               join ai_ledger.budget_policies other/  if false and exists (select 1 from ai_ledger.budget_policies pol\n               join ai_ledger.budget_policies other/"
+mutant mentions_keep_dashes behaviour \
+  "s/position\(replace\(p_user::text, '-', ''\) in lower\(replace\(p_text, '-', ''\)\)\)/position(p_user::text in lower(p_text))/"
+mutant mentions_case_sensitive behaviour \
+  "s/in lower\(replace\(p_text, '-', ''\)\)\)/in replace(p_text, '-', ''))/"
+mutant footprint_no_policy_mentions behaviour \
+  "s/    'policy_mentions', \(select count\(\*\) from ai_ledger.budget_policies pol\n                         where ai_ledger.mentions_user\(pol.policy_key, v_user\) or ai_ledger.mentions_user\(pol.note, v_user\)\),\n//"
+# P3b: READ COMMITTED only
+mutant erase_any_isolation snapshot \
+  "s/(create function public.ai_ledger_erase_user[\s\S]*?)  if current_setting\('transaction_isolation'\) <> 'read committed' then/\$1  if false then/"
+mutant footprint_any_isolation snapshot \
+  "s/(create function public.ai_ledger_user_footprint[\s\S]*?)  if current_setting\('transaction_isolation'\) <> 'read committed' then/\$1  if false then/"
+mutant forget_brand_any_isolation snapshot \
+  "s/(create function public.ai_calls_forget_system_brand[\s\S]*?)  if current_setting\('transaction_isolation'\) <> 'read committed' then/\$1  if false then/"
+# P3a: never delete an acquired row
+mutant forget_brand_deletes_acquired concurrency \
+  "s/ and c.brand_ref = v_brand and c.state <> 'acquired';/ and c.brand_ref = v_brand;/"
 mutant erase_leaves_setting behaviour \
   "s/  perform set_config\('ai_ledger.erasure', '', true\);\n//"
 mutant erase_accepts_erased_subject behaviour \
@@ -65,7 +90,7 @@ mutant erase_accepts_erased_subject behaviour \
 mutant forget_brand_any_slug behaviour \
   "s/'brand_ref', true, '\^u_\[0-9a-f\]\{24\}\\\$'\)/'brand_ref', true, '^[a-z][a-z0-9_]{1,40}\\\$')/"
 mutant forget_brand_also_user_rows behaviour \
-  "s/  delete from ai_calls.consumer_calls c where c.subject_kind = 'system' and c.brand_ref = v_brand;/  delete from ai_calls.consumer_calls c where c.brand_ref = v_brand and c.state <> 'acquired';/"
+  "s/   where c.subject_kind = 'system' and c.brand_ref = v_brand and c.state <> 'acquired';/   where c.brand_ref = v_brand and c.state <> 'acquired';/"
 mutant forget_brand_ignores_in_flight behaviour \
   "s/  if v_in_flight > 0 then\n    return jsonb_build_object\('forgotten'/  if false then\n    return jsonb_build_object('forgotten'/"
 mutant candidates_ignore_age behaviour \

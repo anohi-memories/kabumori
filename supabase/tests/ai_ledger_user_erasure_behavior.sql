@@ -44,8 +44,9 @@ declare
   u uuid := '00000000-0000-4000-8000-0000000000a1';
   v uuid := '00000000-0000-4000-8000-0000000000b2';
   totals_before text; mine_before text; other_before text; summary_before jsonb; status_before jsonb;
-  r jsonb; erased uuid; fp jsonb;
+  r jsonb; erased uuid; fp jsonb; policy_a1 uuid;
 begin
+  policy_a1 := (select id from ai_ledger.budget_policies where policy_key = 'override.user.a1');
   totals_before := aue_test.totals();
   mine_before := aue_test.rows_sans_user(u);
   other_before := aue_test.rows_of(v);
@@ -71,13 +72,14 @@ begin
                            from unnest(array['total', 'provider', 'model', 'application', 'feature', 'logical_role', 'subject_kind']) d) = summary_before,
     'usage summaries unchanged');
   perform aue_test.check(jsonb_array_length(aue_test.rpc('ai_ledger_budget_status', '{}')) = jsonb_array_length(status_before), 'same budget rows');
-  perform aue_test.check((select not enabled and scope_user_id = erased from ai_ledger.budget_policies where policy_key = 'override.user.a1'),
-    'the user''s own policy now names the erased subject and is disabled');
+  perform aue_test.check((select not enabled and scope_user_id = erased and policy_key = 'erased.' || id::text and note is null
+                            from ai_ledger.budget_policies where id = policy_a1),
+    'the user''s own policy: erased subject, disabled, renamed erased.<id>, no note');
   perform aue_test.check((select enabled and scope_user_id = v from ai_ledger.budget_policies where policy_key = 'override.user.b2'),
     'the other user''s policy untouched');
 
   fp := aue_test.footprint(u);
-  perform aue_test.check(fp = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0}'::jsonb,
+  perform aue_test.check(fp = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0, "policy_mentions": 0}'::jsonb,
     'footprint is zero: ' || fp::text);
   perform aue_test.check(aue_test.mentions(u::text) = 0, 'the user id appears nowhere in ai_ledger / ai_calls');
   perform aue_test.check(coalesce(current_setting('ai_ledger.erasure', true), '') = '', 'no erasure setting is left in the transaction');
@@ -336,7 +338,7 @@ begin
   perform aue_test.check(r ->> 'forgotten' = 'true' and r ->> 'deleted' = '2' and r ->> 'ledger_reservations_retained' = '5', 'forgotten: ' || r::text);
   r := aue_test.erase(z);
   perform aue_test.check(r ->> 'erased' = 'true' and r ->> 'reservations' = '5', 'erased: ' || r::text);
-  perform aue_test.check(aue_test.footprint(z) = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0}'::jsonb, 'footprint zero');
+  perform aue_test.check(aue_test.footprint(z) = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0, "policy_mentions": 0}'::jsonb, 'footprint zero');
   -- a late claim (an authoriser that did not stop): the read-back sees it, the erasure refuses, the sweep repeats
   o := acs_test.claim(late) ->> 'owner';
   perform aue_test.check(aue_test.footprint(z) ->> 'call_rows' = '1', 'the read-back sees the late claim');
@@ -344,7 +346,7 @@ begin
   perform acs_test.rpc('ai_calls_complete', acs_test.complete_p(late, o, acs_test.fail_result(late, 'BUDGET_DENIED')));
   perform acs_test.rpc('ai_calls_forget_user', jsonb_build_object('user_id', z));
   perform aue_test.check(aue_test.erase(z) ->> 'erased' = 'true', 'sweep again');
-  perform aue_test.check(aue_test.footprint(z) = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0}'::jsonb, 'footprint zero after the sweep');
+  perform aue_test.check(aue_test.footprint(z) = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0, "policy_mentions": 0}'::jsonb, 'footprint zero after the sweep');
   perform aue_test.check(aue_test.mentions(z::text) = 0, 'no trace of the user');
 end;
 $$;
@@ -357,6 +359,92 @@ begin
   r := ail_test.reserve(aue_test.request('new-user-1'), 1, 'anthropic', 'claude-haiku-5-5', 'postona', 'consult', 'user', '00000000-0000-4000-8000-0000000000aa', null, 0.0044);
   perform aue_test.check(r ->> 'allowed' = 'true', 'a new user reserves normally');
   perform aue_test.check((select count(*) from ai_ledger.budget_buckets where user_id = '00000000-0000-4000-8000-0000000000aa') = 2, 'its own buckets');
+end;
+$$;
+
+\echo '[11] policies: no identifier survives in the user''s own key or note; other policies untouched; a stray mention blocks'
+do $$
+declare
+  u uuid := '00000000-0000-4000-8000-00000000c0de';
+  v uuid := '00000000-0000-4000-8000-00000000beef';
+  w uuid := '00000000-0000-4000-8000-00000000f00d';
+  pol1 uuid; pol2 uuid; polw uuid; conflict uuid;
+  stamps_before text; others_before text; all_before text; totals_before text; r jsonb; fp jsonb; erased uuid; e text;
+begin
+  -- the user's two policies: full id in a key, an e-mail in a note; the id without dashes in a key and in upper case
+  -- without dashes in a note (only those forms: a mention check that misses a form would count one policy less)
+  insert into ai_ledger.budget_policies (policy_key, scope_application, scope_subject_kind, scope_user_id, period, max_calls, note)
+  values ('override.user.' || u::text, 'postona', 'user', u, 'month', 500, 'support ticket: jane@example.com')
+  returning id into pol1;
+  insert into ai_ledger.budget_policies (policy_key, scope_application, scope_subject_kind, scope_user_id, period, max_calls, note)
+  values ('cap.' || replace(u::text, '-', ''), 'postona', 'user', u, 'day', 50, 'raised for ' || upper(replace(u::text, '-', '')))
+  returning id into pol2;
+  -- another user's policy (with its own contact), a system policy, and a system policy whose note names u by mistake
+  insert into ai_ledger.budget_policies (policy_key, scope_application, scope_subject_kind, scope_user_id, period, max_calls, note)
+  values ('override.user.' || v::text, 'postona', 'user', v, 'month', 500, 'ticket: bob@example.com');
+  insert into ai_ledger.budget_policies (policy_key, scope_provider, period, max_estimated_usd, note)
+  values ('system.anthropic.monthly', 'anthropic', 'month', 100, 'ops: keep under budget'),
+         ('system.slip', 'openai', 'month', 1, 'debug for ' || upper(u::text));
+  perform aue_test.seed_user(u, 'pol-u');
+  stamps_before := (select string_agg(concat_ws('|', id, created_at, updated_at, period, max_calls), ';' order by id)
+                      from ai_ledger.budget_policies where id in (pol1, pol2));
+
+  fp := aue_test.footprint(u);
+  perform aue_test.check(fp ->> 'budget_policies' = '2' and fp ->> 'policy_mentions' = '3', 'footprint counts both policies and all three mentions: ' || fp::text);
+
+  -- a policy that is not the user's names the user: refused, nothing changes
+  all_before := (select string_agg(pol::text, '|' order by pol.id) from ai_ledger.budget_policies pol);
+  totals_before := aue_test.totals();
+  r := aue_test.erase(u);
+  perform aue_test.check(r = '{"erased": false, "reason": "POLICY_TEXT_MENTIONS_USER", "policies": 1}'::jsonb, 'stray mention blocks: ' || r::text);
+  perform aue_test.check((select string_agg(pol::text, '|' order by pol.id) from ai_ledger.budget_policies pol) = all_before
+                         and aue_test.totals() = totals_before and aue_test.footprint(u) ->> 'reservations' = '4', 'nothing changed');
+
+  -- the operator corrects that note; the erasure then goes through
+  update ai_ledger.budget_policies set note = 'debug note removed' where policy_key = 'system.slip';
+  others_before := (select string_agg(pol::text, '|' order by pol.id) from ai_ledger.budget_policies pol where pol.id not in (pol1, pol2));
+  totals_before := aue_test.totals();
+  r := aue_test.erase(u);
+  perform aue_test.check(r ->> 'erased' = 'true' and r ->> 'budget_policies' = '2' and r ->> 'reservations' = '4', 'erased: ' || r::text);
+  erased := aue_test.subject_of('pol-u');
+  perform aue_test.check((select bool_and(policy_key = 'erased.' || id::text and note is null and not enabled and scope_user_id = erased)
+                            from ai_ledger.budget_policies where id in (pol1, pol2)), 'both policies: erased.<id>, no note, disabled, erased subject');
+  perform aue_test.check((select string_agg(concat_ws('|', id, created_at, updated_at, period, max_calls), ';' order by id)
+                            from ai_ledger.budget_policies where id in (pol1, pol2)) = stamps_before, 'timestamps, period and caps unchanged');
+  perform aue_test.check((select string_agg(pol::text, '|' order by pol.id) from ai_ledger.budget_policies pol where pol.id not in (pol1, pol2)) = others_before,
+    'every other policy (another user''s, system ones) is byte-for-byte unchanged');
+  perform aue_test.check(aue_test.totals() = totals_before, 'bill and budget totals unchanged');
+  perform aue_test.check(aue_test.mentions(u::text) = 0 and aue_test.mentions(replace(u::text, '-', '')) = 0
+                         and aue_test.mentions(upper(u::text)) = 0 and aue_test.mentions(upper(replace(u::text, '-', ''))) = 0
+                         and aue_test.mentions('jane@example.com') = 0,
+    'no form of the user id and no e-mail of the user remains in ai_ledger / ai_calls');
+  perform aue_test.check(aue_test.mentions('bob@example.com') = 1, 'the other user''s policy keeps its own note');
+  fp := aue_test.footprint(u);
+  perform aue_test.check(fp = '{"call_rows": 0, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0, "policy_mentions": 0}'::jsonb,
+    'footprint zero: ' || fp::text);
+  r := aue_test.erase(u);
+  perform aue_test.check(r = '{"erased": true, "reservations": 0, "usage_events": 0, "budget_buckets": 0, "budget_policies": 0}'::jsonb, 'retry finds nothing');
+
+  -- another policy already holds the key erasure would give: refused, nothing changes; resolved -> erased
+  insert into ai_ledger.budget_policies (policy_key, scope_application, scope_subject_kind, scope_user_id, period, max_calls)
+  values ('override.user.' || w::text, 'postona', 'user', w, 'month', 500) returning id into polw;
+  insert into ai_ledger.budget_policies (policy_key, scope_provider, period, max_calls)
+  values ('erased.' || polw::text, 'openai', 'month', 1) returning id into conflict;
+  r := aue_test.erase(w);
+  perform aue_test.check(r = '{"erased": false, "reason": "POLICY_KEY_CONFLICT"}'::jsonb, 'key conflict refused: ' || r::text);
+  perform aue_test.check((select scope_user_id = w and enabled from ai_ledger.budget_policies where id = polw), 'w''s policy untouched');
+  delete from ai_ledger.budget_policies where id = conflict;
+  perform aue_test.check(aue_test.erase(w) ->> 'budget_policies' = '1', 'erased once the conflict is resolved');
+
+  -- the service role still cannot read or change any policy directly
+  begin
+    set local role service_role;
+    update ai_ledger.budget_policies set note = 'x' where id = pol1;
+    e := 'updated';
+  exception when others then e := sqlstate;
+  end;
+  reset role;
+  perform aue_test.check(e = '42501', 'service_role cannot touch budget_policies: ' || e);
 end;
 $$;
 
