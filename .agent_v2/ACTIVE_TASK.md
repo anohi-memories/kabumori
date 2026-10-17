@@ -94,19 +94,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-postona-claude-bridge-integration-preflight-20261017
+- status: ready
+- task_id: common-ai-f6-postona-ai-ledger-quota-idempotency-design-20261017
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_PREFLIGHT PR239; personal data transfer to Anthropic requires explicit policy decision; billing/entitlement/durable idempotency and F4 integration remain; production NO_GO
+- next_owner: claude
+- blocker: POSTONA ledger/quota/durable operationId architecture design; migration/production/paid calls NO_GO; privacy and F4+F5 review dependencies
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: Draft PR187→198→205→219→222→231→234→237, H5 bridge, inventory PR216; F4 service lifecycle ready
-- previous_archive: .agent_v2/archive/2026-10-17-f6-pr237-escaped-keyword-fix.md
-- slot_use: F6 POSTONA Claude API interface and offline integration preflight
+- dependencies: PR239 source-only bridge contract, provider stack PR187→198→205→219→222→231→234→237→239; F4+F5 PR238 focused review pending
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr239-postona-contract-preflight.md
+- slot_use: F6 POSTONA AI ledger quota idempotency SOURCE-ONLY design
 
 ## F7
 - slot: F7
