@@ -1,0 +1,2179 @@
+# かぶモリ運用休止｜共通アカウントG5/F5 最終引き継ぎ書
+
+文書作成日：2026年10月17日
+担当チャット：共通アカウントG5のちゃ（新F5担当）
+対象リポジトリ：
+https://github.com/anohi-memories/kabumori
+
+文書の目的：
+かぶモリアプリの運用休止に伴い、共通アカウント基盤の
+開発履歴・設計・実装・未完成事項・安全制約を長期保存し、
+数か月〜数年後に新しいChatGPTチャットから安全に開発を
+再開できるようにする。
+
+本書は、2026年10月17日時点のGitHub確認結果と
+この担当チャットの履歴を基に作成した。
+
+GitHubの最新TASK・Report・ACTIVE_TASK・CURRENT_STATE・
+関連PRを優先する。
+
+本書は将来の再開用スナップショットであり、
+再開時には必ずGitHubの最新状態を再取得すること。
+
+本書作成のための製品コード変更・本番操作・
+PR merge・deployは実施していない。
+
+
+============================================================
+第1章｜この部屋の担当範囲と役割
+============================================================
+
+■ 1-1. 担当
+
+この部屋は、かぶモリとPOSTONAで共用する
+アカウント・認証・サービス利用登録基盤の開発を担当する。
+
+旧担当枠：
+G5
+
+新担当枠：
+F5
+
+実装担当：
+Claude Code（くろちゃん）
+
+統括・TASK管理・完了判定：
+ChatGPT（ちゃ）
+
+独立レビュー：
+Codex（こでさん）
+
+■ 1-2. 主な責務
+
+1. Supabase Authを利用した共通ID
+2. サービス別利用登録（entitlement）
+3. 既存共通IDでの別サービス追加登録
+4. 新規ユーザーの利用登録
+5. ログイン・再ログイン時の認証状態確認
+6. セッション変更時の認可状態保護
+7. POSTONA利用終了処理
+8. 共通ID完全削除処理の安全設計
+9. X・Threadsなどの外部連携解除との調整
+10. 他サービスの利用権保護
+11. サービス単位の退会と共通ID削除の分離
+12. DB/RLS/RPC/Edgeの認可境界確認
+13. 冪等性・競合・リトライ・leaseの安全性
+14. POSTONAアプリ側の利用権ゲートとの接続
+15. 将来サービスへの共通基盤再利用
+
+■ 1-3. 共通IDの対象
+
+現時点の対象：
+
+・かぶモリ
+・POSTONA
+
+将来の再利用候補：
+
+・Miseiro
+・その他の新規アプリ
+
+Miseiroの詳細認証方式は、
+POSTONA基盤の成熟後に決定する方針。
+
+■ 1-4. 他担当との境界
+
+F5：
+共通ID、entitlement、共通アカウントの
+ライフサイクル、利用権ゲート。
+
+F3/G3：
+POSTONAのX連携・投稿・予約など。
+X投稿の状態管理やOAuth認可境界は原則F3/G3側。
+
+F4/G4：
+POSTONAアプリUI、利用終了画面、
+Lifecycle Provider/Surface、Threads連携、
+画面遷移・アプリ側の統合。
+
+H5：
+旧Codex臨時実装枠。
+過去に本人確認・認証関係の実装を担当したが、
+新TASKの割当先として自動利用してはいけない。
+
+共通AI基盤G6/F6：
+OpenAI/Claudeなどの共通AI機能。
+共通IDとは関連するが、担当は別。
+
+かぶモリアプリG1/G2/F1/F2：
+かぶモリ本体の休止、画面、ニュース、
+配信、その他アプリ固有機能。
+
+重要：
+共通アカウントF5は、かぶモリ休止作業を理由に
+POSTONAの認証や利用登録機能を停止してはいけない。
+
+
+============================================================
+第2章｜休止する機能と継続する機能
+============================================================
+
+■ 2-1. かぶモリで休止対象となった機能
+
+2026年10月15日に、
+かぶモリアプリの当面の運用休止が決定された。
+
+休止対象として指定されたもの：
+
+・重要ニュース監視
+・速報候補判定
+・breaking/shadow関連処理
+・重要ニュースAI生成
+・ニュース取得Cron
+・X重要ニュース自動投稿
+・朝刊生成
+・大引けレポート生成
+・旧方式の朝刊・大引け処理
+・かぶモリ専用Push通知
+・かぶモリ専用AI生成
+
+個別Cronや配信経路の停止実績については
+かぶモリG1側の最終引き継ぎを正本とする。
+
+このF5担当チャットでは、
+それらの停止操作は担当していない。
+
+■ 2-2. 運用継続・保護対象
+
+絶対に休止処理へ巻き込んではいけないもの：
+
+・Supabase Auth
+・共通ID
+・共通ユーザー情報
+・POSTONA entitlement
+・POSTONAログイン
+・POSTONA投稿・予約機能
+・POSTONAのX OAuth/token
+・Threads連携
+・共通AI基盤
+・共有RPC/Edge FunctionのうちPOSTONAが利用するもの
+・将来のアプリ再利用に必要なアカウント基盤
+
+■ 2-3. かぶモリの利用権
+
+かぶモリが休止しても、
+共通IDとサービス利用登録情報を
+無断で削除・破棄しない。
+
+POSTONAの利用終了は、
+原則としてPOSTONAのサービス利用権だけを扱う。
+
+共通ID完全削除とは区別する。
+
+将来かぶモリを再開する際には、
+既存ユーザーの共通IDを使える設計を維持する。
+
+なお、休止後のかぶモリentitlementを
+どう表示・管理するかの最終製品仕様は、
+再開時に全体統括と照合すること。
+
+
+============================================================
+第3章｜共通アカウントの基本仕様・設計決定
+============================================================
+
+■ 3-1. 共通ID方式
+
+2026年10月1日ごろに確認した基本仕様：
+
+かぶモリから新規登録：
+共通IDを作成し、かぶモリ利用登録を付与する。
+
+POSTONAから新規登録：
+共通IDを作成し、POSTONA利用登録を付与する。
+
+既存共通IDで別サービスを利用：
+IDを重複作成せず、
+該当サービスの利用登録だけを追加する。
+
+これにより、
+ユーザーは複数サービスで共通IDを利用できる。
+
+■ 3-2. Authとentitlementの分離
+
+認証：
+「誰がログインしているか」を確認する。
+
+entitlement：
+「その人がどのサービスを利用できるか」を確認する。
+
+認証成功だけで、
+POSTONAの利用権を付与してはいけない。
+
+クライアントの状態だけで
+サービス利用権を有効・無効にしてはいけない。
+
+サーバー側の正しい利用登録状態を参照する。
+
+■ 3-3. ユーザー間境界
+
+ユーザーAのセッションで、
+ユーザーBのサービス状態を取得・変更してはいけない。
+
+ユーザーIDだけでなく、
+現在の有効セッションとの整合性を確認する。
+
+ログアウト・別ユーザー切替時には、
+古い利用権判定や確認情報を破棄する。
+
+非同期処理の結果が遅れて戻っても、
+古いユーザー・セッションの情報で
+ready状態を復活させてはいけない。
+
+■ 3-4. サービス利用終了
+
+POSTONAの利用終了時：
+
+・POSTONAの利用登録を終了する
+・共通IDは原則保持する
+・他サービスの利用権を保持する
+・X/Threadsの連携解除状態を確認する
+・未確認の外部投稿を安全に扱う
+・古い利用権キャッシュを破棄する
+・サーバーから利用権を再取得する
+
+■ 3-5. 共通ID完全削除
+
+POSTONAの利用終了とは別処理。
+
+共通IDを削除すると、
+将来アプリを含めた複数サービスに影響する。
+
+したがって、
+サービス単位の利用終了成功をもって
+共通ID全削除を実行してはいけない。
+
+未確認のX投稿などが残る場合の
+本人への事前説明・明示同意も必要。
+
+後述のD1未解決問題に該当する。
+
+■ 3-6. fail-closed
+
+認証、権利確認、外部連携解除、
+DB記録、セッション確認が失敗した場合は、
+安全側で処理を停止する。
+
+不明な状態を成功扱いしない。
+
+古いready状態を維持したまま
+アプリ利用を許可しない。
+
+■ 3-7. 冪等性と並行処理
+
+同じ要求が繰り返されても、
+二重削除や二重登録を避ける。
+
+処理中の所有者が変わった場合、
+旧所有者が破壊的処理を続けてはいけない。
+
+leaseやfenceを確認し、
+stale workerによる誤操作を防止する。
+
+
+============================================================
+第4章｜旧G5での実装・完成状況
+============================================================
+
+■ 4-1. 旧基盤
+
+旧TASK：
+.agent/tasks/CLAUDE_TASK_5.md
+
+旧完了確認：
+K5
+
+旧Codexレビュー：
+主にH4/C4など。
+
+旧TASKは旧基盤で完結させる方針。
+
+旧履歴：
+.agent/
+
+過去のReport・設計経緯については、
+旧TASK、旧Report、
+初回migration archiveを確認すること。
+
+■ 4-2. 共通アカウント基礎実装
+
+関連する主なDraft PR：
+
+#121
+https://github.com/anohi-memories/kabumori/pull/121
+
+#152
+https://github.com/anohi-memories/kabumori/pull/152
+
+#165
+https://github.com/anohi-memories/kabumori/pull/165
+
+#178
+https://github.com/anohi-memories/kabumori/pull/178
+
+これらは共通アカウント、
+認証、利用終了、外部連携解除などの
+段階的実装に関係する。
+
+重要：
+PRを作成したことと本番で利用可能なことは別。
+
+本書確認時点では、
+これらを一括してproduction完成と判断していない。
+
+■ 4-3. 旧G5 Phase4の修正
+
+task_id：
+common-account-g5-phase4-h4-c4-r1-r2-repair-20261012
+
+旧TASKの最終状態：
+done
+
+関連PR：
+#152
+
+確認したReportでの最終HEAD：
+ccea1fe8132c6f573a768f0df5a033a05c62ef2c
+
+主な修正：
+
+R1：
+lease喪失後に旧workerが
+provider cleanupを継続する問題。
+
+R2：
+他サービスのtriggerが依存する状態で、
+rollbackが失敗する問題。
+
+付帯事項：
+ACCOUNT_LIFECYCLE_BUSYのSQLSTATE説明と
+実装動作の不一致を修正。
+
+実績：
+改修前FAIL、改修後PASSを報告。
+
+状態：
+ローカル・ソース修正候補。
+
+本番でのprovider cleanupや
+managed環境の挙動を証明したものではない。
+
+
+============================================================
+第5章｜新F5 Phase5～Phase10
+============================================================
+
+新TASK：
+.agent_v2/tasks/F5.md
+
+新完了確認：
+L5
+
+新基盤：
+.agent_v2/
+
+履歴：
+.agent_v2/archive/
+
+索引：
+.agent_v2/HISTORY_INDEX.md
+
+■ 5-1. Phase5
+
+関連PR：
+#165
+
+過去のL5判定：
+PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO
+
+共通IDとサービス利用登録を扱う
+実装候補を作成。
+
+依存PR：
+#152
+#121
+
+本番DB変更・deploy・実SNS操作は未実施。
+
+■ 5-2. Phase6
+
+関連PR：
+#178
+
+POSTONAのThreadsなど、
+外部連携解除処理の安全性を調整。
+
+重要な確認事項：
+threads_cleanup_authorized
+
+POSTONAの利用終了では、
+X/Threads双方の解除状態を安全に扱う必要がある。
+
+Threads側のアダプタ実装・認証境界については
+F4/G4の最新TASKを優先する。
+
+■ 5-3. Phase7～Phase9
+
+主な関連PR：
+
+#183
+#193
+#206
+
+Phase9のテーマ：
+POSTONA優先の共通ログイン・利用登録。
+
+PR #206：
+https://github.com/anohi-memories/kabumori/pull/206
+
+主な確認範囲：
+
+・共通ログイン
+・POSTONA利用登録
+・既存IDの追加登録
+・セッションと利用登録の関連付け
+・明示的な再登録
+・認証状態の変更
+・利用権の確認
+・競合や古いセッションの保護
+
+Phase9はローカル・オフライン検証まで実施。
+
+実際のmanaged Supabase Auth、
+GoTrue、PostgREST、RLSについては、
+未検証部分を残している。
+
+■ 5-4. Phase10
+
+関連PR：
+#214
+https://github.com/anohi-memories/kabumori/pull/214
+
+F3のX未確認投稿状態を、
+共通アカウント利用終了処理へ接続。
+
+重要な設計：
+
+X投稿の未確認件数とsnapshotを組で扱う。
+
+未確認投稿の情報を
+DBへ安全に記録してから、
+そのsnapshotをACKする。
+
+記録できなかったsnapshotはACKしない。
+
+Xの未確認投稿が残る場合、
+誤って完了扱いしない。
+
+関連するmigration候補：
+
+supabase/migrations/
+20261015120000_common_account_x_unconfirmed_snapshot_record.sql
+
+注意：
+このmigrationの本番適用は確認されていない。
+
+■ 5-5. Phase10のP2修正
+
+J3の独立レビューで、
+未確認投稿件数の過小表示を発見。
+
+例：
+
+記録済み：
+1件
+
+新しいsnapshotで判明した未確認投稿：
+9件
+
+新snapshotのDB記録：
+失敗
+
+旧コード：
+警告が1件に戻る。
+
+修正内容：
+観測済み最大件数を
+DB記録処理より前に更新する。
+
+ただし、
+未記録snapshotをACK済みとして扱わない。
+
+関連PR：
+#220
+https://github.com/anohi-memories/kabumori/pull/220
+
+HEAD：
+49b912292f434b5306b3c9e36f8c72466de2f124
+
+L5判定：
+PASS_SOURCE_FIX / PRODUCTION_NO_GO
+
+報告テスト：
+
+Edge：
+143 PASS
+
+統合：
+43 PASS
+
+変異テスト：
+39/39
+
+本番未実施。
+
+■ 5-6. Phase10で残ったD1
+
+最重要未解決事項の一つ。
+
+全共通ID削除で、
+未確認X投稿がある場合に、
+最終HTTP応答だけで警告件数を知らせる設計だと、
+Auth削除後に応答が失われる可能性がある。
+
+ユーザーが未確認投稿の存在を知らないまま、
+共通IDが削除される危険が残る。
+
+必要な対応：
+
+・削除前の明示的な本人同意
+・対象snapshot/countとの紐付け
+・未同意時の全ID削除拒否
+・応答消失時の安全な復旧
+・必要なサーバー側の確認
+
+D1は未解決。
+
+managed_auth_delete：
+BLOCKED
+
+IDP_PREPAUSE_BLOCKED：
+BLOCKED
+
+共通ID完全削除を
+本番有効化してはいけない。
+
+
+============================================================
+第6章｜Phase11～Phase12
+============================================================
+
+■ 6-1. Phase11：managed検証準備
+
+関連PR：
+#223
+https://github.com/anohi-memories/kabumori/pull/223
+
+HEAD：
+28695586f63a30c739a44b829e79a7950932b5e7
+
+L5判定：
+PASS_SOURCE_PREPARATION
+MANAGED_TEST_NOT_RUN
+PRODUCTION_NO_GO
+
+目的：
+
+POSTONAの新規登録・ログイン・利用登録を、
+将来の検証専用Supabaseで
+安全にテストできる仕組みを準備する。
+
+主な成果：
+
+・DRY_RUN既定の検証harness
+・検証対象projectの許可リスト
+・本番project拒否リスト
+・project identity確認
+・migrationファイルの固定hash
+・M1～M12検証計画
+・段階的GO/NO_GO
+・teardown手順
+・ログのマスク
+・認証と利用登録のsource map
+
+ローカルテスト報告：
+
+Deno：
+27 PASS
+
+変異テスト：
+30/30
+
+模擬環境：
+5 PASS
+
+Phase9回帰：
+PASS
+
+実managed環境では未実行。
+
+■ 6-2. BG1：DB baseline不足
+
+Phase11で発見。
+
+リポジトリ内のmigrationだけでは、
+空のSupabase環境を完全再現できない。
+
+主な不足：
+
+public.brands
+public.social_accounts
+public.social_account_oauth_states
+
+Phase12で正確な出所・依存関係を整理。
+
+さらに、
+複数の列・外部キー・依存relationが
+未確認であることが判明。
+
+fixtureの定義を、
+本番DBの実定義とみなしてはいけない。
+
+本番schema inventoryは未取得。
+
+■ 6-3. BG2：危険なCron migration
+
+既存migrationに、
+本番URLを含むCron・HTTP通信設定が存在する。
+
+Phase12で確認された代表例：
+
+20260908110000_add_important_news_publish_ready_cron
+
+20260910163500_add_send_push_notifications_dispatch_cron
+
+20260916100000_mic_phase1b_automation_cron
+
+20260919090000_mic_fx_phase1_automation_cron
+
+20260921090000_mic_equity_index_phase1_automation_cron
+
+20260923090000_mic_macro_indicators_phase1a_automation_cron
+
+20260924093000_mic_estat_activation_and_gated_macro_cron
+
+20260930090000_mic_scenario_automation_cron_phase3c
+
+加えて、
+間接的にCron commandを書き換えるmigrationも確認。
+
+注意：
+
+検証用Supabaseへ
+migrationディレクトリを丸ごと適用してはいけない。
+
+supabase db pushを無条件に実行しない。
+
+本番向けCronやHTTP処理を
+検証環境へ混入させないこと。
+
+■ 6-4. Phase12
+
+関連PR：
+#226
+https://github.com/anohi-memories/kabumori/pull/226
+
+HEAD：
+3d87a8457ddade3209583cbb820d5e5feec23f00
+
+主な成果：
+
+・DB schemaの出所表
+・本番schema-only棚卸し手順
+・安全なSQL scanner
+・migration allowlist
+・hash固定
+・危険なCron/HTTPの拒否
+・fixtureとreplayの差分レポート
+・検証開始条件G3b/G3c
+・実行前STOP条件
+
+ローカルテスト報告：
+
+Deno：
+66 PASS
+
+scanner mutation：
+28/28
+
+harness mutation：
+37/37
+
+inventory mutation：
+60/60
+
+ただし独立J1レビューでP2が4件判明。
+
+■ 6-5. J1で発見されたP2×4
+
+R1：
+検査済みSQLと実行時SQLが異なる可能性。
+
+R2：
+--onlyにより必須のG3b確認を迂回できる。
+
+R3：
+複数関数を経由する外部通信を検出できない。
+
+R4：
+inventory diffから機密情報形状の文字列が
+出力される可能性。
+
+J1判定：
+CHANGES_REQUIRED / P2×4
+
+■ 6-6. Phase12 P2×4修正
+
+関連PR：
+#233
+https://github.com/anohi-memories/kabumori/pull/233
+
+HEAD：
+499a9e1fac595064fbc3928725be8907db1b692b
+
+修正：
+
+R1：
+検証済みSQL bytesをそのままtransportへ渡す。
+
+R2：
+G3bの承認確認を
+変更処理の必須前提にする。
+
+R3：
+関数呼び出しグラフを使い、
+複数段の間接通信も検出する。
+
+R4：
+inventory diffの入力も
+secret scan・shape検証を通す。
+
+追加で、
+guard_test.tsの型不一致も限定修正。
+
+報告テスト：
+
+Deno：
+84 PASS
+
+変異テスト：
+152/152
+
+修正前再現：
+PASS
+
+修正後：
+PASS
+
+L5判定：
+PASS_SOURCE_FIX
+SECURITY_RECHECK_REQUIRED
+PRODUCTION_NO_GO
+
+未完了：
+
+修正した安全境界についての
+独立した限定再確認。
+
+本番DB schema inventory：
+未実施。
+
+managed disposable Supabase検証：
+未実施。
+
+
+============================================================
+第7章｜POSTONA利用終了 G1/G2
+============================================================
+
+この章は2026年10月17日時点の
+重要な最新開発内容。
+
+■ 7-1. G1
+
+問題：
+POSTONA利用終了が成功しても、
+ServiceEnrollmentGateが古いready状態を保持する。
+
+結果：
+終了済みサービスへアクセスできる可能性。
+
+■ 7-2. G2
+
+問題：
+本人確認でsignInWithPasswordを実行すると、
+新しいsession_idが発生する。
+
+利用権ゲートがアプリ領域を再構築し、
+利用終了画面の状態が失われる。
+
+結果：
+本人確認・同意・プレビューから
+最終終了処理まで進められない。
+
+■ 7-3. 採用した設計
+
+設計B。
+
+概念構成：
+
+ServiceLifecycleProvider
+  ├─ ServiceEnrollmentGate
+  └─ ServiceLifecycleSurface
+
+Provider：
+F4所有。
+
+Surface：
+F4所有。
+
+利用権ゲート：
+F5所有。
+
+利用終了画面：
+F4所有。
+
+■ 7-4. G1対策
+
+利用終了の結果を受け、
+ユーザー単位の通知を発行する。
+
+インターフェース：
+
+bump(userId)
+
+F5のゲートは通知を受ける。
+
+古いreadyを破棄。
+
+現在ユーザー・現在セッションで
+サーバーへ問い合わせ直す。
+
+再確認中はfail-closed。
+
+通知自体には、
+利用権を変更する権限がない。
+
+利用可否はサーバーの応答で決定。
+
+■ 7-5. G2対策
+
+利用終了画面を
+ServiceEnrollmentGateの再構築対象外へ配置。
+
+同一ユーザーの再認証では、
+画面を継続できるようにする。
+
+ただし新session_idでは、
+古い本人確認・同意・プレビューを
+そのまま再利用しない。
+
+必要な確認は新しいセッションでやり直す。
+
+別ユーザー切替・ログアウト：
+利用終了画面を閉じる。
+
+サーバーの再認証期限：
+600秒。
+
+■ 7-6. F4設計PR
+
+PR #230
+https://github.com/anohi-memories/kabumori/pull/230
+
+HEAD：
+e6725a165cd8f116a964926cdfceaa9334590491
+
+内容：
+
+・設計B
+・担当分担
+・pendingテスト
+・G1/G2の実装方針
+
+このPR単体では、
+ランタイムの変更はない。
+
+■ 7-7. F5ゲート実装
+
+PR #235
+https://github.com/anohi-memories/kabumori/pull/235
+
+HEAD：
+9480f24b68c209f6bf33b499dc11824cf4595fdd
+
+task_id：
+common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017
+
+F5 L5判定：
+PASS_SOURCE_CANDIDATE
+INTEGRATION_PENDING
+PRODUCTION_NO_GO
+
+実装したもの：
+
+・利用権状態のepoch管理
+・古いreadyの即時破棄
+・現セッションでの再取得
+・fail-closed
+・別ユーザーの通知無視
+・遅延した古い応答の無効化
+・ログアウト時の状態破棄
+・再確認による自動再登録防止
+
+F5単独PRの段階では、
+F4 providerへの接続は未実装だった。
+
+そのため、
+このPRだけで製品上のG1解決を
+主張してはいけない。
+
+F5単独テスト：
+
+アプリ355件PASS
+
+ゲートテスト19件PASS
+
+変異テスト13/13
+
+型チェック・Lint PASS
+
+■ 7-8. F4 Provider実装
+
+PR #236
+https://github.com/anohi-memories/kabumori/pull/236
+
+HEAD：
+605d8776c6be2e33ec247af7c82a99270cf32b82
+
+F4が実装したもの：
+
+・ServiceLifecycleProvider
+・ServiceLifecycleSurface
+・ユーザー単位のbump通知
+・利用終了画面の配置
+・再認証時の画面継続
+・session切替時の安全処理
+・関連画面遷移
+
+F5所有のゲート処理は、
+F4単独PRでは変更しない設計。
+
+■ 7-9. F4/F5統合
+
+重要：
+2026年10月17日のGitHub最新確認では、
+F4/F5の統合PRまで進んでいる。
+
+PR #238
+https://github.com/anohi-memories/kabumori/pull/238
+
+HEAD：
+b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6
+
+task_id：
+postona-f4-f5-service-end-g1-g2-joint-integration-20261017
+
+L4判定：
+PASS_SOURCE_INTEGRATION
+SECURITY_REVIEW_REQUIRED
+PRODUCTION_NO_GO
+
+統合内容：
+
+・F4 PR236を取り込み
+・F5 PR235を取り込み
+・lifecycle epoch seamを接続
+・providerとgateを結合
+・surfaceと利用終了画面を結合
+・G1/G2統合テストを追加
+
+結合用ブランチでは、
+以下の接続が有効化された。
+
+useServiceLifecycleEpoch
+→ useLifecycleEpoch
+
+F5単独PRの
+LIFECYCLE_SIGNAL_CONNECTED=false
+という制約は、
+統合PR側では接続処理により解消。
+
+報告テスト：
+
+統合テスト：
+9/9 PASS
+
+アプリ全体：
+376/376 PASS
+
+変異テスト：
+13/13
+
+ただし、
+実機・managed Supabaseでの確認は未実施。
+
+独立した認証・cross-user境界レビューも
+本書確認時点では完了と確認できていない。
+
+重要：
+#238はソース統合候補であり、
+本番でG1/G2が解消したという意味ではない。
+
+POSTONA_END_SOURCE_ENABLED=falseを維持。
+
+■ 7-10. 統合で残した設計上の選択
+
+F4/F5統合では、
+ゲート内部の利用終了画面の写しを
+完全に置き換える作業は実施していない。
+
+統合Reportでは、
+G1/G2の動作に必須ではない残件として扱われている。
+
+将来の整理対象。
+
+無条件に削除・統合しないこと。
+
+■ 7-11. G1/G2の次の安全確認
+
+今後必要：
+
+・PR #238の限定セキュリティレビュー
+・同一ユーザーの再認証
+・別ユーザー切替
+・ログアウト
+・古いreadyの再表示防止
+・遅延非同期応答
+・本人確認情報の使い回し防止
+・利用終了結果の表示保持
+・実機確認
+・実managed Auth/RLS確認
+
+レビュー範囲は新規の
+認証・ユーザー間境界だけに限定。
+
+過去の共通アカウント全体を
+機械的に再レビューしない。
+
+
+============================================================
+第8章｜重要なDB・Edge Function・RPC・API
+============================================================
+
+■ 8-1. Supabase Auth
+
+共通IDの正本。
+
+関連する主な管理対象：
+
+auth.users
+auth.identities
+auth.sessions
+
+実際の管理DB構造は、
+リポジトリのmigrationだけで
+完全再現できるとは限らない。
+
+本番Auth/RLSの実挙動は
+別途確認が必要。
+
+■ 8-2. 共通アカウント関連テーブル
+
+確認対象：
+
+public.brands
+public.social_accounts
+public.social_account_oauth_states
+
+さらに利用登録・削除・leaseに関係する
+共通アカウントのテーブル・RPCが存在する。
+
+正確な一覧とDDLについては、
+Phase12の出所表・inventory仕様を正本とする。
+
+未知のテーブル定義を
+本書だけから復元してはいけない。
+
+■ 8-3. account-delete Edge Function
+
+重要パス：
+
+supabase/functions/account-delete/
+
+代表ファイル：
+
+lifecycle_logic.ts
+provider_cleanup.ts
+http.ts
+x_unconfirmed.ts
+
+関連する主な責務：
+
+・サービス利用終了
+・共通ID削除の制御
+・provider cleanup
+・X未確認投稿の証跡
+・snapshot ACK
+・lease/fence確認
+・再認証確認
+・HTTP結果整形
+
+重要：
+外部連携解除と本人認証を扱うため、
+小さな変更でも安全境界が変わり得る。
+
+■ 8-4. 主なRPC・処理名
+
+start_x_autopost_service
+
+POSTONA利用権確認・開始に関係する。
+
+重要：
+利用終了済みユーザーが
+明示的な再登録なしに
+自動復帰してはいけない。
+
+finish_owned_service_deletion
+
+サービス利用終了の完了制御に関係する。
+
+その他の共通アカウントRPCについては、
+最新migrationとTASKを再取得すること。
+
+名称・引数・SECURITY DEFINER・GRANT・
+search_pathを推測で補ってはいけない。
+
+■ 8-5. X投稿状態との連携
+
+関連PR：
+F3 PR #204
+
+X投稿の未確認状態について、
+件数とsnapshotを組で扱う。
+
+記録成功前にACKしない。
+
+Xの処理が不明なとき、
+利用終了処理を完了扱いしない。
+
+■ 8-6. Threads連携
+
+ThreadsのOAuth・token・
+外部連携解除は、
+F4/G4の最新実装を参照する。
+
+F5が勝手にThreads側の実装や
+本番tokenを操作してはいけない。
+
+■ 8-7. Cron
+
+共通アカウントの検証では、
+ニュース・Push・MICなどのCron migrationが
+危険な依存となる。
+
+本番URLを埋め込んだmigrationの
+一括適用は禁止。
+
+本番Cronの正確な現在状態については、
+この部屋では最終的なread-backをしていない。
+
+運用停止済みかどうかを推測しない。
+
+■ 8-8. API利用
+
+POSTONAが利用するX/Threadsなどの
+外部APIについては、
+実際の書き込み・revoke・投稿を
+F5の検証TASKから無断実行しない。
+
+API使用料金が発生するテストも、
+明示承認が必要。
+
+
+============================================================
+第9章｜現在の開発状況
+============================================================
+
+確認日：
+2026年10月17日
+
+GitHub：
+
+.agent_v2/tasks/F5.md
+
+task_id：
+common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017
+
+status：
+done
+
+next_owner：
+none
+
+completion_code：
+L5
+
+recommended_model：
+Opus5.5（高）
+
+関連PR：
+#235
+
+ただし、
+F5のTASK本文にあるReportは
+実装担当の完了報告時点の記録。
+
+その後のF4/F5統合は
+F4 PR #238側で進んでいる。
+
+したがって、
+F5のReport単体だけを読んで
+「現在も統合未実施」と判断しないこと。
+
+最新の全体状況は、
+F4 TASK・PR #238・最新ACTIVE_TASKを
+横断して確認する。
+
+■ 現時点の重要な区別
+
+完了したもの：
+
+・F5の共通アカウント各Phaseの
+  ソース実装候補
+・Phase10の既知P2修正
+・Phase11の検証harness準備
+・Phase12のbaseline/Cron安全設計
+・Phase12のP2×4ソース修正
+・F5の利用権ゲート実装
+・F4/F5のソース統合候補PR #238
+
+未完了のもの：
+
+・本番環境での共通アカウント完成検証
+・実managed Supabase Auth/RLS検証
+・本番schema inventory
+・DB baselineの実証
+・全ID削除D1の解決
+・外部連携解除の全経路確認
+・POSTONA利用終了の実機検証
+・F4/F5統合の限定独立レビュー
+・Phase12安全ガードの限定再確認
+・PR stackの安全な統合・デプロイ
+・本番リリース判定
+
+重要：
+上記のソース実装候補は、
+本番完成済み機能とは区別する。
+
+
+============================================================
+第10章｜未完成機能・未解決バグ
+============================================================
+
+■ 10-1. D1：共通ID完全削除前の明示同意
+
+未解決。
+
+未確認のX投稿が存在する場合、
+本人が内容を認識し同意した証拠が必要。
+
+HTTP応答だけで知らせる設計では不十分。
+
+全ID削除のrelease STOP。
+
+■ 10-2. managed Auth/RLS未検証
+
+実managed Supabaseでの：
+
+・GoTrue
+・PostgREST
+・auth.sessions
+・RLS
+・EXECUTE ACL
+・認証provider連携
+・session refresh
+・本人確認
+・ユーザー間権限
+
+について、
+十分な実証は未完了。
+
+■ 10-3. DB baseline不足
+
+GitHub migrationだけでは、
+実際のDB構造を完全復元できない。
+
+本番schema-only inventoryを
+別途安全に取得する必要がある。
+
+■ 10-4. Phase12検証harnessの独立再確認
+
+PR #233でP2×4の修正候補は実装済み。
+
+ただし、
+実際のDBへ接続する前の限定再確認が残る。
+
+■ 10-5. POSTONA G1/G2の実環境確認
+
+PR #238でソース統合済み。
+
+残るもの：
+
+・限定セキュリティレビュー
+・実機検証
+・managed Auth検証
+・サーバー応答との統合確認
+・製品フラグのリリース判定
+
+■ 10-6. F3の依存問題
+
+過去Reportで確認された残件：
+
+・legacy hold()関連
+・サービス終了scopeの問題
+・F3 L1/R2'に関連する未解決事項
+
+POSTONA単独利用終了が
+他サービスやログインを不必要に巻き込まないか、
+最新のF3 TASKで再確認すること。
+
+■ 10-7. G3 T13
+
+POSTONA X OAuth onboardingでの
+サービス利用権確認に関係する課題。
+
+正確な現在状態は
+G3/F3の最新TASK・Reportを優先する。
+
+■ 10-8. 旧account-delete経路
+
+新方式が安全でも、
+旧式の削除経路が残っている場合は
+迂回路になり得る。
+
+リリース前に経路を棚卸しする。
+
+■ 10-9. Threads
+
+認証・連携解除・token cleanupについて、
+F4/G4の最新検証が必要。
+
+■ 10-10. かぶモリ休止との依存
+
+かぶモリ専用Cronなどの停止により、
+POSTONA共通基盤が誤って停止していないか、
+再開時にも確認する。
+
+ただし、
+停止されたかぶモリのニュース処理を
+共通アカウントの検証のために
+勝手に再稼働させない。
+
+
+============================================================
+第11章｜関連PR一覧
+============================================================
+
+以下は、この部屋に関係する主要PR。
+
+全PRの最新HEAD・merge状態は、
+将来の再開時に必ず再確認すること。
+
+旧基盤・共通アカウント：
+
+PR #121
+共通アカウント基礎候補
+
+PR #152
+共通アカウント Phase4・安全修正
+
+PR #165
+共通ID/利用登録 Phase5
+
+PR #178
+外部連携解除 Phase6
+
+新F5の段階実装：
+
+PR #183
+共通アカウント関連Phase
+
+PR #193
+共通アカウント関連Phase
+
+PR #206
+Phase9 ログイン・利用登録
+
+PR #214
+Phase10 X snapshot ACK
+
+PR #220
+Phase10の未確認投稿件数修正
+
+PR #223
+Phase11 managed検証準備
+
+PR #226
+Phase12 baseline/Cron隔離
+
+PR #233
+Phase12 P2×4修正
+
+POSTONA利用終了：
+
+PR #230
+G1/G2設計B
+
+PR #235
+F5利用権ゲート
+
+PR #236
+F4 Provider/Surface
+
+PR #238
+F4/F5統合
+
+関連するPOSTONA側PR：
+
+#197
+#211
+#217
+#221
+
+関連するF3側PR：
+
+#189
+#192
+#204
+
+重要：
+これらを一括でmergeしてはいけない。
+
+積み上げ依存関係と
+各PRのHEAD・base・変更範囲を確認する。
+
+
+============================================================
+第12章｜TASK・Report・履歴保存先
+============================================================
+
+■ 12-1. 旧TASK
+
+.agent/tasks/CLAUDE_TASK_5.md
+
+旧Codex Report：
+
+.agent/CODEX_REPORT_4.md
+
+旧ACTIVE_TASK/CURRENT_STATEも参照。
+
+■ 12-2. 新TASK
+
+.agent_v2/tasks/F5.md
+
+Report：
+同ファイル末尾。
+
+ACTIVE_TASK：
+
+.agent_v2/ACTIVE_TASK.md
+
+CURRENT_STATE：
+
+.agent_v2/CURRENT_STATE.md
+
+■ 12-3. 履歴索引
+
+.agent_v2/HISTORY_INDEX.md
+
+■ 12-4. archive
+
+.agent_v2/archive/
+
+このチャットで保存を確認した代表履歴：
+
+Phase9
+
+.agent_v2/archive/
+2026-10-15-F5-common-account-f5-phase9-postona-shared-login-enrollment-20261015/
+
+Phase10
+
+.agent_v2/archive/
+2026-10-16-F5-common-account-f5-phase10-postona-x-ack-snapshot-reconciliation-20261015/
+
+Phase10 P2修正
+
+.agent_v2/archive/
+2026-10-16-F5-common-account-f5-j3-v3-p2-known-x-warning-count-fix-20261016/
+
+Phase11
+
+.agent_v2/archive/
+2026-10-16-F5-common-account-f5-phase11-postona-managed-auth-isolated-test-readiness-20261016/
+
+Phase12
+
+.agent_v2/archive/
+2026-10-16-F5-common-account-f5-phase12-schema-baseline-cron-isolation-offline-20261016/
+
+Phase12 P2×4修正
+
+.agent_v2/archive/
+2026-10-17-F5-common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016/
+
+保存時には：
+MANIFEST
+SHA256SUMS
+元パス
+元blob/commit
+復元照合
+HISTORY_INDEX
+
+を記録する運用。
+
+重要：
+最新F5 G1/G2 TASKについては、
+現在のTASKがdoneであることを確認したが、
+次TASKへ上書きする前に、
+最新Reportをarchiveへ保存する必要がある。
+
+本引き継ぎ作成では、
+そのarchive登録を実施していない。
+
+■ 12-5. 正本の優先順位
+
+1. 最新GitHub ACTIVE_TASK
+2. 最新TASK metadata
+3. 最新Report
+4. 最新CURRENT_STATE
+5. 関連PR・commit
+6. HISTORY_INDEX・archive
+7. 過去のチャット
+
+古いチャットの記録とGitHubが違う場合、
+GitHubの現在状態を優先する。
+
+ただし、
+CURRENT_STATEに過去のready記録が残っていても、
+最新TASKがdoneなら古いreadyを採用しない。
+
+
+============================================================
+第13章｜変更禁止・安全制約
+============================================================
+
+■ 13-1. 本番操作禁止
+
+明示承認なしに実行しない：
+
+・本番Supabase migration
+・Auth変更
+・RLS変更
+・RPC変更
+・Edge Function deploy
+・Cron変更
+・Vault/Secrets操作
+・実ユーザー削除
+・実SNS投稿
+・X/Threads token revoke
+・有料API使用
+・EAS build
+・PR merge
+・production deploy
+
+■ 13-2. 共通ID保護
+
+かぶモリ休止を理由に、
+共通IDを削除しない。
+
+POSTONA利用終了によって、
+他サービスの登録を消さない。
+
+■ 13-3. 外部連携保護
+
+X投稿予約やThreads連携を、
+共通アカウント変更で勝手に停止させない。
+
+外部連携解除は、
+実際の所有者・証跡・処理結果を確認する。
+
+■ 13-4. PRとworktree
+
+全スロットは独立worktree必須。
+
+他スロットの：
+
+・checkout
+・reset
+・rebase
+・未コミット変更
+・dev server
+・branch
+
+を勝手に操作しない。
+
+同じファイルの並行変更を避ける。
+
+■ 13-5. 権限境界
+
+service_role
+SECURITY DEFINER
+search_path
+RLS
+EXECUTE GRANT
+Auth session
+userId
+sessionId
+
+を変更する場合、
+高リスクとして扱う。
+
+テストでPASSしただけで
+本番権限を変更してはいけない。
+
+■ 13-6. migration
+
+migrationの一括適用は禁止。
+
+本番向けCron/HTTPが紛れ込む可能性がある。
+
+必要なSQLを明示的に選択し、
+hashと依存関係を確認する。
+
+■ 13-7. 共通ID削除
+
+D1未解決のまま、
+全共通ID削除を有効化しない。
+
+managed_auth_delete：
+BLOCKED
+
+IDP_PREPAUSE_BLOCKED：
+BLOCKED
+
+■ 13-8. かぶモリ休止
+
+かぶモリ専用のニュース・AI・Cronを
+共通アカウント作業の副作用で再稼働しない。
+
+POSTONA共通Authと共有AIは保護する。
+
+
+============================================================
+第14章｜将来の開発再開手順
+============================================================
+
+この章が、数か月〜数年後の
+最重要作業指示となる。
+
+■ STEP 1｜GitHub最新状態の確認
+
+まずリポジトリの最新mainを確認。
+
+PROJECT_RULES.md
+.agent/ORCHESTRATION.md
+.agent_v2/ORCHESTRATION.md
+
+新旧ACTIVE_TASK
+新旧CURRENT_STATE
+
+F5/G5 TASK
+F5/G5 Report
+
+F4/G4 TASK
+F3/G3 TASK
+
+関連PR
+
+を必要範囲だけ取得。
+
+巨大な過去履歴を一括取得しない。
+
+■ STEP 2｜スロット移行状況の確認
+
+2026年10月17日時点では、
+旧G/Hから新F/Jへの段階移行中。
+
+旧G5 TASKは旧方式で完結。
+
+新規TASKは新方式F5を優先。
+
+ただし将来、
+完全移行が済んでいる可能性がある。
+
+スロット名を本書から固定してはいけない。
+
+最新ORCHESTRATIONを優先。
+
+■ STEP 3｜現行PR確認
+
+少なくとも以下を確認：
+
+#121
+#152
+#165
+#178
+#183
+#193
+#206
+#214
+#220
+#223
+#226
+#233
+#235
+#236
+#238
+
+OPEN/Draft/merge済み
+HEAD
+base
+依存関係
+変更ファイル
+CI
+未解決レビュー
+
+を確認。
+
+PR #238の統合状況を重視する。
+
+■ STEP 4｜POSTONAを保護
+
+最初に確認すること：
+
+・POSTONAログインは稼働しているか
+・Auth provider設定は何か
+・POSTONA entitlementの状態
+・X予約Dispatcherの状態
+・Threads連携状態
+・共通AI基盤との依存
+・かぶモリ休止Cronとの分離
+
+本番へは勝手に接続しない。
+
+必要な状態取得は、
+read-onlyかつ別途許可された範囲で行う。
+
+■ STEP 5｜F4/F5統合の残件
+
+PR #238について：
+
+・認証/ユーザー間境界の限定レビュー
+・古いreadyの復活防止
+・session rotation
+・logout
+・cross-user
+・プレビュー再取得
+・fail-closed
+・利用終了結果の保持
+
+を確認。
+
+問題がなければ、
+実機・管理環境での検証計画に進む。
+
+■ STEP 6｜Phase12の安全確認
+
+PR #233について、
+J1が指摘したP2×4の修正が
+現在の実装で維持されているか確認。
+
+過去のPhase全体の再レビューは不要。
+
+必要な確認は、
+SQL scanner・runner・inventory diffの
+新しい安全境界に限定。
+
+■ STEP 7｜DB baseline
+
+本番DBのschema-only inventoryを
+安全なread-only手段で取得する。
+
+ただしこの操作も別途承認が必要。
+
+取得対象・必要権限・出力先・秘匿情報・
+結果保存方法を事前に確認。
+
+本番データ行や実ユーザー情報を
+取得する必要はない。
+
+■ STEP 8｜検証専用Supabase
+
+本番とは完全に独立したprojectを利用。
+
+必要な条件：
+
+・検証専用projectであることを確認
+・production ref拒否
+・schema baseline承認済み
+・危険Cron/HTTP無し
+・migration allowlist
+・DRY_RUN
+・teardown手順
+・rollback計画
+・テスト用IDのみ
+
+明示承認が出るまで作成・実行しない。
+
+■ STEP 9｜実認証・利用登録テスト
+
+新規POSTONA登録
+
+既存共通IDログイン
+
+既存IDでPOSTONA利用登録
+
+同一ユーザー再認証
+
+ログアウト
+
+別ユーザー切替
+
+session refresh
+
+POSTONA利用終了
+
+利用終了後の再アクセス拒否
+
+明示的な再登録
+
+他サービスentitlement保護
+
+RLS・EXECUTE権限
+
+以上を検証。
+
+■ STEP 10｜リリース前判定
+
+以下が揃うまでproduction NO_GO。
+
+・Auth/RLS検証
+・F3/F4/G3/G4依存解決
+・利用終了処理の正確性
+・X/Threads解除の安全性
+・D1の扱い
+・旧経路の遮断確認
+・PR依存関係の整合
+・rollback手順
+・実機テスト
+・本番操作の明示承認
+
+
+============================================================
+第15章｜今後予定していた機能・改善
+============================================================
+
+■ 15-1. 共通IDの拡張
+
+POSTONAで完成させた共通IDを、
+Miseiroなど将来のアプリでも利用できるようにする。
+
+新サービス追加時は、
+共通IDを再作成するのではなく、
+サービス利用登録を追加する。
+
+■ 15-2. 認証方式の拡張
+
+メール、Apple、Googleなど、
+実際に対応する認証providerの
+アカウント紐付けを安全に扱う。
+
+Appleのrelay emailなど、
+同一人物を誤って別人とみなす問題にも注意。
+
+詳細はmanaged検証後に判断。
+
+■ 15-3. サービス利用終了の完成
+
+POSTONA単独利用終了
+
+他サービスを維持した利用終了
+
+外部連携解除
+
+利用終了結果の保存・表示
+
+再認証後の画面継続
+
+再登録への明示的な導線
+
+■ 15-4. 共通ID完全削除
+
+D1解消後に再検討。
+
+本人への影響説明、
+未確認外部投稿の扱い、
+各サービスの削除順序、
+証跡、
+復旧可否を含めた設計が必要。
+
+■ 15-5. 管理環境テストの定型化
+
+検証専用Supabaseで、
+共通Authとentitlementを安全に再現できるようにする。
+
+本番とは明確に分離。
+
+■ 15-6. 旧経路整理
+
+旧account-delete経路や
+古いサービス利用終了処理を棚卸しする。
+
+ただし、
+既存POSTONAユーザーの互換性を
+破壊する形で削除しない。
+
+■ 15-7. 共通基盤の保守性
+
+将来的には、
+複数サービスで認証・利用登録を再利用できるよう、
+サービス固有処理と共通処理を整理する。
+
+必要以上に新しい抽象化を増やさず、
+既存機能の安全性と保守性を優先する。
+
+
+============================================================
+第16章｜この部屋で決めた重要な方針
+============================================================
+
+1. かぶモリ休止後も共通IDを守る。
+
+2. POSTONAの開発と運用を優先する。
+
+3. 共通アカウントを将来のMiseiroでも再利用する。
+
+4. Authとサービス利用登録を分離する。
+
+5. POSTONA単独終了で共通IDを削除しない。
+
+6. 他サービスの利用権を壊さない。
+
+7. 未確認の外部投稿を成功扱いしない。
+
+8. DB記録より先にsnapshotをACKしない。
+
+9. 認証・権限の確認に失敗したらfail-closed。
+
+10. 古いsessionのreadyを復活させない。
+
+11. クライアント通知だけで利用権を決定しない。
+
+12. 利用終了成功後はサーバーの状態を再取得する。
+
+13. 別ユーザーへの切替では古い情報を破棄する。
+
+14. 本人確認の有効期間はサーバーを正本とする。
+
+15. 大量のCodexレビューを機械的に繰り返さない。
+
+16. 必要な認証・cross-user境界だけ限定レビューする。
+
+17. ローカルテストと本番実証を明確に区別する。
+
+18. Draft PRを本番完成扱いしない。
+
+19. 新旧スロットと履歴を混在させない。
+
+20. 独立worktreeを使用する。
+
+21. 過去TASK・Reportはarchiveへ保存する。
+
+22. 本番操作は明示承認がある場合のみ。
+
+23. トークン節約のため、
+    巨大TASK・Reportを毎回全文取得しない。
+
+24. GitHubの最新状態を過去チャットより優先する。
+
+25. 新TASKには推薦モデルを必ず記載する。
+
+26. POSTONAが稼働する限り、
+    かぶモリ休止を理由に共通Authを停止しない。
+
+
+============================================================
+第17章｜再開時の推薦モデル
+============================================================
+
+ChatGPT統括：
+GPT-6（高）
+
+Claude Code通常実装：
+Sonnet5（高）
+
+認証・DB・RPC・Edge・複雑な共通アカウント設計：
+Opus5.5（高）
+
+軽微なUI・テスト修正：
+Sonnet5（中）
+
+Codex通常の限定確認：
+Luna（高）
+
+Auth/RLS/ユーザー間境界の高リスク確認：
+Sol（高）
+
+すべてのTASKには、
+その作業に適切なモデルを明記する。
+
+Codexを利用する場合は、
+return_toとcompletion_codeも明記する。
+
+
+============================================================
+第18章｜将来の新しいChatGPTへの開始指示
+============================================================
+
+この文書を受け取った新しいChatGPTは、
+すぐに実装TASKを上書き登録してはいけない。
+
+最初に以下を行うこと。
+
+1. GitHub mainの最新状態を取得する。
+
+2. PROJECT_RULESと新旧ORCHESTRATIONを確認する。
+
+3. 共通アカウントの最新担当slotを特定する。
+
+4. 最新ACTIVE_TASK・TASK・Reportを確認する。
+
+5. 過去未処理の完了コードやreview_requiredを確認する。
+
+6. PR #238の統合状況を確認する。
+
+7. PR #233の安全ガード再確認状況を確認する。
+
+8. 本番DB/managed Authの未検証事項を確認する。
+
+9. POSTONA稼働機能への影響を確認する。
+
+10. 独立worktreeと競合を確認する。
+
+11. 必要なTASKを推薦モデル付きで作成する。
+
+12. 実装・レビュー・本番操作を別々に判断する。
+
+特に重要：
+
+2026年10月17日時点で、
+かぶモリ本体は休止対象だが、
+共通アカウントはPOSTONAの継続運用に必要。
+
+共通基盤を停止・削除することは、
+POSTONAを停止させる可能性がある。
+
+再開時は必ずPOSTONAの現在の稼働状況を
+最優先で保護すること。
+
+
+============================================================
+第19章｜最終確認事項
+============================================================
+
+2026年10月17日時点の結論：
+
+■ かぶモリ
+
+アプリ運用休止方針。
+
+ニュース・AI・配信などの
+停止結果の最終正本はG1側。
+
+■ 共通アカウント
+
+ソース開発は複数Phaseにわたり進展。
+
+F5最新TASKはdone。
+
+POSTONA利用権ゲートのソース実装済み。
+
+■ POSTONA利用終了
+
+F4/F5統合PR #238まで作成。
+
+ソース上のG1/G2統合テストはPASS報告。
+
+ただし、
+実機・managed Auth・本番では未完成扱い。
+
+■ DB
+
+本番baseline inventory未取得。
+
+migration一括適用禁止。
+
+■ セキュリティ
+
+D1未解決。
+
+Phase12安全ガード限定再確認が残る。
+
+F4/F5統合の限定認証レビューが残る。
+
+■ 本番
+
+PRODUCTION_NO_GO。
+
+PR merge：
+本書作成による実施なし。
+
+deploy：
+本書作成による実施なし。
+
+DB/Auth/RLS変更：
+本書作成による実施なし。
+
+実SNS操作：
+本書作成による実施なし。
+
+
+============================================================
+第20章｜最重要の引き継ぎメッセージ
+============================================================
+
+共通アカウント基盤は、
+かぶモリのためだけに作ったものではない。
+
+今後のPOSTONA、
+さらに将来のMiseiroなどに再利用する
+共通インフラとして開発してきた。
+
+かぶモリの運用を休止しても、
+この基盤は停止してはいけない。
+
+共通IDを守ること。
+
+他サービスの利用権を守ること。
+
+POSTONAの投稿・予約を止めないこと。
+
+利用終了とID完全削除を混同しないこと。
+
+古い認証状態・利用権状態を信用しないこと。
+
+本番未検証のソース候補を
+本番完成済みと扱わないこと。
+
+将来の再開時は、
+GitHubの最新状態とこの引き継ぎ書を照合し、
+POSTONAの稼働を守りながら
+安全に開発を再開すること。
+
+
+以上。
+共通アカウントG5/F5
+2026年10月17日
+長期保存用・最終引き継ぎ書

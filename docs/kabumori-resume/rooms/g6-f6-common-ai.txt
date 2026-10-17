@@ -1,0 +1,1652 @@
+# 【かぶモリ運用休止｜共通AI基盤 G6・F6 最終引き継ぎ書】
+**長期保存版｜2026年10月17日**
+
+対象リポジトリ：`anohi-memories/kabumori`  
+対象：共通AI基盤（OpenAI API・Claude API・利用量管理・Consumer Bridge）  
+作成担当：共通AI基盤のちゃ  
+推薦モデル：GPT-6（高）  
+保存先：かぶモリ全体統括のちゃがGitHubへ集約予定
+
+**本書の目的は、かぶモリを数か月〜数年休止しても、将来の新チャットが既存実装・設計判断・未完了作業・安全制約を正確に引き継ぎ、POSTONAを停止させずに開発を再開できるようにすること。**
+
+本書作成に際してGitHubの最新F6 TASK・ACTIVE_TASK・CURRENT_STATEの関連箇所、および主要PRの状態を確認した。古い会話と食い違う情報はGitHubの正本を優先した。
+
+**重要：本書は引き継ぎ用の記録であり、新しい実装・PRマージ・デプロイ・DB変更・本番API切り替えは一切指示または実行していない。**
+
+---
+
+## 1. この部屋の担当範囲と役割
+
+### 1-1. 役割
+
+この部屋は、かぶモリとPOSTONAが共有する**共通AI基盤**の開発調整を担当してきた。
+
+対象は主に次の領域。
+
+- OpenAI APIを利用する既存機能の整理
+- Claude API（Anthropic）対応
+- OpenAIとClaudeのプロバイダー切り替え設計
+- AIモデル選択・出力形式の統一
+- API利用料金と利用量の管理
+- 予算上限・利用回数制御
+- APIタイムアウト・再試行・二重課金防止
+- AI利用の認証・利用権・ユーザー間境界
+- 共通AI ProviderとConsumer Bridgeの実装
+- かぶモリの市況レポートとの互換性確認
+- POSTONAのAI相談・投稿文生成への接続準備
+- Claude実装とCodex／独立Claudeレビューの調整
+- TASK登録、完了判定、履歴保存、PR依存管理
+
+**共通AI基盤は、かぶモリ専用の機能ではない。**
+
+かぶモリ休止後も、POSTONAが利用する、または将来利用する共通機能として保護する必要がある。
+
+### 1-2. 開発体制
+
+この部屋で使用した主な担当枠は以下。
+
+| 担当 | 役割 |
+|---|---|
+| G6 | 旧方式の共通AI基盤実装 |
+| K6 | 旧G6の完了確認 |
+| F6 | 新方式の共通AI基盤実装 |
+| L6 | 新F6の完了確認 |
+| H5 | 旧Codexの臨時実装枠。Consumer Bridgeを担当した経緯あり |
+| J1 | Codexによる安全性レビューに使用した経緯あり |
+
+通常実装担当はClaude Code（くろちゃん）。
+
+推薦モデル：
+- 通常実装：Sonnet5（高）
+- 複雑な共通基盤・認証・API境界：**Opus5.5（高）**
+
+レビュー担当は必要に応じてCodex（こでさん）または独立したClaude Code。
+
+**ユーザーの希望により、レビューは最小限にする。**
+
+特に本件では、Codexへのレビュー集中を避けるため、後半の限定レビューは独立したClaude Code環境で実施した。
+
+### 1-3. 新旧TASKの運用
+
+旧TASKは旧G6/K6系統で完結させる。
+
+新規TASKはF6/L6系統で管理する。
+
+新旧基盤を途中で混在させてはならない。
+
+主要管理ファイル：
+
+```text
+PROJECT_RULES.md
+
+.agent/ORCHESTRATION.md
+.agent/ACTIVE_TASK.md
+.agent/CURRENT_STATE.md
+
+.agent_v2/ORCHESTRATION.md
+.agent_v2/ACTIVE_TASK.md
+.agent_v2/CURRENT_STATE.md
+
+.agent_v2/tasks/F6.md
+.agent_v2/archive/
+.agent_v2/HISTORY_INDEX.md
+```
+
+TASK・Report・ACTIVE_TASK・CURRENT_STATEの最新情報を正本とする。
+
+過去の会話や本書だけで現在状態を断定しないこと。
+
+---
+
+## 2. アプリの機能・仕様・設計上の決定事項
+
+### 2-1. 共通AI基盤の基本設計
+
+OpenAI APIとClaude APIを、各アプリが直接個別実装するのではなく、共通のProvider層から利用する設計を進めた。
+
+主要構成：
+
+```text
+かぶモリ / POSTONA
+        │
+        ▼
+各アプリのAI利用処理
+        │
+        ▼
+Consumer Bridge
+        │
+        ▼
+共通AI Provider
+        │
+        ├── OpenAI API
+        │
+        └── Anthropic Claude API
+        │
+        ▼
+利用量・料金・予算管理
+```
+
+目標は、アプリ固有処理と外部AI APIへの通信処理を分離すること。
+
+ただし、**2026年10月17日時点で、POSTONAがこの構成へ本番接続されたわけではない。**
+
+### 2-2. Provider設計
+
+共通AI Providerでは以下を重視した。
+
+- プロバイダーごとのAPI差異を吸収する
+- 利用可能なAIモデルを明示的に制限する
+- AIの実際の利用量を把握する
+- 利用量が不明な場合も予算を過小評価しない
+- タイムアウト後の安易な再送を禁止する
+- 呼び出し元の認証・権限を検証する
+- アプリ間のAI利用権限を分離する
+- 既存OpenAI経路を不用意に変更しない
+
+### 2-3. 利用料金管理
+
+API呼び出しごとに利用量と費用を管理する設計を進めた。
+
+重要な判断：
+
+**失敗したAPI呼び出しを自動的に無料とみなしてはならない。**
+
+HTTP 500・502・503などのエラーでも、外部AI側で処理が進み、課金が発生する可能性がある。
+
+したがって、費用が確定できない場合は、
+
+```text
+unknown
+upper_bound
+```
+
+などの状態を使用し、安全側の費用見積もりを維持する。
+
+この修正はPR #219・#222系列で実施され、後続の限定レビューでは費用計上部分を再レビュー対象から除外した。
+
+### 2-4. 二重送信・二重課金防止
+
+重要な設計判断：
+
+**タイムアウトしたからといって、同じ有料AIリクエストを無条件に再送しない。**
+
+特に504や接続断は、外部側で処理が完了しているか不明な場合がある。
+
+主な対策：
+
+- operationIdによる処理識別
+- 同一要求の重複実行防止
+- 送信済み状態の管理
+- 不明な結果を安全側で扱う
+- 再試行可能な失敗と再試行禁止の失敗を区別する
+
+ただし、**POSTONAの本番利用に必要な永続的な二重送信防止ストアは未実装**である。
+
+オフラインモックテストのPASSを、本番DBによる永続的な重複防止の完成と混同しないこと。
+
+### 2-5. API認証と利用権限
+
+共通AI Providerを、権限のないEdge Functionや利用者が呼び出せないようにする方針。
+
+設計上、次を区別する必要がある。
+
+- 実際の利用者
+- 利用者が所属するブランド
+- 共通アカウントの利用権
+- アプリごとの利用権
+- システム処理
+- Cronからの実行
+- 認可されたAI機能
+
+静的なimport検査も追加されたが、これは**CIの静的検査であり、実行時sandboxではない**。
+
+そのため、本番権限境界のすべてを保証する仕組みとして扱ってはならない。
+
+---
+
+## 3. これまでに実装・完成した機能
+
+ここでは「ソース実装完了」と「本番稼働完了」を厳密に区別する。
+
+### 3-1. 旧G6で進めた開発
+
+旧G6では、OpenAI・Claude API共通化に向けた基盤整備を進めた。
+
+関連PR：
+
+| PR | 主な役割 | 2026/10/17確認 |
+|---|---|---|
+| #148 | Claude接続アダプター系列 | Draft・未マージ |
+| #150 | 市況レポート統合候補 | Draft・未マージ |
+| #153 | 市況レポート関連の積み上げ | Draft・未マージ |
+| #157 | 共通Providerの統合・権限境界系列 | Draft・未マージ |
+| #162 | テスト安定化 | Draft・未マージ |
+
+旧G6の最終確認として、2026年10月12日のK6では次の判定が記録されている。
+
+```text
+PASS_PREMERGE_QA
+PRODUCTION_NO_GO
+```
+
+PR #162の当時のHEAD：
+
+```text
+93de927aec8726a6269d9c6747b998d29df113da
+```
+
+K6ではテスト安定化の修正を受け入れた。
+
+ただし、旧G6のこれらのPRは、今回のGitHub確認時点でも未マージだった。
+
+**旧G6が本番Claude API切り替えを完了したわけではない。**
+
+### 3-2. 新F6で進めたClaude Provider
+
+新F6では、Claude対応Providerの候補実装を進めた。
+
+主要PR：
+
+```text
+#187
+#198
+#205
+#219
+#222
+#231
+#234
+#237
+#239
+```
+
+これらは依存関係を持つ積み上げPRである。
+
+単独で任意の順番にマージしないこと。
+
+### 3-3. H5 Consumer Bridge
+
+PR #198はH5のConsumer Bridge候補。
+
+Consumer Bridgeの役割は、アプリやEdge Functionなどの呼び出し元が、共通Providerを安全に利用するための接続境界を提供すること。
+
+POSTONAの接続契約では、以下の形式を利用する案が示されている。
+
+```ts
+execute(credential, {
+  feature,
+  operationId,
+  input
+})
+```
+
+ただし、これは既存候補のインターフェースを前提にしたものであり、POSTONA本番への接続完了を意味しない。
+
+### 3-4. セキュリティ修正の経緯
+
+Claude ProviderとBridgeの権限境界について、複数回の限定レビューと修正を行った。
+
+重要な問題と対応は以下。
+
+| 段階 | 発見・修正した内容 |
+|---|---|
+| #219 | 動的importによる権限検査回避、504再送問題の修正系列 |
+| #222 | コメントを使ったimport検査回避、課金不明時の費用計上 |
+| #231 | 文字列・コメントの誤認を避ける字句解析 |
+| #234 | 正規表現と除算の誤判定に対する独立したrawEdges検査 |
+| #237 | Unicodeエスケープされたimportキーワードの検出 |
+
+特に問題となったのは、権限検査が本物の`import()`を見落とすケース。
+
+例：
+
+```ts
+import("../ai_provider/mod.ts")
+```
+
+コメントや文字列を利用して検査をすり抜ける問題があった。
+
+さらに、
+
+```text
+\u0069mport
+```
+
+のように、キーワードの一部をUnicodeエスケープした場合の見落としも確認された。
+
+PR #237では、エスケープしたキーワードを独立して検査する処理を追加した。
+
+追加処理：
+
+```text
+escapedKeywordEdges
+```
+
+これにより、従来の字句解析やrawEdgesと独立した検査経路ができた。
+
+**ただし、PR #237の安全性がすべての入力に対して数学的に証明されたわけではない。**
+
+L6ではソース修正完了として受け入れたが、本番導入の承認はしていない。
+
+### 3-5. 最新F6：POSTONA接続準備
+
+最新PR：
+
+**[PR #239](https://github.com/anohi-memories/kabumori/pull/239)**
+
+HEAD：
+
+```text
+f590b80fbbaa926be08d5e215ad87b373f402ff2
+```
+
+内容：
+
+- POSTONA AI相談の接続仕様
+- POSTONA AI投稿文生成の接続仕様
+- H5 Bridge経由のモック接続確認
+- 利用者・ブランド主体の整理
+- 費用管理・利用上限の設計整理
+- operationIdによる重複防止の設計
+- 本番導入時の依存関係整理
+
+変更ファイル：
+
+```text
+docs/ai-provider/F6_POSTONA_CLAUDE_INTERFACE_PREFLIGHT.md
+
+supabase/functions/_shared/ai_provider/
+  postona_claude_contract_test.ts
+```
+
+**POSTONAの実際のAI相談・投稿生成処理は変更していない。**
+
+PR #239は設計文書とオフライン契約テストの追加である。
+
+---
+
+## 4. 現在の開発状況
+
+### 4-1. 2026年10月17日時点のF6
+
+GitHub確認結果：
+
+```text
+task_id:
+common-ai-f6-postona-claude-bridge-integration-preflight-20261017
+
+slot: F6
+owner: claude
+status: done
+next_owner: none
+completion_code: L6
+
+recommended_model:
+Opus5.5（高）
+```
+
+L6判定：
+
+```text
+PASS_PREFLIGHT
+SOURCE_ONLY
+PRODUCTION_NO_GO
+```
+
+F6 TASK：
+
+```text
+.agent_v2/tasks/F6.md
+```
+
+ACTIVE：
+
+```text
+.agent_v2/ACTIVE_TASK.md
+```
+
+F6の最新TASKは完了済み。
+
+**新しいF6 TASKはまだ登録していない。**
+
+### 4-2. 最新テスト結果
+
+PR #239のReportに記録された結果。
+
+| テスト | 結果 |
+|---|---|
+| 新規POSTONA接続契約テスト | 6 PASS |
+| 共通AI基盤 | 153 PASS |
+| H5 Bridge | 27 PASS |
+| 市況レポート | 324 PASS |
+| 統合検証 | 541 PASS |
+| lint | 0件 |
+| git diff --check | OK |
+
+検証条件：
+
+- Deno 2.9.6
+- ネットワーク拒否
+- ダミーAPIキー
+- 実Anthropic API通信なし
+- 本番DB接続なし
+
+これらはClaude CodeのReportに記録された結果。
+
+L6時点でChatGPTが独立して全テストを再実行したわけではない。
+
+### 4-3. 未確認事項
+
+次は未検証。
+
+```text
+共有コード全体の既存型エラー5件
+
+権限エラーで実行できなかったテスト1件
+
+本番Anthropic API応答
+
+実際のAPI請求
+
+本番利用量台帳
+
+本番でのoperationId永続化
+
+POSTONAの実際のAI生成品質
+
+本番Edgeの実行時間
+
+本番デプロイ構成
+```
+
+### 4-4. マージ・本番状態
+
+2026年10月17日のGitHub確認では、以下のPRはすべてOPEN / Draft / 未マージだった。
+
+```text
+#148
+#150
+#153
+#157
+#162
+
+#187
+#198
+#205
+#216
+#219
+#222
+#231
+#234
+#237
+#239
+```
+
+**ソース候補が完成していることと、本番に導入済みであることは別。**
+
+本書の対象PRについて、本番Claude API切り替えの完了は確認されていない。
+
+---
+
+## 5. 未完成機能・未解決問題
+
+### 5-1. POSTONAのClaude API接続
+
+現在、POSTONAはClaude Providerへ接続されていない。
+
+未完成：
+
+- AI相談の実接続
+- AI投稿文生成の実接続
+- POSTONA用API費用台帳
+- 利用者ごとの利用上限
+- サービス利用権とAI実行権限の連携
+- operationIdの永続化
+- Claudeモデルの品質評価
+- Anthropic送信に対応したプライバシー表示
+- 本番デプロイ
+- 実API課金検証
+
+### 5-2. 個人情報のAnthropic送信
+
+PR #239の調査時点では、個人情報のAnthropic送信が既存ルールに抵触する可能性があった。
+
+その後、このチャットでユーザーが次の方針を了承した。
+
+**POSTONAのAI相談内容および投稿文生成に必要な情報を、Anthropicへ送信する方向で開発を進める。**
+
+ただし、次の条件付き。
+
+- 必要最小限の情報だけ送信する
+- プライバシー表示・利用規約を整備する
+- アプリや利用者間の情報混在を防ぐ
+- 利用権・費用上限を実装する
+- 本番切り替えは別途承認を得る
+
+**この了承は本番送信の実行許可ではない。**
+
+また、既存の「個人情報送信禁止」ルールの正式な修正がGitHubに反映されたことは確認していない。
+
+将来の担当者は、実装前に最新ルールと今回のユーザー判断を照合すること。
+
+### 5-3. 費用台帳
+
+POSTONA用の費用管理には、追加の本番DB設計が必要。
+
+特に以下を決める必要がある。
+
+- 利用者単位の記録
+- サービス単位の記録
+- ブランド単位の記録方法
+- 無料枠・有料枠
+- 利用上限
+- 課金不明時の最大費用見積もり
+- Cronやsystem実行の費用帰属
+
+本番DBのmigrationは別TASK・別承認が必要。
+
+### 5-4. ブランドIDの不整合
+
+POSTONAのブランドIDはUUIDではない。
+
+確認された仕様：
+
+```text
+brands.id:
+^[a-z][a-z0-9_]{1,40}$
+```
+
+利用者ワークスペース：
+
+```text
+u_ + md5の24文字
+```
+
+一方、共通AI台帳の主体はUUIDベース。
+
+そのため、POSTONAのブランドIDをそのまま共通AI台帳のUUID欄に入れてはいけない。
+
+ブランド単位の費用記録・利用権を設計する必要がある。
+
+### 5-5. 永続的な二重送信防止
+
+モック環境で同一operationIdの重複送信防止を確認した。
+
+しかし、永続的な保存場所がまだ決まっていない。
+
+必要なもの：
+
+- DB上の一意性保証
+- 実行状態の保存
+- 再試行・タイムアウト時の状態遷移
+- 課金不明状態の保持
+- 並行実行時の安全性
+
+特に予約投稿などのCron実行では重要になる。
+
+### 5-6. Consumer Bridgeの許可設定
+
+POSTONA側からBridgeを呼び出すには、現在のimport制限を変更する必要がある。
+
+調査で判明した問題：
+
+- F6側のisolation許可
+- H5側のConsumer Bridge利用制限
+
+両者を整合させる必要がある。
+
+**F6だけの修正で解決しない。**
+
+H5の所有境界と調整して、同時に設計すること。
+
+### 5-7. 品質評価
+
+Claude APIで生成した日本語の品質は未検証。
+
+特に次の品質確認が必要。
+
+- AI相談の自然さ
+- 相談内容の正確性
+- 日本語の読みやすさ
+- 投稿文の自然さ
+- SNSごとの文章品質
+- 指示への忠実性
+- JSON形式の遵守
+- 生成時間
+- トークン使用量
+- OpenAIとの費用対効果
+
+有料APIによる品質比較は、別途承認が必要。
+
+---
+
+## 6. 関連PR・commit・TASK・Report
+
+### 6-1. 新F6系列
+
+| PR | 内容 | 確認したHEAD |
+|---|---|---|
+| #187 | Claude Provider候補 | `a7e1d3f3f6b3` |
+| #198 | H5 Consumer Bridge | `4223d5c01389` |
+| #205 | Bridge/Provider権限境界 | `4cd2cbdd51a6` |
+| #219 | 権限・再送制御修正 | `be35cc93205f` |
+| #222 | import検査・費用計上修正 | `11835df1b99f` |
+| #231 | 字句解析導入 | `2a696aff24be` |
+| #234 | rawEdges追加 | `2ba13ee17f75` |
+| #237 | Unicode escape対策 | `d0c85b3e7f12` |
+| #239 | POSTONA接続準備 | `f590b80fbbaa` |
+
+いずれも2026年10月17日の確認時点ではDraft・未マージ。
+
+PR #216は別系統の調査・文書PR。
+
+HEADは今後変わる可能性があるため、再開時に再確認すること。
+
+### 6-2. 最新F6の正本
+
+```text
+.agent_v2/tasks/F6.md
+```
+
+task_id：
+
+```text
+common-ai-f6-postona-claude-bridge-integration-preflight-20261017
+```
+
+結果：
+
+```text
+PASS_PREFLIGHT
+SOURCE_ONLY
+PRODUCTION_NO_GO
+```
+
+### 6-3. 最新PR #239
+
+PR URL：
+
+```text
+https://github.com/anohi-memories/kabumori/pull/239
+```
+
+commit：
+
+```text
+f590b80fbbaa926be08d5e215ad87b373f402ff2
+```
+
+### 6-4. 完了判定のGitHub更新
+
+2026年10月17日のL6処理：
+
+TASK更新：
+
+```text
+8c031ad418c76d87108164401052bfc773ce464f
+```
+
+ACTIVE_TASK更新：
+
+```text
+5751de9e04ee208625c444aef0da3dc5af22e5a7
+```
+
+GitHub read-back確認済み。
+
+### 6-5. 過去TASKのarchive
+
+確認済みの主な履歴：
+
+```text
+.agent_v2/archive/
+  2026-10-16-f6-pr222-source-fix.md
+
+.agent_v2/archive/
+  2026-10-16-f6-pr231-lexer-source-fix.md
+
+.agent_v2/archive/
+  2026-10-17-f6-pr234-rawedges-source-fix.md
+
+.agent_v2/archive/
+  2026-10-17-f6-pr237-escaped-keyword-fix.md
+```
+
+関連するH5・J1・旧G6の履歴については、HISTORY_INDEXから検索する。
+
+```text
+.agent_v2/HISTORY_INDEX.md
+```
+
+重要：
+
+**archiveはappend-only。**
+
+既存履歴の削除・短縮・上書きは禁止。
+
+F6履歴のうち、Git blobの一致確認は実施したものがあるが、すべての個別archiveで独立SHA256・MANIFEST検証が完了したとは断定しない。
+
+---
+
+## 7. 重要なDB・Edge Function・Cron・API
+
+### 7-1. 共通AI Provider
+
+対象：
+
+```text
+supabase/functions/_shared/ai_provider/
+```
+
+主な役割：
+
+- OpenAI/Claudeの呼び出し抽象化
+- モデル選択
+- 利用料金管理
+- 予算上限管理
+- 失敗・再試行制御
+- 権限境界
+- import制限の検査
+
+重要なテスト：
+
+```text
+supabase/functions/_shared/ai_provider/
+  isolation_test.ts
+```
+
+後半のセキュリティ修正は主にこのファイルで実施された。
+
+### 7-2. Consumer Bridge
+
+対象：
+
+```text
+supabase/functions/_shared/ai_consumer_bridge/
+```
+
+役割：
+
+アプリ固有の処理から共通Providerへアクセスするための境界。
+
+PR #198が関連。
+
+Bridgeの所有範囲はH5の担当として扱われている。
+
+F6が勝手にBridge内部の権限条件を変更してはならない。
+
+### 7-3. POSTONA AI相談
+
+対象：
+
+```text
+supabase/functions/social-mobile-consult/logic.ts
+```
+
+主な関数：
+
+```text
+handleSocialMobileConsult
+```
+
+呼び出し元：
+
+```text
+consult.tsx
+consult-client.ts
+```
+
+主な関数：
+
+```text
+ask()
+requestConsult()
+```
+
+PR #239調査時点の仕様：
+
+- JWTによる本人確認
+- owner確認
+- strict JSON Schema
+- 既存モデルは`gpt-6-luna`
+- 出力上限900
+- 25秒タイムアウト
+- 自動再送なし
+
+不足しているもの：
+
+- 利用権確認
+- 利用者ごとの利用上限
+- API費用台帳
+- 永続的な重複送信防止
+
+### 7-4. POSTONA投稿文生成
+
+対象：
+
+```text
+supabase/functions/_shared/brand/
+  brand_post_generator.ts
+```
+
+主要関数：
+
+```text
+generateBrandPost
+```
+
+関連経路：
+
+```text
+social-mobile-brand-dry-run
+
+vault_account_brand_post.ts
+
+ai_lab_scheduled_brand_post.ts
+
+x-test-post/index.ts
+```
+
+用途：
+
+- 投稿文の試し生成
+- 利用者ブランドの予約投稿
+- 会社員AIラボの投稿生成
+- 一部のX投稿処理
+
+PR #239調査時点の問題：
+
+- API費用を計算しても台帳に記録しない
+- タイムアウト上限がない
+- 利用権確認がない
+- 呼び出し主体が複数存在する
+- systemと一般利用者で認証方式が異なる
+
+これらをClaude APIへの接続時に整理する必要がある。
+
+### 7-5. モデル選択
+
+関連ファイル：
+
+```text
+social_ai_model_policy.ts
+```
+
+POSTONA側のモデル選択方針を管理する。
+
+変更時はPOSTONA担当との調整が必要。
+
+### 7-6. 市況レポート
+
+旧かぶモリの関連機能：
+
+```text
+market-report-analysis/
+```
+
+OpenAIを利用していた市況レポートの共通AI接続を検討した。
+
+現在はかぶモリ休止方針が優先される。
+
+**共通AI基盤のテストに市況レポートが含まれていても、本番の市況レポート配信を再開してよいわけではない。**
+
+### 7-7. DB
+
+共通AI利用量台帳・operationId保存先・POSTONA利用権について、関連する設計と検証候補が存在する。
+
+ただし、最新のPOSTONA Claude接続用DBスキーマは未確定。
+
+本書では具体的なテーブル名・migration名を推測しない。
+
+再開時はGitHubのmigrationと現行DB設計を照合すること。
+
+### 7-8. Cron
+
+POSTONAでは以下の処理に関係する。
+
+```text
+予約投稿
+
+ブランド投稿
+
+会社員AIラボの定期投稿
+```
+
+共通AIへの接続時には、Cronでの実行主体と費用帰属の設計が必要。
+
+一方、かぶモリ専用のニュース・朝刊・大引けCronは休止対象。
+
+**POSTONAと共有するCronやEdge Functionを、かぶモリ休止を理由に停止してはならない。**
+
+---
+
+## 8. 他の機能・共通基盤との依存関係
+
+### 8-1. POSTONA
+
+現在の最重要依存先。
+
+共通AI基盤の開発は、今後POSTONAを優先する方針。
+
+接続対象：
+
+- AI相談
+- AI投稿文生成
+- 試し投稿
+- 会社員AIラボ
+- 将来の予約投稿
+
+優先順位：
+
+```text
+AI相談
+   ↓
+試し投稿
+   ↓
+会社員AIラボ
+   ↓
+利用者ブランドの予約投稿
+```
+
+最後の予約投稿は、安全性・権限・費用帰属の条件が厳しい。
+
+### 8-2. 共通アカウント
+
+共通アカウントは、かぶモリ休止後も継続する。
+
+主な担当：
+
+```text
+G5 / F5
+```
+
+POSTONAのログイン、利用権、認証、ユーザー管理に依存する。
+
+AI利用権も共通アカウントと矛盾しないようにする必要がある。
+
+### 8-3. F4
+
+2026年10月17日の確認では、POSTONAのF4は次のTASKが`ready`だった。
+
+```text
+postona-f4-f5-service-end-g1-g2-joint-integration-20261017
+```
+
+対象：
+
+- 利用終了
+- ServiceLifecycleProvider
+- ServiceLifecycleSurface
+- F5の利用権再確認との統合
+
+そのため、共通AI基盤側がF4所有の画面・認証ゲートを変更してはいけない。
+
+POSTONAのAI相談接続は、F4のAuth/利用終了統合との依存関係を確認したうえで進める。
+
+### 8-4. H5
+
+Consumer Bridge担当。
+
+POSTONAから共通Providerを使用するためには、H5の呼び出し制限との調整が必要。
+
+F6のisolation検査だけを変更してはならない。
+
+### 8-5. かぶモリ
+
+かぶモリは当面休止。
+
+本部屋が担当した共通AI基盤は保護する。
+
+かぶモリ専用機能と共通基盤を分けて扱うこと。
+
+### 8-6. 将来のMiseiro
+
+将来的にPOSTONAの共通IDやAI基盤を流用する構想がある。
+
+ただし、本部屋でMiseiro向けClaude API接続の実装を完了した記録はない。
+
+再開時に再利用可能性を検討する段階である。
+
+---
+
+## 9. 変更してはいけない箇所・安全上の注意
+
+### 9-1. 最重要保護対象
+
+かぶモリを休止・再開するときも、以下を破壊してはならない。
+
+```text
+Supabase Auth
+
+共通アカウント
+
+POSTONAのログイン
+
+POSTONAの利用権
+
+POSTONAのX OAuth
+
+POSTONAのThreads/Instagram連携
+
+POSTONAの投稿予約
+
+POSTONAのCron
+
+POSTONAのSNS投稿
+
+共通AI Provider
+
+Consumer Bridge
+
+API利用量・費用管理
+
+ユーザーDB
+```
+
+### 9-2. 無断変更禁止
+
+以下は明示承認と安全確認が必要。
+
+- production DB
+- migration
+- Auth
+- RLS
+- RPC
+- SECURITY DEFINER
+- Edge Functionの本番deploy
+- Cron
+- Secrets
+- OAuth
+- 外部APIへの実書き込み
+- SNS実投稿
+- 有料AI API呼び出し
+- 本番モデル切り替え
+
+### 9-3. PR依存
+
+新F6のPRは積み上げ関係にある。
+
+```text
+#187
+  ↓
+#198
+  ↓
+#205
+  ↓
+#219
+  ↓
+#222
+  ↓
+#231
+  ↓
+#234
+  ↓
+#237
+  ↓
+#239
+```
+
+マージ時はHEAD・base・差分・競合を必ず再確認する。
+
+将来、main側で変更が進んでいる可能性があるため、古いHEADをそのまま使用しない。
+
+### 9-4. worktree
+
+新旧30枠は独立したworktreeまたはcheckoutを使用する。
+
+禁止：
+
+- 他slotのcheckout/reset/rebase
+- 他slotの未コミット変更操作
+- 他slotのdev server停止
+- 無断force push
+- 独立性のない作業ディレクトリ共有
+
+### 9-5. 費用
+
+次は特に重要。
+
+**不明なAPI費用を0円とみなしてはならない。**
+
+また、失敗時の再送によって同じ有料リクエストが複数回実行されることを防止する。
+
+再開時にこの安全設計を不用意に簡略化しないこと。
+
+### 9-6. 休止機能を再開しない
+
+共通AI基盤を復旧する作業によって、以下を勝手に再開してはならない。
+
+- かぶモリ重要ニュース監視
+- ニュース取得Cron
+- AIによるニュース判定・生成
+- かぶモリX自動投稿
+- 朝刊・大引け生成
+- アプリPush通知
+- かぶモリ専用AI生成
+
+一方、POSTONAのサービス機能は保護対象。
+
+---
+
+## 10. 開発を再開したときの最初の作業
+
+将来、新しいChatGPTチャットを作成した場合は、以下の順番で作業する。
+
+### STEP 1：現在のGitHub状態を確認
+
+最初に確認するファイル：
+
+```text
+PROJECT_RULES.md
+
+.agent_v2/ORCHESTRATION.md
+.agent_v2/ACTIVE_TASK.md
+.agent_v2/CURRENT_STATE.md
+
+.agent/ORCHESTRATION.md
+.agent/ACTIVE_TASK.md
+.agent/CURRENT_STATE.md
+```
+
+次にF6のTASKを確認する。
+
+```text
+.agent_v2/tasks/F6.md
+```
+
+古い引き継ぎ書だけでTASKを割り当てない。
+
+### STEP 2：PRの現状を確認
+
+確認対象：
+
+```text
+#187
+#198
+#205
+#219
+#222
+#231
+#234
+#237
+#239
+```
+
+加えて旧G6系列：
+
+```text
+#148
+#150
+#153
+#157
+#162
+```
+
+各PRについて確認する。
+
+- OPEN / CLOSED
+- Draft
+- merged
+- HEAD
+- base
+- changed_files
+- mergeability
+- 後続PRとの依存
+- mainとの差分
+- 重複変更
+
+### STEP 3：POSTONAの稼働状況を先に確認
+
+POSTONAが継続稼働している場合、そちらを優先して保護する。
+
+確認対象：
+
+- 認証
+- 利用権
+- X OAuth
+- 予約投稿
+- Cron
+- AI相談
+- AI投稿文生成
+- 現在使用中のAIモデル
+- 本番APIキー・設定の存在確認
+
+Secret値を読み出す必要はない。
+
+### STEP 4：共通AI基盤の現状確認
+
+対象：
+
+```text
+supabase/functions/_shared/ai_provider/
+
+supabase/functions/_shared/ai_consumer_bridge/
+```
+
+POSTONA接続文書：
+
+```text
+docs/ai-provider/
+  F6_POSTONA_CLAUDE_INTERFACE_PREFLIGHT.md
+```
+
+旧設計を無条件に採用せず、最新実装と照合する。
+
+### STEP 5：未解決条件を整理
+
+最低限、以下を確認する。
+
+1. Anthropicへの情報送信方針と最新プライバシー規約
+2. POSTONA用費用台帳
+3. operationId永続化
+4. 利用者・ブランド単位の費用帰属
+5. 利用者ごとの利用上限
+6. 共通アカウント利用権との連携
+7. F6とH5の権限検査
+8. POSTONA側の最新AI呼び出しコード
+9. Claudeの品質評価
+10. デプロイ時の既存変更混入リスク
+
+### STEP 6：新しいTASKを割り当てる
+
+新TASKは原則F6を使用。
+
+ただし、その時点のF6 status・task_id・競合状況を確認する。
+
+推薦モデル：
+
+```text
+Opus5.5（高）
+```
+
+軽微な文書整理だけならSonnet5（高）でもよい。
+
+**旧G6のTASKを新F6へ無条件に移動しないこと。**
+
+### STEP 7：本番前に限定レビュー
+
+DB・権限・API課金境界に変更がある場合は、必要な範囲だけ独立レビューする。
+
+Codexへの一律レビュー割り当てはしない。
+
+ソーステストに合格しただけで、本番導入を承認しない。
+
+---
+
+## 11. 今後予定していた機能・改善案
+
+### 11-1. POSTONAのClaude API導入
+
+最優先の開発候補。
+
+段階的な導入方針：
+
+```text
+Phase 0
+共通AI Provider / Bridgeの依存整理
+
+Phase 1
+POSTONA費用台帳・利用上限・operationId保存
+
+Phase 2
+POSTONA AI相談のClaude対応
+
+Phase 3
+POSTONA試し投稿のClaude対応
+
+Phase 4
+会社員AIラボ投稿生成のClaude対応
+
+Phase 5
+利用者ブランドの予約投稿のClaude対応
+```
+
+各段階は独立して検証する。
+
+### 11-2. AIモデルの選択
+
+PR #239では、Claude Haiku 5.5を候補とした。
+
+理由：
+
+- 比較的低い利用料金
+- POSTONAの多数の短い生成処理に向く可能性
+- 共通Providerのモデル選択で制御可能
+
+ただし、**品質比較は未実施**。
+
+PR #239に記載された参考の上限費用見積もり：
+
+| モデル | AI相談1回の上限見積もり |
+|---|---:|
+| Haiku 5.5 | $0.0044 |
+| Sonnet系 | $0.089 |
+| Opus系 | $0.18 |
+
+投稿文生成は、Haiku候補で約$0.0012〜0.0019という見積もりが記録されている。
+
+これらは当時の設計用の参考値であり、実測請求額ではない。
+
+将来のAPI料金やモデル名は変更される可能性がある。
+
+本番導入前に再確認すること。
+
+### 11-3. モデルの切り替え
+
+将来的にはOpenAIとClaudeを切り替えられる構成を目指す。
+
+当面の案：
+
+```text
+既定：OpenAI
+
+Claude：機能フラグで段階的に有効化
+
+問題発生時：OpenAIへ戻す
+```
+
+切り替え操作も本番変更として扱う。
+
+### 11-4. API利用量の可視化
+
+将来の改善候補：
+
+- 利用者ごとのAI使用量
+- サービスごとの費用
+- モデルごとの費用
+- 1リクエストあたりの平均費用
+- エラーによる不明費用
+- 予算超過警告
+- 利用制限
+- 管理者向けの費用確認
+
+これらは設計方針であり、完成済みの管理画面があるとは確認していない。
+
+### 11-5. Claude品質比較
+
+今後必要な評価：
+
+- AI相談の品質
+- 投稿文の自然さ
+- 日本語性能
+- JSON出力安定性
+- 応答時間
+- API費用
+- モデルごとの品質差
+
+有料評価は別承認。
+
+### 11-6. かぶモリ再開時のAI復旧
+
+将来かぶモリを再開する場合は、当時のOpenAI専用コードをそのまま復活させるのではなく、最新の共通AI Providerへの接続可能性を評価する。
+
+ただし、これは再開時の別TASK。
+
+POSTONAのAI処理を変更・停止させる形で進めてはいけない。
+
+---
+
+## 12. この部屋で決めた重要な方針・ユーザーの希望
+
+### 12-1. POSTONAを優先する
+
+2026年10月15日に、かぶモリの運用を当面休止する方針が決まった。
+
+共通AI基盤はPOSTONAのために開発を継続する。
+
+### 12-2. コスト管理を重視する
+
+ユーザーは個人開発であり、API料金を抑えることを重視している。
+
+そのため、
+
+- 不必要な有料API呼び出しをしない
+- 再送による二重課金を防ぐ
+- 安価なモデルを候補にする
+- 利用量を正しく記録する
+- 上限を設定する
+
+という方針を維持する。
+
+### 12-3. レビューを増やしすぎない
+
+共通AI基盤のセキュリティ修正では、何度もレビューを実施した。
+
+ユーザーはCodexのレビュー負荷が大きいことを問題視した。
+
+そのため、途中から独立したClaude Codeレビューを利用した。
+
+今後も、
+
+**レビューは必要最小限に限定する。**
+
+既に合格した箇所を機械的に再レビューしない。
+
+### 12-4. 安全性は省略しない
+
+レビュー回数を減らす一方、次の確認は省略しない。
+
+- テスト
+- dry-run
+- mock検証
+- GitHub read-back
+- 変更ファイル競合確認
+- production影響確認
+
+### 12-5. ChatGPTが全体統括する
+
+ユーザーは、GitHubを共有TASKハブとして利用している。
+
+ChatGPTがTASK登録・完了確認・次工程判断を担当する。
+
+可能な場合はChatGPTから直接GitHubを操作し、毎回Workモードへ誘導しない。
+
+### 12-6. 推薦モデルを必ず記載する
+
+TASKには必ず推薦モデルを記載する。
+
+共通AI基盤の複雑な実装は、原則Opus5.5（高）。
+
+### 12-7. POSTONAへのAnthropic送信方針
+
+2026年10月17日、ユーザーはPOSTONAのAI相談内容・投稿文生成情報をAnthropicに送る方向で開発を進めることを了承した。
+
+ただし、プライバシー対応・必要最小限の送信・利用上限・権限管理・別途本番承認が条件。
+
+**了承を得たことと、本番で送信を開始したことは区別する。**
+
+---
+
+## 13. 休止対象と継続対象の区別
+
+| 項目 | 方針 |
+|---|---|
+| かぶモリ重要ニュース監視 | 休止 |
+| かぶモリX重要ニュース自動投稿 | 休止 |
+| かぶモリ朝刊・大引け | 休止 |
+| かぶモリニュース取得Cron | 休止 |
+| かぶモリPush通知 | 休止 |
+| かぶモリ専用AI生成 | 休止 |
+| 共通AI Provider | 保護・開発継続 |
+| Consumer Bridge | 保護・開発継続 |
+| 共通アカウント | 運用継続 |
+| POSTONA認証・利用権 | 運用継続 |
+| POSTONA X/Threads連携 | 保護 |
+| POSTONA投稿・予約 | 保護 |
+| POSTONA AI相談 | 開発継続 |
+| POSTONA Claude API対応 | 開発継続 |
+
+重要なのは、**かぶモリの運用停止を共通AI基盤の停止と混同しないこと。**
+
+---
+
+## 14. 将来の再開時に最も注意すべきこと
+
+長期休止後には、以下が変化している可能性がある。
+
+- OpenAI API仕様
+- Anthropic API仕様
+- 対応モデル
+- モデル料金
+- Supabase仕様
+- Denoバージョン
+- SDK
+- OAuth仕様
+- POSTONAの機能
+- 共通アカウントの構造
+- 本番DBスキーマ
+- GitHubのPR状態
+- 新旧TASK運用方式
+
+したがって、**本書のモデル名・価格・PR状態・ファイル構成は2026年10月17日の記録**である。
+
+再開時には、必ず最新GitHubを確認すること。
+
+また、現時点では新旧30枠の段階移行期間だが、数か月〜数年後には完全移行が終わっている可能性がある。
+
+旧G6/F6というスロット名を永久的なものとして扱わない。
+
+---
+
+## 15. 将来の新チャットへの再開指示
+
+以下は、新しい共通AI基盤のChatGPTチャットを作成した際に使用する指示。
+
+```text
+【共通AI基盤｜長期休止後の再開指示】
+
+このチャットは、かぶモリ／POSTONA共有の
+OpenAI API・Claude API共通基盤を担当する。
+
+過去の担当は旧G6、新F6。
+
+2026年10月17日時点の最新記録では、
+F6のPOSTONA Claude API接続準備TASKがdone。
+
+最終TASK：
+common-ai-f6-postona-claude-bridge-integration-preflight-20261017
+
+最終PR：
+#239
+
+最終判定：
+PASS_PREFLIGHT / SOURCE_ONLY / PRODUCTION_NO_GO
+
+共通AI Provider・Consumer Bridgeの実装候補は存在するが、
+本番への接続・切り替えは未完了。
+
+かぶモリアプリは当面休止中。
+
+POSTONAと共通アカウントの運用は保護する。
+
+最初に必ずGitHubの最新状態を確認すること。
+
+確認対象：
+PROJECT_RULES.md
+新旧ORCHESTRATION
+新旧ACTIVE_TASK
+新旧CURRENT_STATE
+F6 TASK
+HISTORY_INDEX
+関連PR
+
+主要PR：
+#148 #150 #153 #157 #162
+#187 #198 #205 #219 #222
+#231 #234 #237 #239
+#216
+
+最重要：
+古い会話よりGitHubの現在状態を優先する。
+
+旧TASKを新TASKへ勝手に移さない。
+
+PRがマージ済みか、本番反映済みかは
+必ず確認する。
+
+POSTONAのAI相談・投稿文生成へのClaude接続は
+まだ本番実装完了ではない。
+
+未解決：
+・Anthropic送信に関する規約整備
+・POSTONA費用台帳
+・operationId永続化
+・利用者ごとのAI利用上限
+・利用権
+・ブランドIDとUUIDの不整合
+・F6/H5権限境界
+・Claude品質評価
+・本番deploy安全ゲート
+
+2026年10月17日、
+ユーザーはPOSTONAの必要情報をAnthropicへ
+送信する方向での開発を了承した。
+
+ただし本番送信は別承認。
+
+レビューは必要最小限。
+推薦モデルを必ず記載。
+
+新規作業を割り当てる前に、
+他slot・worktree・変更対象競合を確認する。
+
+最初の作業は、
+現在のPOSTONA接続状況と共通AI基盤の状態を
+最新GitHubから確認し、
+次の安全なSOURCE-ONLY TASKを判断すること。
+
+かぶモリのニュース取得・朝刊・大引け・
+Push通知・X自動投稿は勝手に再開しない。
+
+POSTONAの認証・投稿・予約・Cron・
+共通アカウントを停止させない。
+
+本番変更、DB変更、有料API呼び出し、
+merge、deployは無断実行しない。
+```
+
+---
+
+## 16. 最終状態まとめ
+
+**2026年10月17日時点**
+
+| 項目 | 最終状態 |
+|---|---|
+| 旧G6共通AI実装 | ソース候補・K6確認済み |
+| 新F6 Claude Provider | ソース候補完成 |
+| H5 Consumer Bridge | ソース候補あり |
+| import権限検査修正 | PR #237まで実装 |
+| API費用計上修正 | 実装候補あり |
+| 再送・二重課金防止 | 実装候補あり |
+| POSTONA接続仕様 | PR #239で整理完了 |
+| POSTONAオフライン契約テスト | PASS |
+| POSTONA Claude実接続 | 未完了 |
+| POSTONA用DB・利用上限 | 未完了 |
+| 最終F6 TASK | done |
+| 最終L6 | PASS_PREFLIGHT |
+| 関連PRのマージ | 未実施 |
+| 本番Claude API切り替え | 未実施 |
+| production | NO_GO |
+| かぶモリ | 休止方針 |
+| POSTONA | 継続・保護対象 |
+
+### 最重要の引き継ぎ事項
+
+この部屋では、OpenAI APIからClaude APIへの対応を進める過程で、共通AI基盤のProvider・Consumer Bridge・利用量管理・権限境界の実装候補を整備した。
+
+その後、POSTONAのAI相談と投稿文生成をClaude APIへ接続するための設計をPR #239にまとめた。
+
+**ここまでが完了した作業であり、POSTONAの本番Claude API接続は未完了。**
+
+かぶモリが休止しても、これらの共通機能と開発履歴は保護する。
+
+将来の再開では、まず最新GitHubを確認し、POSTONAを停止させず、未完了の費用管理・認証・接続作業を段階的に完成させること。
+
+---
+
+**引き継ぎ書作成日：2026年10月17日**  
+**対象：共通AI基盤 G6・F6／OpenAI API・Claude API**  
+**保存予定：かぶモリ全体統括によるGitHub集約**  
+**本書作成に伴う実装・merge・deploy・本番変更：なし**
+
+**以上、共通AI基盤の長期保存用・最終引き継ぎ書。**

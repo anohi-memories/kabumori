@@ -1,0 +1,1980 @@
+# かぶモリ｜Market Intelligence Core（MIC）
+# 長期保存用・最終引き継ぎ書
+
+作成日：2026年10月17日
+対象：MIC専用チャット（旧G7／新F7）
+作成担当：ChatGPT（ちゃ）
+引き継ぎ先：かぶモリアプリG1のちゃ（全体統括）
+目的：かぶモリ運用休止後、数か月〜数年経過しても正確に開発を再開できるようにする
+
+推薦モデル：
+ChatGPT：GPT-6（高）
+Claude Code：Opus5.5（高）
+Codex：通常確認 Luna（中／高）
+Codex：DB・RPC・Securityレビュー Sol（高）
+
+GitHub：
+https://github.com/anohi-memories/kabumori
+
+確認時のmain最新commit：
+9fe46be3e3049e79f52f87f0e6e4d26f40e87a4d
+
+Supabaseプロジェクト：
+stock-x-autopost
+
+Project ID：
+wsmznyzcvmuitkglfeuj
+
+重要：
+本書は2026年10月17日時点の情報。
+将来再開するときは、必ずGitHubの最新TASK・Report・ACTIVE_TASK・CURRENT_STATEを確認すること。
+
+本書は履歴・再開手順を理解するための長期保存資料であり、将来のGitHub状態を上書きする正本ではない。
+
+
+==================================================
+1. この部屋の担当範囲と役割
+==================================================
+
+■ 担当名称
+
+Market Intelligence Core（MIC）
+
+かぶモリの市場情報を収集・蓄積・分析する基盤。
+
+株式市場、金利、為替、経済指標、商品市況などの情報を統合し、市場環境をAIが理解できる状態にすることが目的。
+
+■ 主な担当範囲
+
+1. 公式・構造化APIからの市場データ取得
+2. 市場指標の履歴保存
+3. 経済イベントの保存
+4. データ鮮度・取得品質の判定
+5. 市場の重要な変化の検出
+6. 重要な変化があった場合のAI分析
+7. 市場状態（State）の保存
+8. 複数Stateを統合したScenario分析
+9. AI利用量・費用の記録
+10. 検証証拠の保存
+11. 分析結果の整合性・鮮度確認
+12. 朝刊・大引け等への市場情報提供
+13. API費用の最適化
+14. MIC停止・再開時の安全管理
+
+■ 担当しない範囲
+
+・POSTONAのSNS投稿
+・共通アカウント認証
+・Supabase Auth
+・共通AI基盤そのものの変更
+・重要ニュース監視本体の改修
+・朝刊・大引け本文生成の主担当
+・アプリの画面UI
+・X OAuth・Threads OAuth
+・SNSへの実投稿
+
+MICのデータが他機能に利用される場合でも、原則として変更対象はMIC側に限定する。
+
+共有コードや他サービスの変更が必要なら、担当チャットへ依頼する。
+
+■ 開発スロット
+
+旧担当：G7
+旧完了確認：K7
+
+新担当：F7
+新完了確認：L7
+
+ユーザーの明示希望：
+2026年10月以降、次の新規MIC TASKはF7を使用する。
+
+旧G7のTASKをF7へ途中移動しない。
+旧G7の完了履歴は保存する。
+
+新F7はMIC専用として扱う。
+
+
+==================================================
+2. MIC全体の基本設計
+==================================================
+
+■ 全体構成
+
+MICは大きく3層から構成される。
+
+【第1層：Facts】
+
+市場に関する事実情報を取得・保存する。
+
+例：
+・米国債利回り
+・日本国債利回り
+・為替レート
+・原油価格
+・日経平均
+・米国株価指数
+・CPI
+・雇用統計
+・GDP
+・中央銀行関連イベント
+
+保存先：
+market_metrics
+market_events
+
+原則：
+事実情報とAIの解釈を混在させない。
+
+【第2層：State】
+
+Factsをもとに、各市場領域の現在の状態を評価する。
+
+例：
+・金利環境
+・為替環境
+・株式市場の状況
+・経済指標の変化
+・商品市況
+
+重要な変化がなければAIを実行しない。
+
+閾値や新規観測の有無などは、まず決定的なロジックで判定する。
+
+AI分析が必要と判断された場合だけモデルを呼び出す。
+
+保存先：
+market_state_current
+market_state_history
+
+【第3層：Scenario】
+
+複数のStateを統合し、市場全体の見通しを作成する。
+
+出力：
+・基本シナリオ
+・上振れシナリオ
+・下振れシナリオ
+・確認条件
+・無効化条件
+・監視すべき項目
+・State間の矛盾
+・Confidence
+
+保存先：
+mic_scenario_current
+mic_scenario_history
+
+Scenarioの再評価も、Stateが変わったときだけAIを呼び出す方針。
+
+■ 基本思想
+
+1. FactsとAI解釈を分離する。
+2. 数値判定は可能な限り決定的に処理する。
+3. 変化がないときはAIを呼び出さない。
+4. 情報源・観測日・取得日を区別する。
+5. データが古い場合は古いと判定する。
+6. 取得成功と新しいデータの取得成功を混同しない。
+7. データ不足をAIの想像で埋めない。
+8. 分析の根拠を記録する。
+9. 不確実な場合は安全側に判定する。
+10. AI費用を最小限にする。
+11. 将来の市場分析機能へ拡張できる構造を維持する。
+
+■ Stateドメイン
+
+設計上の7ドメイン：
+
+rates
+fx
+commodities
+equity_index
+macro
+geopolitical
+corporate_events
+
+2026年10月17日時点で定期State評価の実績が確認できる主要5ドメイン：
+
+rates
+fx
+commodities
+equity_index
+macro
+
+geopoliticalとcorporate_eventsはStateの行が存在するが、AI評価済みStateとして完成していない。
+
+■ Scenarioの対象
+
+現在のScenarioは次の3ドメインを入力とする。
+
+rates
+macro
+equity_index
+
+fx・commodities・geopolitical・corporate_eventsは現行Scenarioの主要入力には含まれない。
+
+将来的な追加候補。
+
+■ Scenarioの有効性
+
+Scenario生成時の結果を無条件に信頼し続けない。
+
+現在のState、生成時の証拠、評価Run、鮮度などを照合するread gateを設計・実装している。
+
+分類：
+usable
+degraded
+expired
+invalid
+unavailable
+
+重要：
+生成済みScenarioがDBに存在することと、それを現在の分析として利用可能なことは別。
+
+実際の利用時にはread gateを通す。
+
+Stateの鮮度とScenarioの鮮度を混同しない。
+
+
+==================================================
+3. これまでに実装・完成した機能
+==================================================
+
+■ Phase 1A：Facts基盤
+
+実装済み。
+
+主な内容：
+
+・市場指標テーブル
+・市場イベントテーブル
+・情報源登録テーブル
+・取得実行履歴
+・重複取得対策
+・取得Runのclaim処理
+・取得失敗の記録
+・期限切れRunの回収
+・取得元別アダプター
+・市場指標の正規化
+・観測日時と取得日時の分離
+
+主な実装：
+
+supabase/functions/market-intelligence-ingest/
+
+重要なアダプター：
+
+mic_fred_adapter.ts
+mic_mof_jgb_adapter.ts
+mic_eia_adapter.ts
+mic_frankfurter_fx_adapter.ts
+mic_estat_adapter.ts
+mic_sec_edgar_adapter.ts
+mic_fed_statement_adapter.ts
+
+2026年10月17日時点で、本番DBにデータが存在する取得元：
+
+FRED
+MOF
+EIA
+Frankfurter
+e-Stat
+
+■ Phase 1B：State基盤
+
+実装済み。
+
+主な内容：
+
+・Stateドメイン分類
+・市場指標とドメインの対応
+・変化率・絶対変化量の閾値判定
+・新しい観測値の判定
+・市場イベントの変化判定
+・データ取得状態の確認
+・観測値の鮮度判定
+・AIを実行するかの決定
+・Stateの現在値保存
+・Stateの履歴保存
+・State評価Runの管理
+・AI利用量の記録
+
+基本動作：
+
+市場データを取得
+↓
+新しい観測値を確認
+↓
+閾値・重要イベントを判定
+↓
+重要な変化なし
+→ no_change
+→ AI呼び出しなし
+
+重要な変化あり
+→ AI分析
+→ State更新
+→ 履歴・利用量保存
+
+重要：
+no_changeでも観測状態や取得品質は更新される場合がある。
+
+AI分析本文の更新と、データ品質の更新は別の処理。
+
+■ State Evidence
+
+実装済み。
+
+・State評価の証拠保存
+・市場イベントとの関連
+・Fed声明変更との関連
+・評価Runとの関連
+・変更履歴の整合性保護
+
+ただし、後述する正式Verificationは未完成。
+
+Evidenceが存在することだけをもって、Stateの正式Verificationが完成したと判断しない。
+
+■ Scenario Phase 3A
+
+基本機能は実装済み。
+
+・Stateを統合したScenario生成
+・基本／上振れ／下振れシナリオ
+・AI費用記録
+・Scenario履歴
+・証拠保存
+・重複実行防止
+・状態変化に応じた再評価
+・Confidence制限
+・Scenario有効期限
+
+■ Scenario Phase 3B
+
+read gateのソース実装あり。
+
+・Scenarioの自己整合性確認
+・生成時のState identity確認
+・State品質の再評価
+・鮮度の確認
+・Confidenceの安全側調整
+・不正・古いScenarioの拒否
+
+過去のレビューでは、複数回のDB読取の間にStateが更新される競合条件が指摘された。
+
+有限回の読取だけでは「応答した瞬間の最新状態」を完全保証できない。
+
+これは設計上の重要な制約。
+
+再開時には、最新実装の保証範囲を改めて確認する。
+
+■ Scenario Phase 3C
+
+Stateとは独立したScenario Cron方式を採用。
+
+理由：
+
+・StateとScenarioの障害分離
+・State更新直後の中途半端なデータ利用防止
+・no_change時のAI費用削減
+・重複起動の抑制
+・State側の既存コード変更を最小化
+
+State更新のおおむね10分後にScenarioを確認する構成。
+
+■ Stage 0
+
+本番反映済み。
+
+主な改善：
+
+・日本国債金利の現行データ形式対応
+・正確な小数比較
+・観測遅延に対する猶予
+・不必要なAI再評価の抑制
+
+関連migration：
+
+20261002090000_mic_jgb_nikkei_observation_grace_stage0.sql
+
+■ Stage 1 Slice 0
+
+本番導入済み。
+
+Stateのno_change時に、正式Verification候補の判定結果をShadowとして記録する機能。
+
+保存先：
+
+mic_state_evaluation_runs.decision_detail.verification_shadow
+
+これは正式Verificationではない。
+
+既存処理を変更せず、検証条件を観測するための仕組み。
+
+main統合commit：
+427b2931
+
+初回本番導入：
+2026年10月7日
+
+導入時のState evaluator：
+v32
+
+2026年10月15日のread-only観測：
+
+・Slice 0以降のState実行：78回
+・no_change：67回
+・AI再評価：11回
+・Shadow記録：67/67回
+・Shadow記録欠落：0
+・no_change時のAI利用：0
+・対象期間中のState失敗：0
+
+この数値は2026年10月15日時点の観測結果。
+
+最終停止時点の累積件数とは異なる。
+
+
+==================================================
+4. 2026年10月17日時点の最終運用状態
+==================================================
+
+■ 最重要：MICは運用休止状態
+
+2026年10月17日13時頃、
+Supabase本番DBをread-onlyで確認。
+
+MIC専用Cron：
+
+24本すべて active=false
+
+内訳：
+
+Ingest：9本
+State：13本
+Scenario：2本
+
+停止設定は確認済み。
+
+ただし停止操作を行った担当・正確な変更時刻は、この部屋では確認していない。
+
+最後に確認できたMIC Cron実行：
+
+2026年10月17日 10:45 JST
+
+jobid 27
+mic-evaluator-fx-after-frankfurter-0130
+
+その後のCronは停止設定になっている。
+
+注意：
+Cronが停止していても、Edge Functionはデプロイ済みの状態。
+
+手動invokeや別の外部呼び出し経路まで完全に無効化されたことは、この確認だけでは保証できない。
+
+■ Edge Functionの本番状態
+
+2026年10月17日時点：
+
+market-intelligence-ingest
+ACTIVE / v51
+
+market-intelligence-state-evaluator
+ACTIVE / v36
+
+market-intelligence-scenario-evaluator
+ACTIVE / v15
+
+停止に際してEdge Functionを削除していない。
+
+将来再開するときも、既存の本番版を確認してから変更する。
+
+■ 本番DBに残存するデータ
+
+2026年10月17日時点：
+
+market_metrics：792件
+market_events：42件
+mic_ingestion_runs：241件
+
+State・Scenarioの現在値、履歴、Evidence、Runも存在。
+
+Cron停止によって既存データは削除されていない。
+
+■ 最新Scenario
+
+確認時点：
+
+scenario_key：market
+assessment_status：assessed
+
+AI評価：
+2026年10月17日 10:25 JST
+
+Confidence：
+0.800
+
+保存されたvalid_until：
+2026年10月21日 06:15 JST
+
+注意：
+この有効期限は、停止期間中も自動的に延長されない。
+
+将来再開したときは、保存済みScenarioをそのまま現在の見通しとして表示してはいけない。
+
+必ず再検証する。
+
+■ 主要データの最終観測日
+
+確認時点：
+
+FRED：
+2026年10月16日
+
+Frankfurter：
+2026年10月16日
+
+MOF JGB：
+2026年10月15日
+
+EIA：
+2026年10月14日
+
+e-Stat：
+2026年8月1日
+
+これは各情報源から保存された最新の観測日であり、取得処理の最終実行日時とは異なる。
+
+e-Statの古い観測日が直ちに異常という意味ではない。
+月次統計などは更新周期が異なる。
+
+■ 最終的な稼働方針
+
+かぶモリ再開までMICは休止。
+
+・定期データ取得：停止
+・State自動評価：停止
+・Scenario自動評価：停止
+・MIC新規開発：停止
+・過去データ：保持
+・GitHubソース：保持
+・設計PR：保持
+・共通AI基盤：継続
+・共通アカウント：継続
+・POSTONA：継続
+
+
+==================================================
+5. 未完成機能・未解決課題
+==================================================
+
+■ 最大の未完成機能
+
+Stage 1 正式Verification。
+
+現在のShadow判定を、DBが独立して証明する正式な検証機能へ移行する計画。
+
+設計は完成している。
+
+実装は未着手。
+
+■ Stage 1の目的
+
+従来のno_changeでは、AI分析を再実行しなくてもよいかをEdge側が判定していた。
+
+正式Verificationでは、DB側が事実情報を再確認し、その判断が正しいことを証拠付きで記録する。
+
+重要：
+単にEdgeが「変化なし」と申告しただけではverifiedにしない。
+
+■ 実装予定RPC
+
+apply_mic_state_verified_no_change_update
+
+現在の本番には未導入。
+
+既存RPC：
+
+apply_mic_state_material_update
+apply_mic_state_no_change_update
+
+この2本は保護対象。
+
+■ 予定DB列
+
+mic_state_evaluation_runs：
+
+verification_status
+verification_reason
+verified_source_evaluation_run_id
+verification_fingerprint
+verified_metric_count
+verified_observation_as_of
+verification_detail jsonb
+
+market_state_current：
+
+verified_at
+verification_run_id
+
+新RPC・列の追加はS1-Aでソース実装する予定だった。
+
+■ 正式Verificationの重要な条件
+
+・DBが観測値を独立再取得
+・source identity確認
+・metric ID確認
+・観測日時確認
+・value比較
+・閾値比較
+・新しい観測の有無を確認
+・未処理イベント確認
+・最新50件を超えるイベントの扱い
+・イベント改定の検出
+・欠損証拠はfail-closed
+・競合更新対策
+・CAS
+・不正なポインタ更新防止
+・監査証拠を不変保存
+・既存State/Scenario互換性維持
+
+■ 重要な設計決定
+
+U2：
+EdgeとSQLのイベント種別定義を一致させる。
+
+U3：
+verification_detail jsonbに検証証拠を保存する。
+
+U6：
+DBがcoverage/fetch/observationを独立再計算する。
+
+U9：
+通常no_changeとall-staleを新RPCに統合する設計。
+
+■ Verificationの3分類
+
+verified：
+検証成立。
+ポインタ更新可能。
+
+neutral：
+新しい観測がない場合。
+以前のポインタは維持するが、verified_atを新しく進めない。
+
+negative：
+検証不成立。
+以前のverifiedポインタを消去する。
+
+■ 重要な未解決事項
+
+U1：
+equity_indexのno_new_observationを自然Shadow観測で確認できていない。
+
+S1-Aでは合成SQLテストによる再現が必要。
+
+U10：
+migrationのバージョン番号予約。
+
+U12：
+イベント走査上限500件、窓外改定、性能と正当性の確認。
+
+U13：
+DBによる再計算結果とEdgeの表示状態5列の扱い。
+
+Stage 2関連：
+
+U4
+U5
+U7
+U8
+U11
+
+これらはStage 1完了と混同しない。
+
+■ 必要なテスト
+
+SQLテスト計画：42項目
+
+変異テスト：5種類
+
+主な対象：
+
+・境界値
+・閾値比較
+・新規観測
+・同日改定
+・同値再取得
+・過去データ改定
+・イベント追加
+・イベント更新
+・50件超のイベント
+・500件上限
+・複数セッション同時実行
+・最新データの並行INSERT
+・DBスナップショット
+・CAS
+・権限
+・rollback
+・ポインタ整合性
+・旧RPC互換性
+
+42項目は設計・実装計画。
+
+実行済みテストとして扱わない。
+
+■ Stage 2
+
+Stateの鮮度と正式Verificationの結果を、ScenarioやConsumerがどう利用するかを検討する次工程。
+
+検討されていた数値：
+
+96時間
+168時間
+Confidence 0.64
+AI backstop 96時間
+
+いずれも仮値。
+
+正式採用していない。
+
+再開時に、現在のデータ特性と利用用途から改めて判断する。
+
+■ Scenarioの既知の注意点
+
+2026年10月16日 06:25 JST：
+
+Scenario評価が1件失敗。
+
+エラー：
+SCENARIO_AI_MALFORMED_RESPONSE
+
+内容：
+state_conflicts[0] contains forbidden wording
+
+AI応答の表現がバリデーション規則に違反した。
+
+2026年10月17日にはScenarioの再評価成功を確認。
+
+恒常的な障害と断定しない。
+
+再開時の回帰テスト対象として保存する。
+
+■ その他の未完成・課題
+
+・geopolitical Facts拡充
+・corporate_events Facts拡充
+・SEC EDGAR取得の安定化
+・日本企業開示データ統合
+・市場指数取得元の権利確認
+・TOPIXの正式利用
+・個別銘柄終値の保存
+・取得履歴の長期補完
+・Scenarioの利用者向け本格接続
+・停止期間の履歴補完
+・正式Verificationのproduction移行
+
+各項目は将来候補であり、実装済みと扱わない。
+
+
+==================================================
+6. 関連PR・TASK・Report・commit
+==================================================
+
+■ 旧G7完了TASK
+
+task_id：
+mic-stage1-formal-verification-design-finalization-g7-20261011
+
+status：
+done
+
+完了コード：
+K7
+
+判定：
+PASS_DESIGN_ONLY / TASK_COMPLETE
+
+TASK・Report：
+
+.agent/tasks/CLAUDE_TASK_7.md
+
+設計PR：
+
+https://github.com/anohi-memories/kabumori/pull/125
+
+PR #125
+
+タイトル：
+docs(mic): Stage 1 formal verification design (DESIGN ONLY)
+
+PR HEAD：
+aa47e40d2a3ba7ec8bfc7d1d30c8eb51d53f2c48
+
+2026年10月17日時点：
+
+OPEN
+Draft
+未マージ
+
+変更ファイル：
+
+docs/mic/stage1-formal-verification-design-20261010.md
+
+重要：
+この設計書はPR #125のブランチに存在する。
+2026年10月17日時点のmainには未マージ。
+
+GitHub mainから取得できない場合は、PR #125のHEAD SHAを指定して読むこと。
+
+PR #125は設計のみ。
+
+ソース実装、migration適用、本番変更は行っていない。
+
+■ 設計v2の内容
+
+・U2/U3/U6/U9反映
+・単一DBスナップショット設計
+・イベント取得窓の整合
+・ポインタ維持・消去規則
+・A1 mismatchの扱い
+・SQL42テスト計画
+・変異テスト5種類
+・rollback計画
+・Stage 2との境界整理
+
+この設計はK7で確認済み。
+
+ただし設計承認はproduction承認ではない。
+
+■ 新F7 TASK
+
+task_id：
+mic-stage1-formal-verification-s1a-source-f7-20261015
+
+TASK：
+
+.agent_v2/tasks/F7.md
+
+Report：
+同TASK末尾
+
+ACTIVE_TASK：
+.agent_v2/ACTIVE_TASK.md
+
+status：
+ready
+
+next_owner：
+claude
+
+recommended_model：
+Opus5.5（高）
+
+completion_code：
+L7
+
+目的：
+Stage 1 S1-A正式Verificationのソース実装。
+
+現在のReport：
+
+not_started
+
+changed_files：
+none
+
+tests：
+not_run
+
+commit：
+none
+
+push：
+not_performed
+
+merge：
+not_performed
+
+deploy：
+not_performed
+
+重要：
+このTASKはGitHub上ではreadyのまま。
+
+しかし、ユーザーはかぶモリの休止を決定している。
+
+そのため、再開の明示判断なしにF7を開始しない。
+
+今後このTASKをidleに戻す場合や別TASKへ置き換える場合は、全体統括が履歴保存と競合確認を行う。
+
+本引き継ぎ書作成時にはTASKを変更しない。
+
+■ F7登録関連commit
+
+TASK登録：
+5223ddf2b0811f95e1f9893fbd0784a67ced52f4
+
+ACTIVE_TASK更新：
+268122b0d531e8635a901c9d74cd7ac849f551de
+
+CURRENT_STATE更新：
+72f2340d8a337c8ab818b1babd2459b46863e8e8
+
+上記は登録時の履歴。
+
+最新状態の確認にはmainの現行ファイルを優先する。
+
+■ 新旧基盤移行
+
+新基盤PR：
+#155
+
+2026年10月12日にmainへマージ済み。
+
+merge SHA：
+4e80c79dc42c11fbc1ca105665514b0dd32842d3
+
+旧基盤：
+.agent/
+
+新基盤：
+.agent_v2/
+
+MICは旧G7で完了したTASKを維持し、新規TASKからF7へ移行している。
+
+■ 重要な参考文書
+
+docs/market-intelligence/ARCHITECTURE.md
+
+docs/market-intelligence/PHASE_1B_STATE_LAYER.md
+
+docs/mic/phase3a-review-20260928.md
+
+docs/mic/phase3b-review-20260929.md
+
+docs/mic/phase3c-scenario-trigger-design.md
+
+PR #125内：
+docs/mic/stage1-formal-verification-design-20261010.md
+
+
+==================================================
+7. 重要なDB・Edge・Cron・API
+==================================================
+
+■ 主要DB
+
+Facts：
+
+market_metrics
+market_events
+
+取得元・取得履歴：
+
+mic_source_registry
+mic_ingestion_runs
+
+State：
+
+mic_metric_domain_map
+market_state_current
+market_state_history
+mic_state_evaluation_runs
+mic_state_evidence
+
+Scenario：
+
+mic_scenario_current
+mic_scenario_history
+mic_scenario_evaluation_runs
+mic_scenario_evidence
+
+Fed関連：
+
+mic_fed_statement_diffs
+
+AI利用量：
+
+ai_usage_events
+
+■ 主なView
+
+v_mic_latest_metric_changes
+
+v_mic_metric_observation_status
+
+v_mic_source_fetch_status
+
+これらのViewは、元データの鮮度や最新観測値の判定に関係する。
+
+■ 重要RPC
+
+apply_mic_state_material_update
+
+apply_mic_state_no_change_update
+
+apply_mic_scenario_update
+
+この3つは既存の重要な書き込み経路。
+
+削除・上書きしない。
+
+Stage 1で追加予定だった新RPC：
+
+apply_mic_state_verified_no_change_update
+
+これは未実装。
+
+■ Edge Function
+
+market-intelligence-ingest
+
+役割：
+市場データ収集・正規化・保存。
+
+market-intelligence-state-evaluator
+
+役割：
+Factsの変化判定とState評価。
+
+market-intelligence-scenario-evaluator
+
+役割：
+State統合とScenario評価。
+
+■ データ取得API
+
+FRED：
+米国債、政策金利、日経平均、米国主要指数、米国・日本の経済指標等。
+
+MOF：
+日本国債金利。
+
+EIA：
+WTI・Brent等。
+
+Frankfurter：
+為替。
+
+e-Stat：
+日本の政府統計。
+
+Fed：
+中央銀行声明等。
+
+SEC EDGAR：
+米国企業開示の将来・部分実装対象。
+
+■ 情報源の登録状態
+
+2026年10月17日時点：
+
+fred：is_active=true
+frankfurter：is_active=true
+estat：is_active=true
+
+eia：is_active=false
+mof_jgb：is_active=false
+fed：is_active=false
+sec_edgar：is_active=false
+
+重要：
+is_active=falseでも、Cronが取得元を明示指定すると実行され得る。
+
+Cronの停止とsource_registryのフラグは別物。
+
+再開・停止の際に混同しない。
+
+■ MIC Cron
+
+合計24本。
+
+現在はすべて停止。
+
+【Ingest：9本】
+
+jobid 12
+mic-ingest-fred-2100
+
+jobid 13
+mic-ingest-fred-0100
+
+jobid 14
+mic-ingest-mof-jgb-0600
+
+jobid 15
+mic-ingest-mof-jgb-0900
+
+jobid 16
+mic-ingest-eia-1500
+
+jobid 17
+mic-ingest-eia-1900
+
+jobid 24
+mic-ingest-frankfurter-fx-1730
+
+jobid 25
+mic-ingest-frankfurter-fx-0130
+
+jobid 39
+mic-ingest-estat-daily
+
+
+【State：13本】
+
+jobid 18
+mic-evaluator-rates-after-fred-2100
+
+jobid 19
+mic-evaluator-rates-after-fred-0100
+
+jobid 20
+mic-evaluator-rates-after-mof-jgb-0600
+
+jobid 21
+mic-evaluator-rates-after-mof-jgb-0900
+
+jobid 22
+mic-evaluator-commodities-after-eia-1500
+
+jobid 23
+mic-evaluator-commodities-after-eia-1900
+
+jobid 26
+mic-evaluator-fx-after-frankfurter-1730
+
+jobid 27
+mic-evaluator-fx-after-frankfurter-0130
+
+jobid 34
+mic-evaluator-equity-index-after-fred-2100
+
+jobid 35
+mic-evaluator-equity-index-after-fred-0100
+
+jobid 36
+mic-evaluator-macro-after-fred-2100
+
+jobid 37
+mic-evaluator-macro-after-fred-0100
+
+jobid 40
+mic-evaluator-macro-after-estat
+
+
+【Scenario：2本】
+
+jobid 41
+mic-scenario-after-state-0100
+
+jobid 42
+mic-scenario-after-state-weekday
+
+
+■ Cronの時間設定
+
+Cron timezone：
+GMT
+
+日本時間への変換が必要。
+
+主な取得時刻：
+
+FRED：
+6:00 / 10:00
+
+MOF：
+15:00 / 18:00
+
+EIA：
+0:00 / 4:00
+
+Frankfurter：
+2:30 / 10:30
+
+e-Stat：
+7:00
+
+State評価：
+原則として取得から15分後。
+
+Scenario：
+State評価のおおむね10分後。
+
+実行曜日は取得元ごとに異なる。
+
+再開時には、必ず実際のCron scheduleを読み戻す。
+
+過去の時刻一覧をそのまま復旧SQLへ転記しない。
+
+
+==================================================
+8. 他機能・共通基盤との依存関係
+==================================================
+
+■ 朝刊・大引け
+
+依存あり。
+
+以下の処理がMICの市場指標を参照する。
+
+supabase/functions/market-report-data-packet/handler.ts
+
+主な参照：
+
+market_metrics
+mic_metric_domain_map
+
+そのため、MICのデータ収集を止めたまま朝刊・大引けを再開すると、古い市場指標を参照する可能性がある。
+
+再開する場合は、MIC側のデータ鮮度を先に確認する。
+
+■ 個別レポート
+
+MICのStateを補助的な市場情報として読む実装がある。
+
+関連：
+
+supabase/functions/personalized-reports/mic_market_context.ts
+
+参照：
+
+market_state_current
+
+対象：
+
+rates
+macro
+equity_index
+
+この補助情報は、shared_marketの確定情報より優先しない。
+
+古い・低品質なStateを強い結論の根拠にしない設計。
+
+再開時には現在のコードと利用条件を確認する。
+
+■ 共通AI基盤
+
+MICのAI利用は共有のai_usage_events台帳に記録される。
+
+MICを停止するために、共通AI基盤そのものを止めてはいけない。
+
+POSTONAなどの別サービスが利用するため。
+
+■ 共通アカウント
+
+Supabase Authとentitlementは保護対象。
+
+MICの停止・再開のために共通認証を変更しない。
+
+■ POSTONA
+
+POSTONAは継続運用対象。
+
+確認したCron構成では、MIC専用24本とPOSTONAの投稿Dispatcherは別ジョブ。
+
+2026年10月17日時点で：
+
+dispatch-scheduled-posts
+jobid 1
+active=true
+
+MIC停止によって、このCronを変更してはいけない。
+
+今回確認したMICソースでは、POSTONAを直接起動する処理は確認されていない。
+
+ただし、POSTONA全コードの完全な依存関係監査を実施したという意味ではない。
+
+本番再開時にはG3/G4および共通基盤担当と境界を再確認する。
+
+■ 重要ニュース監視
+
+MICと重要ニュース監視は、共有する市場イベントやニュース情報との関係を持ち得る。
+
+ただし、important-news-monitor本体はMICの管理対象ではない。
+
+再開時に勝手に重要ニュースCronを起動しない。
+
+■ 依存関係の最重要方針
+
+MIC再開によってPOSTONAを停止させない。
+
+MIC専用の処理と共有処理を区別する。
+
+共通DB、Auth、AI、Cron、Edgeの変更が必要なら、変更対象ごとに担当と承認を確認する。
+
+
+==================================================
+9. 変更禁止・安全上の注意
+==================================================
+
+■ 本番操作
+
+ユーザーの明示承認がない限り禁止：
+
+・production DB migration
+・本番DB write
+・RLS変更
+・Auth変更
+・Secret変更
+・Vault変更
+・Cron変更
+・Edge Function deploy
+・実AI呼び出し
+・有料API利用
+・外部API実書き込み
+・SNS実投稿
+・本番向けPR merge
+
+■ DB保護
+
+既存Facts、State、Scenarioの履歴を削除しない。
+
+特に以下を保護：
+
+market_metrics
+market_events
+market_state_history
+mic_state_evidence
+mic_scenario_history
+mic_scenario_evidence
+ai_usage_events
+
+履歴の削除・truncate・無断改変は禁止。
+
+既存トリガーやRLSも維持する。
+
+■ RPC保護
+
+既存material/no_change RPCをStage 1実装のために無断変更しない。
+
+Stage 1では新しいRPCを追加する設計。
+
+旧RPCはrollback用に維持する。
+
+■ 実行権限
+
+新規RPCは原則SECURITY INVOKER。
+
+search_pathを明示的に制御。
+
+PUBLIC・anon・authenticatedの実行権限を不用意に開放しない。
+
+service_roleのみを想定する処理では、実際のGRANTをテストする。
+
+■ 競合防止
+
+独立Git worktree必須。
+
+他slotのworktreeを操作しない。
+
+他slotのbranchをcheckoutしない。
+
+未コミット変更を上書きしない。
+
+dev serverを停止しない。
+
+force push禁止。
+
+PR #125の既存branchとworktreeを保護する。
+
+■ PR保護
+
+PR #125は設計PR。
+
+明示承認なしにmergeしない。
+
+別PRへ内容を取り込む際は、正しい差分と依存関係を確認する。
+
+■ 段階移行
+
+旧G7のTASKはK7で完了済み。
+
+新規作業はF7へ。
+
+同じtask_idを新旧両方の正本へ置かない。
+
+■ 休止期間
+
+Cronが停止していることを確認しただけで、全経路が完全停止したと断定しない。
+
+手動invoke、別システムからの呼び出し、Secretを利用した外部起動経路が残る可能性を考慮する。
+
+ただし、確認のために本番APIを実行してはいけない。
+
+
+==================================================
+10. 開発再開時の最初の作業
+==================================================
+
+■ 再開の基本方針
+
+いきなりMICを再稼働しない。
+
+まず状態確認と復旧計画を実施する。
+
+■ Step 1：GitHubの正本確認
+
+読むもの：
+
+PROJECT_RULES.md
+
+.agent/ORCHESTRATION.md
+
+.agent/ACTIVE_TASK.md
+
+.agent/CURRENT_STATE.md
+
+.agent/tasks/CLAUDE_TASK_7.md
+
+.agent_v2/ORCHESTRATION.md
+
+.agent_v2/ACTIVE_TASK.md
+
+.agent_v2/CURRENT_STATE.md
+
+.agent_v2/tasks/F7.md
+
+PR #125
+
+HISTORY_INDEX
+
+必要なarchive
+
+確認事項：
+
+・現在のmain
+・旧G7完了状態
+・F7の最新状態
+・F7 TASKが実行済みか
+・新旧枠の競合
+・PR #125の状態
+・新たなMIC関連PR
+・他slotがDB/RPC/Edgeを変更していないか
+
+本書に記載したF7状態が将来も変わらないとは限らない。
+
+■ Step 2：本番の読み取り専用調査
+
+確認：
+
+・MIC Cron一覧
+・active状態
+・最終実行時刻
+・各取得元の登録状態
+・Edge Functionバージョン
+・最新migration
+・market_metricsの最新観測日
+・market_eventsの件数
+・State/Scenarioの最新評価
+・AI費用
+・停止中の異常実行の有無
+
+最初はread-onlyのみ。
+
+■ Step 3：POSTONAと共通基盤の確認
+
+POSTONA、共通アカウント、共通AI基盤の担当に、MIC再開予定を連絡する。
+
+共有ファイル・Cron・DB・RPC・Secret・API境界の競合を確認する。
+
+POSTONAを止めてまでMICを優先しない。
+
+■ Step 4：停止期間のデータ欠損を調査
+
+最後の保存データから、再開予定日までの欠損期間を調べる。
+
+重要：
+取得元ごとに過去データの復元可能性が異なる。
+
+FREDには履歴取得機能がある。
+
+ただし現行の履歴取得実装は、すべての指標を任意期間で補完できる保証がない。
+
+EIA、MOF、Frankfurter、e-Statは別途取得条件を確認する。
+
+イベント系の情報は完全復元できない場合がある。
+
+■ Step 5：復旧方式を決定
+
+推奨：
+
+A. 既存履歴を保持する。
+
+B. 欠損期間のFactsを補完する。
+
+C. 重複・改定・観測日時の整合を検証する。
+
+D. 現在のFactsが十分に新しいことを確認する。
+
+E. Stateを再開する。
+
+F. Stateが安定してからScenarioを再開する。
+
+G. 最後にConsumerとの接続を検証する。
+
+停止前に生成されたState・Scenarioを、再開直後の最新分析として無条件に使用しない。
+
+■ Step 6：Stage 1正式Verificationを再評価
+
+PR #125の設計を確認。
+
+古くなった仕様を洗い出す。
+
+そのまま実装できるか判断する。
+
+必要な場合のみ、F7のS1-A TASKを再開・修正する。
+
+推薦モデル：
+
+Opus5.5（高）
+
+ただし、数か月〜数年後には利用可能なモデルや推奨構成が変わっている可能性があるため、その時点で再選定する。
+
+■ Step 7：限定レビュー
+
+DB/RPC/Auth/権限/並行処理に関する実装後、Codexで重点レビュー。
+
+推薦：
+
+Sol（高）
+
+対象：
+
+・DB整合性
+・RLS
+・権限
+・CAS
+・競合
+・履歴保存
+・rollback
+・既存RPCとの互換性
+
+全ファイルを機械的に再レビューする必要はない。
+
+変更された安全境界を中心に確認する。
+
+■ Step 8：本番再開
+
+ユーザー承認後、段階的に再開する。
+
+推奨順：
+
+1. Ingest
+2. Facts鮮度確認
+3. State
+4. State正常動作確認
+5. Scenario
+6. Scenario正常動作確認
+7. 朝刊・大引け等のConsumer接続
+
+一括して24本のCronを再有効化しない。
+
+必要なジョブから順番に復旧し、各段階でread-backを行う。
+
+■ 再開完了条件
+
+・取得元のデータが正常
+・停止期間のデータ欠損を把握済み
+・State正常
+・Scenario正常
+・異常なAI呼び出しなし
+・費用上限を確認
+・Cron競合なし
+・POSTONA影響なし
+・共通Auth/AI影響なし
+・本番操作ログ保存
+・再開時点のCURRENT_STATE更新
+
+
+==================================================
+11. 今後予定していた機能・改善案
+==================================================
+
+■ 優先度A：正式Verification
+
+最も具体化していた未完成機能。
+
+PR #125設計v2をベースに、S1-A/S1-Bを完成させる。
+
+ただし、かぶモリ休止中に実装する必要はない。
+
+■ 優先度B：市場データ取得の強化
+
+・日本株の主要指数
+・個別銘柄の終値
+・日次OHLC
+・出来高
+・主要ETF
+・米国主要指数
+・セクター情報
+・データ履歴の長期保存
+
+個別株の終値は、将来のMIC分析強化案としてユーザーと検討した。
+
+2026年10月時点では正式TASK未登録。
+
+■ 個別銘柄データ
+
+想定していた保存内容：
+
+・銘柄コード
+・取引日
+・始値
+・高値
+・安値
+・終値
+・出来高
+・取得元
+・取得時刻
+・株式分割調整の有無
+
+利用目的：
+
+・個別株のトレンド分析
+・移動平均
+・指数との相関
+・急落原因分析
+・セクター比較
+・投資判断の補助
+
+ただし商用利用条件に注意。
+
+個人利用で取得可能なデータを、将来そのまま公開アプリへ再配信できるとは限らない。
+
+データライセンスは再開時に必ず再確認する。
+
+■ 日経平均・TOPIX
+
+将来の重要候補。
+
+ただしTOPIXについては、アプリでの商用利用条件が未確定だった。
+
+無断利用・無断公開しない。
+
+FREDには日経平均などの系列があるが、MICで利用する条件と、アプリへ再配信する条件は別。
+
+指数の取得先・更新頻度・権利を確認する。
+
+■ 優先度C：イベント分析
+
+・FOMC声明
+・政策金利
+・企業決算
+・業績修正
+・M&A
+・重大な政治イベント
+・地政学的リスク
+・経済統計サプライズ
+
+Factsの取得とAI分析を分離する基本方針は維持する。
+
+■ 優先度D：Scenario高度化
+
+・fxの統合
+・commoditiesの統合
+・地政学リスク
+・企業イベント
+・複数市場の連動性
+・シナリオ無効化条件
+・市場環境変化の早期検出
+・Confidence調整
+・検証証拠の拡張
+
+■ 優先度E：個人向け投資分析
+
+将来的に、自分専用の市場分析基盤として活用する案。
+
+かぶモリの公開再開が未定の場合でも、個人分析用途としての再開は可能。
+
+ただし実際に再開するかはユーザーが判断する。
+
+POSTONA優先という現在の方針を無断で変更しない。
+
+
+==================================================
+12. この部屋で決めた重要方針・ユーザー希望
+==================================================
+
+■ 1. MIC専用担当
+
+旧G7から新F7へ移行。
+
+次回以降のMIC新規TASKはF7を使う。
+
+別の空き枠へ勝手に割り当てない。
+
+■ 2. コスト重視
+
+定期的にAIを呼び出す方式ではなく、重要な変化があった場合のみAIを利用する。
+
+AI費用を最小化する。
+
+■ 3. データの信頼性重視
+
+公式情報を優先。
+
+観測日と取得日を混同しない。
+
+古いデータを新しいデータとして扱わない。
+
+不確実なデータは安全側に判定。
+
+■ 4. 変更履歴を大切にする
+
+Facts・State・Scenarioの履歴を保持する。
+
+AIの判断根拠を追跡可能にする。
+
+■ 5. 不必要なレビューを増やさない
+
+設計文書だけの変更では、必要性が低ければCodexレビューを省略可能。
+
+ただしDB/RPC/権限/production変更には重点レビューを行う。
+
+■ 6. 独立worktree
+
+他slotと作業環境を共有しない。
+
+作業競合を防ぐ。
+
+■ 7. PRを勝手にmergeしない
+
+Draft PRは明示的な承認があるまで保護する。
+
+■ 8. かぶモリ休止
+
+2026年10月に、かぶモリアプリの運用休止を決定。
+
+POSTONAを優先する。
+
+MICの新規開発も停止。
+
+■ 9. MICのCron停止
+
+MICのAI費用が低額であることを確認したうえで、当面は自動収集・分析を休止する方針。
+
+2026年10月17日時点で24本すべて停止設定を確認。
+
+■ 10. 再開時に困らない状態を残す
+
+長期保存用の引き継ぎ書をGitHubへ集約する方針。
+
+各チャットの情報をまとめ、将来の新チャットへ正確に引き継ぐ。
+
+古い記憶よりGitHubの正本を優先する。
+
+
+==================================================
+13. 停止時の費用・履歴保存・復旧上の補足
+==================================================
+
+■ MIC AI費用
+
+2026年10月1日〜15日：
+
+約$0.16
+
+2026年10月1日〜17日13時頃：
+
+$0.182246
+
+後者はai_usage_eventsのMIC関連featureを集計した値。
+
+該当期間のAI利用：
+46件
+
+これはAI利用台帳上の費用。
+
+Supabase全体の固定費、ネットワーク費用、外部サービス利用料を含まない。
+
+■ AIモデル
+
+停止直前のMIC実績：
+
+State：
+主にgpt-5.6-luna
+
+Scenario：
+gpt-5.6-luna
+gpt-5.6-sol
+
+将来再開するときは、モデル名・価格・API仕様を再確認する。
+
+■ 保存済みデータ
+
+Cron停止だけではデータは削除されない。
+
+ただしDBバックアップの保持期間や将来のプロジェクト維持状況は、今回の調査で保証していない。
+
+長期保存が目的なら、全体統括側でDBバックアップと復元可能性を別途確認することを推奨。
+
+GitHubにはソースやmigrationを保存できるが、GitHubだけでは本番DBの実データを完全復元できない。
+
+■ 復旧時の重要ポイント
+
+・古いScenarioの再利用禁止
+・古いStateの現在値扱い禁止
+・欠損期間を認識する
+・データ補完は取得元ごとに実施
+・観測日の重複を検査
+・過去データの改定を検査
+・出所を維持する
+・再度AI分析する前にデータ鮮度を確認
+・再起動順序を守る
+
+■ 停止時刻について
+
+2026年10月17日10:45 JSTのMIC実行履歴まで確認。
+
+13時頃には24本すべてactive=false。
+
+正確なCron無効化時刻・操作担当・操作commitは、この部屋では未確認。
+
+推測で記録しない。
+
+■ APIキー・Secret
+
+本書には実際の認証情報を記載しない。
+
+Vaultや環境変数の名前・用途は将来の設定確認時に必要。
+
+ただしSecretの値をGitHubや引き継ぎ書に保存してはいけない。
+
+
+==================================================
+14. 再開時に最も重要な確認事項
+==================================================
+
+将来、新しいChatGPTチャットがこの引き継ぎ書を受け取ったら、以下を最優先で確認する。
+
+【確認1】
+MICの現在の本番運用状況。
+
+【確認2】
+旧G7と新F7のTASK状態。
+
+【確認3】
+PR #125の設計が現在も有効か。
+
+【確認4】
+停止期間中のデータ欠損。
+
+【確認5】
+MICの再開目的。
+
+・かぶモリアプリ向けか
+・個人投資分析向けか
+・両方か
+
+【確認6】
+POSTONAへの影響。
+
+【確認7】
+共通AI基盤・Authの安全性。
+
+【確認8】
+データ取得元の規約・ライセンス。
+
+【確認9】
+現在のAIモデルと費用。
+
+【確認10】
+本番再開の明示承認。
+
+これらを確認してから、新しいTASKを登録する。
+
+==================================================
+15. 全体統括G1への申し送り
+==================================================
+
+■ MICの最終判定
+
+DEVELOPMENT_PAUSED
+
+MIC_CRON_DISABLED_24_OF_24
+
+DATA_RETAINED
+
+F7_TASK_READY_BUT_ON_HOLD
+
+PR125_DESIGN_COMPLETE_UNMERGED
+
+STAGE1_FORMAL_VERIFICATION_NOT_IMPLEMENTED
+
+POSTONA_PROTECTION_REQUIRED
+
+PRODUCTION_CHANGE_NOT_AUTHORIZED
+
+■ 今回の引き継ぎ書作成で実施したこと
+
+・GitHub最新TASK確認
+・旧G7完了状態確認
+・新F7状態確認
+・PR #125確認
+・MIC設計文書確認
+・本番Cron read-only確認
+・本番DB read-only確認
+・Edge Functionバージョン確認
+・AI利用量確認
+・依存関係確認
+・停止状態確認
+・長期引き継ぎ情報の整理
+
+■ 実施していないこと
+
+・GitHubへの新規保存
+・TASK変更
+・Report変更
+・PR変更
+・main merge
+・本番DB変更
+・Cron変更
+・Edge Function deploy
+・Secret変更
+・外部API呼び出し
+・AI生成API実行
+・POSTONAへの操作
+
+■ G1に依頼したいこと
+
+1. 本書をかぶモリ全体の長期引き継ぎへ統合する。
+2. GitHubの長期保存先に登録する。
+3. MICの停止状態を全体休止記録に反映する。
+4. F7の未着手TASKをどう保存・保留するか判断する。
+5. POSTONAと共有する基盤を保護する。
+6. 将来再開時のMIC専用チャットへ本書を渡せる状態にする。
+
+■ F7の扱い
+
+現在のF7 TASKはready。
+
+しかしユーザー方針は開発休止。
+
+勝手にF7を開始しない。
+
+将来、新しいMIC開発を行う場合はF7を優先する。
+
+既存TASKを置き換える場合は、保存・競合確認を行ったうえで実施する。
+
+■ 最終方針
+
+MICは現在、開発・定期運用を休止する。
+
+ここまでに実装したFacts・State・Scenarioの基盤は保持する。
+
+Stage 1正式Verification設計はPR #125に保持する。
+
+将来の再開時には、まず保存状態と依存関係を確認し、POSTONAを保護したまま段階的に復旧する。
+
+本書は、将来の新しいChatGPTチャットがMICの設計と開発経緯を理解するための長期保存資料とする。
+
+
+==================================================
+最終確認日：2026年10月17日
+対象：Market Intelligence Core（MIC）
+旧担当：G7
+新担当：F7
+保存先：かぶモリ全体統括によるGitHub集約待ち
+==================================================
