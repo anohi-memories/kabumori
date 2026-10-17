@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-17-F3-postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016/files/.agent_v2/tasks/F3.md",
+  "size": 22959,
+  "sha256": "cf38895ab2280281ef3aa7c2d123e77881f263e330e6bb1e57cb3d8cad0521e5",
+  "original_git_blob": "6ed87f24583c9fbd76212c40c5520dfc7ac66fac",
+  "source_commit": "61064f56e68751f408afead93d7467c310d022b9",
+  "archive_commit": "5445359be8e8aaad1535e48b1b074d8ad653f2f9",
+  "restore_check": "original and archive Git blob and full UTF8 contents byte-identical"
+}
