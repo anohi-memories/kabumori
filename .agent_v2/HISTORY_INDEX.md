@@ -613,3 +613,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - Independent SHA256/MANIFEST pending validation; append-only original kept intact.
 
 - 2026-10-17 | F10 | `orchestration-v3-pr229-security-review-high-medium-fixes-f10-20261016` | L10 PASS_SOURCE_FIX; Draft PR #229 HEAD `284286248e561e55e8aef7682081998878d05cfa`; subsequent rereview found N1/N2 | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-pr229-security-review-high-medium-fixes-f10-20261016/` | SHA256 `cdd142dd0267cb5fca6310e276b3ba66d19067db717b7b732deaab04f119a9b9`, restore exact.
+
+## F5 POSTONA gate G1/G2 task completed — 2026-10-17
+- task_id: `common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017`
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017/files/.agent_v2/tasks/F5.md`
+- bytes: 16333; SHA256: `a375d975745d41ee0962892f91fcb64dafb4e90009d717b1add392be54674a76`; original_blob: `b79d0b6208c6ef3f51aa06c2cc2fb58302a6e75b`
+- exact original/archived content and blob read-back matched; MANIFEST and SHA256SUMS saved. L5 PASS_SOURCE_CANDIDATE / INTEGRATION_PENDING / PRODUCTION_NO_GO, PR235 `9480f24b68c209f6bf33b499dc11824cf4595fdd`. Later F4 joint PR238 source integrated; J2 V2 P2x2.
