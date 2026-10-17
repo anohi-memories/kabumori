@@ -660,3 +660,7 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-account-f5-postona-disposable-supabase-architecture-plan-20261017`, L5 PASS_SOURCE_DESIGN / PRODUCTION_NO_GO, Draft PR #250 head `2a626cd49f55611258c7695f0b84cb2a917d4595`.
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/files/.agent_v2/tasks/F5.md`.
 - bytes: 21427; SHA256: `6291c1525b2e3d112c65937d82beeb8c088dd67bca4cecfb72317b02dcc64a98`; original/archive blob: `f6e61db476860c1a67196a8964f0ed3dfc02f0f8`; full restore verified; MANIFEST/SHA256SUMS saved; append-only.
+
+## F6 PR249 consumer_calls reviewed source candidate — 2026-10-17
+- task_id: `common-ai-f6-postona-consumer-calls-pg-offline-candidate-20261017`, L6 PASS_SOURCE_CANDIDATE; independent Claude PASS_SOURCE_REVIEW P0/P1/P2=0, P3x5; PR249 Draft head `e589e2c39886fde582bd31a4c25fd4f6839fac49`, no merge/deploy/production.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr249-consumer-calls-reviewed.md`; original/archive blob `3b81a3e68e376a6680c142162de3e785f7421f7a`, 11391 chars, read-back match; archive commit `ddee6356b3f42daedc48de366f80fb27a04e9432`. SHA256/MANIFEST independently NOT_VERIFIED.
