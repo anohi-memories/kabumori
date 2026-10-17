@@ -1,0 +1,17 @@
+{
+  "planners": true,
+  "table_columns": true,
+  "useful_settings": true,
+  "morning_settings": true,
+  "close_settings": true,
+  "us_settings": true,
+  "windows": true,
+  "cron": true,
+  "queue_writers": true,
+  "trigger": true,
+  "settings_consumers": true,
+  "brand_default": true,
+  "inflight_empty": true,
+  "two_pending": true,
+  "edge_bundle": true
+}

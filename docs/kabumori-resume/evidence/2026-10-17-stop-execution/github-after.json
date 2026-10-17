@@ -1,0 +1,236 @@
+{
+  "observed_at": "2026-10-17T10:51:41.493987+00:00",
+  "workflows": {
+    "total_count": 3,
+    "workflows": [
+      {
+        "id": 371309016,
+        "node_id": "W_kwDOUJkyLs4WIbnY",
+        "name": "Sync AI Lab diary snapshot",
+        "path": ".github/workflows/ai-lab-diary-snapshot.yml",
+        "state": "active",
+        "created_at": "2026-10-01T00:29:06.000+09:00",
+        "updated_at": "2026-10-01T00:29:06.000+09:00",
+        "url": "https://api.github.com/repos/anohi-memories/kabumori/actions/workflows/371309016",
+        "html_url": "https://github.com/anohi-memories/kabumori/blob/main/.github/workflows/ai-lab-diary-snapshot.yml",
+        "badge_url": "https://github.com/anohi-memories/kabumori/workflows/Sync%20AI%20Lab%20diary%20snapshot/badge.svg"
+      },
+      {
+        "id": 376087886,
+        "node_id": "W_kwDOUJkyLs4WaqVO",
+        "name": "Check morning greeting image",
+        "path": ".github/workflows/morning-greeting-image-check.yml",
+        "state": "disabled_manually",
+        "created_at": "2026-10-06T15:02:21.000+09:00",
+        "updated_at": "2026-10-17T19:51:12.000+09:00",
+        "url": "https://api.github.com/repos/anohi-memories/kabumori/actions/workflows/376087886",
+        "html_url": "https://github.com/anohi-memories/kabumori/blob/main/.github/workflows/morning-greeting-image-check.yml",
+        "badge_url": "https://github.com/anohi-memories/kabumori/workflows/Check%20morning%20greeting%20image/badge.svg"
+      },
+      {
+        "id": 347498805,
+        "node_id": "W_kwDOUJkyLs4Utmk1",
+        "name": "Generate morning greeting image",
+        "path": ".github/workflows/morning-greeting-image.yml",
+        "state": "disabled_manually",
+        "created_at": "2026-09-01T21:40:16.000+09:00",
+        "updated_at": "2026-10-17T19:50:58.000+09:00",
+        "url": "https://api.github.com/repos/anohi-memories/kabumori/actions/workflows/347498805",
+        "html_url": "https://github.com/anohi-memories/kabumori/blob/main/.github/workflows/morning-greeting-image.yml",
+        "badge_url": "https://github.com/anohi-memories/kabumori/workflows/Generate%20morning%20greeting%20image/badge.svg"
+      }
+    ]
+  },
+  "runs": {
+    "347498805": {
+      "total_count": 80,
+      "latest": [
+        {
+          "id": 38977991272,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-16T22:49:17Z",
+          "updated_at": "2026-10-16T22:49:30Z",
+          "run_started_at": "2026-10-16T22:49:17Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38977991272"
+        },
+        {
+          "id": 38973464164,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-16T22:04:03Z",
+          "updated_at": "2026-10-16T22:04:15Z",
+          "run_started_at": "2026-10-16T22:04:03Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38973464164"
+        },
+        {
+          "id": 38959870448,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-16T20:06:55Z",
+          "updated_at": "2026-10-16T20:07:08Z",
+          "run_started_at": "2026-10-16T20:06:55Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38959870448"
+        },
+        {
+          "id": 38950193306,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-16T18:48:46Z",
+          "updated_at": "2026-10-16T18:51:07Z",
+          "run_started_at": "2026-10-16T18:48:46Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38950193306"
+        },
+        {
+          "id": 38821234019,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-15T23:03:45Z",
+          "updated_at": "2026-10-15T23:03:57Z",
+          "run_started_at": "2026-10-15T23:03:45Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38821234019"
+        },
+        {
+          "id": 38815650797,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-15T22:13:46Z",
+          "updated_at": "2026-10-15T22:13:59Z",
+          "run_started_at": "2026-10-15T22:13:46Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38815650797"
+        },
+        {
+          "id": 38802945412,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-15T20:33:43Z",
+          "updated_at": "2026-10-15T20:33:56Z",
+          "run_started_at": "2026-10-15T20:33:43Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38802945412"
+        },
+        {
+          "id": 38791311828,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-15T19:07:34Z",
+          "updated_at": "2026-10-15T19:09:41Z",
+          "run_started_at": "2026-10-15T19:07:34Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38791311828"
+        },
+        {
+          "id": 38652563208,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-14T23:11:45Z",
+          "updated_at": "2026-10-14T23:11:58Z",
+          "run_started_at": "2026-10-14T23:11:45Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38652563208"
+        },
+        {
+          "id": 38646477686,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-14T22:16:26Z",
+          "updated_at": "2026-10-14T22:16:44Z",
+          "run_started_at": "2026-10-14T22:16:26Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38646477686"
+        }
+      ]
+    },
+    "376087886": {
+      "total_count": 22,
+      "latest": [
+        {
+          "id": 39004622885,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-17T04:59:51Z",
+          "updated_at": "2026-10-17T05:00:02Z",
+          "run_started_at": "2026-10-17T04:59:51Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/39004622885"
+        },
+        {
+          "id": 38981871315,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-16T23:31:17Z",
+          "updated_at": "2026-10-16T23:31:32Z",
+          "run_started_at": "2026-10-16T23:31:17Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38981871315"
+        },
+        {
+          "id": 38853479053,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-16T05:00:04Z",
+          "updated_at": "2026-10-16T05:00:14Z",
+          "run_started_at": "2026-10-16T05:00:04Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38853479053"
+        },
+        {
+          "id": 38824886048,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-15T23:39:29Z",
+          "updated_at": "2026-10-15T23:39:43Z",
+          "run_started_at": "2026-10-15T23:39:29Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38824886048"
+        },
+        {
+          "id": 38685602143,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-15T05:13:12Z",
+          "updated_at": "2026-10-15T05:13:24Z",
+          "run_started_at": "2026-10-15T05:13:12Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38685602143"
+        },
+        {
+          "id": 38656769635,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-14T23:53:08Z",
+          "updated_at": "2026-10-14T23:53:20Z",
+          "run_started_at": "2026-10-14T23:53:08Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38656769635"
+        },
+        {
+          "id": 38516481241,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-14T05:24:39Z",
+          "updated_at": "2026-10-14T05:24:50Z",
+          "run_started_at": "2026-10-14T05:24:39Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38516481241"
+        },
+        {
+          "id": 38489113787,
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-10-14T00:15:28Z",
+          "updated_at": "2026-10-14T00:15:41Z",
+          "run_started_at": "2026-10-14T00:15:28Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38489113787"
+        },
+        {
+          "id": 38360655118,
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-10-13T07:06:56Z",
+          "updated_at": "2026-10-13T07:07:09Z",
+          "run_started_at": "2026-10-13T07:06:56Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38360655118"
+        },
+        {
+          "id": 38337380971,
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-10-13T02:32:41Z",
+          "updated_at": "2026-10-13T02:32:56Z",
+          "run_started_at": "2026-10-13T02:32:41Z",
+          "html_url": "https://github.com/anohi-memories/kabumori/actions/runs/38337380971"
+        }
+      ]
+    }
+  }
+}
