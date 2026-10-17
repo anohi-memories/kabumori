@@ -56,21 +56,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-f5-service-end-g1-g2-joint-integration-20261017
+- status: ready
+- task_id: postona-f4-service-end-device-readiness-release-gate-inventory-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR236 F4 605d8776; PR235 F5 9480f24b; both Draft; F5 L5 accepted; PR230 design B
-- blocker: assembled-source integration and Auth/cross-user review pending; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-service-lifecycle-provider-g1-g2-implementation-20261017/F4.md
-- slot_use: integrate existing F4 Provider/Surface and F5 gate in isolated integration branch; no duplicate provider implementation
-
-- l4_verdict_20261017_joint: PASS_SOURCE_INTEGRATION / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR238 b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6 Draft; 9/9 integration, app376/376, mutations13/13 reported; one focused independent review pending.
+- dependencies: F5 PR240 HEAD 5e462ba73be691c80f75198d57782626f1d241cc accepted source fix, prior PR238, J2 V2 closed
+- blocker: real iOS/managed Auth/Edge release validation pending; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-f5-service-end-g1-g2-joint-integration-20261017/F4.md
+- slot_use: source-only native smoke matrix and release blocker inventory, no source mutation
 
 ## F5
 - slot: F5
