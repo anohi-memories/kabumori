@@ -619,3 +619,6 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017/files/.agent_v2/tasks/F5.md`
 - bytes: 16333; SHA256: `a375d975745d41ee0962892f91fcb64dafb4e90009d717b1add392be54674a76`; original_blob: `b79d0b6208c6ef3f51aa06c2cc2fb58302a6e75b`
 - exact original/archived content and blob read-back matched; MANIFEST and SHA256SUMS saved. L5 PASS_SOURCE_CANDIDATE / INTEGRATION_PENDING / PRODUCTION_NO_GO, PR235 `9480f24b68c209f6bf33b499dc11824cf4595fdd`. Later F4 joint PR238 source integrated; J2 V2 P2x2.
+
+## F6 PR239 POSTONA Claude contract preflight archive — 2026-10-17
+- task_id: `common-ai-f6-postona-claude-bridge-integration-preflight-20261017`, L6 PASS_PREFLIGHT/SOURCE_ONLY/PRODUCTION_NO_GO, PR239 Draft. Original `.agent_v2/tasks/F6.md`, archive `.agent_v2/archive/2026-10-17-f6-pr239-postona-contract-preflight.md`, 9344 characters, Git blob original/archive `500c442c7bd33b66f91e8c8d9915d24e267c13bf` read-back equality verified. Original L6 completion task commit `8c031ad418c76d87108164401052bfc773ce464f`. Independent SHA256/MANIFEST NOT_VERIFIED; append-only.
