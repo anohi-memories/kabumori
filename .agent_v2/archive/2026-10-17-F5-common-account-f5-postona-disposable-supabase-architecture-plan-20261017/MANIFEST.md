@@ -1,0 +1,12 @@
+# Phase13 F5 archived task and report
+- task_id: common-account-f5-postona-disposable-supabase-architecture-plan-20261017
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/files/.agent_v2/tasks/F5.md
+- size_bytes: 21427
+- SHA256: 6291c1525b2e3d112c65937d82beeb8c088dd67bca4cecfb72317b02dcc64a98
+- original_git_blob: f6e61db476860c1a67196a8964f0ed3dfc02f0f8
+- restored_git_blob: f6e61db476860c1a67196a8964f0ed3dfc02f0f8
+- restore_check: exact UTF-8 and Git blob match (2026-10-17)
+- prior_pr: https://github.com/anohi-memories/kabumori/pull/250
+- prior_pr_HEAD: 2a626cd49f55611258c7695f0b84cb2a917d4595
+- archive: append-only
