@@ -1,10 +1,10 @@
-// PENDING acceptance specs for the POSTONA service-end gates G1 / G2 (F4 design task
-// postona-f4-service-end-auth-gate-g1-g2-design-20261016; design: docs/postona-service-end-gate-g1-g2-design.md).
+// PENDING acceptance specs for the F5-owned half of the POSTONA service-end gates G1 / G2 (design:
+// docs/postona-service-end-gate-g1-g2-design.md, design B). The F4-owned half (ServiceLifecycleProvider, the surface,
+// the end screen's bump, layout and entry points) is implemented and tested in tests/service-lifecycle.test.mjs.
 // NOT part of `npm test` (`node --test tests/*.test.mjs`). Run: `node --test tests/pending/service-end-gate.pending.mjs`.
-// The specs marked [SPEC] FAIL on PR221 dcae62c6 (fail-before) and must pass once the owners implement the design;
-// the [CONTROL] ones hold before and after. The names of the proposed seams (ServiceLifecycleProvider,
-// useServiceLifecycleEpoch, useServiceLifecycle, ServiceLifecycleSurface) are the proposal and may be renamed with the
-// spec. Synthetic sessions, transport and screen only; no network.
+// The [SPEC] ones FAIL until F5's gate consumes the F4 contract (`useServiceLifecycleEpoch(userId)` and `open(userId)`
+// from '@/features/service-lifecycle/service-lifecycle'); the [CONTROL] ones hold before and after. Move them into the
+// suite with the F5 change. Synthetic sessions and transport only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,11 +13,6 @@ import vm from 'node:vm';
 import { Buffer } from 'node:buffer';
 import ts from 'typescript';
 import * as enrollmentModule from '../../src/domain/service-enrollment.ts';
-import * as account from '../../src/domain/account-deletion.ts';
-import * as endDomain from '../../src/domain/postona-service-end.ts';
-import * as notices from '../../src/domain/postona-end-notices.ts';
-import * as flows from '../../src/domain/auth-flows.ts';
-import * as recovery from '../../src/domain/recovery-binding.ts';
 
 const root = resolve(import.meta.dirname, '../..');
 const read = (path) => readFile(join(root, path), 'utf8');
@@ -165,17 +160,10 @@ test('[CONTROL G1] a signal for another person, or after sign-out, sends nothing
 
 // ------------------------------------------------------------------------------------ G2: the surface outside
 
-test('[SPEC G2 / layout] the service-end surface is hosted OUTSIDE the per-login gate, inside the signed-in root', async () => {
-  const layout = await read('src/app/_layout.tsx');
-  const provider = layout.indexOf('<ServiceLifecycleProvider>');
-  const gateEnd = layout.indexOf('</ServiceEnrollmentGate>');
-  const surface = layout.indexOf('<ServiceLifecycleSurface />');
-  assert.ok(provider > -1, 'a signed-in root provider for the lifecycle surface and signal');
-  assert.ok(provider < layout.indexOf('<ServiceEnrollmentGate>'), 'the provider is above the gate');
-  assert.ok(surface > gateEnd, 'the surface is a sibling after the gate, so a new login of the same person does not unmount it');
-  assert.ok(layout.indexOf('if (!session) return <AuthScreen />') < provider, 'only signed-in sessions reach it');
+test('[SPEC G2 / F5 gate] the gate opens the F4 surface instead of rendering its own copy of the end screen', async () => {
   const gate = await read('src/features/service-enrollment/service-enrollment-gate.tsx');
-  assert.doesNotMatch(gate, /<AccountDeletionScreen \/>/u, 'the gate opens the surface instead of rendering its own copy');
+  assert.doesNotMatch(gate, /<AccountDeletionScreen \/>/u, 'no in-gate copy that a new login (re-authentication) would destroy');
+  assert.match(gate, /\.open\(/u, 'its 「利用終了・共通IDの管理」 link opens the surface for the person it shows');
 });
 
 test('[CONTROL G2 / S1 unchanged] a new login of the same person still closes the gated app until its own answer', async () => {
@@ -189,82 +177,4 @@ test('[CONTROL G2 / S1 unchanged] a new login of the same person still closes th
     server.held[0].release(ACTIVE); await g.settle();
     assert.equal(g.isApp(), true);
   } finally { g.done(); }
-});
-
-test('[SPEC G2 / F4 surface] the surface opened for a person survives that person\'s new login and closes for anyone else', async () => {
-  const source = await read('src/features/service-lifecycle/service-lifecycle-surface.tsx');   // fails before: not there yet
-  const h = hooks();
-  let session = sessionOf('A', 1);
-  const state = { openFor: 'user-A', closed: 0 };
-  const modules = {
-    react: h.react,
-    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
-    'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View', Modal: 'Modal' },
-    '@/constants/theme': { colors: {}, typography: {} },
-    '@/components/ui': { styles: {} },
-    '@/providers/auth-provider': { useAuth: () => ({ session }) },
-    '@/app/account-deletion': { __esModule: true, default: 'AccountDeletionScreen' },
-    '@/features/service-lifecycle/service-lifecycle': { useServiceLifecycle: () => ({ openFor: state.openFor, open(u) { state.openFor = u; }, close() { state.openFor = null; state.closed += 1; }, bump() {} }) },
-  };
-  const module = { exports: {} };
-  vm.runInNewContext(transpile(source), { module, exports: module.exports, require: (n) => { assert.ok(Object.hasOwn(modules, n), `unexpected import ${n}`); return modules[n]; } });
-  const render = () => h.run(module.exports.ServiceLifecycleSurface, {});
-  const shows = (tree) => walk(tree).some((n) => n.type === 'AccountDeletionScreen');
-  assert.equal(shows(render()), true);
-  session = sessionOf('A', 2); render(); await flush();   // re-authentication: a new login of the same person
-  assert.equal(shows(render()), true, 'the in-progress end survives the person\'s own new login');
-  session = sessionOf('B', 1); render(); await flush();
-  assert.equal(shows(render()), false, 'another person never sees it');
-  assert.equal(state.openFor, null, 'and it is closed, not merely hidden');
-  h.unmount();
-});
-
-// ------------------------------------------------------------------------------------ G1: the screen signals
-
-const jwt = (id, sid) => ({ user: { id, identities: [{ provider: 'email' }] }, access_token: `synthetic.${Buffer.from(JSON.stringify({ session_id: sid })).toString('base64url')}.signature` });
-
-async function screenHarness(endAnswer) {
-  const h = hooks();
-  const ctx = { userId: 'u1', sessionId: 's1' };
-  const bound = { ok: true, accountStatus: 'active', lifecycleVersion: 7, services: [{ service: 'kabumori', status: 'active' }, { service: 'x_autopost', status: 'active' }], acknowledgementRequired: ['threads'], postonaAvailable: true, deletionInProgress: false, context: ctx };
-  const bumps = [];
-  const auth = { session: jwt('u1', 's1'), backendAvailable: true, email: { signIn: true }, readiness: () => ({ usableNow: true }),
-    reauthenticate: async () => ({ ok: true, context: ctx }), previewPostonaEnd: async () => bound, endPostonaService: async () => endAnswer };
-  const modules = {
-    react: h.react,
-    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
-    'react-native': Object.fromEntries(['ActivityIndicator', 'Linking', 'Pressable', 'ScrollView', 'Text', 'TextInput', 'View', 'Modal'].map((n) => [n, n])),
-    '@/constants/theme': { colors: {}, typography: {} }, '@/components/ui': { Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
-    '@/domain/account-deletion': account, '@/domain/postona-service-end': { ...endDomain, POSTONA_END_SOURCE_ENABLED: true }, '@/domain/postona-end-notices': notices,
-    '@/domain/auth-flows': flows, '@/domain/recovery-binding': recovery, '@/domain/legal-links': { LEGAL_LINK_LABELS: {} },
-    '@/lib/legal-config': { LEGAL_LINKS: { support: {} } }, '@/providers/auth-provider': { useAuth: () => auth },
-    '@/features/service-lifecycle/service-lifecycle': { useServiceLifecycle: () => ({ openFor: 'u1', open() {}, close() {}, bump: (userId) => bumps.push(userId) }) },
-  };
-  const module = { exports: {} };
-  vm.runInNewContext(transpile(await read('src/app/account-deletion.tsx')), { module, exports: module.exports, require: (n) => { assert.ok(Object.hasOwn(modules, n), n); return modules[n]; } });
-  const render = () => h.run(module.exports.default, {});
-  const texts = (tree) => walk(tree).filter((n) => n.type === 'Text').map((n) => [n.props.children].flat(Infinity).filter((s) => typeof s === 'string').join(''));
-  const button = (tree, label) => walk(tree).find((n) => n.type === 'Pressable' && walk(n.props.children).some((c) => c.type === 'Text' && [c.props.children].flat(Infinity).join('').includes(label)));
-  async function submitEnd() {
-    render(); await flush();
-    walk(render()).find((n) => n.type === 'TextInput' && n.props.secureTextEntry).props.onChangeText('synthetic');
-    await button(render(), 'で本人確認').props.onPress(); await flush();
-    walk(render()).find((n) => n.type === 'TextInput' && !n.props.secureTextEntry).props.onChangeText(endDomain.POSTONA_END_CONFIRM_PHRASE);
-    walk(render()).find((n) => n.type === 'Pressable' && n.props.accessibilityRole === 'checkbox').props.onPress();
-    assert.equal(bumps.length, 0, 'nothing is signalled before an end was sent');
-    await button(render(), 'POSTONAの利用を終了').props.onPress(); await flush();
-    return texts(render());
-  }
-  return { submitEnd, bumps, done: () => h.unmount() };
-}
-
-test('[SPEC G1 / F4 screen] an answered end of the person signals exactly that person once; the result stays visible', async () => {
-  const ended = endDomain.parseEndResult(200, { ok: true, outcome: 'ended', providers: { x: 'done', threads: 'local_removed_remote_unverified' }, remote_unverified: ['threads'], x_posts_unconfirmed: 2 }, ['threads']);
-  for (const answer of [ended, endDomain.endFailure('RESULT_UNCONFIRMED', undefined, { remoteUnverified: ['threads'], xPostsUnconfirmed: 2 })]) {
-    const s = await screenHarness(answer);
-    const shown = await s.submitEnd();
-    assert.deepEqual(s.bumps, ['u1'], `${answer.ok ? 'ended' : answer.code}: one identity-bound signal (the server re-ask decides)`);
-    assert.ok(shown.some((line) => line.includes('予約が2件')), 'the person still sees their own warnings');
-    s.done();
-  }
 });

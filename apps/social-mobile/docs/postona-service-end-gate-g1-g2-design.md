@@ -131,3 +131,44 @@ TASK: `postona-f4-service-end-auth-gate-g1-g2-design-20261016`。設計と、ま
   - 受け入れテストは 7/7 合格。`tsc` と `expo lint` も合格。
   - 既存のテストでは、24件が失敗した（336件中 312件合格）。内訳は、テストの部品表に新しいモジュールが無いための失敗が23件（関門19件・画面4件）と、経路の約束の意図した変更が1件。どれも §6 の直しで対応する。
   - 試作は、関門・レイアウト・画面の3ファイルの変更（23行追加・26行削除）と、新しい2ファイル。
+
+## 9. F4 の実装と、F5 への約束（2026-10-17 JST）
+
+TASK: `postona-f4-service-lifecycle-provider-g1-g2-implementation-20261017`。この文書の PR230 head `e6725a165cd8f116a964926cdfceaa9334590491` の上に積む。F5 の関門（`src/features/service-enrollment/service-enrollment-gate.tsx`）とそのテスト、H5 の本人確認は変えていない。
+
+**F5 が使う出口（正確な場所と型）** — `apps/social-mobile/src/features/service-lifecycle/service-lifecycle.tsx`（import は `@/features/service-lifecycle/service-lifecycle`）
+
+```ts
+export function ServiceLifecycleProvider({ children }: PropsWithChildren): JSX.Element;
+export function useServiceLifecycleEpoch(userId: string | null): number;
+export function useServiceLifecycle(): ServiceLifecycle;   // provider の外では例外
+export type ServiceLifecycle = {
+  readonly openFor: string | null;   // surface が開いている人。今サインインしている人以外にはならない
+  open(userId: string): boolean;     // 今サインインしている人なら開いて true、それ以外は何もせず false
+  close(): void;
+  bump(userId: string): boolean;     // 今サインインしている人なら、その人の epoch を +1 して true、それ以外は false
+};
+```
+
+- `useServiceLifecycleEpoch(userId)`:
+  - 値: その人の数え上げ。最初の利用終了までは 0。`bump` のたびに +1。サインインしている間は減らない。`null` なら 0。provider の外でも 0 を返す。
+  - 中身: 人の ID と数だけ。トークン、セッション、使えるかどうかの判定、プレビュー、同意は含まない。
+- `bump` を呼ぶ場所と条件:
+  - 呼ぶのは利用終了の画面だけ。
+  - 条件は、サーバーの `ended`／`already_ended` の答えが、固定した人のそのログインに返ったとき（終了クライアントの柵が、そのときだけ `ok` を返す）。そのとき1回だけ呼ぶ。
+  - 次の場合は呼ばない: `not_registered`、`RESULT_UNCONFIRMED`、拒否、`SESSION_CHANGED`、例外、プレビューだけのとき、本人確認だけのとき。
+  - 人が切り替わった後に遅れて届いた `bump` は、provider が拒む。
+- `open(userId)`:
+  - F4 の入口（`login-methods`、初回案内）が使う。F5 の関門の「利用終了・共通IDの管理」も、関門の中の写しの代わりにこれを呼ぶ想定。
+  - 別の人やサインアウトに変わったら、描画の時点で閉じる（戻ってきても開き直さない）。
+- 置き場所: `_layout.tsx` で `<ServiceLifecycleProvider><ServiceEnrollmentGate>…</ServiceEnrollmentGate><ServiceLifecycleSurface /></ServiceLifecycleProvider>`。サインインの確認とパスワード回復の確認の後に置くので、サインアウトするとすべて外れる。
+- surface（`service-lifecycle-surface.tsx`）:
+  - 利用終了の画面を、関門の外の Modal に人ごとの `key` で描く。
+  - 同じ人の新しいログイン（本人確認）では同じ画面が残る。画面は、古いログインの本人確認・同意・結果を捨て、プレビューを取り直す。
+- F5 がつなぐのは1行だけ: F5 の `lifecycle-epoch.ts` から上の `useServiceLifecycleEpoch` をそのまま export する。F5 の関門側は、この PR を土台にして積む。
+
+**F5 側に残ること**（`tests/pending/service-end-gate.pending.mjs` の [SPEC] 3件）
+
+- 関門が合図でもう一度聞くこと（2件）。
+- 関門の中の写しを `open()` に置き換えること（1件）。
+- 関門のテストの部品表に、新しいモジュールを足すこと。

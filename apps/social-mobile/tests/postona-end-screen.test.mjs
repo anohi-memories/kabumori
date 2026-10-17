@@ -35,7 +35,8 @@ async function screenHarness({ enabled = false, execute = async () => end.endFai
     '@/constants/theme': { colors: {} }, '@/components/ui': { Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
     '@/domain/account-deletion': account, '@/domain/postona-service-end': { ...end, POSTONA_END_SOURCE_ENABLED: enabled }, '@/domain/postona-end-notices': notices,
     '@/domain/auth-flows': flows, '@/domain/recovery-binding': recovery, '@/domain/legal-links': { LEGAL_LINK_LABELS: {} },
-    '@/lib/legal-config': { LEGAL_LINKS: { support: {} } }, '@/providers/auth-provider': { useAuth: () => auth } };
+    '@/lib/legal-config': { LEGAL_LINKS: { support: {} } }, '@/providers/auth-provider': { useAuth: () => auth },
+    '@/features/service-lifecycle/service-lifecycle': { useServiceLifecycle: () => ({ openFor: null, open: () => false, close() {}, bump: () => false }) } };
   const source = await readFile(new URL('../src/app/account-deletion.tsx', import.meta.url), 'utf8');
   const module = { exports: {} };
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;

@@ -1,6 +1,7 @@
 // The real onboarding-gate.tsx (transpiled) rendered with stubbed React/RN/data.
 // Proves account deletion stays reachable from every unfinished onboarding state,
-// without Home, and that the deletion view is per user and truthful.
+// without Home, and that the entry opens the service-lifecycle surface (outside the
+// enrollment gate) for the person signed in only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -45,7 +46,7 @@ async function gateHarness({ input, userId = 'user-1', acknowledged = false, ide
     useCallback: (cb) => cb,
     useMemo: (factory) => factory(),
   };
-  const state = { userId, input, identities };
+  const state = { userId, input, identities, opened: [] };
   const stubs = {
     react, 'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, fn: type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, fn: type, props }) },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => {} } },
@@ -61,8 +62,8 @@ async function gateHarness({ input, userId = 'user-1', acknowledged = false, ide
     '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: 'idle', stateText: '', verifiedHandle: null, connect: async () => {} }) },
     '@/lib/supabase': { supabase: {} },
     '@/providers/data-provider': { useDataStatus: () => ({ reload() {} }) },
-    // The deletion screen is stubbed to prove WHICH component is shown; it never needs Home providers.
-    '@/app/account-deletion': { __esModule: true, default: function AccountDeletionScreen() { return null; } },
+    // The surface is opened through the lifecycle provider (its own tests cover who it opens for).
+    '@/features/service-lifecycle/service-lifecycle': { useServiceLifecycle: () => ({ openFor: null, open: (person) => { state.opened.push(person); return person === state.userId; }, close() {}, bump: () => false }) },
   };
   const source = await readFile(new URL('../src/features/onboarding/onboarding-gate.tsx', import.meta.url), 'utf8');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -95,32 +96,24 @@ test('the new-account notice also exposes the entry', async () => {
   assert.ok(entryOf(tree), 'entry on the notice screen');
 });
 
-test('the entry opens the deletion screen without Home, and 戻る returns to onboarding', async () => {
+test('the entry opens the service-lifecycle surface for the person signed in, without Home; onboarding stays behind it', async () => {
   const harness = await gateHarness({ input: STATES.connect_x });
   entryOf(harness.render()).props.onPress();
-  const open = harness.render();
-  assert.equal(harness.isHome(open), false);
-  let shown = false;
-  walk(open, (n) => { if (n.type === 'AccountDeletionScreen') shown = true; });
-  assert.ok(shown, 'account deletion screen rendered');
-  const back = pressables(open).find((p) => label(p).includes('戻る'));
-  assert.ok(back);
-  back.props.onPress();
-  const again = harness.render();
-  let stillShown = false;
-  walk(again, (n) => { if (n.type === 'AccountDeletionScreen') stillShown = true; });
-  assert.equal(stillShown, false);
-  assert.ok(entryOf(again));
+  assert.deepEqual(harness.state.opened, ['user-1']);
+  const after = harness.render();
+  assert.equal(harness.isHome(after), false);
+  let embedded = false;
+  walk(after, (n) => { if (n.type === 'AccountDeletionScreen') embedded = true; });
+  assert.equal(embedded, false, 'no in-gate copy that a new login (re-authentication) would destroy');
+  assert.ok(entryOf(after), 'the entry is still there when the surface is closed');
 });
 
-test('the deletion view is per user: another user never inherits it', async () => {
+test('the entry always opens for the CURRENT person: after a switch it never opens for the previous one', async () => {
   const harness = await gateHarness({ input: STATES.connect_x, userId: 'user-1' });
   entryOf(harness.render()).props.onPress();
   harness.state.userId = 'user-2';
-  const tree = harness.render();
-  let shown = false;
-  walk(tree, (n) => { if (n.type === 'AccountDeletionScreen') shown = true; });
-  assert.equal(shown, false, 'user-2 does not see user-1\'s deletion view');
+  entryOf(harness.render()).props.onPress();
+  assert.deepEqual(harness.state.opened, ['user-1', 'user-2']);
 });
 
 test('finished onboarding still renders the app (the entry lives in the route/account area)', async () => {

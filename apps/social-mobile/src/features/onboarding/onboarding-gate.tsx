@@ -10,7 +10,7 @@ import { deriveOnboardingStep, inputForCurrentUser, onboardingStorageKey, type O
 import { shouldShowNewAccountNotice } from '@/domain/auth-flows';
 import { useAuth } from '@/providers/auth-provider';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
-import AccountDeletionScreen from '@/app/account-deletion';
+import { useServiceLifecycle } from '@/features/service-lifecycle/service-lifecycle';
 import { supabase } from '@/lib/supabase';
 import { useDataStatus } from '@/providers/data-provider';
 
@@ -39,8 +39,9 @@ async function readDeferred(userId: string): Promise<boolean> {
 /**
  * Secondary action shown on every unfinished onboarding screen. Account deletion
  * must stay reachable before Home (App Review 5.1.1(v)); the destination is the
- * same screen as the /account-deletion route, so recent-auth, the typed
- * confirmation and the user/session pinning are unchanged.
+ * same screen, opened in the service-lifecycle surface outside the enrollment gate
+ * (a new login during re-authentication does not destroy it), so recent-auth, the
+ * typed confirmation and the user/session pinning are unchanged.
  */
 function DeletionEntry({ onOpen }: { onOpen: () => void }) {
   return (
@@ -73,6 +74,7 @@ function Progress({ current }: { current: number }) {
 export function OnboardingGate({ children }: PropsWithChildren) {
   const { reload: reloadData } = useDataStatus();
   const { session } = useAuth();
+  const lifecycle = useServiceLifecycle();
   const currentUserId = session?.user.id ?? null;
   const selection = useMemo(() => selectDataSource(), []);
   const repository = useMemo(() => (supabase ? new SupabaseOnboardingRepository(supabase) : null), []);
@@ -81,8 +83,6 @@ export function OnboardingGate({ children }: PropsWithChildren) {
     { userId: null, input: selection.kind === 'mock' ? { kind: 'mock' } : { kind: 'loading' }, acknowledged: false },
   );
   const [generation, setGeneration] = useState(0);
-  // The deletion view is opened for one user only; another user never inherits it.
-  const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
   const refresh = useCallback(() => setGeneration((value) => value + 1), []);
 
   useEffect(() => {
@@ -123,17 +123,8 @@ export function OnboardingGate({ children }: PropsWithChildren) {
 
   const step = deriveOnboardingStep(input);
   if (step.step === 'preview' || step.step === 'done') return <>{children}</>;
-  if (currentUserId !== null && deletionOpenFor === currentUserId) {
-    return (
-      <View style={{ flex: 1 }}>
-        <Pressable accessibilityRole="button" onPress={() => setDeletionOpenFor(null)} style={{ padding: 16, paddingBottom: 0 }}>
-          <Text style={{ color: colors.primary, fontWeight: '700' }}>‹ 戻る</Text>
-        </Pressable>
-        <AccountDeletionScreen />
-      </View>
-    );
-  }
-  const openDeletion = () => setDeletionOpenFor(currentUserId);
+  // The surface is opened for the person signed in only; another person never inherits it (the provider).
+  const openDeletion = () => { if (currentUserId) lifecycle.open(currentUserId); };
   const identities = (session?.user.identities ?? []).map((identity) => ({ provider: identity.provider }));
   // Display only (never authorization): how this session signed in.
   const signedInWithX = identities.some((identity) => identity.provider === 'x');

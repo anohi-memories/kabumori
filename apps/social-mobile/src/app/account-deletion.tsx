@@ -11,12 +11,14 @@ import { LEGAL_LINK_LABELS } from '@/domain/legal-links';
 import { LEGAL_LINKS } from '@/lib/legal-config';
 import type { BoundEndPreview } from '@/lib/postona-service-end-client';
 import { useAuth } from '@/providers/auth-provider';
+import { useServiceLifecycle } from '@/features/service-lifecycle/service-lifecycle';
 
 const inputStyle = { borderColor: colors.border, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9, color: colors.ink, backgroundColor: '#FFFFFF' };
 
 /** Service ending never selects whole-login deletion from a legacy scope preview. */
 export default function AccountDeletionScreen() {
   const { session, backendAvailable, readiness, email, reauthenticate, previewPostonaEnd, endPostonaService } = useAuth();
+  const lifecycle = useServiceLifecycle();
   const [preview, setPreview] = useState<BoundEndPreview | EndFailure | null>(null);
   const [reauthed, setReauthed] = useState<DeletionContext | null>(null);
   const [password, setPassword] = useState('');
@@ -75,6 +77,9 @@ export default function AccountDeletionScreen() {
     try {
       const answer = await endPostonaService({ context: pinned, preview: ready, phrase, acknowledged });
       setResult({ ...answer, context: pinned });
+      // G1: only the server's own ended / already-ended answer for exactly this login (the client's identity fence
+      // returns ok only then) makes the gate ask the server again. Unconfirmed, refused and thrown answers never do.
+      if (answer.ok && (answer.outcome === 'ended' || answer.outcome === 'already_ended')) lifecycle.bump(pinned.userId);
       setPreview(null); setAcknowledged([]); setPhrase(''); setReauthed(null);
     } catch {
       setResult({ ...endFailure('RESULT_UNCONFIRMED'), context: pinned });
