@@ -72,10 +72,10 @@
 
 ## F5
 - slot: F5
-- status: ready
+- status: review_required
 - task_id: common-account-f5-phase13-baseline-contract-extend-20261017
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -86,6 +86,7 @@
 - previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/
 - review_required: Phase12 PR233 P2x4 focused review only before later managed apply
 - slot_use: source-only baseline contract extension ensure_my_profile()/social_accounts.platform plus local PG17 tests; no real Supabase or SNS
+- latest_result: 2026-10-17 JST SOURCE_CANDIDATE_COMPLETE; Draft PR254 head 503a6ca85ebd6f1482b530f6025074b930d7f944 on PR250 2a626cd4; baseline contract v2 (ensure_my_profile shape, social_accounts.platform, auth.uid) read from chain preflights; local PG17 fail-before on the real base code: 8 gap cases stopped by v2, K01-K10 chain-prefix read-back unchanged digest; 115 harness tests + 35/35 new and 66/37/49 old mutants; no production/managed access, no inventory run, no project; production NO_GO
 
 ## F6
 - slot: F6
