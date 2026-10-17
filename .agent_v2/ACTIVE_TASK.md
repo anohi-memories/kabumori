@@ -94,11 +94,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-postona-ai-ledger-quota-idempotency-design-20261017
 - owner: claude
-- next_owner: chatgpt
-- blocker: POSTONA ledger/quota/durable operationId architecture design; migration/production/paid calls NO_GO; privacy and F4+F5 review dependencies
+- next_owner: none
+- blocker: L6 PASS_DESIGN PR241; SQL migration / live DB / RLS / durable call store not yet implemented; source-only, production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
