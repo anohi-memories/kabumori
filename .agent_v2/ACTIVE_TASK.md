@@ -89,10 +89,10 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-postona-consumer-calls-pg-offline-candidate-20261017
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - blocker: candidate ai_ledger.consumer_calls migration/RPC local-PG-only verification; DB/production/merge/deploy NO_GO, F5/F4 scopes protected
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
