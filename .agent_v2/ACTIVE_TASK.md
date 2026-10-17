@@ -74,23 +74,20 @@
 - l4_verdict_20261017_refresh: PASS_SOURCE_DESIGN / IMPLEMENTATION_PENDING / PRODUCTION_AND_PILOT_NO_GO; PR255 head 7bd54218a45e78f45448aea3ef72ed769f629325; no real refresh or DB activity.
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase13-baseline-contract-extend-20261017
+- status: ready
+- task_id: common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: G4 D-1 approved; Phase13 PR250, Phase12 PR233; D-2 requires F3/G3 contract, D-3 hosted project design only
-- blocker: production/managed schema inventory not approved; F3 X stand-in contract pending; PRODUCTION_NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/
-- review_required: Phase12 PR233 P2x4 focused review only before later managed apply
-- slot_use: source-only baseline contract extension ensure_my_profile()/social_accounts.platform plus local PG17 tests; no real Supabase or SNS
-- latest_result: 2026-10-17 JST SOURCE_CANDIDATE_COMPLETE; Draft PR254 head 503a6ca85ebd6f1482b530f6025074b930d7f944 on PR250 2a626cd4; baseline contract v2 (ensure_my_profile shape, social_accounts.platform, auth.uid) read from chain preflights; local PG17 fail-before on the real base code: 8 gap cases stopped by v2, K01-K10 chain-prefix read-back unchanged digest; 115 harness tests + 35/35 new and 66/37/49 old mutants; no production/managed access, no inventory run, no project; production NO_GO
-
-- l5_verdict: PASS_SOURCE_FIX / PRODUCTION_NO_GO (2026-10-17). PR254 HEAD 503a6ca85ebd6f1482b530f6025074b930d7f944 Draft; baseline contract v2 ensure_my_profile/platform/auth.uid; reported local PG17 and 115 harness PASS; managed/schema-only/prod unapproved; D-2 pending F3/G3 contract; archive before reuse.
+- dependencies: G4 D-2_IMPLEMENTATION_GO and F3/G3 PASS_CONTRACT_REVIEW; PR254/250/233, F3 PR204 and F5 PR214
+- blocker: R2' POSTONA-only real X scope unresolved; G3 T13; managed unapproved, production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-baseline-contract-extend-20261017/
+- review_required: conditional, no automatic wide review; Phase12 #233 P2x4 focused gate remains independent
+- slot_use: testing-only dependency-injected inert X saga stand-in; no production X cleanup, F3/G3/F4/F6, Auth, DB, OAuth, SNS or deployment
 
 ## F6
 - slot: F6
