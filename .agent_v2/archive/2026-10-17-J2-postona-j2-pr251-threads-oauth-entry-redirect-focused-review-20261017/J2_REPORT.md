@@ -1,0 +1,97 @@
+# J2 — PR251 Threads OAuth entry / mobile return focused review
+- task_id: postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017
+- slot: J2
+- status: review_required
+- next_owner: chatgpt
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: V2
+- recommended_model: Sol（高）
+- verdict: CHANGES_REQUIRED — P0=0 / P1=0 / P2=1
+- release: PRODUCTION_AND_PILOT_NO_GO
+- target_pr: https://github.com/anohi-memories/kabumori/pull/251
+- target_head: 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc
+- base_head: 7c4f457834cddb42b72be6b74996e643b213e8c8 (PR180)
+- integration_parent: f21d5caa (PR180 + PR159 assembly)
+- fresh_main_review_baseline: 88ed1dc3f8a8476583a9bb496dd286f907e07e2f
+- scope: F4-added nine-file delta only; no source fixes
+
+## R1 — P2: Android callback delivery accepts non-deliverable intent filters
+- File: `apps/social-mobile/src/domain/threads-connect.ts:147-151` (new F4 predicate).
+- Owner: F4. Fix predicate and focused mobile return tests only.
+- Trigger: matching HTTPS host/path, action VIEW and autoVerify=true, but (a) DEFAULT/BROWSABLE categories absent or incomplete, or (b) data.port=8443 for the portless HTTPS callback.
+- Actual: `{ok:true,callback}`, rather than CALLBACK_NOT_CONFIGURED. Neither categories nor port constraints are inspected. The production adapter consequently exposes a non-null registeredCallback, allowing start/browser opening without a matching browser-return route.
+- Evidence: reviewer R1a/R1b assertions both FAIL against exact PR251; valid-filter control PASS. Executing installed Expo57's manifest renderer confirms absent categories become an empty category list (no automatic DEFAULT/BROWSABLE addition), and explicit port=8443 is preserved. No physical-device test is claimed.
+- Impact: when an operator later enables the candidate with malformed native config, OAuth starts instead of refusing preflight and the return can fail/timeout/cancel. Current default-OFF gates remain closed. No demonstrated token leak/cross-user completion/production enablement.
+- Minimal fix: require both DEFAULT and BROWSABLE on the qualifying filter and ensure any explicit port constraint covers the actual HTTPS callback. Retain exact host/path checks; add missing/partial-category and mismatched-port negatives. Actual signed-build/App-Link verification remains a separate approved gate.
+
+Self-contained reproduction using the real domain function:
+```js
+const callback = 'https://links.postona.example/threads/callback';
+const filter = { action:'VIEW',autoVerify:true,category:['DEFAULT','BROWSABLE'],
+  data:[{scheme:'https',host:'links.postona.example',path:'/threads/callback'}] };
+const check = f => threadsCallbackDelivery({
+  platform:'android',callback,androidIntentFilters:[f]
+});
+check({...filter,category:[]}); // actual ok:true; expected unavailable
+check({...filter,category:['DEFAULT']}); // also incorrectly accepted
+check({...filter,data:[{...filter.data[0],port:'8443'}]}); // incorrectly accepted
+check(filter); // correct positive control: ok:true
+```
+
+## Verified source/offline boundaries
+1. Static THREADS_CONNECT_EDGE_WIRED=false; exported Edge handler equals H5 disabled handler. Throwing env/importer probes untouched while OFF. All five connect/publish/UI source gates remain false.
+2. THREADS_CONNECT_ENABLED accepts exactly string "true". Canonical POSTONA_THREADS_* vs three legacy alias mismatches fail before composition import. No early SDK/driver construction or environment read; real composition is dynamically imported after gates only.
+3. Real composition rejects postgres/service_role/wrong DB host/non-HTTPS callback with sanitized 503. Import rejection and construction failure never cache a successful instance; no synthetic configured secret echoed.
+4. Two concurrent synthetic callers share one construction but retain separate Bearer headers/bodies. Integration refuses user/brand/account injection, alternate origin, redirect parameters, duplicate state/code and token fragments before runtime actions. Existing H5 actor/state/claim fixtures pass; this is not a full H5 re-audit or managed identity proof.
+5. iOS17.4+ exact associatedDomains match supplies preferUniversalLinks + preferEphemeralSession. Older iOS/missing config refuse before request. Installed expo-web-browser57 native source confirms the .https(host:path:) branch and 17.4 availability check.
+6. X custom scheme/options unchanged in F4 delta. Existing executable callback/state/cancel/ownership tests pass where dependencies are present; see blocked cases below.
+7. No F4 changes to H5 runtime/SQL/token custody or PR255 refresh design. Earlier PR159 merged files are not misclassified as new F4 findings.
+
+## Tests actually run
+Offline cached-only, deny-net/deny-env/deny-write/deny-run. Synthetic in-memory env only, no OS secret access. No installs/network/managed DB/provider exchange.
+
+| Group | Result |
+| --- | --- |
+| New iOS return8 + entry8 + HTTP edge8 + contract14 | 38/38 PASS |
+| App Threads connect18 + H5 identity/state/claim fixtures32 | 50/50 PASS |
+| Real entry composition2 + config/connector fixtures15 | 17/17 PASS |
+| Selected all-five-gates source-isolation smoke | 1/1 PASS, unrelated cleanup smoke filtered |
+| Reviewer adverse probes: real entry/domain + installed Expo renderer | 6 PASS / 2 FAIL, both reproduce R1 |
+| Additional X connect session suite | 12 PASS / 2 dependency-blocked (14 total), NOT all-pass |
+
+Primary focused checks total: 106/106 PASS; duplicated reruns, partial X suite and reviewer failures excluded.
+
+Commands:
+```text
+deno test --no-config --no-lock --no-prompt --cached-only --node-modules-dir=none --no-check --deny-net --deny-env --deny-write --deny-run --allow-read --preload=/private/tmp/j2-pause-offline-env-20261015.ts --import-map=/private/tmp/j2-pr238-import-map-20261017.json <focused app/entry/edge/contract/runtime files>
+deno test --config supabase/candidates/postona_threads_auth_runtime/wiring/deno.json --no-lock --no-prompt --cached-only --no-check --deny-net --deny-env --deny-write --deny-run --allow-read --preload=/private/tmp/j2-pause-offline-env-20261015.ts supabase/functions/_shared/social/threads_connect_entry_composition_test.ts supabase/candidates/postona_threads_auth_runtime/wiring/connector_test.ts
+deno test --no-config --no-lock --no-prompt --cached-only --no-check --deny-net --deny-env --deny-write --deny-run --allow-read --filter 'all FIVE' supabase/candidates/postona_threads_auth_runtime/wiring/source_isolation.smoke.ts
+deno test --no-config --no-lock --no-prompt --cached-only --node-modules-dir=none --no-check --deny-net --deny-env --deny-write --deny-run --allow-read /private/tmp/j2-pr251-adverse-20261017.test.mjs
+git diff --check
+```
+
+Reviewer harness: `/private/tmp/j2-pr251-adverse-20261017.test.mjs`, SHA256 `de04ce7daeb48ff21f175a3789912e37eb3a2854eae529b516caf8fdc32aee3a`; outside source checkout. Reproducer above records finding independently of that temporary file.
+Mobile VM harness uses installed TypeScript6.0.3 with scratch CommonJS wrapper/import map (no product changes).
+Initial renderer probe had a scratch source-map/comment concatenation error; fixed scratch only and reran eight probes. Final two failures are real predicate assertions, not that harness error.
+
+## Environment/integration blockers — not new F4 findings
+- Unfiltered H5 source_isolation smoke: 1 PASS/1 blocked because preexisting `supabase/functions/account-delete/provider_cleanup.ts` is absent. Already documented G5 overlay dependency; no other owner's source overlaid. Selected source-isolation test rerun PASS.
+- X suite's two blocked tests read checkout-local expo-web-browser under absent node_modules. No install/copy attempted. Separate read-only installed SDK inspection confirms iOS native handling/manifest renderer; it does not turn those blocked tests into PASS.
+- PR251 has no supabase/config.toml or function-local import map. Tests use H5 wiring/deno.json; candidate packaging/SDK pins/dedicated DB owner/transport/SQL prerequisites/Meta config/native build and domain hosting+verification need separate owner approvals before enable/deploy.
+- app.json intentionally contains no real Threads callback/associatedDomains/Android filters. Declaration alone does not prove OS-verified links or actual OAuth.
+- No full app build/typecheck or physical-device/managed DB/ACL/Vault test claimed. Only focused offline review authorized.
+
+## Archive / concurrency / publication
+- Fresh main checked on formal kabumori-fresh and independent clone; target/base verified using GitHub metadata and PR refs. PR251 remains draft/open.
+- Source checkout `/private/tmp/j2-pr251-review-20261017.tETXnc`: detached approved HEAD, clean before/after tests. Report checkout separate at same path plus `-report`.
+- Old/new ACTIVE_TASK and current-state portions checked. F3 X guard, F4 new CAS SQL, F5 D-2, F6 AI, F7 MIC and F10 orchestration protected. J2 source-read-only scope does not write their boundaries. Only J2 metadata plus required archive completion changed.
+- Previous PR238 archive original commit `dfcf02f42e0daf28b1ebfa435ae84c7a6896b65b`, snapshot `3f80a62d5136b6d2c99950b46a9b090664fbbf0e`: TASK3429 bytes/Report12449 bytes match original Git blobs and full byte restoration. SHA256SUMS 2/2 PASS. Added MANIFEST/SHA256SUMS/HISTORY_INDEX without rewriting snapshots; local archive commit `aaf74885` (may rebase metadata-only before publication).
+- Publication/read-back: archive verification commit `aaf74885` + review commit `8332a548245274852ef6deaf425bca39703d3a50` pushed successfully to origin/main (88ed1dc3 → 8332a548). Fresh fetch confirms ancestor inclusion. GitHub main read-back verifies this exact task_id, review_required/chatgpt in TASK/Report/ACTIVE J2 and full Report byte equality; archive MANIFEST/SHA256SUMS are present. This receipt-only Report update contains no product source changes.
+
+## Safety / next action
+Product source edits0; review PR edits/merge/deploy0; managed Supabase/DB/schema/RPC/Cron/settings/secrets/Vault/OAuth operations0; actual Meta/X/Threads/OpenAI/Push/post/revoke/paid API0.
+Other worktrees, existing formal `?? supabase/.temp/`, apps/admin, HANDOFF and original archive snapshots untouched.
+Supabase/Auth skill guided ownership/session/fail-closed review; no new implementation or operational changes.
+G4 should decide F4-only R1 correction and focused rerun. Do not reopen prior PR238 or PR255 review; remain PRODUCTION_AND_PILOT_NO_GO.
+
+POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ V2 を送ってください。
