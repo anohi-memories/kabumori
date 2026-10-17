@@ -294,36 +294,36 @@ test('G1: the gate reads and writes only the X service; the other app\'s entitle
 
 // --------------------------------------------------------------------- remount, the end screen and the mock
 
-test('G1: a React remount of the gate starts closed and asks afresh; no end view is open after a remount', async () => {
+test('G1: a React remount of the gate starts closed and asks afresh, and opens nothing by itself', async () => {
   let ended = false;
   const { server, lifecycle, h, done } = await openGate(() => (ended ? ENDED(2) : ACTIVE));
   try {
     ended = true;
     lifecycle.bump('user-A'); await h.settle();
     assert.equal(h.isApp(), false);
-    const open = h.link('利用終了・共通IDの管理');
-    assert.ok(open, 'the embedded end screen is reachable from the closed gate');
-    open.props.onPress(); h.render();
-    assert.ok(h.has('AccountDeletionScreen'), 'opened by the person');
     h.unmount(); h.clear();                                   // the gate is destroyed and mounted again
     h.render();
-    assert.equal(h.has('AccountDeletionScreen'), false, 'a remounted gate never mounts an open end view');
-    assert.equal(h.isApp(), false, 'and it is closed until the server answers');
+    assert.deepEqual(h.lifecycleApi.opened, [], 'a remounted gate never asks the surface to open');
+    assert.equal(h.has('AccountDeletionScreen'), false, 'and draws no end screen of its own');
+    assert.equal(h.isApp(), false, 'it is closed until the server answers');
     await h.settle();
     assert.equal(server.requests.at(-1).fn, 'start_x_autopost_service');
   } finally { done(); }
 });
 
-test('G1: a signal does not close the end screen the person has open (their result stays visible)', async () => {
+test('G1: the management link only asks F4\'s outside surface to open, for the person signed in; a further signal tears nothing down', async () => {
   let ended = false;
   const { lifecycle, h, done } = await openGate(() => (ended ? ENDED(2) : ACTIVE));
   try {
     ended = true;
     lifecycle.bump('user-A'); await h.settle();               // closed gate with the re-enroll screen
-    h.link('利用終了・共通IDの管理').props.onPress(); h.render();
-    assert.ok(h.has('AccountDeletionScreen'));
+    const link = h.link('利用終了・共通IDの管理');
+    assert.ok(link, 'the entry is reachable from the closed gate');
+    link.props.onPress();
+    assert.deepEqual(h.lifecycleApi.opened, ['user-A'], 'open(currentUserId), nothing else');
+    assert.equal(h.has('AccountDeletionScreen'), false, 'the gate draws no copy of the screen');
     lifecycle.bump('user-A'); await h.settle();
-    assert.ok(h.has('AccountDeletionScreen'), 'a further signal re-asks the server but does not tear the screen down');
+    assert.deepEqual(h.lifecycleApi.opened, ['user-A'], 'a further signal re-asks the server but opens or closes nothing');
   } finally { done(); }
 });
 
@@ -358,7 +358,8 @@ test('the seam: the gate\'s only lifecycle input is a read of a per-person numbe
   const gate = code(await read('src/features/service-enrollment/service-enrollment-gate.tsx'));
   assert.match(gate, /import \{ useLifecycleEpoch \} from '@\/features\/service-enrollment\/lifecycle-epoch';/u);
   assert.doesNotMatch(gate, /bump\s*\(/u, 'the gate consumes the epoch; the end surface (F4) alone produces it');
-  assert.doesNotMatch(gate, /ServiceLifecycleProvider|service-lifecycle\/service-lifecycle/u, 'no competing or direct F4 import');
+  assert.doesNotMatch(gate, /ServiceLifecycleProvider|useServiceLifecycleEpoch/u, 'no provider of its own, and the epoch comes only through the seam');
+  assert.match(gate, /import \{ useServiceLifecycle \} from '@\/features\/service-lifecycle\/service-lifecycle';/u, 'the one other F4 import: the door that asks the outside surface to open');
   const source = code(await read('src/features/service-enrollment/lifecycle-epoch.ts'));
   assert.doesNotMatch(source, /createContext|useState|useEffect|useRef/u, 'the seam holds no state: it is not a provider');
   const layout = await read('src/app/_layout.tsx');

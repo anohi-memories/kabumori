@@ -81,6 +81,9 @@ export async function gateHarness(server, options = {}) {
     },
   };
   let session = null;
+  // The surface's door: `opened` records every `open(userId)` the gate asked for.
+  const opened = [];
+  const lifecycleApi = options.lifecycleApi ?? { openFor: null, opened, open: (userId) => { opened.push(userId); return true; }, close() {}, bump: () => false };
   const modules = {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
@@ -92,7 +95,8 @@ export async function gateHarness(server, options = {}) {
     '@/domain/service-enrollment': enrollmentModule,
     '@/lib/supabase': { getSupabaseConfig: () => ({ ok: true, config: { url: 'https://fixture.supabase.co', publishableKey: 'sb_publishable_fixture' } }) },
     '@/providers/auth-provider': { useAuth: () => ({ session }) },
-    '@/app/account-deletion': { __esModule: true, default: 'AccountDeletionScreen' },
+    // F4's lifecycle hook the gate uses to ask the OUTSIDE surface to open (recorded here; the gate draws no screen of its own)
+    '@/features/service-lifecycle/service-lifecycle': { useServiceLifecycle: () => lifecycleApi },
     // The gate's one view of F4's service-lifecycle signal. Without a lifecycle mock every person is at epoch 0.
     '@/features/service-enrollment/lifecycle-epoch': options.lifecycleModule ?? { useLifecycleEpoch: (userId) => (options.lifecycle && userId ? options.lifecycle.epochOf(userId) : 0) },
   };
@@ -135,6 +139,7 @@ export async function gateHarness(server, options = {}) {
   }
   return {
     CHILDREN,
+    lifecycleApi,
     setSession(next) { session = next; },
     render, settle,
     isApp: () => tree === CHILDREN || find(tree, (n) => n === CHILDREN) !== null || tree?.props?.children === CHILDREN,

@@ -18,12 +18,33 @@ M = [
     ('the seam answers a constant instead of F4\'s number', S, "export { useServiceLifecycleEpoch as useLifecycleEpoch } from '@/features/service-lifecycle/service-lifecycle';", "export const useLifecycleEpoch: LifecycleEpochHook = () => 0;"),
     ('the seam claims not to be connected', S, "export const LIFECYCLE_SIGNAL_CONNECTED = true;", "export const LIFECYCLE_SIGNAL_CONNECTED = false;"),
     ('the seam becomes a stateful provider', S, "export { useServiceLifecycleEpoch as useLifecycleEpoch } from '@/features/service-lifecycle/service-lifecycle';", "import { useState } from 'react';\nexport const useLifecycleEpoch: LifecycleEpochHook = () => useState(0)[0];"),
+    # ---- J2 V2 P2-1 / P2-2
+    ('the gate draws its own copy of the end screen again', G, "import { useLifecycleEpoch } from '@/features/service-enrollment/lifecycle-epoch';", "import { useLifecycleEpoch } from '@/features/service-enrollment/lifecycle-epoch';\nimport AccountDeletionScreen from '@/app/account-deletion';\nvoid AccountDeletionScreen;"),
+    ('the management entry does nothing', G, "    if (signedIn !== null && signedIn === userId) lifecycle.open(signedIn);", "    void signedIn;"),
+    ('the management entry opens for the identity of the render', G, "    if (signedIn !== null && signedIn === userId) lifecycle.open(signedIn);", "    if (userId !== null) lifecycle.open(userId);"),
+    ('the management entry opens for whoever is signed in, whatever the render was drawn for', G, "    if (signedIn !== null && signedIn === userId) lifecycle.open(signedIn);", "    if (signedIn !== null) lifecycle.open(signedIn);"),
+    ('the re-enroll click does not compare with the latest question', G, "    if (!isCurrentQuestion(clicked, shown)) return;\n    const mine = ++request.current;", "    const mine = ++request.current;"),
+    ('the re-enroll click compares the owner but not the request', G, "isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);", "isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch), []);"),
+    ('the notice acknowledgement has neither guard', G, "            if (!isCurrentQuestion(origin, shown)) return;\n            setView((previous) => (previous.kind === 'outcome' && isOwner(previous, userId, loginId, epoch) && previous.request === shown\n              ? { ...previous, noticeAcknowledged: true } : previous));", "            setView((previous) => (previous.kind === 'outcome' ? { ...previous, noticeAcknowledged: true } : previous));"),
+    ('the dispatch-time check is gone (behaviourally redundant; pinned by the source-order test)', G, "        if (mine !== request.current || !isOwner(currentOwner.current, clicked.userId, clicked.loginId, clicked.epoch)) throw new EnrollmentCancelledError();\n", ""),
+    ('the retry is not compared with the latest question', G, "    if (!isCurrentQuestion({ userId, loginId, epoch }, view.request)) return;\n    enrollment.reset();", "    enrollment.reset();"),
+    ('the gate\'s old copy of the opened identity returns', G, "  const explicitInFlight = useRef(false);\n", "  const explicitInFlight = useRef(false);\n  const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);\n  void deletionOpenFor; void setDeletionOpenFor;\n"),
     ('the gate produces the signal itself', G, "  const epoch = useLifecycleEpoch(userId);", "  const epoch = useLifecycleEpoch(userId); const bump = () => {}; bump();"),
     ('the sign-out reset is gone', G, "  useEffect(() => () => enrollment.reset(), []);", "  useEffect(() => () => undefined, []);"),
 ]
 # Redundant guards: each is covered by another guard on every path the harness (and React) can take, so breaking only
 # this one cannot be observed. They are listed so the reasoning is reproducible: they are EXPECTED to survive.
+# A change of the owner (person, login or epoch) always advances the request counter in the same commit, and the request
+# comparison alone blocks every old callback; likewise the notice acknowledgement is guarded twice. So each single guard
+# below cannot be observed on its own through the public behaviour: they are EXPECTED to survive (the combined removals
+# above are detected). The task asks for both comparisons; they are kept as defence in depth.
 EQUIVALENT = [
+    ('the re-enroll click compares the request but not the owner', G, "isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);", "originRequest === request.current, []);"),
+    ('the re-enroll click ignores the epoch', G, "isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);", "isOwner(currentOwner.current, origin.userId, origin.loginId, currentOwner.current.epoch) && originRequest === request.current, []);"),
+    ('the re-enroll click ignores the login', G, "isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);", "isOwner(currentOwner.current, origin.userId, currentOwner.current.loginId, origin.epoch) && originRequest === request.current, []);"),
+    ('the re-enroll click ignores the person', G, "isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);", "isOwner(currentOwner.current, currentOwner.current.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);"),
+    ('the notice acknowledgement is not compared with the latest question', G, "            if (!isCurrentQuestion(origin, shown)) return;\n", ""),
+    ('the notice acknowledgement applies to whatever view is current', G, "(previous.kind === 'outcome' && isOwner(previous, userId, loginId, epoch) && previous.request === shown\n              ? { ...previous, noticeAcknowledged: true } : previous)", "(previous.kind === 'outcome' ? { ...previous, noticeAcknowledged: true } : previous)"),
     ('the queued ask does not check the epoch', G, "!isOwner(currentOwner.current, userId, loginId, epoch)) return;", "false) return;"),
     ('the view is not tagged with the epoch it was asked at', G, "setView({ userId, loginId, epoch, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });\n      } catch", "setView({ userId, loginId, epoch: currentOwner.current.epoch, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });\n      } catch"),
     ('a late answer of an older request may set the view', G, "if (!cancelled && mine === request.current) setView({ userId, loginId, epoch, request: mine, kind: 'outcome'", "if (!cancelled) setView({ userId, loginId, epoch, request: mine, kind: 'outcome'"),
@@ -34,7 +55,7 @@ EQUIVALENT = [
 
 def run(root):
     try:
-        return subprocess.run(['node', '--test', '--test-timeout=60000', 'tests/service-enrollment-lifecycle.test.mjs', 'tests/service-enrollment.test.mjs'], cwd=root, capture_output=True, text=True, timeout=240).returncode
+        return subprocess.run(['node', '--test', '--test-timeout=60000', 'tests/service-enrollment-lifecycle.test.mjs', 'tests/service-enrollment.test.mjs', 'tests/service-enrollment-gate-j2-v2.test.mjs', 'tests/service-end-g1-g2-integration.test.mjs'], cwd=root, capture_output=True, text=True, timeout=240).returncode
     except subprocess.TimeoutExpired:
         return 124
 def fresh():

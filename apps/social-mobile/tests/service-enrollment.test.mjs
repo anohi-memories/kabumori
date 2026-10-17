@@ -435,6 +435,7 @@ test('routing: auth, then service enrollment, then data and onboarding; mock pre
   const gate = await read('src/features/service-enrollment/service-enrollment-gate.tsx');
   assert.match(gate, /if \(selection\.kind === 'mock'\) return <>\{children\}<\/>;/u);
   assert.match(gate, /<SignOutButton \/>/u);
-  assert.match(gate, /<AccountDeletionScreen \/>/u);
+  assert.doesNotMatch(gate, /AccountDeletionScreen|deletionOpenFor/u, 'the gate keeps no copy of the end screen: F4\'s surface outside it owns the flow');
+  assert.match(gate, /onPress=\{manage\}/u, 'the management link asks the outside surface to open');
   assert.match(gate, /useEffect\(\(\) => \(\) => enrollment\.reset\(\), \[\]\)/u, 'leaving the signed-in tree cancels and forgets');
 });

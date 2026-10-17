@@ -20,8 +20,8 @@ import {
 } from '@/domain/service-enrollment';
 import { getSupabaseConfig } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
-import AccountDeletionScreen from '@/app/account-deletion';
 import { useLifecycleEpoch } from '@/features/service-enrollment/lifecycle-epoch';
+import { useServiceLifecycle } from '@/features/service-lifecycle/service-lifecycle';
 
 // Each request carries the access token of the session it was started for -- never a shared client's
 // later token -- and the gate cancels it (unsent) when the person signs out, or another person or another
@@ -68,6 +68,9 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   // The login of this session; null when the token cannot be identified (never enrolled, never ready).
   const loginId = userId && accessToken ? loginSessionIdOf(userId, accessToken) : null;
   const epoch = useLifecycleEpoch(userId);
+  // The end / ID-management screen lives in F4's surface, OUTSIDE this gate (so a new login of the same person does not
+  // destroy it). The gate only asks it to open; it keeps no copy of the screen and no identity of its own for it.
+  const lifecycle = useServiceLifecycle();
   const selection = useMemo(() => selectDataSource(), []);
   const [view, setView] = useState<GateView>({ userId: null, loginId: null, epoch: 0, request: 0, kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -78,8 +81,6 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   // The person and epoch the previous run of the automatic effect asked for (to tell a lifecycle signal from a retry).
   const askedFor = useRef<{ userId: string | null; epoch: number }>({ userId, epoch });
   const explicitInFlight = useRef(false);
-  // The deletion view is opened for one user only; another user never inherits it.
-  const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
 
   // Leaving the signed-in tree (sign-out, recovery) cancels pending work and forgets the outcome.
   useEffect(() => () => enrollment.reset(), []);
@@ -116,11 +117,25 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, selection, userId, loginId, epoch]);
 
+  // A handler is drawn for ONE person, login, epoch and request. It may act only while that is still what the gate is
+  // asking: this is checked when the handler RUNS (the owner and request refs are the latest committed question), never
+  // inferred from the button having been re-rendered or hidden -- an old callback can still be held and called.
+  const isCurrentQuestion = useCallback((origin: Owner, originRequest: number) =>
+    isOwner(currentOwner.current, origin.userId, origin.loginId, origin.epoch) && originRequest === request.current, []);
+
   const retry = useCallback(() => {
+    if (!isCurrentQuestion({ userId, loginId, epoch }, view.request)) return;
     enrollment.reset();
     setView({ userId, loginId, epoch, request: ++request.current, kind: 'loading' });
     setAttempt((value) => value + 1);
-  }, [userId, loginId, epoch]);
+  }, [userId, loginId, epoch, isCurrentQuestion, view.request]);
+
+  // The management link: F4's surface opens for the person signed in NOW, never for the one this render was drawn for
+  // if somebody else is signed in by the time of the click (the provider refuses any other person as well).
+  const manage = useCallback(() => {
+    const signedIn = currentOwner.current.userId;
+    if (signedIn !== null && signedIn === userId) lifecycle.open(signedIn);
+  }, [lifecycle, userId]);
 
   // The person's own click: sent now, once, for exactly this person and login, at the version the server
   // reported. Nothing is remembered for later, so another person or a later login never inherits it.
@@ -129,12 +144,18 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
     if (view.kind !== 'outcome' || !isOwner(view, userId, loginId, epoch) || view.outcome.kind !== 'reenroll_required') return;
     const lifecycleVersion = view.outcome.lifecycleVersion;
     const clicked: Owner = { userId, loginId, epoch };
+    const shown = view.request;
+    // A callback drawn for an older person, login, epoch or request sends nothing: this is the first thing the click does.
+    if (!isCurrentQuestion(clicked, shown)) return;
     const mine = ++request.current;
     explicitInFlight.current = true;
     setView({ ...clicked, request: mine, kind: 'loading' });
     enrollment
-      .explicit({ userId, accessToken }, (context, signal) =>
-        reactivateServiceExplicitly(transportFor(context), 'x_autopost', lifecycleVersion, signal))
+      .explicit({ userId, accessToken }, (context, signal) => {
+        // ... and once more at the very moment of dispatch (nothing can change between this check and the send).
+        if (mine !== request.current || !isOwner(currentOwner.current, clicked.userId, clicked.loginId, clicked.epoch)) throw new EnrollmentCancelledError();
+        return reactivateServiceExplicitly(transportFor(context), 'x_autopost', lifecycleVersion, signal);
+      })
       .then(
         (outcome) => {
           if (mine === request.current && isOwner(currentOwner.current, clicked.userId, clicked.loginId, clicked.epoch)) {
@@ -149,7 +170,7 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
         },
       )
       .finally(() => { explicitInFlight.current = false; });
-  }, [accessToken, epoch, loginId, userId, view]);
+  }, [accessToken, epoch, isCurrentQuestion, loginId, userId, view]);
 
   if (selection.kind === 'mock') return <>{children}</>;
   // Everything decided is tagged with the person and login it belongs to; nobody else sees it.
@@ -157,17 +178,6 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   if (loginId !== null && current.kind === 'outcome' && current.outcome.kind === 'ready'
       && (!current.outcome.sharedAccountNotice || current.noticeAcknowledged)) {
     return <>{children}</>;
-  }
-
-  if (userId !== null && deletionOpenFor === userId) {
-    return (
-      <View style={{ flex: 1 }}>
-        <Pressable accessibilityRole="button" onPress={() => setDeletionOpenFor(null)} style={{ padding: 16, paddingBottom: 0 }}>
-          <Text style={{ color: colors.primary, fontWeight: '700' }}>‹ 戻る</Text>
-        </Pressable>
-        <AccountDeletionScreen />
-      </View>
-    );
   }
 
   let body;
@@ -195,7 +205,14 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
         <SectionTitle detail={ENROLLMENT_NOTICE}>利用登録が完了しました</SectionTitle>
         <ActionButton
           label="はじめる"
-          onPress={() => setView((previous) => (previous.kind === 'outcome' ? { ...previous, noticeAcknowledged: true } : previous))}
+          onPress={() => {
+            // Only the view this button was drawn for may be acknowledged (an old button never acknowledges another person's notice).
+            const origin: Owner = { userId, loginId, epoch };
+            const shown = current.request;
+            if (!isCurrentQuestion(origin, shown)) return;
+            setView((previous) => (previous.kind === 'outcome' && isOwner(previous, userId, loginId, epoch) && previous.request === shown
+              ? { ...previous, noticeAcknowledged: true } : previous));
+          }}
         />
       </Card>
     );
@@ -227,7 +244,7 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
         <SignOutButton />
         <Pressable
           accessibilityRole="button"
-          onPress={() => setDeletionOpenFor(userId)}
+          onPress={manage}
           style={({ pressed }) => [{ alignItems: 'center', paddingVertical: 10 }, pressed && styles.buttonPressed]}
         >
           <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>利用終了・共通IDの管理</Text>

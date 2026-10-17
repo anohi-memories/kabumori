@@ -110,7 +110,7 @@ async function assemble({ answer = () => ACTIVE, endAnswer = () => endDomain.par
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' }, '@/data/repository-selection': { selectDataSource: () => ({ kind: 'supabase' }) },
     '@/domain/service-enrollment': enrollmentDomain,
     '@/lib/supabase': { getSupabaseConfig: () => ({ ok: true, config: { url: 'https://fixture.supabase.co', publishableKey: 'sb_publishable_fixture' } }) },
-    '@/providers/auth-provider': authModule, '@/app/account-deletion': screenModule, '@/features/service-enrollment/lifecycle-epoch': seam,
+    '@/providers/auth-provider': authModule, '@/features/service-enrollment/lifecycle-epoch': seam, '@/features/service-lifecycle/service-lifecycle': lifecycle,
   });
   const originalFetch = globalThis.fetch; globalThis.fetch = server.fetchImpl;
   const APP = { type: 'APP' };
@@ -281,17 +281,15 @@ test('G2 assembled: another person or sign-out closes the surface and discards t
   } finally { a.done(); }
 });
 
-test('G2 assembled: the gate\'s own embedded end view (closed states) is drawn by the gate itself and survives the same person\'s new login', async () => {
+test('G2 assembled: the gate\'s management entry (closed states) opens F4\'s outside surface; the gate draws no end screen of its own (J2 V2 P2-1; was: an embedded copy)', async () => {
   const a = await assemble({ answer: () => ENDED(4) });
   try {
     assert.equal(a.isApp(), false); assert.ok(a.gateButton('利用登録する'));
     const link = walk(a.view.gate).find((n) => n.type === 'Pressable' && textOf(walk(n.props.children).find((c) => c.type === 'Text') ?? {}).includes('利用終了・共通IDの管理'));
     link.props.onPress(); a.frame();
-    const shape = (tree) => walk(tree).map((n) => (typeof n.type === 'function' ? n.type.name || 'fn' : n.type)).join('>');
-    const before = shape(a.view.gate);
-    assert.ok(walk(a.view.gate).some((n) => typeof n.type === 'function'), 'the end screen element is in the gate\'s tree');
-    a.auth.session = sessionOf('A', 2); a.frame();   // a new login of the same person while the gate re-asks
-    assert.equal(shape(a.view.gate), before, 'same element tree at the same place: React keeps the same instance');
+    assert.equal(a.api().openFor, 'user-A', 'the entry asks the provider to open for the person signed in');
+    assert.ok(a.view.screen, 'the end screen is drawn by the surface, outside the gate');
+    assert.ok(!walk(a.view.gate).some((n) => typeof n.type === 'function'), 'and the gate\'s own tree holds no screen element');
   } finally { a.done(); }
 });
 
