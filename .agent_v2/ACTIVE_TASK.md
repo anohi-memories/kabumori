@@ -56,22 +56,20 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-threads-credential-rotate-cas-sql-contract-20261017
+- status: ready
+- task_id: postona-f4-pr251-android-intent-filter-p2-fix-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（中）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR251/J2 pending scoped review, PR255 refresh design, H5 Vault, F5 lifecycle fences
-- blocker: source-only CAS contract; managed/no real Meta, pilot and production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-token-refresh-source-design-20261017/F4.md
-- slot_use: F4-owned Threads credential CAS SQL proposal and offline PG tests
+- dependencies: PR251 HEAD 3163928d; J2 V2 Android P2; J2 PR258 review independent
+- blocker: production/pilot NO_GO; no real OAuth
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-credential-rotate-cas-sql-contract-20261017/F4.md
+- slot_use: Android callback filter P2 minimal fix and offline regression
 
-
-- l4_verdict_20261017_rotation: PASS_SOURCE_CANDIDATE / SQL_REVIEW_REQUIRED / PRODUCTION_AND_PILOT_NO_GO; PR258 HEAD 713955b5371cf4f1de4681ecec1737e1ccc7d4cd; source candidate only, no Vault/managed operation.
 ## F5
 - slot: F5
 - status: done
@@ -188,22 +186,20 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017
+- status: ready
+- task_id: postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: PR251 HEAD 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc
-- blocker: V2 CHANGES_REQUIRED P2 R1 Android callback-filter validation; focused106 PASS, adverse6 PASS/2 FAIL; no real OAuth/managed testing; production and pilot NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr238-auth-cross-user-review-20261017/
-- slot_use: read-only one-pass focused OAuth edge/redirect review
+- dependencies: PR258 HEAD 713955b5; F4 Android P2 independent
+- blocker: production/pilot NO_GO; managed Vault and H5/F5 owner contracts not validated
+- previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017/
+- slot_use: PR258 five-file source-only SQL and PG17 review
 
-
-- v2_verdict: CHANGES_REQUIRED / P2 R1 Android filter categories/port validation / 2026-10-17 / PR251 unchanged; F4 follow-up required; PRODUCTION_AND_PILOT_NO_GO.
 ## J3
 - slot: J3
 - status: idle
