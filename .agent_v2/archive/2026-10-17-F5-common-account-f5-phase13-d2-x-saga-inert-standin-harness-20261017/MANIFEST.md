@@ -1,0 +1,12 @@
+# F5 D-2 completed archive
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/files/.agent_v2/tasks/F5.md
+- size_bytes: 21903
+- SHA256: a11d31fdd31fa3c44be0a19d195c9e4afd95589923d490968c597073334bdb3f
+- original_blob: cfded2dabdb48617fa3425be25c42665b7ee4cdf
+- archive_blob: cfded2dabdb48617fa3425be25c42665b7ee4cdf
+- source_task_id: common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017
+- implementation_PR: https://github.com/anohi-memories/kabumori/pull/259
+- implementation_HEAD: 422c101aff4bb475db075abf2c0e9423582069ae
+- restore_verification: exact UTF-8 content and blob matched 2026-10-17
+- archive_policy: append-only
