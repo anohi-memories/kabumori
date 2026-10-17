@@ -1,0 +1,282 @@
+{
+  "version": 1,
+  "kind": "phase13-d3-gates",
+  "rules": [
+    "Every gate is a separate, explicit owner decision. A GO on one gate never implies another.",
+    "Every consent phrase authorizes exactly one scope and ends with the sentence 'This does not authorize any other gate.' (the Japanese phrase ends with the matching sentence).",
+    "No gate is open today. Writing a phrase in this file is not giving it.",
+    "No secret, key, token or project ref is ever written into git, chat or a Report: a phrase names a project only by the first 12 hex digits of the SHA-256 of its ref.",
+    "A secret the executor needs is set in the executor's own environment by the owner, out of band. An AI agent never receives, types or stores one.",
+    "A harness PASS is a PASS of our orchestration on a stand-in or a model. It is never a PASS of a real remote revoke, the Vault, a managed OAuth flow or production."
+  ],
+  "closing": {
+    "en": "This does not authorize any other gate.",
+    "ja": "これ以外のゲートは承認しません。"
+  },
+  "gates": [
+    {
+      "id": "PG1",
+      "title": "Restricted recheck of PR #233 (P2 x4) and of the files the D-1 / D-3 work touched",
+      "access": "review_only",
+      "decider": "owner",
+      "executor": "an independent reviewer assigned by G4 (Sol, high); no write access",
+      "prerequisites": [],
+      "inputs": ["PR #233 head 499a9e1fac595064fbc3928725be8907db1b692b", "the D-3 handoff of docs/common-account/phase13-d3-hosted-sandbox-preflight.md (section 11)"],
+      "outputs": ["reviewer verdict PASS, or a P2 list that F5 fixes before PG2a"],
+      "consents": [
+        {
+          "id": "PG1-REVIEW",
+          "en": "An independent reviewer may review exactly the boundaries listed in section 11 of docs/common-account/phase13-d3-hosted-sandbox-preflight.md at PR head <40-hex>. No other file and no wider scope. This does not authorize any other gate.",
+          "ja": "独立レビュー担当は、PR head <40-hex> における docs/common-account/phase13-d3-hosted-sandbox-preflight.md の第11節に列挙された境界だけをレビューしてよい。それ以外のファイルや広い範囲は対象外。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["reading the listed files at the stated head and reporting PASS or a P2 list"],
+      "doesNotAuthorize": ["any production read", "any project", "a wholesale re-review of Phase 11 / 12"],
+      "evidence": ["the reviewer's verdict", "the offline suites of section 12 re-run by the reviewer"],
+      "stop": ["any open P1 or P2"],
+      "existsToday": ["the review scope (section 11)", "the re-run commands (section 12)"],
+      "missingToday": ["the review itself"]
+    },
+    {
+      "id": "PG2a",
+      "title": "Production catalog inventory (A1): one read-only run of the pinned query",
+      "access": "production_read_only",
+      "decider": "owner",
+      "executor": "the owner, on the owner's machine",
+      "prerequisites": ["PG1"],
+      "inputs": ["PG1 PASS", "decision A (which login runs the query)", "inventory/schema_inventory.sql, SHA-256 from plan.lock.json"],
+      "outputs": ["inventory_cli check = READY_FOR_OWNER_REVIEW", "two runs with the same contract digest (64 hex)"],
+      "consents": [
+        {
+          "id": "PG2A-LOGIN",
+          "en": "OPTIONAL, only if decision A chose a dedicated login: authorize creating ONE login role <login-name> on the production database with the CONNECT privilege only, and dropping it after the export of PG2b is done. This is a production write and the only one. This does not authorize any other gate.",
+          "ja": "任意（判断Aで専用ログインを選んだ場合のみ）: 本番データベースに CONNECT 権限だけを持つログインロール <login-name> を 1 つ作成し、PG2b の出力が終わったら削除することを承認する。これは本番への書き込みであり、これ 1 件だけ。これ以外のゲートは承認しません。"
+        },
+        {
+          "id": "PG2A-RUN",
+          "en": "Authorize ONE read-only run of supabase/preflight/managed_disposable/inventory/schema_inventory.sql (SHA-256 <64-hex>) against the production database, with the login <login-name>, in the window <window-jst>. The output file stays outside git and chat. This does not authorize any other gate.",
+          "ja": "本番データベースに対し、ログイン <login-name> で supabase/preflight/managed_disposable/inventory/schema_inventory.sql（SHA-256 <64-hex>）を、<window-jst> の間に 1 回だけ読み取り専用で実行することを承認する。出力ファイルは git とチャットの外に置く。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["one execution of the pinned query inside a READ ONLY transaction (twice, to compare, if the window allows)"],
+      "doesNotAuthorize": ["reading any row", "the DDL export", "any other query", "any write other than the optional login role"],
+      "evidence": ["inventory_cli.ts check output (counts, codes, digests only)", "two contract digests that are equal"],
+      "stop": ["secret-shaped text in the output", "any statement other than SELECT", "a login that needs more than CONNECT", "two runs with different contract digests", "a required object missing or retyped"],
+      "existsToday": ["the pinned query and its SHA-256", "inventory_cli.ts", "the Phase 12 proof for a CONNECT-only login on a local model"],
+      "missingToday": ["a first evaluation against a real catalog (this run is that test)"]
+    },
+    {
+      "id": "PG2b",
+      "title": "Baseline DDL export (A2): schema-only, human-trimmed, scanned",
+      "access": "production_read_only",
+      "decider": "owner",
+      "executor": "the owner, on the owner's machine",
+      "prerequisites": ["PG2a"],
+      "inputs": ["PG2a outputs", "decision B (export method)", "baseline_provenance.json (contract version 2) for the object list"],
+      "outputs": ["the baseline file digest (64 hex)", "scanSql: zero blocking findings"],
+      "consents": [
+        {
+          "id": "PG2B-RUN",
+          "en": "Authorize ONE schema-only export (no row is requested) of exactly the objects listed in baseline_provenance.json (contract version 2) from the production database, by method <method>, with the login <login-name>. The file stays outside git and chat; after human trimming only its SHA-256 and the scanner result are reported. This does not authorize any other gate.",
+          "ja": "本番データベースから、baseline_provenance.json（契約バージョン 2）に列挙されたオブジェクトだけを、方法 <method>、ログイン <login-name> でスキーマのみ（行は要求しない）1 回エクスポートすることを承認する。ファイルは git とチャットの外に置き、人の手で整えた後は SHA-256 とスキャン結果だけを報告する。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["one schema-only export of the listed objects"],
+      "doesNotAuthorize": ["any row", "any trigger, cron job, host, URL, Vault reference or literal staying in the file", "applying the file anywhere"],
+      "evidence": ["the file's SHA-256", "scanSql result with zero blocking findings", "the object list equals baseline_provenance.json"],
+      "stop": ["any trigger / cron / host / URL / literal left after trimming", "an object of the list missing from the file", "the method needs more privilege than decision B allowed"],
+      "existsToday": ["the object list (contract v2)", "scanSql", "local evidence that pg_dump --schema-only needs SELECT on every dumped table (section 4)"],
+      "missingToday": ["a catalog-only DDL generator for the CONNECT-only login (a separate TASK); pg_dump is the method available today"]
+    },
+    {
+      "id": "PG3",
+      "title": "Owner approval of the contract digest and the baseline file digest",
+      "access": "decision_only",
+      "decider": "owner",
+      "executor": "none (a decision recorded in the Report, not in git)",
+      "prerequisites": ["PG2a", "PG2b"],
+      "inputs": ["the contract digest of PG2a", "the baseline file digest of PG2b", "the owner's local reading of the manifest"],
+      "outputs": ["two approved digests recorded in the Report"],
+      "consents": [
+        {
+          "id": "PG3-APPROVE",
+          "en": "I approve baseline contract digest <64-hex> and baseline file digest <64-hex>. This approves no environment and no execution. This does not authorize any other gate.",
+          "ja": "ベースライン契約ダイジェスト <64-hex> とベースラインファイルダイジェスト <64-hex> を承認する。環境も実行も承認しない。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["using these two digests as the expected values of G3a / G3b"],
+      "doesNotAuthorize": ["creating a project", "applying anything"],
+      "evidence": ["the Report line that records both digests"],
+      "stop": ["a digest is not approved", "the contract is extended after the approval (the digest must be approved again)"],
+      "existsToday": ["G3b compares the digest in the harness"],
+      "missingToday": ["the digests (they do not exist until PG2a / PG2b)"]
+    },
+    {
+      "id": "PG4",
+      "title": "Create ONE new empty hosted Supabase project",
+      "access": "hosted_disposable_create",
+      "decider": "owner",
+      "executor": "the owner, in the provider's dashboard",
+      "prerequisites": ["PG3"],
+      "inputs": ["PG3 digests", "decision C (organization)", "decision D (budget envelope)", "the cost sources (docs/common-account/phase13-d3-cost-sources.json) re-confirmed on the live pages that day"],
+      "outputs": ["the ref's SHA-256 prefix", "the allow-list entry", "readback sheet part 1 (identity, plan, region, extensions, empty counts)"],
+      "consents": [
+        {
+          "id": "PG4-CREATE",
+          "en": "Authorize creating ONE new empty Supabase project named <project-name> in organization <org-name> on plan <plan>, region <region>, with a budget ceiling of USD <budget>, solely for the disposable validation, and adding only its ref to KABUMORI_DISPOSABLE_ALLOWLIST. The project is deleted by <delete-by-jst>. It holds no secret of any other system and no production data. This does not authorize any other gate.",
+          "ja": "組織 <org-name> のプラン <plan>、リージョン <region> に、使い捨て検証だけのための空の Supabase プロジェクト <project-name> を 1 つ新規作成し、そのrefだけを KABUMORI_DISPOSABLE_ALLOWLIST に加えることを承認する。予算上限は USD <budget>。プロジェクトは <delete-by-jst> までに削除する。他システムの秘密も本番データも入れない。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["creating the project and recording its identity"],
+      "doesNotAuthorize": ["applying the baseline or the chain", "enabling any provider or extension", "deploying any function"],
+      "evidence": ["readback sheet part 1 accepted by d3_readback.ts", "the guard resolves the target in dry-run with the new ref"],
+      "stop": ["the project was created as a branch or restore of production", "the project is in an organization that holds production", "an extension pg_cron / pg_net is enabled and cannot be disabled"],
+      "existsToday": ["the guard (guard.ts) and its dry-run", "d3_readback.ts (identity part)"],
+      "missingToday": ["the project"]
+    },
+    {
+      "id": "PG5",
+      "title": "Apply the baseline and the pinned chain; deploy the pinned Edge function; set Auth",
+      "access": "hosted_disposable_mutate",
+      "decider": "owner",
+      "executor": "the owner (or an agent the owner names) running cli.ts --execute with the owner's environment",
+      "prerequisites": ["PG4"],
+      "inputs": ["PG3 digests", "PG4 identity", "plan.lock.json at a stated commit", "the pinned bytes of account-delete"],
+      "outputs": ["G1, G2, G3a, G3b, G3-P1 ... G3-P10, G3c, G4 all PASS", "the P1 / P2 fidelity result", "readback sheet part 2 (Auth, Edge list, secret names, counts)"],
+      "consents": [
+        {
+          "id": "PG5-DB",
+          "en": "Authorize cli.ts --execute --only=G1,G2,G3a,G3b,G3-P1,G3-P2,G3-P3a,G3-P3b,G3-P4,G3-P5,G3-P6,G3-P8,G3-P9,G3-P10,G3c,G4 against the project whose ref has SHA-256 prefix <sha256-12>, with plan.lock.json at commit <commit-sha>, contract digest <64-hex> and baseline digest <64-hex>. No other step and no other target. This does not authorize any other gate.",
+          "ja": "ref の SHA-256 先頭12桁が <sha256-12> のプロジェクトに対し、plan.lock.json を commit <commit-sha>、契約ダイジェスト <64-hex>、ベースラインダイジェスト <64-hex> に固定して、cli.ts --execute --only=G1,G2,G3a,G3b,G3-P1,G3-P2,G3-P3a,G3-P3b,G3-P4,G3-P5,G3-P6,G3-P8,G3-P9,G3-P10,G3c,G4 を実行することを承認する。他のステップや他の対象は含まない。これ以外のゲートは承認しません。"
+        },
+        {
+          "id": "PG5-EDGE",
+          "en": "Authorize deploying exactly the Edge function account-delete, with verify_jwt on and source digest <64-hex>, to the project whose ref has SHA-256 prefix <sha256-12>, and setting its Auth options exactly as listed in the readback sheet part 2. No other function, no secret of any other system. This does not authorize any other gate.",
+          "ja": "ref の SHA-256 先頭12桁が <sha256-12> のプロジェクトに、verify_jwt を有効、ソースダイジェスト <64-hex> で、Edge 関数 account-delete だけをデプロイし、Auth の設定を読み戻しシート第2部のとおりに設定することを承認する。他の関数や他システムの秘密は含まない。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["the listed harness steps against the one project", "the deployment of one named function by pinned bytes"],
+      "doesNotAuthorize": ["supabase db push", "supabase link", "any migration outside the chain", "the stand-in or the legacy social-mobile-account-delete function", "any provider other than e-mail"],
+      "evidence": ["the harness report (every listed step PASS)", "G3c cron / network-trigger counts unchanged", "the P1 / P2 fidelity check of the architecture plan section 4.4", "readback sheet part 2 accepted by d3_readback.ts"],
+      "stop": ["the first FAIL or STOP", "a digest mismatch", "a scanner finding", "a function other than account-delete in the list", "a secret name of X, Threads, AI, Apple, Google, SMTP or Expo"],
+      "existsToday": ["cli.ts, runner.ts, plan.ts (G1 ... G4 and the chain steps)", "the pinned digests", "d3_readback.ts (part 2)"],
+      "missingToday": ["a reviewed way to deploy account-delete by pinned bytes (a human step with a read-back and a source diff)"]
+    },
+    {
+      "id": "PG6",
+      "title": "Managed smoke: the acceptance steps that exist today, stage AS-A only",
+      "access": "hosted_disposable_exercise",
+      "decider": "owner",
+      "executor": "the owner (or an agent the owner names) running cli.ts --execute",
+      "prerequisites": ["PG5"],
+      "inputs": ["PG5 outputs"],
+      "outputs": ["every listed step PASS; manual items recorded; the F5 sign-off record"],
+      "consents": [
+        {
+          "id": "PG6-SMOKE",
+          "en": "Authorize running the acceptance steps M1, M2, M4, M5, M6, M7, M8, M9, M10, M11 and the teardown T1 against the project whose ref has SHA-256 prefix <sha256-12>, with e-mail and password sign-in only. M12 is excluded unless it is separately approved. Real OAuth is excluded. This does not authorize any other gate.",
+          "ja": "ref の SHA-256 先頭12桁が <sha256-12> のプロジェクトに対し、メールとパスワードのサインインだけで、受け入れステップ M1, M2, M4, M5, M6, M7, M8, M9, M10, M11 と後片付け T1 を実行することを承認する。M12 は別途承認しない限り含まない。実OAuthは含まない。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["the listed steps and the teardown of the users they create"],
+      "doesNotAuthorize": ["M3 (Apple / Google, manual)", "M12 (needs a saga the project can reach)", "the proposed M13 - M15 and X-1 ... X-7 (not implemented in plan.ts)", "any provider other than e-mail"],
+      "evidence": ["every listed step PASS", "T1 removed the logins", "the F5 sign-off record is complete"],
+      "stop": ["any FAIL or STOP", "a 'complete' summary with an open item that is not listed as excluded"],
+      "existsToday": ["M1, M2, M4 - M11, T1 in plan.ts", "the fake-server model run of the same steps"],
+      "missingToday": ["M12 on the project", "M13 - M15 and X-1 ... X-7 as automated steps", "M3 (manual, needs provider credentials)"]
+    },
+    {
+      "id": "PG7",
+      "title": "One sandbox build on a device against the project",
+      "access": "device",
+      "decider": "owner",
+      "executor": "the owner, with F4's sandbox preflight",
+      "prerequisites": ["PG6"],
+      "inputs": ["PG6 PASS and the F5 sign-off record", "F4 preflight (PR #243) printing READY"],
+      "outputs": ["F4's checklist result"],
+      "consents": [
+        {
+          "id": "PG7-DEVICE",
+          "en": "Authorize ONE sandbox build of the POSTONA app against the project whose ref has SHA-256 prefix <sha256-12>, with the publishable key only, and one device test by <tester> on <date-jst>. POSTONA_END_SOURCE_ENABLED stays false in git. This does not authorize any other gate.",
+          "ja": "ref の SHA-256 先頭12桁が <sha256-12> のプロジェクトに対し、公開可能キーだけを使う POSTONA アプリのサンドボックスビルドを 1 回作り、<tester> が <date-jst> に実機で 1 回テストすることを承認する。POSTONA_END_SOURCE_ENABLED は git 上で false のまま。これ以外のゲートは承認しません。"
+        }
+      ],
+      "authorizes": ["one build and one device test"],
+      "doesNotAuthorize": ["a build against production", "a store submission", "enabling any release flag in git"],
+      "evidence": ["F4's sandbox preflight prints READY", "F4's device checklist"],
+      "stop": ["the preflight REFUSES", "the build points anywhere but the project"],
+      "existsToday": ["F4's preflight on its pinned head (REFUSED today, as it must be)"],
+      "missingToday": ["everything before it"]
+    }
+  ],
+  "notGatesHere": [
+    { "id": "PG8", "reason": "later authentication stages (Google, Apple, X as a login, Threads), one approval per provider, in a different document" },
+    { "id": "PG9", "reason": "production release is a different document and different TASKs; no phrase is offered here and none is implied" }
+  ],
+  "decisions": [
+    {
+      "id": "A",
+      "question": "Which login runs the pinned production inventory query?",
+      "options": ["a dedicated CONNECT-only login (creating it is a production write that needs consent PG2A-LOGIN)", "an existing owner login in a READ ONLY session (no production write; the credential is broader than the query needs)"],
+      "recommended": "a dedicated CONNECT-only login",
+      "why": "the query is pinned by SHA-256 and runs in one READ ONLY transaction either way; the dedicated login limits what a mistake could do, at the price of one production write the owner must consent to"
+    },
+    {
+      "id": "B",
+      "question": "How is the baseline DDL exported (PG2b)?",
+      "options": ["pg_dump --schema-only restricted to the listed relations by a login that holds SELECT on them (available today; reads no row, but needs a data-capable credential)", "a catalog-only generator run by the CONNECT-only login (does not exist; needs a separate TASK and review)"],
+      "recommended": "pg_dump by the owner's own login if G4 wants to proceed now; the generator if G4 wants least privilege and accepts one more TASK",
+      "why": "local evidence (section 4): a CONNECT-only login cannot run pg_dump even with --schema-only, because pg_dump takes ACCESS SHARE locks that need SELECT"
+    },
+    {
+      "id": "C",
+      "question": "In which organization does the disposable project live?",
+      "options": ["a new organization of its own (only the owner is a member)", "the organization that holds production"],
+      "recommended": "a new organization of its own",
+      "why": "membership of an organization gives access to every project in it; a separate organization makes a mix-up between the disposable and production a different login context"
+    },
+    {
+      "id": "D",
+      "question": "Which cost envelope does the owner accept?",
+      "options": ["E0: Free plan, ceiling USD 0, only if a free project slot is available", "E1: a new Pro organization, ceiling USD 25, project deleted the same day"],
+      "recommended": "E0 if the owner's free slot is available, otherwise E1",
+      "why": "the pages state two free projects across every organization the owner administers; whether a slot is free cannot be read without signing in, so it is NOT_VERIFIED here"
+    },
+    {
+      "id": "E",
+      "question": "Which redirect URLs does the project's Auth list hold?",
+      "options": ["kabumori-social://auth-callback and kabumori-social://oauth-callback, both exact, no wildcard (what F4's preflight requires)", "kabumori-social://auth-callback only (what the app passes to Auth)"],
+      "recommended": "both exact, because F4's preflight REFUSES an auth-callback-only list and changing F4's contract is a different TASK; if the provider does not match an exact entry once a flow id is appended (Q-1), stop and go back to F4",
+      "why": "offline test of the pinned F4 preflight: an auth-callback-only list fails REDIRECTS_DECLARED"
+    },
+    {
+      "id": "F",
+      "question": "What happens to M12 (ending POSTONA alone) on the hosted project?",
+      "options": ["excluded from the first managed pass and listed as BLOCKED", "a deployed inert stand-in, which needs an F3 / G3 contract, a digest pin and a separate approval", "F3's real saga, which holds the X revoke call and the login-deleting scope"],
+      "recommended": "excluded from the first managed pass; the validation of the orchestration stays on the local harness (D-2)",
+      "why": "D-2's stand-in is injected at the harness boundary, not a function the project can reach; the legacy function is not deployed on the project"
+    },
+    {
+      "id": "G",
+      "question": "How is the project's configuration accepted?",
+      "options": ["the owner fills the readback sheet from the dashboard and d3_readback.ts decides", "no sheet (not recommended: the repository has no config.toml)"],
+      "recommended": "the readback sheet",
+      "why": "Auth providers, redirects, JWT expiry, exposed schemas, function list and secret names live in the project, not in git"
+    }
+  ],
+  "f4Conditions": [
+    { "code": "DATA_SOURCE_SUPABASE", "gate": "PG7", "howEstablished": "the sandbox build's local environment file sets the data source to supabase" },
+    { "code": "SANDBOX_DECLARED", "gate": "PG4", "howEstablished": "POSTONA_SMOKE_SANDBOX_REF is the project's ref (or local for a local stack)" },
+    { "code": "SANDBOX_NOT_PRODUCTION", "gate": "PG4", "howEstablished": "the SHA-256 of that ref is not the production hash F4 pins (deny-list agreement tested in section 12)" },
+    { "code": "URL_NOT_PRODUCTION", "gate": "PG7", "howEstablished": "the build's Supabase URL is not the production host" },
+    { "code": "URL_IS_DECLARED_SANDBOX", "gate": "PG7", "howEstablished": "the build's Supabase URL is exactly the declared project" },
+    { "code": "ENV_FILES_CONSISTENT", "gate": "PG7", "howEstablished": "no environment file of the app points anywhere else" },
+    { "code": "ENV_FILES_NO_MOCK", "gate": "PG7", "howEstablished": "no environment file selects the mock data source" },
+    { "code": "KEY_IS_PUBLISHABLE", "gate": "PG7", "howEstablished": "the build holds the publishable key only" },
+    { "code": "REDIRECTS_DECLARED", "gate": "PG5", "howEstablished": "the Auth redirect list, read back in the sheet, holds both app URLs exactly and no wildcard (decision E)" },
+    { "code": "END_FLAG_LOCAL_ONLY", "gate": "PG7", "howEstablished": "POSTONA_END_SOURCE_ENABLED is true in the working tree only and false in git HEAD" },
+    { "code": "OTHER_GATES_OFF", "gate": "PG7", "howEstablished": "the Threads and reservation switches are false in source (already true)" },
+    { "code": "OWNER_SIGNOFF", "gate": "PG6", "howEstablished": "the owner's F5 sign-off record (kept by the owner, never in git)" },
+    { "code": "SIDE_EFFECTS_ATTESTED", "gate": "PG5", "howEstablished": "the attestation no-x-no-ai-no-real-email, backed by the secret-name list and the function list of the readback sheet" }
+  ]
+}
