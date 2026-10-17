@@ -1,0 +1,1081 @@
+{
+  "version": 1,
+  "exportedAt": "2026-10-09",
+  "cases": [
+    {
+      "caseId": "aj-flydubai-attack-e956ae92",
+      "group": "geopolitics",
+      "outcomeKind": "success",
+      "note": "Al Jazeeraの見出しトリガー経由で公開された国際ニュース。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://www.aljazeera.com/news/2026/10/3/flydubai-co-pilot-stabbed-pilot-with-crash-axe-in-terrorist-attack-uae",
+        "sourceName": "al_jazeera",
+        "title": "Flydubai co-pilot stabbed captain with crash axe in ‘terrorist’ attack: UAE",
+        "bodySummary": "[単一ソース: Al Jazeera 記事（RSS見出し・本文要約）] This is a breaking news story. 本文冒頭: The prosecutor general of the United Arab Emirates has said a Flydubai co-pilot “attempted to carry out a terrorist act” during a flight earlier this week, using a crash axe against the pilot inside the cockpit. State news agency WAM quoted Hamad Saif al-Shamsi as saying on Saturday that the attacker of Wednesday’s flight FZ1073 tried to take control of the aircraft’s flight controls. He said the investigation is under way “to uncover all the circumstances of the incident, its motives, and related connections, in addition to completing technical examinations and examining physical and digital evidence”. The final results will be announced as soon as the necessary procedures are completed, Al Shamsi said. A crash axe is a tool kept in a cockpit to help pilots cut through the plane in emergencies.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:trigger:major_security_incident",
+        "category": "major_security_incident",
+        "publishedAt": "2026-10-03T06:16:47.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "major_security_incident",
+          "affectedEntities": [
+            "Flydubai",
+            "アラブ首長国連邦",
+            "航空業界"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "UAE当局がFlydubai機内で副操縦士によるテロ未遂と発表し、捜査中。重大な航空保安事案だが、日本株への具体的影響は入力から確認できない。",
+          "confidence": 0.88,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】Flydubai機内で副操縦士が機長を襲撃、UAE当局が発表\n\nUAEの検察当局によると、Flydubaiの便で副操縦士が機長に対し、非常用の斧で襲い、操縦を奪おうとしたとされています。当局は「テロ行為を試みた」と発表し、動機や関係先を含めて捜査中です。最終結果は、必要な手続きが終わり次第公表するとしています。\n\n出典: https://www.aljazeera.com/news/2026/10/3/flydubai-co-pilot-stabbed-pilot-with-crash-axe-in-terrorist-attack-uae",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "aj-hurricane-fact-failure-8792253b",
+      "group": "disaster",
+      "outcomeKind": "generation_failure",
+      "note": "ハリケーン接近の報道。Factに失敗した例。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://www.aljazeera.com/news/2026/10/8/hurricane-isaias-charges-towards-the-us-gulf-coast-with-dangerous-winds",
+        "sourceName": "al_jazeera",
+        "title": "Hurricane Isaias charges towards the US Gulf Coast with dangerous winds",
+        "bodySummary": "[単一ソース: Al Jazeera 記事（RSS見出し・本文要約）] The storm is forecast to strike Florida, Alabama and Mississippi with up to 10 inches of rain this weekend. 本文冒頭: Hurricane Isaias has intensified into the first hurricane of the Atlantic season as it barrels over record-warm water toward the northern shoreline of the United States Gulf Coast, prompting school closures and local government shutdowns. According to the Miami-based National Hurricane Center, the storm is forecast to make landfall in parts of the Florida Panhandle, southern Alabama and southern Mississippi late Friday or early Saturday. The low-lying areas are especially vulnerable to flooding and storm surges. The center warned residents in likely impact zones on Thursday to complete all emergency life-safety and property protections without delay. It has also issued a hurricane watch from Bay St. Louis, Mississippi, through Indian Pass in the northwestern part of Florida in anticipation of torrential downpours and the substantial risk of localised flash and urban flooding.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:trigger:disaster",
+        "category": "disaster",
+        "publishedAt": "2026-10-08T17:58:07.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "disaster",
+          "affectedEntities": [
+            "米国メキシコ湾岸地域",
+            "米国の保険・エネルギー関連業種"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "ハリケーンが米国湾岸への上陸を予測され、豪雨・洪水や行政機能への影響が報じられている。一方、日本株への具体的影響は入力から確認できない。",
+          "confidence": 0.78,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】ハリケーン「Isaias」が大西洋シーズン初のハリケーンに発達し、米国メキシコ湾岸へ進んでいます。フロリダ州パンハンドル、アラバマ州南部、ミシシッピ州南部に、金曜遅くから土曜早朝に上陸するとの予報です。週末に最大10インチの雨が降る可能性も報じられています。\n\nミシシッピ州ベイセントルイスからフロリダ州インディアンパスまでハリケーン警報が発令され、学校の休校や自治体の業務停止も始まっています。\n\n出典: https://www.aljazeera.com/news/2026/10/8/hurricane-isaias-charges-towards-the-us-gulf-coast-with-dangerous-winds",
+          "model": "gpt-6-luna",
+          "factStatus": "failed",
+          "voiceStatus": "not_run",
+          "error": "NEWS_GENERATION_FACT_FAILED",
+          "factIssues": [
+            "警戒情報の誤訳：原文はhurricane watch（ハリケーン注意報・警戒）であり、「ハリケーン警報」ではありません。"
+          ],
+          "voiceIssues": [
+            "FACT_NOT_PASSED"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "aj-qatar-tanker-3a1fe802",
+      "group": "geopolitics",
+      "outcomeKind": "success",
+      "note": "カタール沖でタンカーが攻撃を受けた報道。重要として公開された。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://www.aljazeera.com/news/2026/10/8/tanker-hit-by-multiple-projectiles-off-north-coast-of-qatar-ukmto-says",
+        "sourceName": "al_jazeera",
+        "title": "Tanker hit by multiple projectiles off north coast of Qatar, UKMTO says",
+        "bodySummary": "[単一ソース: Al Jazeera 記事（RSS見出し・本文要約）] The UK maritime agency has reported a rise in attacks on vessels in the vital Strait of Hormuz. 本文冒頭: A number of casualties have been reported after a tanker sailing off the north coast of Qatar was struck by multiple projectiles, the United Kingdom Maritime Trade Operations (UKMTO) agency has announced. The vessel was hit by several projectiles 94 kilometres (58 miles) north of Madinat ash Shamal, UKMTO said on Wednesday. The incident comes as the British maritime agency reported a recent rise in attacks on vessels in the Strait of Hormuz. UKMTO did not say how many people were killed or injured in this latest attack, adding that authorities were investigating. It did not specify the origin of the ship. An attack on a vessel in the middle of the Gulf is unusual. The Maritime Executive, a publication specialising in commercial shipping, said it was the first reported attack on a tanker in the western half of the Gulf in weeks.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:trigger:major_security_incident",
+        "category": "major_security_incident",
+        "publishedAt": "2026-10-08T02:48:25.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "major_security_incident",
+          "affectedEntities": [
+            "カタール沖のタンカー航路",
+            "ホルムズ海峡周辺の海運"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "UKMTOによると、カタール沖のタンカーが複数の飛翔体による攻撃を受け、死傷者が報告された。海運への懸念材料だが、被害規模や日本株への具体的影響は不明。",
+          "confidence": 0.82,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】UKMTOによると、カタール北岸沖を航行していたタンカーが複数の飛翔体による攻撃を受け、死傷者が報告されました。現場はマディナト・アッシュ・シャマールの北約94km。死傷者の数は明らかにされておらず、当局が調査しています。UKMTOは、ホルムズ海峡で船舶への攻撃が最近増えているとも報告しています。\n\n出典: https://www.aljazeera.com/news/2026/10/8/tanker-hit-by-multiple-projectiles-off-north-coast-of-qatar-ukmto-says",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "bbc-flydubai-attack-fact-failure-f4a8a7cc",
+      "group": "geopolitics",
+      "outcomeKind": "generation_failure",
+      "note": "同じ事件のBBC記事。『17,000フィート超』を『約5,200m』と言い換えて『超』を落とし、Factに失敗した例。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://www.bbc.co.uk/news/articles/c61wv7lgex13o",
+        "sourceName": "bbc_world",
+        "title": "Flydubai co-pilot attacked captain with axe, UAE official says",
+        "bodySummary": "[単一ソース: BBC News 記事（RSS見出し・本文要約）] The flydubai plane plunged more than 17,000ft two and a half hours into its journey before passengers and crew overpowered the attacker. 本文冒頭: The co-pilot of the Flydubai plane travelling to Israel attacked the pilot with a crash axe in an attempt to take control of the aircraft, the United Arab Emirates prosecutor general has said. The flight from Dubai to Tel Aviv carrying more than 170 people plunged more than 17,000ft (5,200m) two and a half hours into its journey. Capt Smit Machchhar said he was lying on the cockpit floor injured when he realised the plane was sinking and he had to act, explaining: \"I told myself to go for one last push to open the door from inside.\" Passengers aboard the aircraft were then able to enter the cockpit and overpower the attacker, while on-duty crew travelling on the flight landed the plan safely. A crash axe is usually kept ​in the cockpit in case of emergencies. The UAE attorney general told state media that investigations were ongoing to determine the full circumstances and motives of the incident.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:trigger:major_security_incident",
+        "category": "major_security_incident",
+        "publishedAt": "2026-10-03T07:49:40.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "major_security_incident",
+          "affectedEntities": [
+            "Flydubai",
+            "航空"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "副操縦士が機長を斧で襲い、機体が急降下した重大な航空機内事件。乗客らが制圧し、安全に着陸したと報じられている。",
+          "confidence": 0.88,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】flydubai機内で副操縦士が機長を斧で襲撃\n\nUAEの検察当局によると、ドバイ発テルアビブ行きの便で、副操縦士が操縦室の斧で機長を襲い、機体は高度約5,200メートル急降下しました。乗客らが副操縦士を制圧し、機内にいた勤務中の乗員が安全に着陸させたとのことです。乗客・乗員は170人以上。当局は詳しい経緯や動機を調べています。\n\n出典: https://www.bbc.co.uk/news/articles/c61wv7lgex13o",
+          "model": "gpt-6-luna",
+          "factStatus": "failed",
+          "voiceStatus": "not_run",
+          "error": "NEWS_GENERATION_FACT_FAILED",
+          "factIssues": [
+            "急降下の規模を「17,000フィート（5,200m）超」から「約5,200メートル」に変更し、超過条件を欠落"
+          ],
+          "voiceIssues": [
+            "FACT_NOT_PASSED"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "bbc-nepal-floods-1533a3fd",
+      "group": "disaster",
+      "outcomeKind": "success",
+      "note": "ネパールの洪水報道（海外災害）。見出しトリガー経由で公開された。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://www.bbc.co.uk/news/articles/ck054zm1701qo",
+        "sourceName": "bbc_world",
+        "title": "Many Nepalis swept away in the floods aren't officially dead, leaving families in limbo",
+        "bodySummary": "[単一ソース: BBC News 記事（RSS見出し・本文要約）] Relatives are finding themselves with no compensation and facing an administrative nightmare. 本文冒頭: At the Pashupatinath temple, on the banks of the Bagmati River in Kathmandu, Madan Lal Lawat joined other families in honouring loved ones who were lost when a deadly flood tore through the China-Nepal border last month. In Hindu tradition, when a body cannot be recovered, a symbolic effigy is made from sacred \"kusha\" grass to represent the dead, allowing relatives to perform last rites. With more than 5,000 people still missing and the government ending rescue operations, this is the only way people like Lawat can honour the dead. Five of his relatives - including his brother - were caught in the water's onslaught and are still missing. Lawat survived because he was driving his bus outside his village, Betrawati. The last Lawat heard from survivors is that his brother Mangal died while going door-to-door, trying to warn others to leave.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:trigger:disaster",
+        "category": "disaster",
+        "publishedAt": "2026-10-06T22:17:56.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "disaster",
+          "affectedEntities": [
+            "ネパール",
+            "中国・ネパール国境地域"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "中国・ネパール国境の洪水で5,000人超が行方不明とされ、救助活動も終了したとの報道。重大な災害だが、日本株への具体的な影響は入力から確認できない。",
+          "confidence": 0.87,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】中国・ネパール国境地域の洪水で、5,000人超が行方不明と報じられています。ネパール政府は救助活動を終了。遺体が見つからず、死亡が公的に確認されていないため、補償を受けられず行政手続きに直面する遺族もいるとのことです。\n\n出典: https://www.bbc.co.uk/news/articles/ck054zm1701qo",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "boj-governor-speech-a3dac612",
+      "group": "negative_control",
+      "outcomeKind": "negative_control",
+      "note": "日銀総裁の挨拶（講演）。市場を動かす新情報がなく no_post が妥当な対照例。",
+      "candidate": {
+        "sourceType": "market_macro",
+        "sourceUrl": "https://www.boj.or.jp/about/press/koen_2026/ko261006a.htm",
+        "sourceName": "market_macro",
+        "title": "【挨拶】植田総裁（全国証券大会）",
+        "bodySummary": null,
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "macro:boj",
+        "category": "boj",
+        "publishedAt": "2026-10-06T06:35:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "no_post",
+          "category": "boj",
+          "affectedEntities": [
+            "日本銀行"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "総裁挨拶の題名のみで本文要約がなく、政策変更や具体的な市場影響は確認できない。（保存済み情報だけでは安全に確定できないため投稿対象外）",
+          "confidence": 0.87,
+          "needsSol": true,
+          "factCheckStatus": "needs_review",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": null
+      },
+      "expected": {
+        "importance": "no_post",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "boj-official-policy-change-notice-a989d1f3",
+      "group": "boj",
+      "outcomeKind": "miss",
+      "note": "日銀公式の『金融市場調節方針の変更について』。同じ利上げの報道記事は重要として公開されたが、この公式文書は no_post と判定された（取りこぼし例）。",
+      "candidate": {
+        "sourceType": "market_macro",
+        "sourceUrl": "https://www.boj.or.jp/mopo/mpmdeci/mpr_2026/k260918a.pdf",
+        "sourceName": "market_macro",
+        "title": "金融市場調節方針の変更について",
+        "bodySummary": null,
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "macro:boj",
+        "category": "boj",
+        "publishedAt": "2026-09-18T02:54:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "no_post",
+          "category": "boj",
+          "affectedEntities": [
+            "日本銀行",
+            "日本株市場"
+          ],
+          "japanMarketRelevance": "high",
+          "reason": "日本銀行による金融市場調節方針の変更であり日本株への影響が見込まれるが、変更内容・規模・予想外度を確認できず最重要とは判定できない。（保存済み情報だけでは安全に確定できないため投稿対象外）",
+          "confidence": 0.8,
+          "needsSol": true,
+          "factCheckStatus": "needs_review",
+          "model": "gpt-5.6-sol",
+          "escalatedToSol": true
+        },
+        "generation": null
+      },
+      "expected": {
+        "importance": "important",
+        "source": "human_hint"
+      }
+    },
+    {
+      "caseId": "boj-rate-hike-news-cafc0f82",
+      "group": "boj",
+      "outcomeKind": "success",
+      "note": "日銀の利上げ（1.25%）の報道。旧generic検索が拾い、重要として公開された。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://apnews.com/article/67e71246d3af41bcfc61aa788f9959c7",
+        "sourceName": "breaking_market",
+        "title": "Bank of Japan raises benchmark interest rate to 1.25%",
+        "bodySummary": "The Bank of Japan raised its benchmark interest rate to 1.25% from 1.00%, according to an Associated Press report. Tokyo’s Nikkei 225 rose after the decision was announced.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:japan_session",
+        "category": "boj",
+        "publishedAt": "2026-09-18T03:20:26.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "boj",
+          "affectedEntities": [
+            "Bank of Japan",
+            "Nikkei 225",
+            "日本株",
+            "日本の金利市場"
+          ],
+          "japanMarketRelevance": "high",
+          "reason": "日銀が政策金利を1.00%から1.25%へ引き上げ、日本株・金利市場に直接影響する。ただし、予想外度や市場反応の規模が確認できず、最重要とは判定しない。",
+          "confidence": 0.9,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-5.6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】日本株では、日銀の決定発表後に日経225が上昇しました。日銀は政策金利を1.00％から1.25％へ引き上げ。日本の金利市場にも直接関わる決定です。📈\n\n出典: https://apnews.com/article/67e71246d3af41bcfc61aa788f9959c7",
+          "model": "gpt-5.6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": [
+            "「日本の金利市場にも直接関わる決定です」はやや抽象的で、なくても内容は伝わります。全体としては重要ニュース向けに簡潔で、日経225の反応も添えられています。"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "fsa-insurer-administrative-action-b5a10bac",
+      "group": "fsa_action",
+      "outcomeKind": "success",
+      "note": "金融庁による生命保険会社への行政処分（JP公式レーン）。",
+      "candidate": {
+        "sourceType": "market_macro",
+        "sourceUrl": "https://www.fsa.go.jp/news/r8/hoken/20261009/20261009.html",
+        "sourceName": "jp_official",
+        "title": "プルデンシャル生命保険株式会社、ジブラルタ生命保険株式会社及びプルデンシャル・ホールディング・オブ・ジャパン株式会社に対する行政処分について公表しました。",
+        "bodySummary": "金融庁は、本日、プルデンシャル生命保険株式会社（本店：東京都千代田区、法人番号4010001028465、以下、「プルデンシャル生命」という。）、ジブラルタ生命保険株式会社（本店：東京都千代田区、法人番号5010001034776、以下、「ジブラルタ生命」という。）及びプルデンシャル・ホールディング・オブ・ジャパン株式会社（本店：東京都千代田区、法人番号2010001073307、以下、「プルデンシャル・ホールディング・オブ・ジャパン」という。）に対し、下記のとおり行政処分を行いました。 （１）令和８年10月13日（火）から令和９年１月31日（日）までの間、保険募集及び保険契約の締結を停止すること。 （当局が契約者保護の観点から必要とされる業務として個別に認めたものを除く。） （２）業務の健全かつ適切な運営を確保するため、以下を実施すること。 （３）上記（２）については、保険業やコーポレートガバナンスにかかる専門的知見を有する外部専門家により業務改善計画の策定及び実施にかかるレビューを受けること。 （４）上記（２）に係る業務の改善計画を、令和８年11月30日（月）までに提出し、ただちに実行すること。 （５）上記（４）の改善計画について、３か月毎の進捗及び改善状況を翌月15日までに報告すること（初回報告基準日を令和９年２月末とする）。 プルデンシャル生命の社外特別調査委員会の調査報告書も踏まえ、当庁による立入検査の結果や保険業法第128条第１項に基づき求めた報告を検証したところ、以下の問題が認められた。 当社は、ライフプランナーと称する営業社員（以下「LP」という。\n（出典：金融庁ウェブサイト）",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "jp_official:jp_fsa_news:995292",
+        "category": "administrative_action",
+        "publishedAt": "2026-10-09T06:00:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "administrative_action",
+          "affectedEntities": [
+            "プルデンシャル生命保険株式会社",
+            "ジブラルタ生命保険株式会社",
+            "プルデンシャル・ホールディング・オブ・ジャパン株式会社"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "金融庁が3社に対し、約3カ月半の保険募集・契約締結の停止を命じた。業務への重大な影響は明確だが、日本株市場全体への影響規模は確認できない。",
+          "confidence": 0.88,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】保険募集と保険契約の締結が約3カ月半停止に。金融庁はプルデンシャル生命、ジブラルタ生命、プルデンシャル・ホールディング・オブ・ジャパンの3社に行政処分を行いました。停止期間は2026年10月13日から2027年1月31日までで、契約者保護のため当局が個別に認めた業務は除かれます。\n\n3社は業務改善計画を2026年11月30日までに提出して実行し、外部専門家のレビューを受けるよう求められています。\n\n出典: https://www.fsa.go.jp/news/r8/hoken/20261009/20261009.html",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": [
+            "速報として事実を簡潔に伝えていて自然です。会話調は控えめですが、重要ニュースなので問題ありません。"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "fx-finance-minister-remarks-25c28b26",
+      "group": "fx",
+      "outcomeKind": "success",
+      "note": "財務相が米国からの協調介入要請を否定した発言。旧generic検索（日本市場トピック）が拾い、重要として配信待ちになった。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://www.mof.go.jp/public_relations/conference/my20260904.html",
+        "sourceName": "breaking_market",
+        "title": "Japan finance minister says no formal U.S. request for coordinated FX intervention or monetary-policy action",
+        "bodySummary": "Japan’s Finance Minister Satsuki Katayama said on September 4 that the United States had made no formal request for Japan to take specific action on monetary policy or coordinated foreign-exchange intervention. She acknowledged that U.S. Treasury Secretary Scott Bessent has discussed interest-rate differentials and exchange rates with Japanese officials.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:fx_intervention",
+        "category": "fx",
+        "publishedAt": "2026-09-04T00:00:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "fx",
+          "affectedEntities": [
+            "日本円",
+            "為替市場",
+            "日本政府"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "日本の財務相が、米国から協調為替介入や金融政策対応の正式要請はないと説明した。為替介入観測に関わる発言だが、具体的な政策変更や介入決定は確認できない。",
+          "confidence": 0.88,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-5.6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】日本の片山さつき財務相は9月4日、米国から協調為替介入や金融政策対応について、正式な要請は受けていないと説明しました。\n\n米財務長官のベッセント氏が日本側と金利差や為替レートについて協議したことは認めていますが、具体的な政策変更や為替介入の決定は確認されていません。\n\n出典: https://www.mof.go.jp/public_relations/conference/my20260904.html",
+          "model": "gpt-5.6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "north-korea-projectile-090e8d18",
+      "group": "north_korea",
+      "outcomeKind": "success",
+      "note": "北朝鮮の飛翔体発射。旧generic検索（国内安全保障トピック）が拾い、重要として公開された。",
+      "candidate": {
+        "sourceType": "breaking_market",
+        "sourceUrl": "https://apnews.com/article/ad020d996b61dedd358cc689db614fdb",
+        "sourceName": "breaking_market",
+        "title": "North Korea launches unidentified projectile toward the sea",
+        "bodySummary": "South Korea’s military said North Korea launched an unidentified projectile toward the sea on Sunday, September 20, 2026. The launch was reported amid an ongoing series of North Korean weapons tests; the report did not confirm a Japan J-Alert activation, Japanese EEZ impact, or damage.",
+        "companyName": null,
+        "companyCode": null,
+        "entityKey": "breaking:japan_security",
+        "category": "major_security_incident",
+        "publishedAt": "2026-09-20T06:31:04.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "major_security_incident",
+          "affectedEntities": [
+            "北朝鮮",
+            "韓国",
+            "日本の安全保障"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "北朝鮮の飛翔体発射は地域の安全保障と市場心理に影響し得る。一方、Jアラート、EEZへの影響、被害は確認されず、規模も不明なため最重要には当たらない。",
+          "confidence": 0.84,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-5.6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】韓国軍によると、北朝鮮が2026年9月20日、海に向けて正体不明の飛翔体を発射しました。北朝鮮では兵器発射が続いていますが、今回の発射については、Jアラートの発出や日本のEEZへの影響、被害は確認されていません。規模も不明です。日本株では安全保障をめぐる反応が出る可能性はあるものの、現時点で確認できるのは発射の事実までです。⚠️\n\n出典: https://apnews.com/article/ad020d996b61dedd358cc689db614fdb",
+          "model": "gpt-5.6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": [
+            "重要ニュースとして簡潔にまとまっています。『規模も不明です』はやや対象が曖昧ですが、全体の読みやすさや速報性を損なうほどではありません。"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-buyback-fact-failure-4887f2b0",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "note": "自己株式取得の決定。Factに失敗した例。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547285.pdf",
+        "sourceName": "tdnet",
+        "title": "自己株式取得に係る事項の決定に関するお知らせ（会社法第459条第１項の規定による定款の定めに基づく自己株式の取得）",
+        "bodySummary": "ご注意：この文書は、当社の自己株式取得に関して一般に公表するための記者発表文であり、国内外を問わず投資勧誘を目的として作\n成されたものではありません。当社普通株式について投資を行う際は、必ず当社が作成する株式売出目論見書及び訂正事項分\n（作成された場合）をご覧いただいた上で、投資家ご自身の責任と判断でなさるようお願いいたします。また、この文書は、\n米国における当社普通株式についての投資の募集、購入の勧誘行為の一部をなすものではありません。当社は当社普通株式に\nついて、1933 年米国証券法に基づいて証券の登録をしておらず、また、登録を行うことを予定しておりません。1933 年米国\n各 位\n会社名 ＣＫＤ株式会社\n（TEL 0568－74－1111）\n自己株式取得に係る事項の決定に関するお知らせ\n（会社法第459条第１項の規定による定款の定めに基づく自己株式の取得）\n当社は、2026年10月７日付の取締役会決議において、会社法第459条第１項の規定による当社定款第\n33条の定めに基づき、自己株式取得に係る事項について下記のとおり決定いたしましたので、お知らせ\nいたします。\n記\n１．自己株式の取得を行う理由\n当社は、資本効率の向上及び株主還元の充実を図ることを目的として、機動的な自己株式の取得を\n実施する方針としております。また、2026年10月７日付「株式の売出しに関するお知らせ」にて公表\nした当社株式の売出し（以下「本売出し」という。）の実施に伴う、当社株式の需給への影響を緩和\nする観点から、今回の自己株式取得を実施するものであります。\n２．取得に係る事項の内容\n（１） 取得対象株式の種類 当社普通株式\n（２） 取得し得る株式の総数 130万株（上限）\n（発行済株式総数（自己株式を除く。）に対する割合1.94％）\n（３） 株式の取得価額の総額 50億円（上限）\n（４） 取得期間 本売出しに係る売出価格等決定日（2026年10月19日（月）か\nら2026年10月22日（木）までの間のいずれかの日（以下「売\nご注意：この文書は、当社の自己株式取得に関して一般に公表するための記者発表文であり、国内外を問わず投資勧誘を目的として作\n成されたものではありません。当社普通株式について投資を行う際は、必ず当社が作成する株式売出目論見書及び訂正事項分\n（作成された場合）をご覧いただいた上で、投資家ご自身の責任と判断でなさるようお願いいたします。また、この文書は、\n米国における当社普通株式についての投資の募集、購入の勧誘行為の一部をなすものではありません。当社は当社普通株式に\nついて、1933 年米国証券法に基づいて証券の登録をしておらず、また、登録を行うことを予定しておりません。1933 年米国\nら2026年12月30日（水）まで（（注）２．）\n（５） 取得方法 株式会社東京証券取引所における市場買付け\n（注）１．市場動向等により一部又は全部の取得が行われない可能性があります。\n２．売出価格等決定日が2026年10月19日（月）の場合、「2026年10月27日（火）から2026年12\n月30日（水）まで」\n（ご参考）2026年９月30日時点の自己株式の保有状況\n発行済株式総数（自己株式を除く。） 66,839,038株\n自己株式数 1,070,411株\n以 上",
+        "companyName": "ＣＫＤ",
+        "companyCode": "64070",
+        "entityKey": "company:64070",
+        "category": "share_buyback",
+        "publishedAt": "2026-10-07T07:00:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "share_buyback",
+          "affectedEntities": [
+            "ＣＫＤ株式会社",
+            "CKD（64070）"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "売出しに伴う需給影響の緩和などを目的に、上限50億円・発行済株式の1.94％に相当する自己株式取得を決定。金額・比率が明示された株主還元策だが、最上位とするほどの規模とは確認できない。",
+          "confidence": 0.94,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】CKDは、上限50億円の自己株式取得を決定しました。取得株数は上限130万株で、自己株式を除く発行済み株式の1.94％に相当します。期間は売出価格の決定日から2026年12月30日まで、東証で市場買付けを行う予定です。\n\n10月7日に公表した株式売出しに伴う需給への影響を緩和することなどが目的です。市場動向によっては、取得の一部または全部を行わない可能性があります。\n\n出典: https://www.release.tdnet.info/inbs/140120261007547285.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "failed",
+          "voiceStatus": "not_run",
+          "error": "NEWS_GENERATION_FACT_FAILED",
+          "factIssues": [
+            "取得期間の開始日が不正確。売出価格等決定日からと断定しているが、決定日によって開始日が異なり、10月19日決定の場合は10月27日開始と記載されている。"
+          ],
+          "voiceIssues": [
+            "FACT_NOT_PASSED"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-dividend-increase-7207a56d",
+      "group": "tdnet_earnings",
+      "outcomeKind": "success",
+      "note": "中間配当の増配と配当予想の修正。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547756.pdf",
+        "sourceName": "tdnet",
+        "title": "剰余金の配当（中間配当の増配）および配当予想の修正に関するお知らせ",
+        "bodySummary": "03\n剰余金の配当（中間配当の増配）および配当予想の修正に関するお知らせ\n本日（2026 年 10 月８日）開催の取締役会において、2026 年８月 31 日を基準日とする剰余金\nの配当（中間配当）および 2027 年２月期の配当予想を下記のとおり修正することを決議しまし\nたので、お知らせします。\n記\n１．剰余金の配当\n（１）中間配当の内容\n決定額 直近の配当予想\n(2026 年４月９日公表)\n基準日 2026 年８月 31 日 同左 2025 年８月 31 日\n１株当たり配当金 12 円 00 銭 11 円 00 銭 11 円 00 銭\n配当金の総額 768 百万円 ― 712 百万円\n効力発生日 2026 年 11 月９日 ― 2025 年 11 月 10 日\n配当原資 利益剰余金 ― 利益剰余金\n（２）理由\n当社は、株主の皆様に対する安定的な利益還元を経営の重要課題と認識しており、連結業績\nの動向や財務状況、および今後の事業展開に必要な内部留保の充実等を総合的に勘案し、配当\nを実施することを基本方針としています。\nこの方針に基づき、本日公表しました「2027 年２月期 第２四半期（中間期）決算短信」お\nよび「2027 年２月期第２四半期（中間期）の連結業績予想と実績との差異および通期連結業績\n予想の修正に関するお知らせ」に記載のとおり、通期業績予想を上方修正したことを受け、\n2027 年２月期の中間配当を前回予想の１株当たり 11 円から１円増配し、12 円とすることを決\n定しました。\n会 社 名 株式会社 吉野家ホールディングス\n電 話 番 号 [tel]\n２．期末配当予想の修正\n上記方針および通期業績予想の上方修正を踏まえ、期末配当予想を前回予想の１株当たり 11\n円から１円増配し、12 円に修正します。これにより、2027 年２月期の年間配当予想は、中間\n配当と合わせて１株当たり 24 円となります。\n年間配当金\n第２四半期末 期末 合計",
+        "companyName": "吉野家ＨＤ",
+        "companyCode": "98610",
+        "entityKey": "company:98610",
+        "category": "dividend_increase",
+        "publishedAt": "2026-10-08T07:00:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "dividend_increase",
+          "affectedEntities": [
+            "吉野家ホールディングス",
+            "98610"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "業績予想の上方修正を受け、中間・期末配当を各1円増額し、年間配当予想を24円に修正。増配幅は限定的です。",
+          "confidence": 0.97,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】吉野家HD、2027年2月期の年間配当予想を24円に増額\n\n通期業績予想の上方修正を受け、中間配当は前回予想の11円から12円に。期末配当予想も11円から12円へ引き上げ、年間では前回予想から2円増の24円です。\n\n出典: https://www.release.tdnet.info/inbs/140120261008547756.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-earnings-revision-contract-loss-91569af5",
+      "group": "tdnet_earnings",
+      "outcomeKind": "success",
+      "note": "主要取引先との契約解除に伴う損失と通期業績予想の修正（最重要）。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008548015.pdf",
+        "sourceName": "tdnet",
+        "title": "主要取引先との供給契約の解除に伴う損失等の計上、および2027年3月期通期連結業績予想の修正に関するお知らせ",
+        "bodySummary": "各 位\n会社名 テルモ株式会社\n（TEL. 03－6742－8500）\n主要取引先との供給契約の解除に伴う損失等の計上、および 2027 年 3 月期通期連結業績予想の修正に\n関するお知らせ\n当社は本日、当社グループの主要取引先である CSL Plasma 社との供給契約を合意解除することを\n決定いたしましたので、お知らせいたします。これに伴い、2027 年３月期（2026 年４月１日～2027 年\n３月 31 日）の連結決算において、下記の通り損失等を計上する見込みとなりました。また、2026 年\n８月７日に公表しました 2027 年３月期の通期連結業績予想を下記の通り修正いたしましたので、併\nせてお知らせいたします。\n１． 主要取引先との供給契約の解除について\n当社の完全子会社であるTerumo Blood and Cell Technologies（以下、Terumo BCT）は、2021年に\n原料血漿採取領域においてCSL Plasma社と協業を開始し、同社が米国において運営する血漿採取セン\nターに原料血漿採取システムを供給してまいりましたが、締結済みの供給契約について、両社で合意\nした移行期間の終了後に解除することを同社と合意いたしました。今後は、両社で合意した移行計画\nおよび移行期間に基づき、契約解除に向けた手続きを進めてまいります。\n２． 供給契約の解除に伴う損失等の計上について\n（１） 損失等の内容\nCSL Plasma社と供給契約の解除を合意したことを受けて、Terumo BCT関連事業の将来収益計画\nを見直した結果、関連資産の減損損失等の計上を含む財務影響が見込まれることとなりました。\n技術その他の関連資産に係る減損損失であり、現金支出を伴わない費用です。また、残る約1.6億\n米ドル（約255億円）は、移行期間中に発生する事業損失ならびに契約解除および事業再編に伴う\n費用等です。\nこれらの金額は現時点における概算であり、今後の契約交渉、移行条件および資産評価等によ\nり変動する可能性があります。当該損失による財務影響が東京証券取引所の定める軽微基準に該\nのお客様に対するソリューションの提供に取り組んでまいります。\n３． 通期連結業績予想の修正\n上記損失を反映し、2027年３月期の通期連結業績予想を修正いたします。当該修正額が、東京証券\n取引所の定める軽微基準に該当しないこととなったため、公表いたします。\n（１） 2027 年３月期 通期連結業績予想数値の修正（2026 年４月１日～2027 年３月 31 日）\n売上収益\n(百万円)\n調整後\n営業利益\n(百万円)\n営業利益\n(百万円)\n親会社の所有者に帰属\nする当期利益\n(百万円)\n基本的1株当たり\n当期利益\n(円)\n(Ｂ) 1,229,500 274,500 160,000 120,000 81.35\n増減額(Ｂ－Ａ) -9,500 - -97,500 -73,100 －\n増減率 -0.8% - -37.9% -37.9% －\n(参考)前期実績\n（2026年３月期） 1,131,877 219,369 176,320 135,914 92.14\n*調整後営業利益については、今回の減損損失の計上に伴い、将来の償却費負担が軽減されること等\nから、約20億円の利益押し上げ効果を見込んでおります。また、2026年9月30日に公表したArsenal\nMedical社の買収に伴い、研究開発費等で約20億円の費用を見込んでおり、当該費用についても今回の\n業績予想に織り込んでおります。\n（２） 修正の理由\nCSL Plasma社と供給契約の解除を合意したことを踏まえて、関連資産の減損損失に加え、移行\n期間中の事業損失ならびに契約解除および事業再編に伴う費用等を反映し、営業利益および親会\n社の所有者に帰属する当期利益について、通期の業績予想を下方修正いたします。\n（注）テルモが開示する情報のうち、業績予想をはじめとする将来予測は、現時点で入手可能な限られた情報に基づ\nき、テルモで判断した予想であり、潜在的なリスクや不確実性が含まれています。そのためさまざまな要因により、実\n際の業績等が変動する可能性があります。実際の業績に影響を与えうる重要な要素には、テルモの事業領域を取り巻く",
+        "companyName": "テルモ",
+        "companyCode": "45430",
+        "entityKey": "company:45430",
+        "category": "earnings_revision_down",
+        "publishedAt": "2026-10-08T07:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "most_important",
+          "category": "earnings_revision_down",
+          "affectedEntities": [
+            "テルモ",
+            "CSL Plasma",
+            "医療機器"
+          ],
+          "japanMarketRelevance": "high",
+          "reason": "主要取引先との供給契約解除に伴い、通期予想を下方修正。営業利益は975億円、当期利益は731億円の減額で、いずれも従来予想比37.9％減。",
+          "confidence": 0.98,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【重大速報】テルモ（4543）は、完全子会社のTerumo BCTとCSL Plasma社の供給契約を、合意した移行期間の終了後に解除すると発表しました。関連資産の減損損失などを見込み、2027年3月期の通期予想を下方修正しています。\n\n営業利益は従来予想から975億円減の1,600億円、親会社の所有者に帰属する当期利益は731億円減の1,200億円。減損損失は現金支出を伴わない費用で、残る約255億円は移行期間中の事業損失や契約解除・事業再編の費用などとしています。金額は概算で、今後の交渉や資産評価などにより変動する可能性があります。\n\n出典: https://www.release.tdnet.info/inbs/140120261008548015.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "most_important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-etf-daily-disclosure-201cf3c7",
+      "group": "negative_control",
+      "outcomeKind": "negative_control",
+      "note": "ETFの日々の開示事項。定型で no_post が妥当な対照例。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548542.pdf",
+        "sourceName": "tdnet",
+        "title": "インベスコQQQトラスト シリーズ1 に関する日々の開示事項",
+        "bodySummary": "（\n（\n令和8年10月9日\n1. 上場 ETF の上場受益権口数 （ 令和8年10月8日 現在）\n673,650,000 口\n2. 上場 ETF の純資産総額 （ 令和8年10月8日 現在）\n令和8年10月8日 に三菱UFJ 銀行が発表した対顧客電信売・買相場の仲値１米国ドル＝ 円で計算）\n79,526,371 ( 503,491\n157.95\n百万円 百万米国ドル）\n3. 上場 ETF の一口あたりの純資産額 （ 令和8年10月8日 現在）\n令和8年10月8日 に三菱UFJ 銀行が発表した対顧客電信売・買相場の仲値１米国ドル＝ 円で計算）\n118,053 円 ( 747.41 米国ドル）\n157.95\n4. 上場ETF の一口あたりの純資産額の日々の変動幅とナスダック100 グロス・トータル・リターン\n0.00 ％\n指数の日々の変動幅との乖離率 （ 令和8年10月8日 現在）\n管理会社名 インベスコQQQトラスト シリーズ1\n（管理会社コード 587A4）\n代表者兼最高経営責任者 ブライアン・ハーティガン\n（銘柄コード 587A (東証外国ETF) ）\n弁護士 樋口 航\n（TEL. 03 – 6775 – 1000）\n（参考）乖離率の計算式\n（*上場ＥＴＦの一口あたりの収益分配金は、基準日が米国取引所における分配落日に該当する場合のみ加算）\n各 位\nインベスコQQQトラスト シリーズ1 に関する日々の開示事項上場ETFの ＊上場ETFの ナスダック100グロス\n一口あたりの純資産額 ＋ 一口あたりの収益分配金\n・トータル・リターン指数の終値\n100（%)\n前営業日の上場ETFの一口あたりの純資産額\n・トータル・リターン指数の終値\n前営業日のナスダック100グロス\n- ×",
+        "companyName": "Ｅ－インベスコＱＱＱ",
+        "companyCode": "587A4",
+        "entityKey": "company:587a4",
+        "category": "other_corporate_ir",
+        "publishedAt": "2026-10-09T03:15:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "no_post",
+          "category": "other_corporate_ir",
+          "affectedEntities": [
+            "インベスコQQQトラスト シリーズ1",
+            "東証外国ETF",
+            "ナスダック100"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "ETFの口数・純資産額・基準価額などの日次定型開示で、特段の材料は確認できません。",
+          "confidence": 0.99,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": null
+      },
+      "expected": {
+        "importance": "no_post",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-jftc-raid-0b73ef94",
+      "group": "domestic_incident",
+      "outcomeKind": "success",
+      "note": "公正取引委員会による強制調査。国内企業の重大事案として公開された。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261007547372.pdf",
+        "sourceName": "tdnet",
+        "title": "公正取引委員会による強制調査について",
+        "bodySummary": "各 位\n会社名 アサヒグループホールディングス株式会社\n公正取引委員会による強制調査について\n当社傘下のアサヒビール株式会社は、「私的独占の禁止及び公正取引の確保に関する法律（独占禁止法）」\n違反の疑いがあるとして、公正取引委員会による強制調査を受けました。公正取引委員会の調査には全面\n的に協力してまいります。\n現時点では業績への影響は不明であり、今後開示すべき事項が生じた場合には速やかに公表いたします。\n以 上",
+        "companyName": "アサヒ",
+        "companyCode": "25020",
+        "entityKey": "company:25020",
+        "category": "misconduct",
+        "publishedAt": "2026-10-07T07:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "misconduct",
+          "affectedEntities": [
+            "アサヒグループホールディングス",
+            "アサヒビール"
+          ],
+          "japanMarketRelevance": "high",
+          "reason": "傘下のアサヒビールが独占禁止法違反の疑いで公正取引委員会の強制調査を受けた。違反の認定や業績への影響は確認できず、最重要とは判定しない。",
+          "confidence": 0.91,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】アサヒビールに公取委の強制調査\n\nアサヒグループホールディングスによると、傘下のアサヒビールが独占禁止法違反の疑いで、公正取引委員会の強制調査を受けました。違反が認定されたわけではなく、会社は調査に全面的に協力するとしています。業績への影響は現時点で不明です。\n\n出典: https://www.release.tdnet.info/inbs/140120261007547372.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-large-order-fact-failure-2f881cde",
+      "group": "tdnet_earnings",
+      "outcomeKind": "generation_failure",
+      "note": "大口受注の開示。Factに失敗した例。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548485.pdf",
+        "sourceName": "tdnet",
+        "title": "大口受注に関するお知らせ",
+        "bodySummary": "（TEL．０６－６１５０－２５８２）\n大口受注に関するお知らせ\n当社グループは、取引先より大口の受注をいたしましたので、下記のとおりお知らせいたします。\n本案件は、昨年米国政府機関の一部閉鎖にともなってFDA（米国食品医薬品局）の業務が縮小した影\n響により契約締結が遅れていたものであります。米国での受注活動においては依然として当該影響が\n残っているものの正常化に向かっている状況であり、当社への開発案件委託の打診は増加傾向にあり\nます。当社は引き続き更なる受注獲得に向けて営業活動を進めてまいります。\n記\n１．受注内容\n(1) 受注先：米国バイオテック企業\n(2) 受注金額：20.4百万USドル（3,212百万円）\n２．今後の見通し\n本件による2027年３月期の業績への影響は、2026年５月15日公表の業績予想に織り込んでおりま\nす。",
+        "companyName": "リニカル",
+        "companyCode": "21830",
+        "entityKey": "company:21830",
+        "category": "large_order",
+        "publishedAt": "2026-10-09T02:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "large_order",
+          "affectedEntities": [
+            "リニカル（21830）"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "米国企業から32.12億円の受注を公表。金額は具体的だが、業績予想に織り込み済みで、業績全体に対する規模は確認できない。",
+          "confidence": 0.82,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】リニカルが米国バイオテック企業から大口受注。受注金額は20.4百万米ドル（32億1,200万円）です。📄\n\n昨年の米政府機関の一部閉鎖に伴うFDAの業務縮小で契約締結が遅れていた案件で、同社は米国での受注活動について「正常化に向かっている」と説明しています。\n\nこの受注による2027年3月期業績への影響は、2026年5月15日公表の業績予想に織り込み済みです。\n\n出典: https://www.release.tdnet.info/inbs/140120261009548485.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "failed",
+          "voiceStatus": "not_run",
+          "error": "NEWS_GENERATION_FACT_FAILED",
+          "factIssues": [
+            "重要条件の欠落：米国での受注活動には、FDA業務縮小の影響が依然残っている点を省略"
+          ],
+          "voiceIssues": [
+            "FACT_NOT_PASSED"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-press-report-denial-fact-failure-26648baf",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "note": "『当社に関する一部報道について』。本文が『当社』のみで会社名を含まず、Factに失敗した例（のちに修正済み）。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261001544939.pdf",
+        "sourceName": "tdnet",
+        "title": "昨日の一部報道について",
+        "bodySummary": "2026年10月２日\n各 位\n会 社 名 株 式会 社プロク レアホールディ ング ス\nコ ー ド 番 号 (7384 東証プライム)\n（TEL [tel]）\n昨日の一部報道について\n昨日、一部報道機関等において、当社と秋田銀行、岩手銀行における経営統合の検討開始に関する報道が\nなされましたが、当該報道内容は当社が発表したものではございません。\n当該事項につきましては、本日開催の当社取締役会に付議する予定であり、決定しましたら速やかに開示い\nたします。\n以 上",
+        "companyName": "プロクレアＨＤ",
+        "companyCode": "73840",
+        "entityKey": "company:73840",
+        "category": "ma",
+        "publishedAt": "2026-10-01T23:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "ma",
+          "affectedEntities": [
+            "プロクレアホールディングス（7384）",
+            "秋田銀行",
+            "岩手銀行",
+            "地方銀行"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "３行の経営統合検討に関する報道について、プロクレアHDが本日の取締役会に付議予定と開示。統合は未決定で、規模や条件も不明。",
+          "confidence": 0.88,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【速報】プロクレアHD、3行の経営統合報道について。秋田銀行、岩手銀行との経営統合を検討するとの報道について、プロクレアHDは「当社が発表したものではない」と説明しました。本日、取締役会に付議する予定で、決定した場合は速やかに開示するとしています。統合はまだ決定していません。\n\n出典: https://www.release.tdnet.info/inbs/140120261001544939.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "failed",
+          "voiceStatus": "not_run",
+          "error": "NEWS_GENERATION_FACT_FAILED",
+          "factIssues": [
+            "会社名の同一性未確認（company_identity.sameCompanyConfirmed=false）"
+          ],
+          "voiceIssues": [
+            "FACT_NOT_PASSED"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-sbi-merger-fact-failure-84832da2",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "note": "吸収合併の基本合意。会社同一性が原因でFactに失敗した例（のちに判定を修正済み）。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120260929541595.pdf",
+        "sourceName": "tdnet",
+        "title": "SBIグローバルアセットマネジメント株式会社とSBIインシュアランスグループ株式会社の吸収合併による経営統合に関する基本合意締結のお知らせ",
+        "bodySummary": "各 位\n会 社 名 ＳＢＩグローバルアセットマネジメント株式会社\n（TEL．03－6229－0812）\n会 社 名 ＳＢＩインシュアランスグループ株式会社\n（TEL．[tel]）\nＳＢＩグローバルアセットマネジメント株式会社とＳＢＩインシュアランスグループ株式会社の\n吸収合併による経営統合に関する基本合意書締結のお知らせ\nＳＢＩグローバルアセットマネジメント株式会社（以下「ＳＢＩＧＡＭ」といいます。）とＳＢＩインシュ\nアランスグループ株式会社（以下「ＳＢＩＩＧ」といい、ＳＢＩＧＡＭと併せて「両社」といいます。）は、\nＳＢＩＧＡＭを吸収合併存続会社、ＳＢＩＩＧを吸収合併消滅会社とし、吸収合併（以下「本合併」といいま\nす。）の方法により経営統合を行うこと（以下「本経営統合」といいます。）について、基本的な合意に達し、\nなお、ＳＢＩＧＡＭ代表取締役社長及びＳＢＩＩＧ取締役を務める朝倉智也は、ＳＢＩＧＡＭにおける唯一\nの業務執行取締役であるため、ＳＢＩＧＡＭの立場で本合併に係る協議・交渉には参加しておりますが、ＳＢ\nＩＧＡＭの親会社であるＳＢＩアセットマネジメントグループ株式会社（以下「ＳＢＩＡＭＧ」といいま\nす。）代表取締役社長及びＳＢＩホールディングス株式会社（以下「ＳＢＩＨＤ」といいます。ＳＢＩＨＤは\nＳＢＩＧＡＭ及びＳＢＩＩＧの支配株主です。）代表取締役副社長を兼務しているため、本合併につき特別の\n利害関係を有する取締役としてＳＢＩＧＡＭにおける取締役会の審議及び議決に参加しておらず、ＳＢＩＩＧ\nの立場で本合併に係る協議・交渉に参加しておらず、本合併につき特別の利害関係を有する取締役としてＳＢ\nＩＩＧにおける取締役会の審議及び議決に参加しておりません。また、ＳＢＩＧＡＭ取締役の北尾吉孝はＳＢ\nＩＡＭＧ取締役会長及びＳＢＩＨＤ代表取締役会長兼社長（ＣＥＯ）を兼務しておりますが、利益相反を回避\nする観点から、ＳＢＩＧＡＭの立場で本合併に係る協議・交渉に参加しておらず、本合併につき特別の利害関\n係を有する取締役としてＳＢＩＧＡＭにおける取締役会の審議及び議決に参加しておりません。\nまた、本基本合意書において、本経営統合の実施は、今後両社が締結する本合併に関する法的拘束力ある最\n終契約（以下「最終契約」といいます。）が締結されること、その効力発生日までに両社の臨時株主総会によ\nり承認を受けること及び関係当局の認可等を受けることを条件としており、最終契約においても、当該条件及\nびその詳細を定めることとしております。\nめとする他の金融商品に比べ、著しく限られています。資産運用の世界では、コストの開示と比較が、\n競争を通じて商品の質を高め、受益者の利益に貢献してきました。同じ変化を保険の世界にもたらすこ\nと、すなわち、誰もが商品を正しく比較し、自ら選択できる保険市場をつくることは、保険業界全体の\n識に立つものです。\nＳＢＩグループは、創業以来「顧客中心主義」を基本方針とし、証券分野における国内株式売買手数\n料の無料化をはじめ、金融サービスの価格革新を先導してまいりました。ＳＢＩグループは、証券事業、\n品の提供を通じて個人投資家の資産形成に貢献し、ＳＢＩＩＧは、ダイレクト型を軸とする低コストの\n保険商品の提供により保有契約件数を拡大してまいりました。しかしながら、運用の商品組成力と、保\n険の商品設計・引受・保全とが、別々の上場会社で別々の意思決定に分かれている現在の体制では、上\nこうした認識の下、両社は、経営の意思決定を一つにし、資産（運用）と負債（保険）の一体経営、\n並びにＡＩ・システムの共通基盤化による業務の抜本的な再構築を実行することが、保険契約者・受益\n者をはじめとするお客さまへの提供価値の向上と、両社の持続的な成長及び中長期的な企業価値の向上\n本経営統合の目的は、資産運用と保険を一つの経営の下に置くことにより、「運用起点の保険商品」を\nわが国において本格的に実現し、運用収益と業務効率化の成果を保険契約者・受益者に還元するととも\nに、保険を選ぶすべての人が保険商品を正しく比較し、選択できる市場の実現に貢献することにありま\nし、資産負債管理（ＡＬＭ）の高度化と運用収益の向上を図るとともに、その成果を保険料の引下げや",
+        "companyName": "ＳＢＩＧアセットＭ",
+        "companyCode": "47650",
+        "entityKey": "company:47650",
+        "category": "ma",
+        "publishedAt": "2026-09-29T23:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "most_important",
+          "category": "ma",
+          "affectedEntities": [
+            "SBIグローバルアセットマネジメント株式会社",
+            "SBIインシュアランスグループ株式会社",
+            "SBIホールディングス株式会社"
+          ],
+          "japanMarketRelevance": "high",
+          "reason": "上場２社の吸収合併で基本合意。SBIインシュアランスグループの上場廃止を予定し、存続会社は発行済株式約1.38億株に対し約8762万株を新規発行する予定。最終契約・株主総会承認等が条件。",
+          "confidence": 0.94,
+          "needsSol": true,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-sol",
+          "escalatedToSol": true
+        },
+        "generation": {
+          "text": "【重大速報】SBIグローバルアセットマネジメントとSBIインシュアランスグループが、吸収合併による経営統合で基本合意しました。存続会社はSBIグローバルアセットマネジメントで、SBIインシュアランスグループは消滅会社となる予定です。\n\n合併比率はSBIインシュアランスグループ株1株に対し、SBIグローバルアセットマネジメント株3.53株。交付する株式は約8,762万株を予定しています。SBIインシュアランスグループは2027年3月30日に上場廃止、合併の効力発生日は同年4月1日の予定です。\n\n実施には最終契約の締結、両社の臨時株主総会での承認、関係当局の認可などが条件。対象となるのは、両社の株主です。\n\n出典: https://www.release.tdnet.info/inbs/140120260929541595.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "failed",
+          "voiceStatus": "not_run",
+          "error": "NEWS_GENERATION_FACT_FAILED",
+          "factIssues": [
+            "company_identity.sameCompanyConfirmed=falseのため、metadataName「ＳＢＩＧアセットＭ」と生成文の企業名が同一企業だと確認できない",
+            "「対象となるのは、両社の株主です」は元情報にない対象範囲の断定"
+          ],
+          "voiceIssues": [
+            "FACT_NOT_PASSED"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "most_important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-share-consolidation-voice-failure-44df218f",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "note": "株式併合・単元株式数の廃止。Voiceに失敗した例。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261009548380.pdf",
+        "sourceName": "tdnet",
+        "title": "株式併合並びに単元株式数の定めの廃止及び定款の一部変更の承認決議に関するお知らせ",
+        "bodySummary": "各 位\n会 社 名 新光商事株式会社\n電 話 番 号 （TEL. [tel]）\n株式併合並びに単元株式数の定めの廃止及び定款の一部変更の\n承認決議に関するお知らせ\n当社は、2026 年９月７日付で当社が公表いたしました「臨時株主総会の開催並びに株式併合、単元株式\n数の定めの廃止及び定款の一部変更に関するお知らせ」（以下「2026 年９月７日付当社プレスリリース」とい\nいます。）においてお知らせいたしましたとおり、本日開催の臨時株主総会（以下「本臨時株主総会」といいま\nす。）に、株式併合並びに単元株式数の定めの廃止及び定款の一部変更に係る各議案について付議いた\nしましたところ、いずれも原案どおり承認可決されましたので、下記のとおりお知らせいたします。\nこの結果、当社の普通株式（以下「当社株式」といいます。）は、株式会社東京証券取引所（以下「東京証\n券取引所」といいます。）の有価証券上場規程に定める上場廃止基準に該当することとなります。これにより、\n当社株式は、2026 年 10 月９日から 2026 年 10 月 28 日までの間、整理銘柄に指定された後、2026 年 10 月\n29 日をもって上場廃止となる予定です。上場廃止後は、当社株式を東京証券取引所プライム市場において\n取引することはできませんので、ご留意くださいますようお願いいたします。\n記\n１．第１号議案（株式併合の件）\n当社は、以下の内容の当社株式の併合（以下「本株式併合」といいます。）について、本臨時株主総会に\nおいて株主の皆様にご承認いただきました。本株式併合の内容の詳細は 2026 年９月７日付当社プレスリリ\nースに記載のとおりです。\n① 併合する株式の種類\n普通株式\n② 併合比率\n当社株式 7,894,651 株を１株に併合いたします。\n③ 減少する発行済株式総数\n29,347,654 株\n④ 効力発生前における発行済株式総数\n29,347,657 株\n（注）「効力発生前における発行済株式総数」は、当社が 2026 年６月 29 日に提出した第 73 期有価証\n券報告書に記載された 2026 年３月 31 日現在の当社の発行済株式総数（31,010,566 株）から、当\n社が 2026 年９月７日付の取締役会においてその消却を決議し、2026 年 10 月 30 日付で消却され\nる予定の自己株式数（1,662,909 株）（2026 年８月 25 日現在当社が所有する自己株式 1,401,209\n株、2026 年 10 月 30 日までに当社が無償取得する予定の当社の「役員株式給付信託（ＢＢＴ）」の\n信託財産として受託者である株式会社日本カストディ銀行（信託Ｅ口）が所有する当社株式\n（259,900 株）及び譲渡制限付株式（1,800 株）の合計）を控除した株式数です。\n⑤ 効力発生後における発行済株式総数\n３株\n⑥ 効力発生日における発行可能株式総数\n12 株\n項又は同条第２項において準用する同法第 234 条第２項のいずれの規定による処理を予定しているか\nの別及びその理由\n本株式併合により、加賀電子株式会社（以下「公開買付者」といいます。）以外の株主の皆様が所\n有する当社株式の数は、１株に満たない端数となる予定です。\n本株式併合の結果、生じる１株未満の端数については、その合計数（合計数に１株に満たない端数\nがある場合には、当該端数は切り捨てられます。）に相当する数の株式を、会社法第 235 条その他の\n関係法令の規定に従って売却し、その売却により得られた代金を端数が生じた株主の皆様に対して、\nその端数に応じて交付いたします。\n当該売却について、当社は、当社株式が 2026 年 10 月 29 日をもって上場廃止となる予定であり、\n市場価格のない株式となることから、競売によって買受人が現れる可能性は低いと考えられること、及\nび本株式併合が、当社の株主を公開買付者のみとし、当社株式を非公開化することを目的とした一連\nの取引（以下「本取引」といいます。）の一環として実施されるものであり、かかる目的との関係では公\n開買付者が端数相当株式の買受人となるのが整合的であることを踏まえ、会社法第 235 条第２項の準",
+        "companyName": "新光商",
+        "companyCode": "81410",
+        "entityKey": "company:81410",
+        "category": "tob",
+        "publishedAt": "2026-10-09T01:55:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "tob",
+          "affectedEntities": [
+            "新光商事（81410）",
+            "加賀電子",
+            "東京証券取引所プライム市場"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "株式併合が承認され、加賀電子以外の株主を整理して2026年10月29日に上場廃止となる予定。公開買付価格と同額の1株1,580円を基準に端数株式を処理する内容で、非公開化の最終段階に関する重要IR。",
+          "confidence": 0.96,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】新光商事（8141）の臨時株主総会で、株式併合と単元株式数の廃止、定款変更が承認されました。加賀電子以外の株主が保有する株式は併合で1株未満の端数となり、端数株式は裁判所の許可を得たうえで加賀電子に売却する予定です。交付額は、許可が得られた場合、公開買付価格と同額の1株1,580円を基準に算定されます。新光商事株は10月9日から整理銘柄に指定され、10月29日に上場廃止となる予定です。\n\n出典: https://www.release.tdnet.info/inbs/140120261009548380.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "failed",
+          "error": "NEWS_GENERATION_VOICE_FAILED",
+          "factIssues": [],
+          "voiceIssues": [
+            "「単元株式数の廃止」は「単元株式数の定めの廃止」と区分が異なる表現です。正式な内容に沿った言い方が必要です。"
+          ]
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-small-acquisition-d09c88ce",
+      "group": "tdnet_capital",
+      "outcomeKind": "success",
+      "note": "子会社化（株式取得）の開示。重要として公開された。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008547942.pdf",
+        "sourceName": "tdnet",
+        "title": "株式会社おがさわらの株式取得（子会社化）に関するお知らせ",
+        "bodySummary": "各 位\n会 社 名 株式会社ブッキングリゾート\n（TEL [tel]）\n株式会社おがさわらの株式取得（子会社化）に関するお知らせ\n当社は、本日開催の取締役会において、ペットと泊まれる本格温泉宿「阿蘇温泉御宿小笠原」を運営する株式会社\nおがさわらの株式を取得し、子会社化することについて決議し、同日付で株式譲渡契約書を締結いたしましたので、下\n記の通りお知らせいたします。\n記\n１．株式取得の理由\n当社は、「宿泊業界を UP DATE」をビジョンに掲げ、全国の宿泊施設における集客支援、運営受託、開発・再生事\n業を展開しております。\nこの度、ペットと泊まれる本格温泉宿として高いブランド力と実績を誇る「阿蘇温泉御宿小笠原」を運営する株式会社\nおがさわらの全株式を譲り受け、当社の 100%子会社とすることいたしました。\n当社の強みである圧倒的な集客ノウハウ・デジタルマーケティング力と、株式会社おがさわらが培ってきた上質な温\n浴・ペット共生型宿泊施設の運営ノウハウを融合させることで、両社のシナジーを最大限に引き出し、施設のさらなる付\n高い成長を続けるペットツーリズム市場において、実績ある同社のブランドと当社の集客基盤を連動させることで、\n全国のパートナー施設に対する「集客・売上アップの成功モデル」を提示し、当社のプラットフォーム全体の価値向\n上を牽引してまいります。\n２．異動する子会社の概要\n名 称 株式会社おがさわら\n所 在 地 熊本県阿蘇市黒川 2323 番地\n１ 株 当 た り 当 期 純 利 益 114,930 円 9 銭 168,167 円 30 銭 90,700 円 20 銭\n３．株式取得の相手先の概要\n氏 名 小笠原 幸信\n当 社 と 当 該 個 人 の 関 係 資本関係、人的関係、取引関係等、該当事項はありません。\n４．取得株式数、取得価額および異動前後の所有株式状況\n異 動 前 所 有 株 式 数 0 株 （議決権所有割合：0.0％）\n取 得 株 式 数 100 株\n取 得 価 額 株式取得価額 147 百万円\nアドバイザリー費用等 26 百万円\n決 済 及 び 資 金 調 達 方 法 手許現預金を充当いたします。\n５．株式取得の日程\n取 締 役 会 決 議 日 2026 年 10 月 8 日\n６．今後の見通し\n本件が当社の 2027 年 4 月期連結業績に与える影響につきましては現在精査中であり、開示すべき事項が生じた\n場合には、速やかに公表いたします。\n事 業 内 容\n：株式会社ブッキングリゾート\n：2013 年５月 27 日",
+        "companyName": "Ｇ－ブッキングＲ",
+        "companyCode": "324A0",
+        "entityKey": "company:324a0",
+        "category": "ma",
+        "publishedAt": "2026-10-08T06:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "ma",
+          "affectedEntities": [
+            "株式会社ブッキングリゾート（324A）",
+            "株式会社おがさわら"
+          ],
+          "japanMarketRelevance": "low",
+          "reason": "ブッキングリゾートが取得価額147百万円で株式会社おがさわらの全株式を取得し子会社化。業績への影響は精査中で、規模や影響の大きさは確認できない。",
+          "confidence": 0.91,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】ブッキングリゾート（324A）が、ペットと泊まれる温泉宿「阿蘇温泉御宿小笠原」を運営する株式会社おがさわらの全株式を取得し、子会社化します。株式取得価額は147百万円で、アドバイザリー費用などは26百万円。取得資金には手許現預金を充てます。\n\n2027年4月期の連結業績への影響は精査中です。\n\n出典: https://www.release.tdnet.info/inbs/140120261008547942.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    },
+    {
+      "caseId": "tdnet-third-party-committee-60d9954a",
+      "group": "domestic_incident",
+      "outcomeKind": "success",
+      "note": "分配可能額超過に関する第三者委員会の設置。重要として公開された。",
+      "candidate": {
+        "sourceType": "tdnet",
+        "sourceUrl": "https://www.release.tdnet.info/inbs/140120261008548024.pdf",
+        "sourceName": "tdnet",
+        "title": "分配可能額を超えた過年度の中間配当金に関する第三者委員会設置のお知らせ",
+        "bodySummary": "Ｔ Ｅ Ｌ ０ ３ － ５ ２ ２ ０ － ５ ４ ５ １\n分配可能額を超えた過年度の中間配当金に関する\n第三者委員会設置のお知らせ\n当社は、2026 年 10 月５日付「分配可能額を超えた過年度の中間配当金について」にて公表いたしました\nとおり、2024 年 12 月及び 2025 年 12 月に実施した中間配当（以下、総称して「本件中間配当」といいます。）\nが、会社法及び会社計算規則により算定される分配可能額を超過していたこと（以下「本件」といいます。）\n（５）その他、第三者委員会が必要と認めた事項\nなお、本件中間配当の後に実施した１株に満たない端数の買取り（計４件、買取価額の総額 18,451 円）\nも分配可能額を超過しておりましたが、本件と同一の原因によるものとして、本件と併せて取り扱いま\n- 2 -\n４．調査期間及び調査結果の公表\n第三者委員会は本日より調査を開始し、2026 年 10 月下旬を目途に調査報告書を受領する予定ですが、\n調査の進捗により変更となる可能性がございます。調査報告書を受領した際には、その内容及び再発防\n止策につきまして、速やかにお知らせいたします。\n５．今後の見通し\n当社は、第三者委員会の調査に全面的に協力してまいります。本件が当社の連結業績に与える影響は\n軽微なものと考えておりますが、今後、開示すべき事項が生じた場合には速やかにお知らせいたします。",
+        "companyName": "日本Ｍ＆Ａ",
+        "companyCode": "21270",
+        "entityKey": "company:21270",
+        "category": "misconduct",
+        "publishedAt": "2026-10-08T06:30:00.000Z"
+      },
+      "recorded": {
+        "judgement": {
+          "importance": "important",
+          "category": "misconduct",
+          "affectedEntities": [
+            "日本Ｍ＆Ａ",
+            "21270"
+          ],
+          "japanMarketRelevance": "medium",
+          "reason": "2024年・2025年の中間配当が分配可能額を超えていたとして第三者委員会を設置。業績影響は軽微との記載だが、原因調査と再発防止策の公表を予定している。",
+          "confidence": 0.91,
+          "needsSol": false,
+          "factCheckStatus": "passed",
+          "model": "gpt-6-luna",
+          "escalatedToSol": false
+        },
+        "generation": {
+          "text": "【速報】日本Ｍ＆Ａは、2024年12月と2025年12月に実施した中間配当が、会社法などで算定される分配可能額を超えていた件について、第三者委員会を設置しました。関連する端数株の買取り4件も調査対象です。\n\n第三者委員会は本日から調査を始め、調査報告書は2026年10月下旬を目途に受領する予定。調査の進捗によって時期は変わる可能性があります。会社は連結業績への影響を軽微と見込んでおり、報告書を受領後、内容と再発防止策を公表するとしています。\n\n出典: https://www.release.tdnet.info/inbs/140120261008548024.pdf",
+          "model": "gpt-6-luna",
+          "factStatus": "passed",
+          "voiceStatus": "passed",
+          "error": null,
+          "factIssues": [],
+          "voiceIssues": []
+        }
+      },
+      "expected": {
+        "importance": "important",
+        "source": "production_decision"
+      }
+    }
+  ]
+}
