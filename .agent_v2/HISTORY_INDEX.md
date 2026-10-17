@@ -641,3 +641,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017/files/.agent_v2/tasks/F5.md`.
 - size: 13886 bytes; SHA256: `870a151a03d1ef954daf11a2ccaf37644000005d0be2a9a14535d8f756592b85`; original/archive Git blob: `613352853abee5daa675c7b48b076fadd1e3c817`.
 - read-back: exact UTF-8 and Git blob match; MANIFEST.md and SHA256SUMS stored, archive append-only. Subsequent F5 task is sandbox architecture source-only design.
+
+## F4 POSTONA non-production isolation preflight archive — 2026-10-17
+- task_id: `postona-f4-sandbox-isolation-preflight-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `1aa8160e`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-sandbox-isolation-preflight-20261017/F4.md`
+- bytes: 11043; SHA256: `d3156c7c03fe552bbd05a529478b3d462a95a3286e12e5958713bb471cdc9430`; original_blob: `157d5228bfdc9467e9fa88c76eb40c350cd5c34c`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-oauth-connect-gap-readiness-20261017`). L4 accepted, PR243 `60e4a4c059a9d7304e5a48a7b3219ab801e822ae`, device smoke BLOCKED_PRECONDITION, production NO_GO.
