@@ -56,21 +56,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-threads-oauth-connect-gap-readiness-20261017
+- status: ready
+- task_id: postona-f4-threads-oauth-stack-integration-ios-return-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR154/193 Threads, G5 sandbox prerequisites
-- blocker: real Threads OAuth and Meta testing unverified; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-sandbox-isolation-preflight-20261017/F4.md
-- slot_use: source-only integration gap audit
-
-- l4_verdict: PASS_GAP_AUDIT / IMPLEMENTATION_REQUIRED / PRODUCTION_NO_GO; PR247 27e2135c041fb8c37bbf9c68adbe4f6fa66ea5e8 Draft; no real OAuth or production use.
+- dependencies: PR159 163675c6, PR180 7c4f4578, PR247 27e2135c; H5 Auth/F5 sandbox protected
+- blocker: Meta OAuth, managed Supabase, device and pilot unapproved; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-connect-gap-readiness-20261017/F4.md
+- slot_use: source-only Threads stack integration and iOS callback safety
 
 ## F5
 - slot: F5
