@@ -165,8 +165,8 @@ const PLAN_STEPS: readonly Step[] = [
   },
   {
     id: BASELINE_GATE, title: 'baseline read-back: the project\'s own schema inventory against the approved contract digest', access: 'read', mode: 'automated', modelled: true,
-    expected: 'the contract subset of the project\'s inventory provides every object the chain requires, and its SHA-256 equals KABUMORI_DISPOSABLE_INVENTORY_SHA256',
-    stop: 'no approved digest, a required object missing or of another type, any difference from the approved contract, secret-shaped text in the output, or an unreadable inventory',
+    expected: 'the contract subset of the project\'s inventory provides every object the chain requires (baseline contract v2: the Phase 1 lists, public.ensure_my_profile() with its shape, public.social_accounts.platform, auth.uid(), auth.sessions), and its SHA-256 equals KABUMORI_DISPOSABLE_INVENTORY_SHA256',
+    stop: 'no approved digest, a required object missing or of another type or shape, a lock of another contract version, any difference from the approved contract, secret-shaped text in the output, or an unreadable inventory',
     run: async (ctx) => {
       const requirements = ctx.baseline.requirements;
       if (!requirements) return stop('the plan lock carries no baseline requirements: regenerate it with cli.ts --write-lock');

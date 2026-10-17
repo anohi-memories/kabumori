@@ -10,7 +10,8 @@ import sys
 import tempfile
 
 src_root = sys.argv[1]
-TREES = ['supabase/preflight', 'supabase/migrations', 'supabase/tests']
+# the Phase 13 documentation-consistency tests also read these trees
+TREES = ['supabase/preflight', 'supabase/migrations', 'supabase/tests', 'docs/common-account', 'docs/postona', '.agent', 'apps/social-mobile', 'supabase/functions']
 DIR = 'supabase/preflight/managed_disposable/'
 I = DIR + 'inventory.ts'
 Q = DIR + 'inventory/schema_inventory.sql'

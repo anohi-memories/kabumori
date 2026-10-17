@@ -63,6 +63,8 @@ export function classify(requirements: Requirements, migrations: Record<string, 
       return { name, class: (created.length > 0 ? 'repository_created' : 'absent_from_repository') as ObjectClass, createdBy: created };
     }),
     roles: requirements.roles.map((name) => ({ name, class: 'platform_managed' as ObjectClass })),
+    // functions of the managed platform the chain needs (auth.uid()): created by Supabase, never by this repository
+    platformFunctions: (requirements.platformFunctions ?? []).map((fn) => ({ signature: fn.signature, returns: fn.returns, class: 'platform_managed' as ObjectClass })),
   };
 }
 
@@ -91,7 +93,7 @@ export type ColumnProvenance = {
   typeDiffers: boolean;
 };
 
-export function compareColumns(requirements: Requirements, fixture: WorldFacts, replay: WorldFacts, createdByRepository: ReadonlySet<string> = new Set()): ColumnProvenance[] {
+export function compareColumns(requirements: Pick<Requirements, 'columns'>, fixture: WorldFacts, replay: WorldFacts, createdByRepository: ReadonlySet<string> = new Set()): ColumnProvenance[] {
   const index = (facts: WorldFacts) => new Map(facts.columns.map((c) => [`${c.relation}.${c.column}`, c.type]));
   const f = index(fixture);
   const m = index(replay);
@@ -126,6 +128,7 @@ export type Provenance = {
   functions: (FunctionProvenance & { inFixture: boolean; inReplay: boolean })[];
   schemas: { name: string; class: ObjectClass; createdBy: string[] }[];
   roles: { name: string; class: ObjectClass }[];
+  platformFunctions: { signature: string; returns: string; class: ObjectClass }[];
   columns: ColumnProvenance[];
   foreignKeys: { key: string; inFixture: boolean; inReplay: boolean; touchesUnknown: boolean }[];
   /** columns of the gap relations that only the fixtures define: not reconstructed, listed */
@@ -180,6 +183,7 @@ export function buildProvenance(
     functions,
     schemas: classified.schemas,
     roles: classified.roles,
+    platformFunctions: classified.platformFunctions,
     columns,
     foreignKeys,
     fixtureOnlyColumns: fixtureOnlyColumns(unknownRelations, fixture, replay),
