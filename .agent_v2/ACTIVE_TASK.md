@@ -92,19 +92,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-postona-consumer-calls-pg-offline-candidate-20261017
+- status: ready
+- task_id: common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017
 - owner: claude
-- next_owner: none
-- blocker: PR249 independent Claude PASS_SOURCE_REVIEW (2026-10-17), P0/P1/P2 none, P3 x5. Production blockers: ledger user_id anonymization, deletion integration, content purge scheduling, managed validation, release authorization. Merge/deploy/production NO_GO.
+- next_owner: claude
+- blocker: AI ledger user_id erasure and safe deletion source-only candidate; F5 account deletion integration separate; production/managed/merge/deploy NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: PR241 ledger design and PR239 contract, common provider/bridge Draft stack; POSTONA F4/F5 Auth and production protected
-- previous_archive: .agent_v2/archive/2026-10-17-f6-pr241-ledger-design.md
-- slot_use: F6 consumer_calls source-only candidate and isolated local PostgreSQL safety tests
+- dependencies: PR249 independent review PASS with P3x5, existing Draft #241/#239 provider stack; F5 Phase13 separate
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr249-consumer-calls-reviewed.md
+- slot_use: F6 ledger user_id anonymization, deletion and purge contract offline candidate
 
 ## F7
 - slot: F7
