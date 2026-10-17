@@ -201,7 +201,7 @@ No project is created, no paid action taken, no credential stored, no data copie
 
 PG1 of the architecture plan stands. **Scope note:** this change edits `inventory.ts` (`contractSubset`, `checkRequirements`,
 `shown()`), which the recheck's "inventory input vetting" boundary covers, so the PG1 reviewer should include these three
-additions (about 40 lines) and `baseline_requirements.ts` (new). Nothing else changes the recheck's scope.
+additions (about 70 changed lines) and `baseline_requirements.ts` (new). Nothing else changes the recheck's scope.
 
 ## 7. What was executed (offline; exact commands and outputs are in section 9)
 
