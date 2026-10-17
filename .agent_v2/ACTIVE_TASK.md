@@ -92,19 +92,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-pr234-escaped-keyword-guard-fix-20261017
+- status: ready
+- task_id: common-ai-f6-postona-claude-bridge-integration-preflight-20261017
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_FIX PR237; source-only candidate accepted, no independent security certification; merge/deploy/production NO_GO.
+- next_owner: claude
+- blocker: POSTONA Claude interface/ledger/tenant contract to verify; no F4/F5 owned code changes, no live API/merge/deploy
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: Draft PR187→198→205→219→222→231→234, independent Claude review P2
-- previous_archive: .agent_v2/archive/2026-10-17-f6-pr234-rawedges-source-fix.md
-- slot_use: F6 escaped keyword source-only security fix
+- dependencies: Draft PR187→198→205→219→222→231→234→237, H5 bridge, inventory PR216; F4 service lifecycle ready
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr237-escaped-keyword-fix.md
+- slot_use: F6 POSTONA Claude API interface and offline integration preflight
 
 ## F7
 - slot: F7
