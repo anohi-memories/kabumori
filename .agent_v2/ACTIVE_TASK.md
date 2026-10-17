@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-pr251-android-intent-filter-p2-fix-20261017
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Sonnet5（中）
@@ -70,6 +70,8 @@
 - previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-credential-rotate-cas-sql-contract-20261017/F4.md
 - slot_use: Android callback filter P2 minimal fix and offline regression
 
+
+- l4_verdict_20261017_android: PASS_SOURCE_FIX / J2_R1_P2_FIXED_IN_SOURCE / LIMITED_RECHECK_PENDING / PRODUCTION_AND_PILOT_NO_GO; PR260 HEAD 8e1534f2fa1d39f8f1c321ed2cf69705fddf1421 Draft.
 ## F5
 - slot: F5
 - status: done
