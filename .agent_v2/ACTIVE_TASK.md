@@ -40,7 +40,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-publish-enabled-t13-active-service-write-guard-20261017
 - owner: claude
 - next_owner: claude
