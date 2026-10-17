@@ -1,5 +1,12 @@
 # HISTORY_INDEX（検索用の軽量索引）
 
+## J2 PR238 archive verification — 2026-10-17
+
+- task_id: `postona-j2-pr238-auth-cross-user-review-20261017`; original commit `dfcf02f42e0daf28b1ebfa435ae84c7a6896b65b`; snapshot commit `3f80a62d5136b6d2c99950b46a9b090664fbbf0e`.
+- `.agent_v2/tasks/J2.md` → `.agent_v2/archive/2026-10-17-J2-postona-j2-pr238-auth-cross-user-review-20261017/J2.md`: 3429 bytes, SHA256 `057cba3397b096a36dba9cccba0779df436b3b7dd5a182da5f2b0cf6c4405ed2`.
+- `.agent_v2/reports/J2.md` → same directory `J2_REPORT.md`: 12449 bytes, SHA256 `464a4e0c3159678c3a6ee34a2a40faab229da6658a3c9555c3c83e5959d973c2`.
+- Both original/archive Git blobs and full byte restoration matched; MANIFEST.md + SHA256SUMS added by new J2 startup gate; snapshots untouched.
+
 旧 `.agent/`（G1〜G10 / H1〜H5）の完了作業を、2026-10-12 の初回移行snapshotから機械抽出した索引。Report本文はコピーしない。通常のF / F1〜F10 / J1〜J5 / L / V の実行時には読まない。過去案件を調べるときだけ検索する。
 
 ## 読み方
