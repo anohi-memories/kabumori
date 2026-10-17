@@ -56,21 +56,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-service-end-device-readiness-release-gate-inventory-20261017
+- status: ready
+- task_id: postona-f4-sandbox-isolation-preflight-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: F5 PR240 HEAD 5e462ba73be691c80f75198d57782626f1d241cc accepted source fix, prior PR238, J2 V2 closed
-- blocker: real iOS/managed Auth/Edge release validation pending; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-f5-service-end-g1-g2-joint-integration-20261017/F4.md
-- slot_use: source-only native smoke matrix and release blocker inventory, no source mutation
-
-- l4_verdict_20261017_device: PASS_OFFLINE_READINESS / BLOCKED_PRECONDITION / PRODUCTION_NO_GO; Draft PR242 ec5e27c6f42d7f1b55145fd3cd15310682d03e16; 396/396 reported; no real device/managed tests; F5 sandbox/migration/Edge/redirect prerequisites pending.
+- dependencies: PR242 ec5e27c6 on PR240 5e462ba7, G5/F5 isolated sandbox and managed prerequisite design
+- blocker: missing approved nonproduction Supabase, no real connected tests, production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-service-end-device-readiness-release-gate-inventory-20261017/F4.md
+- slot_use: source-only environment isolation and production endpoint guard preflight
 
 ## F5
 - slot: F5
