@@ -670,3 +670,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F4.md` (state at `1ece8b7a`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-stack-integration-ios-return-20261017/F4.md`
 - bytes: 13570; SHA256: `208ad7922012d3ffe413b639ac968572aa365129f21627091aca109d68a7e1f7`; original_blob: `c685b38cc5eaf0743c52718b24879041c2759dfe`
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-token-refresh-source-design-20261017`). L4 accepted, PR251 `3163928d5fa3b8e6984f6350ce5a8faf31d23ffc`, production and pilot NO_GO.
+
+- 2026-10-17 | F10 | `orchestration-v3-final-legacy-snapshot-and-pilot-readiness-f10-20261017` | L10 PASS_SNAPSHOT_AND_READINESS; Draft PR252 legacy snapshot and PR253 rollout readiness | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-final-legacy-snapshot-and-pilot-readiness-f10-20261017/` | SHA256 `6e887b0d488e41c8b784f3cf3859f3fad9390af3235226c5944b93572f969203`; blob/byte restoration verified.
