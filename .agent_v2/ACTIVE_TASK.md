@@ -56,21 +56,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-threads-oauth-stack-integration-ios-return-20261017
+- status: ready
+- task_id: postona-f4-threads-token-refresh-source-design-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR159 163675c6, PR180 7c4f4578, PR247 27e2135c; H5 Auth/F5 sandbox protected
-- blocker: Meta OAuth, managed Supabase, device and pilot unapproved; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-connect-gap-readiness-20261017/F4.md
-- slot_use: source-only Threads stack integration and iOS callback safety
-
-- l4_verdict_20261017_threads: PASS_SOURCE_CANDIDATE / FOCUSED_REVIEW_REQUIRED / PRODUCTION_AND_PILOT_NO_GO; PR251 HEAD 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc, OAuth flags OFF, no real Meta/managed validation.
+- dependencies: PR251 3163928d pending focused review, F5 baseline contract, H5 token-owner contract
+- blocker: no live Meta credential or pilot approval; production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-stack-integration-ios-return-20261017/F4.md
+- slot_use: Threads token refresh design and offline contracts, no OAuth network
 
 ## F5
 - slot: F5
