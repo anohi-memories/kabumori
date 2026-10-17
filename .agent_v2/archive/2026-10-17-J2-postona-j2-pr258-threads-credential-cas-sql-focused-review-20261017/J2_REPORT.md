@@ -1,0 +1,122 @@
+# J2 Report — PR258 credential custody CAS SQL limited review
+- task_id: postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017
+- slot: J2
+- status: review_required
+- next_owner: chatgpt
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: V2
+- recommended_model: Sol（高）
+- verdict: CHANGES_REQUIRED — P0=0 / P1=0 / P2=1
+- production_permission: PRODUCTION_AND_PILOT_NO_GO
+- target_pr: https://github.com/anohi-memories/kabumori/pull/258
+- target_head: 713955b5371cf4f1de4681ecec1737e1ccc7d4cd
+- base_head: 7bd54218a45e78f45448aea3ef72ed769f629325 (PR255)
+- main_start: 0262a0e25fd1b7034ad18c9ca34b514ced089a8d
+- main_prepublication: 1ce872df94b00f1b6df0767dff907e8f1497e632
+- scope: PR258 five new candidate SQL/fixture/behavior/runner/docs files ONLY; no product-source edits
+
+## R1 — P2: claim can fence the previous owner but grant a lease to a different, ended owner
+
+**Location:** `supabase/candidates/postona_threads_publish/threads_credential_rotation_candidate.sql:176-182` (and resulting lease insert at 208-211).
+**Owner:** F4 candidate SQL, coordinated with F5's owner-fence contract; H5 consumes claim outcomes.
+
+The owner resolved inside `threads_manual_publish_owner_fence(brand)` is not bound to the owner returned later by `threads_credential_refresh_owner(brand)`. F5 resolves an owner before waiting on that person's lifecycle row. After the wait, claim separately reads/locks membership and uses the potentially different owner in the lease. Unlike rotate's claimed-owner comparison, claim has no checked-owner identity to compare.
+
+**PG17 two-session reproduction (actual candidate + pinned real F5 SQL, no function substitutions):**
+1. A is workspace owner with active POSTONA; B exists with POSTONA ended. The account has valid custody, no live lease/post.
+2. Holder transaction locks A's common_accounts row, then takes the same workspace advisory lock (the documented lifecycle → workspace order), and waits.
+3. A second session invokes claim(account). pg_stat_activity confirms it is blocked on a lock while fencing A.
+4. Holder changes the owner membership A → B and commits. Claim resumes with A's active lifecycle result, then reads B as current owner.
+5. Actual response is `status:claimed`; a lease with owner_user_id=B persists even though B's entitlement is ended.
+6. Stable controls: unchanged active A gives claimed; a subsequent unchanged ended-B claim gives SERVICE_NOT_ACTIVE. Expected safety assertion for the racing call (refused, not claimed) FAILS.
+
+Observed synthetic postflight:
+```json
+{"worker_waiting_on_lock":true,"claim_status":"claimed","current_owner_state":"00000000-0000-4000-8000-0000000009b1:ended","stable_ended_owner_claim":"SERVICE_NOT_ACTIVE","lease_persisted":"1"}
+```
+
+**Impact/limits:** The proposed H5 contract reads the named token and can call Meta immediately after a successful claim. Thus a claim for an unfenced, ended owner can start a refresh that should be denied. This is an owner-channel concurrency defect, not a demonstrated anonymous/authenticated API exploit. No Meta or Vault call was made in the proof. A later rotate against stable ended B still refuses; no unauthorized successful rotation/Vault write is claimed. The scenario is an owner change, which this candidate explicitly attempts to handle; no current end-user ownership-transfer API reachability is asserted.
+
+**Minimum correction / contract:** Bind the identity actually checked by the lifecycle fence to the owner locked/recorded in claim, and refuse if they differ. Have F4/F5 agree on a fence interface returning/accepting the checked owner identity, or equivalent fail-closed identity-preserving protocol. Do not just re-fence a new owner while holding workspace/account locks (would violate the required lock order). A separate unfenced pre-read alone is not proof against ABA. If ownership is meant to be immutable, prove/enforce that contract rather than assume it.
+Add a synchronized two-session transfer-to-ended-owner regression, plus active/ended controls; preserve replay/CAS/lease and all lock-order tests.
+
+**Test gap:** Existing section5 changes ownership before rotate and tests its lease-owner comparison. Freeze/lock-order races keep one owner identity. Neither covers owner replacement while claim's initial lifecycle fence waits. All 23 existing mutations can pass detection while this gap remains.
+
+## Verified source / disposable PG behavior
+- Six new functions are SECURITY INVOKER, same non-superuser table owner, empty search_path. claim/rotate/release have 3s lock_timeout. Local catalog read-back confirmed all six, not just textual declarations.
+- Lease table has RLS enabled and owner-only ACL. No anon/authenticated/service_role/authenticator execution on any new function; local has_function_privilege counts all zero. Owner RLS bypass is intentional for this server-only candidate; no client grant/RLS policy added.
+- Claim/rotate/release refuse non-null auth.uid; no token strings returned. secret_id is server-only custody identity, not credential material.
+- CAS binds account, current secret_id, custody.recorded_at and lease snapshot. Consumed/wrong/expired leases, replay, concurrent rotations, reconnect using same secret ID with newer record, different account/workspace/secret and owner-change-before-rotate all tested.
+- Wall-clock lease expiry/credential expiry/new-expiry bounds are rechecked after lock waits; new expiry must extend existing record. Invalid/null/infinite inputs fail. One lease per account with bounded60s duration; exact/idempotent release and cascade deletion tested.
+- Existing lifecycle → workspace → brand/membership → account → custody → lease ordering passes the supplied freeze/timeout/deadlock races. R1 is identity consistency across the first two phases, not a request to reverse that order.
+- Current post-release/grant-in-flight prevents rotation; disconnect/reconnect/delete races refuse without overwriting their committed outcome. Account deletion cascades custody and lease.
+- Same-transaction H5 Vault-stub update and SQL exception rollback proof pass. Real managed Vault atomicity, H5 transport/store implementation and actual Meta semantics were NOT validated.
+
+## Isolated tests actually run
+Cluster: PostgreSQL17.11/Homebrew, newly initialized under `/private/tmp/j2-pr258-pg-20261017.89Mz00`, dedicated Unix socket/port58458, listen_addresses empty (TCP disabled), synthetic roles/data only. Production/managed DB credentials and tools not used. Initial sandbox initdb failed on shared-memory permission; normal approved sandbox escalation allowed the same disposable setup. No review/policy bypass.
+
+```text
+KEEP=1 THREADS_PGHOST=/private/tmp/j2-pr258-pg-20261017.89Mz00 THREADS_PGPORT=58458 THREADS_PGSUPER=j2_review_super PSQL=/opt/homebrew/opt/postgresql@17/bin/psql bash supabase/tests/postona_threads_rotation_run.sh
+node /private/tmp/j2-pr258-owner-race-20261017.mjs
+bash -n supabase/tests/postona_threads_rotation_run.sh
+git diff --check
+```
+
+| Proof | Actual result |
+| --- | --- |
+| Real pinned G5/F5 migration world + X/2a-2/PR124 + publish/cleanup/disconnect/guards | PASS |
+| Seven prerequisite refusals + reapply refusal | PASS |
+| ACL + behavior sections1–14, including stub Vault rollback/publish release | PASS |
+| Ten supplied two-session races | PASS |
+| No-candidate fail-before | PASS |
+| Mutation detection | 23/23 detected |
+| Additional owner-transfer race | Safety assertion FAIL (claimed instead of refused); active/ended controls PASS, actual worker lock wait observed |
+| Shell syntax / diff whitespace | PASS |
+
+Runner exited0 with ALL PASS; its existing checks do not cover R1. Source tree remained clean. Isolated overlay is exactly PR178 `83334a091ded5571cf595fd99d7a035627564735` (five pinned fixture/migration files), and PR124 candidate/fixture byte-identical to `c30f246409a77080cbc03aef6c4cb72b5481e125`; not a merge or shared-worktree change.
+Kept runner scratch: `/private/tmp/kabumori-threads-rotation.9uqj5K`. Runner cleans its own generated DBs; reviewer copied its unused fixture template to `j2_pr258_adverse` in the same private cluster before cleanup. No other cluster used. Dedicated PG server stopped after postflight; synthetic evidence retained, no listening server left.
+Reviewer harness SHA256: `8d3b2ef32a233e5e02ca9f598c6e92b0558a5d4078fc1f92ec95c83ab992e034`. Source assertions are outside repo; no product SQL/test edits. Earlier run without the holder workspace lock reproduced the same result; final run includes that lock to respect the documented order.
+
+### Replay recipe for C2 / F4 (using existing fixture functions)
+Use a fresh applied candidate+rotation fixture. Create A via t13.person, B via t13.login/register and t13.state(B,'ended'); leave the account without a refresh lease.
+```sql
+-- Holder: start first, and ensure worker reaches the fence wait before transfer
+begin;
+update public.common_accounts set status=status where user_id=:A;
+select public.social_mobile_account_deletion_workspace_lock(
+  public.social_mobile_account_deletion_workspace(:A));
+-- launch worker; confirm worker wait_event_type='Lock'
+update public.brand_memberships set user_id=:B
+ where brand_id=public.social_mobile_account_deletion_workspace(:A)
+   and user_id=:A and role='owner';
+commit;
+-- Worker (started while holder retained its locks):
+select public.claim_threads_credential_refresh(:account);
+-- Expected refused; actual claimed + persisted B-owned lease while B ended.
+```
+
+## Prerequisites / H5 & F5 contracts — not completed by this candidate
+1. Installation order: original custody → manual publish → publish release, F4 lifecycle guards, reviewed disconnect/cleanup and real F5 prerequisites before rotation. Not a production migration; no migration history recorded. Reader body MD5 and table shape pins checked by proof. A live schema comparison was neither authorized nor performed.
+2. H5 must use a dedicated restricted owner channel with no user JWT claims; claim+token read transaction, Meta call outside DB transaction, then rotated-only custody+same-secret Vault replacement in ONE transaction. Refusal, uncertainty or Vault error must rollback and must never write another secret or invent success.
+3. F5 must agree on the checked-owner binding (R1), active-service/deletion precedence, cleanup cascade and lock order. Service can resume within the same valid lease under current documented tests; stronger lifecycle-epoch semantics require an explicit owner contract, not a silent change here.
+4. Already documented open integration gap: publish authorize/release does not honor an active refresh lease. A post released between claim/rotate makes rotate refuse PUBLISH_IN_FLIGHT and discard refresh output. Meta old-token invalidation semantics/T7 remain unproven. Block enabling until the separate publisher lease handshake is implemented/reviewed; no new duplicate finding for the explicitly deferred work.
+5. Vault co-write cannot be enforced by this SQL alone; actual managed Vault rollback/updated_at semantics, H5 port mapping and Meta190/markReauthRequired behavior remain unverified. Stub proof is not managed Vault proof.
+6. No Edge wiring, release flag, Cron or automatic refresher activation is included. PR251 Android fix is independent, and PR255 design is not re-reviewed.
+
+## Scope / startup archive / concurrency
+Reviewed exactly five added files: rotation candidate SQL, rotation fixture SQL, rotation behavior SQL, rotation_run.sh, docs/postona/threads-credential-rotation-cas.md. Product changed_files: none.
+Dedicated source checkout: `/private/tmp/j2-pr258-review-20261017.Gjsw27`, exact713955b5 clean. Separate report worktree: same path plus `-report`. No checkout/reset/stash of other worktrees.
+Fresh old/new ACTIVE_TASK/CURRENT_STATE and F3/F4/F5 metadata checked; legacy slots done; F4 Android-only fix, F3 X write guard, F6 AI fix and F10 orchestration records protected. They do not write these five reviewed files. Review only, no source mutations.
+Previous PR251 archive original `d6cee18234ebcc7c5b4765f237ecb26ca112b2f4` → snapshot `6ffc247609fcf4f2ab7f61c85ad454553e51904f`: TASK3185 bytes/Report10602 bytes; original Git blob + full byte restore matched; SHA256SUMS2/2 PASS. Added append-only MANIFEST/SHA256SUMS/HISTORY_INDEX; snapshots unchanged.
+Record changes limited to J2 TASK/Report/ACTIVE section and the required J2 archive verification. Other-slot concurrent records preserved.
+Publication/read-back: archive verification commit `0e93109d` and review commit `4773e8146001e0d6a6e1b01414c1cf478dfb126f` normally pushed to origin/main (1ce872df → 4773e814). Fresh fetch confirms inclusion. GitHub main read-back confirms this task_id and review_required/chatgpt in TASK/Report/ACTIVE J2, and full Report byte equality. This receipt update changes only the J2 Report; product source remains unchanged.
+
+## Safety / recommendation
+- Source fixes0; merge/deploy0; managed/production DB/schema/RPC/migration/history/Cron/settings changes0.
+- Real Vault/token/secrets access0; actual Meta/OAuth/X/Threads/Push/OpenAI/paid API/post/revoke0.
+- Only authorized local disposable PG DDL/synthetic data/probes ran; do not describe this as DB writes0 globally.
+- Other worktrees/local uncommitted files, apps/admin/HANDOFF, H5/F5/F3 implementation, PR251/255 and other production components untouched.
+- Supabase and Postgres skills used for least privilege, RLS, transaction/lock-order checks; no code changes resulted.
+- Source-only R1 correction/test follow-up is appropriate; integration/enable/merge/deploy approval is NOT granted. Keep PRODUCTION_AND_PILOT_NO_GO and return to G4.
+
+POSTONA｜マルチSNS化・開発統括（G4）のちゃ へ V2 を送ってください。
