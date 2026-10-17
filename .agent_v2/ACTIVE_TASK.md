@@ -95,7 +95,7 @@
 - task_id: common-ai-f6-postona-consumer-calls-pg-offline-candidate-20261017
 - owner: claude
 - next_owner: none
-- blocker: L6 PASS_SOURCE_CANDIDATE PR249: ai_calls.consumer_calls separate schema; narrowly scoped independent Auth/RLS/RPC/concurrency/billing review pending. Managed DB/merge/deploy/production NO_GO.
+- blocker: PR249 independent Claude PASS_SOURCE_REVIEW (2026-10-17), P0/P1/P2 none, P3 x5. Production blockers: ledger user_id anonymization, deletion integration, content purge scheduling, managed validation, release authorization. Merge/deploy/production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
