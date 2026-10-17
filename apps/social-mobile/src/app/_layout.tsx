@@ -9,6 +9,8 @@ import { ActiveAccountProvider } from '@/providers/active-account-provider';
 import { DataProvider } from '@/providers/data-provider';
 import { OnboardingGate } from '@/features/onboarding/onboarding-gate';
 import { ServiceEnrollmentGate } from '@/features/service-enrollment/service-enrollment-gate';
+import { ServiceLifecycleProvider } from '@/features/service-lifecycle/service-lifecycle';
+import { ServiceLifecycleSurface } from '@/features/service-lifecycle/service-lifecycle-surface';
 
 function SignedInApp() {
   const { loading, session, recoveryMode } = useAuth();
@@ -17,7 +19,9 @@ function SignedInApp() {
   // A password-recovery link signs the user in only to set a new password.
   if (recoveryMode) return <NewPasswordScreen />;
   // Signed in → X autopost service enrollment (common account) → first-run gate (real data only) → app.
-  return <ServiceEnrollmentGate><DataProvider><OnboardingGate><ActiveAccountProvider><Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /><Stack.Screen name="accounts" options={{ headerShown: true, title: 'アカウント' }} /><Stack.Screen name="media" options={{ headerShown: true, title: '素材BOX' }} /><Stack.Screen name="posts/[id]" options={{ headerShown: true, title: '投稿詳細' }} /><Stack.Screen name="oauth-callback" /><Stack.Screen name="auth-callback" /><Stack.Screen name="login-methods" options={{ headerShown: true, title: 'ログイン方法' }} /><Stack.Screen name="account-deletion" options={{ headerShown: true, title: '利用終了・共通IDの管理' }} /></Stack></ActiveAccountProvider></OnboardingGate></DataProvider></ServiceEnrollmentGate>;
+  // The service-end surface is a sibling AFTER the gate: the gate remounts its subtree for every new login, and
+  // re-authentication is a new login of the same person, which must not destroy the end flow (G2).
+  return <ServiceLifecycleProvider><ServiceEnrollmentGate><DataProvider><OnboardingGate><ActiveAccountProvider><Stack screenOptions={{ headerShown: false }}><Stack.Screen name="(tabs)" /><Stack.Screen name="accounts" options={{ headerShown: true, title: 'アカウント' }} /><Stack.Screen name="media" options={{ headerShown: true, title: '素材BOX' }} /><Stack.Screen name="posts/[id]" options={{ headerShown: true, title: '投稿詳細' }} /><Stack.Screen name="oauth-callback" /><Stack.Screen name="auth-callback" /><Stack.Screen name="login-methods" options={{ headerShown: true, title: 'ログイン方法' }} /><Stack.Screen name="account-deletion" options={{ headerShown: true, title: '利用終了・共通IDの管理' }} /></Stack></ActiveAccountProvider></OnboardingGate></DataProvider></ServiceEnrollmentGate><ServiceLifecycleSurface /></ServiceLifecycleProvider>;
 }
 
 export default function RootLayout() { return <AuthProvider><StatusBar style="auto" /><SignedInApp /></AuthProvider>;
