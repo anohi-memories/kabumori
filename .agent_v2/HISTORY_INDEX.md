@@ -606,3 +606,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-ai-f6-pr231-regex-division-parser-bypass-fix-20261016`; L6 PASS_SOURCE_FIX; independent Claude Code review CHANGES_REQUIRED P2 escaped import keyword.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr234-rawedges-source-fix.md`; source/archive Git blob `74734e5348545bf80945763a33366572529fdfa7`, 7946 UTF-8 characters, exact match verified. Source commit b2ed9c13bb4e3b89e3072ebd7ea9e248c31577ed.
 - SHA256 / independent MANIFEST pending verification; archive append-only.
+
+## F6 PR237 escaped keyword fix archive — 2026-10-17
+- task_id: `common-ai-f6-pr234-escaped-keyword-guard-fix-20261017`; L6 PASS_SOURCE_FIX / PRODUCTION_NO_GO, PR237 Draft unmerged.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr237-escaped-keyword-fix.md`; original/restored Git blob `ab198d024ec74e0f5db877ac63a385b394328f22`, 7841 characters, readback match.
+- Independent SHA256/MANIFEST pending validation; append-only original kept intact.
