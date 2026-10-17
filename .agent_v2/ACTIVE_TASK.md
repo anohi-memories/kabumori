@@ -40,7 +40,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-x-oauth-t13-reservation-owner-guard-20261017
 - owner: claude
 - next_owner: claude
