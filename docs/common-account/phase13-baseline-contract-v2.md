@@ -181,6 +181,8 @@ reported).
 
 ### 6.1 D-2: the inert X-saga preview stand-in — F3/G3 must confirm the contract first
 
+*(Superseded: D-2 was implemented as a testing-only injection at the F5 harness boundary, not as the deployable function proposed below — `docs/common-account/phase13-d2-x-saga-standin.md`. The proposal is kept as history; managed M12 stays blocked.)*
+
 F5 does **not** implement or alter anything F3-owned (legacy X cleanup, reservation, posting, revoke, any production endpoint).
 This is a **proposal only**, for F3/G3 to accept, change or reject (the contract is theirs; F5 would only pin the accepted bytes):
 
