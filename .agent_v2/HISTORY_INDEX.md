@@ -622,3 +622,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 
 ## F6 PR239 POSTONA Claude contract preflight archive — 2026-10-17
 - task_id: `common-ai-f6-postona-claude-bridge-integration-preflight-20261017`, L6 PASS_PREFLIGHT/SOURCE_ONLY/PRODUCTION_NO_GO, PR239 Draft. Original `.agent_v2/tasks/F6.md`, archive `.agent_v2/archive/2026-10-17-f6-pr239-postona-contract-preflight.md`, 9344 characters, Git blob original/archive `500c442c7bd33b66f91e8c8d9915d24e267c13bf` read-back equality verified. Original L6 completion task commit `8c031ad418c76d87108164401052bfc773ce464f`. Independent SHA256/MANIFEST NOT_VERIFIED; append-only.
+
+## F4 POSTONA service-end device readiness archive — 2026-10-17
+- task_id: `postona-f4-service-end-device-readiness-release-gate-inventory-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `1a6f1ff6`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-service-end-device-readiness-release-gate-inventory-20261017/F4.md`
+- bytes: 11651; SHA256: `b4a0542ea86e038cc5f33221756741808ac03b860746e9a8facf13fdfa4b1919`; original_blob: `1370ecbb431cf2de98b54476f3ad2737598c8768`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-sandbox-isolation-preflight-20261017`). L4 accepted offline runbook, BLOCKED_PRECONDITION, PR242 `ec5e27c6f42d7f1b55145fd3cd15310682d03e16`, production NO_GO.
