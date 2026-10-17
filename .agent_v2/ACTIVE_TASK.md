@@ -74,23 +74,20 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-postona-disposable-supabase-architecture-plan-20261017
+- status: ready
+- task_id: common-account-f5-phase13-baseline-contract-extend-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: Phase11 #223, Phase12 #226/#233, F4 preflight #243, POSTONA G1/G2 #240; preserve F4 Threads, F3 X, F6 AI
-- blocker: BG1 missing baseline, BG2 unsafe Cron/HTTP, managed project unapproved; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017/
-- review_required: restricted Phase12 #233 safety check only before future managed apply
-- slot_use: read-only/source-only POSTONA disposable Supabase architecture design; NO project creation, migration, real OAuth/SNS, merge/deploy
-- latest_result: 2026-10-17 JST DESIGN_COMPLETE_SOURCE_ONLY; Draft PR250 head 2a626cd49f55611258c7695f0b84cb2a917d4595 on PR233 499a9e1f; 17 new offline tests / 101 harness tests PASS; F4 PR243 preflight REFUSED (10 failing) as designed; finding F-1: Phase12 contract misses ensure_my_profile() and social_accounts.platform (oracle, local PG17); no managed/production access, no project, no inventory; production NO_GO
-
-- l5_verdict: PASS_SOURCE_DESIGN / PRODUCTION_NO_GO (2026-10-17); PR250 head 2a626cd49f55611258c7695f0b84cb2a917d4595; 6 new files, 101 offline tests reported; baseline contract F-1 and inert X stand-in F-2 block managed validation; next task needs archive before overwrite.
+- dependencies: G4 D-1 approved; Phase13 PR250, Phase12 PR233; D-2 requires F3/G3 contract, D-3 hosted project design only
+- blocker: production/managed schema inventory not approved; F3 X stand-in contract pending; PRODUCTION_NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/
+- review_required: Phase12 PR233 P2x4 focused review only before later managed apply
+- slot_use: source-only baseline contract extension ensure_my_profile()/social_accounts.platform plus local PG17 tests; no real Supabase or SNS
 
 ## F6
 - slot: F6
