@@ -4,19 +4,22 @@
 -- (20261017120000). The ledger is append-only and its reservation identity is immutable, so this migration adds the
 -- ONE narrow exception the erasure needs and nothing else:
 --   * public.ai_ledger_erase_user(p {user_id}) replaces every ledger reference to the user (reservations, usage
---     events, per-user budget buckets, user-scoped policies, which are also disabled) by ONE fresh "erased subject"
---     id. Amounts, counts, statuses, timestamps and every other column stay exactly as they were, so monthly totals
---     and per-call audit are unchanged. The erased-subject id is random (not derived from the user id), is never
+--     events, per-user budget buckets, user-scoped policies) by ONE fresh "erased subject" id. The user's own
+--     policies are also disabled, renamed erased.<policy id> and lose their note (free text that may name the user
+--     or a contact). Amounts, counts, statuses, timestamps and every other column stay exactly as they were, so
+--     monthly totals and per-call audit are unchanged. The erased-subject id is random (not derived from the user id), is never
 --     stored next to the user id, never returned, and has a reserved shape (00000000-0000-0000-....-............) that
 --     no real (version 4) user id can take, so it cannot collide with a user and is recognisable as erased.
---     Refused while the user still has call-store rows (forget them first) or an in-flight (reserved / sent)
---     attempt (recover it first). Idempotent: a second call finds nothing.
+--     Refused while the user still has call-store rows (forget them first), an in-flight (reserved / sent) attempt
+--     (recover it first), or a policy NOT scoped to the user whose key or note names the user id (an operator must
+--     fix it; erasure never rewrites other policies). Idempotent: a second call finds nothing. READ COMMITTED only:
+--     a REPEATABLE READ / SERIALIZABLE snapshot could miss a row committed before the locks were taken.
 --   * the two ledger triggers that forbid the change (ai_ledger.reservation_transition, the usage_events append-only
 --     trigger) admit exactly that change: only user_id, from that user to that erased id, only inside the erasure
 --     function's transaction (transaction-local setting ai_ledger.erasure = '<user>><erased id>'). Every other update
 --     or delete is refused with the same errors as before.
 --   * public.ai_ledger_user_footprint(p {user_id, brand_ref?}): counts of rows still referencing the user (ledger +
---     call store) for the deletion read-back. Counts only.
+--     call store), including policies whose key or note names the user id, for the deletion read-back. Counts only.
 --   * public.ai_calls_forget_system_brand(p {brand_ref}): removes SYSTEM-subject call-store rows tagged with a
 --     POSTONA user workspace slug (u_ + 24 hex), which forget_user (by user_id) cannot reach.
 --   * public.ai_calls_recovery_candidates(p): old in-flight claims with their ledger summary (no user id, no brand),
@@ -106,6 +109,17 @@ begin
 end;
 $$;
 
+-- True when free text names the user: the user id with or without dashes, in any letter case.
+create function ai_ledger.mentions_user(p_text text, p_user uuid)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select p_text is not null and p_user is not null
+     and position(replace(p_user::text, '-', '') in lower(replace(p_text, '-', ''))) > 0
+$$;
+
 -- ---------------------------------------------------------------------------------------------------------
 -- The narrow immutability exception
 -- ---------------------------------------------------------------------------------------------------------
@@ -163,7 +177,8 @@ create or replace trigger usage_events_append_only before update or delete on ai
 -- ---------------------------------------------------------------------------------------------------------
 -- RPC: erase_user  p: {user_id}
 --   -> {erased: true, reservations, usage_events, budget_buckets, budget_policies}
---    | {erased: false, reason: CALL_STORE_NOT_FORGOTTEN | LEDGER_IN_FLIGHT, ...}
+--    | {erased: false, reason: CALL_STORE_NOT_FORGOTTEN | LEDGER_IN_FLIGHT | POLICY_TEXT_MENTIONS_USER
+--                              | POLICY_KEY_CONFLICT, ...}
 -- Excludes concurrent call-store claims of the user (the call store's per-user lock) and every new ledger
 -- reservation (the ledger's reservation lock) for its duration. The erased-subject id is not returned.
 -- ---------------------------------------------------------------------------------------------------------
@@ -178,11 +193,15 @@ declare
   v_erased uuid;
   v_calls bigint;
   v_in_flight bigint;
+  v_mentions bigint;
   v_reservations integer;
   v_events integer;
   v_buckets integer;
   v_policies integer;
 begin
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'AI_LEDGER_ERASURE_REQUIRES_READ_COMMITTED: %', current_setting('transaction_isolation') using errcode = 'P0001';
+  end if;
   if v_user is null then
     raise exception 'AI_LEDGER_INVALID_INPUT: user_id is required' using errcode = '22023';
   end if;
@@ -202,6 +221,20 @@ begin
   if v_in_flight > 0 then
     return jsonb_build_object('erased', false, 'reason', 'LEDGER_IN_FLIGHT', 'in_flight', v_in_flight);
   end if;
+  -- A policy NOT scoped to the user whose key or note names the user is not erasure's to rewrite: refuse, so the
+  -- identifier can never be left behind silently (an operator corrects it, then the erasure is repeated).
+  select count(*) into v_mentions from ai_ledger.budget_policies pol
+   where pol.scope_user_id is distinct from v_user
+     and (ai_ledger.mentions_user(pol.policy_key, v_user) or ai_ledger.mentions_user(pol.note, v_user));
+  if v_mentions > 0 then
+    return jsonb_build_object('erased', false, 'reason', 'POLICY_TEXT_MENTIONS_USER', 'policies', v_mentions);
+  end if;
+  -- The user's own policies are renamed erased.<policy id>: refuse rather than guess if another policy holds that key.
+  if exists (select 1 from ai_ledger.budget_policies pol
+               join ai_ledger.budget_policies other on other.policy_key = 'erased.' || pol.id::text and other.id <> pol.id
+              where pol.scope_user_id = v_user) then
+    return jsonb_build_object('erased', false, 'reason', 'POLICY_KEY_CONFLICT');
+  end if;
 
   v_erased := ai_ledger.new_erased_subject();
   perform set_config('ai_ledger.erasure', v_user::text || '>' || v_erased::text, true);
@@ -212,7 +245,11 @@ begin
   -- Counters keep their values and updated_at (a fresh timestamp would date the erasure).
   update ai_ledger.budget_buckets b set user_id = v_erased where b.user_id = v_user;
   get diagnostics v_buckets = row_count;
-  update ai_ledger.budget_policies pol set scope_user_id = v_erased, enabled = false where pol.scope_user_id = v_user;
+  -- The user's own policies: subject replaced, disabled, key and note (free text) no longer naming anyone.
+  -- created_at / updated_at stay as they were.
+  update ai_ledger.budget_policies pol
+     set scope_user_id = v_erased, enabled = false, policy_key = 'erased.' || pol.id::text, note = null
+   where pol.scope_user_id = v_user;
   get diagnostics v_policies = row_count;
   perform set_config('ai_ledger.erasure', '', true);
 
@@ -220,6 +257,8 @@ begin
      or exists (select 1 from ai_ledger.usage_events e where e.user_id = v_user)
      or exists (select 1 from ai_ledger.budget_buckets b where b.user_id = v_user)
      or exists (select 1 from ai_ledger.budget_policies pol where pol.scope_user_id = v_user)
+     or exists (select 1 from ai_ledger.budget_policies pol
+                 where ai_ledger.mentions_user(pol.policy_key, v_user) or ai_ledger.mentions_user(pol.note, v_user))
      or exists (select 1 from ai_calls.consumer_calls c where c.user_id = v_user) then
     -- A reservation or claim of the user that slipped past the two locks: refuse the whole erasure.
     raise exception 'AI_LEDGER_ERASURE_INCOMPLETE' using errcode = 'P0001';
@@ -231,7 +270,8 @@ $$;
 
 -- ---------------------------------------------------------------------------------------------------------
 -- RPC: user_footprint  p: {user_id, brand_ref?}
---   -> {reservations, usage_events, budget_buckets, budget_policies, call_rows, brand_call_rows?}  (counts only)
+--   -> {reservations, usage_events, budget_buckets, budget_policies, policy_mentions, call_rows, brand_call_rows?}
+--      (counts only; policy_mentions = policies whose key or note names the user id, whoever they are scoped to)
 -- ---------------------------------------------------------------------------------------------------------
 create function public.ai_ledger_user_footprint(p jsonb)
 returns jsonb
@@ -245,6 +285,9 @@ declare
   v_brand text;
   v jsonb;
 begin
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'AI_LEDGER_ERASURE_REQUIRES_READ_COMMITTED: %', current_setting('transaction_isolation') using errcode = 'P0001';
+  end if;
   if v_user is null then
     raise exception 'AI_LEDGER_INVALID_INPUT: user_id is required' using errcode = '22023';
   end if;
@@ -259,6 +302,8 @@ begin
     'usage_events', (select count(*) from ai_ledger.usage_events e where e.user_id = v_user),
     'budget_buckets', (select count(*) from ai_ledger.budget_buckets b where b.user_id = v_user),
     'budget_policies', (select count(*) from ai_ledger.budget_policies pol where pol.scope_user_id = v_user),
+    'policy_mentions', (select count(*) from ai_ledger.budget_policies pol
+                         where ai_ledger.mentions_user(pol.policy_key, v_user) or ai_ledger.mentions_user(pol.note, v_user)),
     'call_rows', (select count(*) from ai_calls.consumer_calls c where c.user_id = v_user));
   if v_brand is not null then
     v := v || jsonb_build_object('brand_call_rows', (select count(*) from ai_calls.consumer_calls c where c.brand_ref = v_brand));
@@ -269,9 +314,11 @@ $$;
 
 -- ---------------------------------------------------------------------------------------------------------
 -- RPC: ai_calls_forget_system_brand  p: {brand_ref (u_ + 24 hex)}
---   -> {forgotten: true, deleted} | {forgotten: false, reason: 'CALLS_IN_FLIGHT', in_flight}
+--   -> {forgotten: true, deleted} | {forgotten: false, reason: 'CALLS_IN_FLIGHT', in_flight, deleted?}
 -- A system-subject call tagged with a user's workspace slug is not reached by forget_user (no user_id). Only POSTONA
 -- user workspace slugs are accepted, so an operator brand (whose replay protection the AI Lab needs) never is.
+-- An acquired (in-flight) row is never deleted, even one whose claim commits between the check and the delete
+-- (system claims do not take this function's lock); it is reported, and the caller repeats later.
 -- ---------------------------------------------------------------------------------------------------------
 create function public.ai_calls_forget_system_brand(p jsonb)
 returns jsonb
@@ -284,14 +331,23 @@ declare
   v_in_flight bigint;
   v_deleted integer;
 begin
+  if current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'AI_CALLS_REQUIRES_READ_COMMITTED: %', current_setting('transaction_isolation') using errcode = 'P0001';
+  end if;
   perform pg_advisory_xact_lock(hashtextextended('ai_calls:system_brand:' || v_brand, 0));
   select count(*) into v_in_flight from ai_calls.consumer_calls c
    where c.subject_kind = 'system' and c.brand_ref = v_brand and c.state = 'acquired';
   if v_in_flight > 0 then
     return jsonb_build_object('forgotten', false, 'reason', 'CALLS_IN_FLIGHT', 'in_flight', v_in_flight);
   end if;
-  delete from ai_calls.consumer_calls c where c.subject_kind = 'system' and c.brand_ref = v_brand;
+  delete from ai_calls.consumer_calls c
+   where c.subject_kind = 'system' and c.brand_ref = v_brand and c.state <> 'acquired';
   get diagnostics v_deleted = row_count;
+  select count(*) into v_in_flight from ai_calls.consumer_calls c
+   where c.subject_kind = 'system' and c.brand_ref = v_brand and c.state = 'acquired';
+  if v_in_flight > 0 then
+    return jsonb_build_object('forgotten', false, 'reason', 'CALLS_IN_FLIGHT', 'in_flight', v_in_flight, 'deleted', v_deleted);
+  end if;
   return jsonb_build_object('forgotten', true, 'deleted', v_deleted);
 end;
 $$;
@@ -339,6 +395,7 @@ $$;
 -- ---------------------------------------------------------------------------------------------------------
 revoke all on function
   ai_ledger.is_erased_subject(uuid), ai_ledger.new_erased_subject(), ai_ledger.erasure_allows(uuid, uuid),
+  ai_ledger.mentions_user(text, uuid),
   ai_ledger.usage_events_guard(), ai_ledger.reservation_transition()
   from public, anon, authenticated, service_role;
 revoke all on function

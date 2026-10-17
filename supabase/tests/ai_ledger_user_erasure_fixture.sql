@@ -98,7 +98,8 @@ end;
 $$;
 
 -- Everything the bill and the budgets depend on, without any user column: usage by month / provider / model /
--- application / feature / outcome / basis, reservations by status, bucket counters by policy and period.
+-- application / feature / outcome / basis, reservations by status, bucket counters by policy (id: erasure renames a
+-- user's own policy) and period.
 create function aue_test.totals()
 returns text
 language sql
@@ -111,14 +112,15 @@ as $$
     (select string_agg(x, ';' order by x) from (
        select concat_ws('|', status, count(*), sum(reserved_usd)) as x from ai_ledger.reservations group by status) s),
     (select string_agg(x, ';' order by x) from (
-       select concat_ws('|', pol.policy_key, b.period_start, count(*), sum(b.calls), sum(b.held_usd), sum(b.settled_usd)) as x
-         from ai_ledger.budget_buckets b join ai_ledger.budget_policies pol on pol.id = b.policy_id
-        group by pol.policy_key, b.period_start) s),
+       select concat_ws('|', b.policy_id, b.period_start, count(*), sum(b.calls), sum(b.held_usd), sum(b.settled_usd)) as x
+         from ai_ledger.budget_buckets b
+        group by b.policy_id, b.period_start) s),
     (select count(*)::text from ai_ledger.usage_events),
     (select count(*)::text from ai_ledger.reservations))
 $$;
 
--- Every ledger row of one subject, all columns except the subject columns (and a policy's enabled flag).
+-- Every ledger row of one subject, all columns except the subject columns (and, for a policy, what erasure rewrites:
+-- enabled, policy_key, note).
 create function aue_test.rows_sans_user(p_user uuid)
 returns text
 language sql
@@ -127,7 +129,7 @@ as $$
     (select string_agg((to_jsonb(r) - 'user_id')::text, '|' order by r.id) from ai_ledger.reservations r where r.user_id = p_user),
     (select string_agg((to_jsonb(e) - 'user_id')::text, '|' order by e.id) from ai_ledger.usage_events e where e.user_id = p_user),
     (select string_agg((to_jsonb(b) - 'user_id')::text, '|' order by b.id) from ai_ledger.budget_buckets b where b.user_id = p_user),
-    (select string_agg((to_jsonb(pol) - 'scope_user_id' - 'enabled')::text, '|' order by pol.id)
+    (select string_agg((to_jsonb(pol) - 'scope_user_id' - 'enabled' - 'policy_key' - 'note')::text, '|' order by pol.id)
        from ai_ledger.budget_policies pol where pol.scope_user_id = p_user))
 $$;
 
@@ -171,6 +173,12 @@ begin
 end;
 $$;
 
+-- Race helper for a statement that only READS: used as a test-only row-level-security policy (FORCE RLS on a
+-- non-superuser owner), it sleeps knobs.delay_seconds once, in the first session that evaluates it, so that
+-- statement's snapshot is old while another session commits. Other sessions (and later statements of the same
+-- session) pass straight through. Very low cost, so the planner evaluates it before the query's own conditions.
+-- Defined after the knobs table below.
+
 -- Race helper (see the call-store fixture): a BEFORE trigger the runner creates that sleeps knobs.delay_seconds.
 create table aue_test.knobs (delay_seconds numeric not null);
 insert into aue_test.knobs values (0);
@@ -181,5 +189,25 @@ as $$
 begin
   perform pg_sleep((select k.delay_seconds from aue_test.knobs k));
   return new;
+end;
+$$;
+
+create function aue_test.slow_once()
+returns boolean
+language plpgsql
+volatile
+cost 0.0001
+security definer
+set search_path = ''
+as $$
+begin
+  if coalesce(current_setting('aue.slept', true), '') = '1' then
+    return true;
+  end if;
+  if (select k.delay_seconds from aue_test.knobs k) > 0 and pg_try_advisory_lock(hashtext('aue_test.slow_once')) then
+    perform set_config('aue.slept', '1', false);
+    perform pg_sleep((select k.delay_seconds from aue_test.knobs k));
+  end if;
+  return true;
 end;
 $$;

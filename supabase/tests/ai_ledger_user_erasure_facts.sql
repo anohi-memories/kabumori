@@ -1,5 +1,5 @@
 -- Every catalog fact of the database, one per line, EXCLUDING the objects 20261017150000 creates (its four public
--- RPCs and four ai_ledger helpers): schemas, relations, columns, constraints, indexes, triggers, policies, functions
+-- RPCs and five ai_ledger helpers): schemas, relations, columns, constraints, indexes, triggers, policies, functions
 -- (source hash + ACL + settings + owner), default ACLs, role attributes and memberships. It includes the ledger and
 -- the call store. Taken before and after the migration, the difference must be exactly the two ledger facts the
 -- erasure exception changes (the reservation trigger function and the usage-events trigger); taken before the
@@ -43,7 +43,7 @@ select fact from (
      and not (n.nspname = 'public' and p.proname in ('ai_ledger_erase_user', 'ai_ledger_user_footprint',
                                                      'ai_calls_forget_system_brand', 'ai_calls_recovery_candidates'))
      and not (n.nspname = 'ai_ledger' and p.proname in ('is_erased_subject', 'new_erased_subject', 'erasure_allows',
-                                                        'usage_events_guard'))
+                                                        'usage_events_guard', 'mentions_user'))
   union all
   select 'defacl|' || pg_get_userbyid(d.defaclrole) || '|' || coalesce(d.defaclnamespace::regnamespace::text, '') || '|'
          || d.defaclobjtype::text || '|' || d.defaclacl::text

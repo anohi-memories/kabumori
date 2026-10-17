@@ -41,6 +41,7 @@ begin
 end;
 $$;
 drop function ai_ledger.erasure_allows(uuid, uuid);
+drop function ai_ledger.mentions_user(text, uuid);
 drop function ai_ledger.new_erased_subject();
 drop function ai_ledger.is_erased_subject(uuid);
 commit;

@@ -10,12 +10,15 @@
 # Parts:
 #   isolation    the target is a local socket-only server (no TCP listener)
 #   behaviour    preconditions (no call store / not the owner -> refused, nothing created), one-shot, behaviour file
+#   snapshot     erase / footprint / forget_system_brand refuse REPEATABLE READ and SERIALIZABLE; under REPEATABLE READ a
+#                reservation committed after the snapshot would otherwise be missed (P3b)
 #   supabase     Supabase-like default privileges are neutralised; behaviour holds
 #   nonsuper     all three migrations applied by a non-superuser owner; behaviour holds
 #   legacy       with the erasure applied: the ledger's own behaviour suite, the call store's behaviour suite and the
 #                real H5 bridge end to end (PR249) still pass
-#   concurrency  real parallel sessions: one user erased by 20 sessions, 20 users at once, a reservation and a claim
-#                arriving during an erasure (held open by a test trigger)
+#   concurrency  real parallel sessions: one user (with PII-bearing policies) erased by 20 sessions, 20 users at once,
+#                a reservation and a claim arriving during an erasure (held open by a test trigger), and a system claim
+#                committing between forget_system_brand's check and its delete (P3a, held open by a test RLS policy)
 #   adverse      unsafe role graphs / grants make the migration refuse atomically, catalog unchanged
 #   rollback     the migration changes exactly two existing ledger facts; data untouched; the rollback restores the
 #                exact catalog; an erasure done before the rollback stays done
@@ -39,7 +42,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 LEDGER="$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql"
 STORE="$HERE/../migrations/20261017120000_ai_consumer_call_store.sql"
 MIGRATION="${AUE_MIGRATION:-$HERE/../migrations/20261017150000_ai_ledger_user_erasure.sql}"
-PARTS="${AUE_PARTS:-isolation behaviour supabase nonsuper legacy concurrency adverse rollback preflight maintenance}"
+PARTS="${AUE_PARTS:-isolation behaviour snapshot supabase nonsuper legacy concurrency adverse rollback preflight maintenance}"
 PREFIX="aue_proof_$$"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/aue_proof.XXXXXX")"
 
@@ -47,6 +50,7 @@ psql_super() { psql -X -h "$HOST" -p "$PORT" -U "$SUPER" -v ON_ERROR_STOP=1 -q "
 fail() { echo "FAIL: $*" >&2; exit 1; }
 want() { [ "$1" = "$2" ] || fail "$3: expected '$2', got '$1'"; }
 query() { psql_super -d "$1" -Atc "$2"; }
+user_n() { printf '00000000-0000-4000-8000-%012d' "$1"; }
 
 reset_cluster_roles() {
   psql_super -d postgres >/dev/null 2>&1 <<SQL || true
@@ -130,7 +134,7 @@ fixtures() {
 }
 facts() { psql_super -d "$1" -Atf "$HERE/ai_ledger_user_erasure_facts.sql"; }
 new_objects() {
-  query "$1" "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where (n.nspname = 'public' and p.proname in ('ai_ledger_erase_user', 'ai_ledger_user_footprint', 'ai_calls_forget_system_brand', 'ai_calls_recovery_candidates')) or (n.nspname = 'ai_ledger' and p.proname in ('is_erased_subject', 'new_erased_subject', 'erasure_allows', 'usage_events_guard'))"
+  query "$1" "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where (n.nspname = 'public' and p.proname in ('ai_ledger_erase_user', 'ai_ledger_user_footprint', 'ai_calls_forget_system_brand', 'ai_calls_recovery_candidates')) or (n.nspname = 'ai_ledger' and p.proname in ('is_erased_subject', 'new_erased_subject', 'erasure_allows', 'usage_events_guard', 'mentions_user'))"
 }
 ledger_data() {
   query "$1" "select md5(coalesce((select string_agg(x::text, '|' order by x.id) from ai_ledger.reservations x), '') || coalesce((select string_agg(x::text, '|' order by x.id) from ai_ledger.usage_events x), '') || coalesce((select string_agg(x::text, '|' order by x.id) from ai_ledger.budget_buckets x), '') || coalesce((select string_agg(x::text, '|' order by x.id) from ai_ledger.budget_policies x), '') || coalesce((select string_agg(x::text, '|' order by x.call_key) from ai_calls.consumer_calls x), ''))"
@@ -177,6 +181,32 @@ if has_part behaviour; then
   psql_super -d "$DB" -f "$HERE/ai_ledger_user_erasure_behavior.sql"
   drop_db "$DB"
   echo "PASS behaviour"
+fi
+
+# ---- snapshot (P3b): READ COMMITTED only --------------------------------------------------------------------------
+if has_part snapshot; then
+  DB="$(fresh_db snapshot)"; base "$DB"; apply "$DB"; fixtures "$DB"
+  U="$(user_n 61)"
+  query "$DB" "insert into ai_ledger.budget_policies (policy_key, scope_application, scope_subject_kind, scope_user_id, period, max_calls) values ('snap.user', 'postona', 'user', '$U', 'month', 100)" >/dev/null
+  query "$DB" "select aue_test.seed_user('$U', 'snap')" >/dev/null
+  for level in "repeatable read" serializable; do
+    for call in "aue_test.erase('$U')" "aue_test.footprint('$U')" "aue_test.rpc('ai_calls_forget_system_brand', '{\"brand_ref\": \"u_0123456789abcdef01234567\"}')"; do
+      if out="$(psql_super -d "$DB" -Atc "begin isolation level $level" -c "select $call" -c "commit" 2>&1)"; then fail "snapshot: $call ran under $level"; fi
+      case "$out" in *REQUIRES_READ_COMMITTED*) ;; *) fail "snapshot: $call under $level: $out" ;; esac
+    done
+  done
+  # The hazard itself: a REPEATABLE READ snapshot taken before another session commits a reservation of the user.
+  INSERT_LATE="psql -X -h $HOST -p $PORT -U $SUPER -d $DB -Atq -c \"select ail_test.reserve(aue_test.request('snap-late'), 1, 'anthropic', 'claude-haiku-5-5', 'postona', 'consult', 'user', '$U', null, 0.0044) ->> 'allowed'\""
+  if out="$(psql_super -d "$DB" -Atc "begin isolation level repeatable read" -c "select count(*) from ai_ledger.reservations" -c "\\! $INSERT_LATE" -c "select aue_test.erase('$U')" -c "commit" 2>&1)"; then
+    fail "snapshot: erasure ran on a stale snapshot: $out"
+  fi
+  case "$out" in *AI_LEDGER_ERASURE_REQUIRES_READ_COMMITTED*) ;; *) fail "snapshot hazard: $out" ;; esac
+  want "$(query "$DB" "select aue_test.footprint('$U') ->> 'reservations'")" 5 "snapshot: nothing was erased under the stale snapshot"
+  query "$DB" "select ail_test.rpc('ai_ledger_release', jsonb_build_object('reservation_id', (select id from ai_ledger.reservations where request_id = aue_test.request('snap-late'))))" >/dev/null
+  want "$(query "$DB" "select aue_test.erase('$U') ->> 'reservations'")" 5 "snapshot: READ COMMITTED erases all 5, including the late one"
+  want "$(query "$DB" "select aue_test.footprint('$U') ->> 'reservations'")" 0 "snapshot: nothing left"
+  drop_db "$DB"
+  echo "PASS snapshot (P3b): erase / footprint / forget_system_brand refuse REPEATABLE READ and SERIALIZABLE; the stale-snapshot case is refused, READ COMMITTED erases everything"
 fi
 
 # ---- supabase-like default privileges ----------------------------------------------------------------------------
@@ -248,7 +278,6 @@ slow() {
     query "$1" "update aue_test.knobs set delay_seconds = $2; create trigger aue_slow before update on ai_ledger.usage_events for each row execute function aue_test.slow()" >/dev/null
   fi
 }
-user_n() { printf '00000000-0000-4000-8000-%012d' "$1"; }
 
 if has_part concurrency; then
   DB="$(fresh_db conc)"; base "$DB"; apply "$DB"; fixtures "$DB"
@@ -256,10 +285,13 @@ if has_part concurrency; then
 
   # E1. one user erased by 20 sessions at once: one does the work, the others find nothing; one erased subject
   U="$(user_n 1)"
+  query "$DB" "insert into ai_ledger.budget_policies (policy_key, scope_application, scope_subject_kind, scope_user_id, period, max_calls, note) values ('override.user.$U', 'postona', 'user', '$U', 'month', 500, 'ticket: jane@example.com')" >/dev/null
   query "$DB" "select aue_test.seed_user('$U', 'conc-1')" >/dev/null
   TOTALS="$(query "$DB" "select aue_test.totals()")"
   run_parallel "$DB" 20 "select aue_test.try('ai_ledger_erase_user', jsonb_build_object('user_id', '$U'))" e1
   want "$(count_matching e1 '"reservations": 4')" 1 "E1: one session erased the 4 reservations"
+  want "$(count_matching e1 '"budget_policies": 1')" 1 "E1: one session renamed the user's policy"
+  want "$(query "$DB" "select aue_test.mentions('$U') + aue_test.mentions('jane@example.com')")" 0 "E1: no id or e-mail left"
   want "$(count_matching e1 '"reservations": 0')" 19 "E1: the others found nothing"
   want "$(count_matching e1 'ERR')$(count_matching e1 '^ERROR')" 00 "E1: errors"
   want "$(query "$DB" "select count(distinct user_id) from ai_ledger.reservations where request_id like 'h5m2_%' and user_id is not null and ai_ledger.is_erased_subject(user_id)")" 1 "E1: one erased subject"
@@ -311,6 +343,46 @@ if has_part concurrency; then
   want "$(query "$DB" "select aue_test.erase('$U') ->> 'reason'")" CALL_STORE_NOT_FORGOTTEN "E4: the next sweep waits for the call store"
   echo "PASS concurrency E4: a claim during the erasure waits for the user lock; read-back sees it; the sweep refuses until forgotten"
   drop_db "$DB"
+
+  # E5 (P3a). forget_system_brand counts in-flight rows, then deletes. A system claim (which does not take its lock)
+  #     committing in between must not be deleted. A test-only RLS policy (FORCE RLS works on a non-superuser owner)
+  #     holds the counting statement open for 1 s while the claim commits; the delete then sees the new acquired row.
+  DB="$(fresh_db conc_brand)"
+  psql_super -d "$DB" -c "create role aue_owner nologin; grant create on database $DB to aue_owner; grant create on schema public to aue_owner" >/dev/null
+  for f in "$LEDGER" "$STORE" "$MIGRATION"; do psql_super -d "$DB" -c "set role aue_owner" -f "$f" >/dev/null; done
+  fixtures "$DB"
+  B="u_0123456789abcdef0123456e"
+  R1="acs_test.claim_p('op-brand-done', 'system-postona', 'x', 'system', null, 'postona.ai_lab', '$B')"
+  R2="acs_test.claim_p('op-brand-late', 'system-postona', 'y', 'system', null, 'postona.ai_lab', '$B')"
+  OWNER="$(query "$DB" "select acs_test.claim($R1) ->> 'owner'")"
+  query "$DB" "select acs_test.rpc('ai_calls_complete', acs_test.complete_p($R1, '$OWNER', acs_test.fail_result($R1, 'PROVIDER_FAILED')))" >/dev/null
+  # An unrelated in-flight claim: the counting statement reads in-flight rows (partial index), so it must meet one
+  # row to evaluate the policy and pause.
+  query "$DB" "select acs_test.claim(acs_test.claim_p('op-other', 'tenant-other', 'z', 'user', '$(user_n 71)')) ->> 'kind'" >/dev/null
+  psql_super -d "$DB" >/dev/null <<'SQL'
+grant usage on schema aue_test to aue_owner;
+alter table ai_calls.consumer_calls force row level security;
+create policy aue_t_select on ai_calls.consumer_calls for select using (aue_test.slow_once());
+create policy aue_t_insert on ai_calls.consumer_calls for insert with check (true);
+create policy aue_t_update on ai_calls.consumer_calls for update using (true) with check (true);
+create policy aue_t_delete on ai_calls.consumer_calls for delete using (true);
+update aue_test.knobs set delay_seconds = 1;
+SQL
+  ( psql -X -h "$HOST" -p "$PORT" -U "$SUPER" -d "$DB" -Atq -c "select aue_test.try('ai_calls_forget_system_brand', jsonb_build_object('brand_ref', '$B'))" >"$WORK/e5forget.1" 2>&1 ) &
+  FORGET=$!
+  sleep 0.3
+  T0="$(date +%s)"
+  want "$(query "$DB" "select acs_test.claim($R2) ->> 'kind'")" acquired "E5: the late system claim"
+  T1="$(date +%s)"
+  wait "$FORGET"
+  [ $((T1 - T0)) -le 1 ] || fail "E5: the claim waited for the forget (no race was exercised)"
+  grep -q '"in_flight": 1' "$WORK/e5forget.1" && grep -q '"deleted": 1' "$WORK/e5forget.1" && grep -q '"forgotten": false' "$WORK/e5forget.1" \
+    || fail "E5: forget result: $(cat "$WORK/e5forget.1")"
+  want "$(query "$DB" "select (acs_test.call_row($R2)).state")" acquired "E5: the late claim survives the delete"
+  want "$(query "$DB" "select count(*) from ai_calls.consumer_calls where call_key = $R1 ->> 'call_key'")" 0 "E5: the finished row was deleted"
+  drop_db "$DB"
+  reset_cluster_roles
+  echo "PASS concurrency E5 (P3a): a system claim committed between the check and the delete is kept and reported ($(cat "$WORK/e5forget.1"))"
 fi
 
 # ---- adverse -----------------------------------------------------------------------------------------------------
@@ -353,7 +425,7 @@ if has_part rollback; then
   CHANGED="$(comm -3 "$WORK/facts_before" "$WORK/facts_after" | sed 's/^[[:space:]]*//' | cut -d'|' -f1,2 | sort | uniq -c | awk '{print $1 " " $2}' | sort | tr '\n' ';')"
   want "$CHANGED" "2 fn|ai_ledger.reservation_transition();2 trg|ai_ledger.usage_events.usage_events_append_only;" "the migration changes exactly the two ledger facts of the exception"
   want "$(ledger_data "$DB")" "$DATA_BEFORE" "data untouched by the migration"
-  want "$(new_objects "$DB")" 8 "four RPCs + four helpers present"
+  want "$(new_objects "$DB")" 9 "four RPCs + five helpers present"
   psql_super -d "$DB" -f "$HERE/ai_ledger_user_erasure_fixture.sql" >/dev/null
   want "$(query "$DB" "select aue_test.erase('$(user_n 51)') ->> 'reservations'")" 1 "erase before the rollback"
   DATA_ERASED="$(ledger_data "$DB")"
