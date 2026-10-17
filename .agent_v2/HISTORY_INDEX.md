@@ -696,3 +696,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 ## F6 PR256 erasure source candidate and independent CHANGES_REQUIRED — 2026-10-17
 - task_id: `common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017`; L6 PASS_SOURCE_CANDIDATE, subsequent independent Claude PR256 review CHANGES_REQUIRED: P2 policy_key/note PII retention, P3x3. Draft PR256 HEAD `1830320bd93fcfa458411dcf00f130d87d607d39` (no merge/production).
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr256-erasure-reviewed-changes-required.md`; blob SHA both `12ad2381fad6d6fbef8d387eda56d53e3cddeb60`, 11052 chars, read-back equality verified. archive commit `82a8a58bca08eb80a346f901f43ec09b84558bff`. Independent SHA256/MANIFEST NOT_VERIFIED.
+
+- 2026-10-17 | F3 | `postona-f3-x-oauth-t13-reservation-owner-guard-20261017` | L3 PASS_SOURCE_CANDIDATE / PROD NO_GO; Draft PR257 HEAD 005d7ecc | `.agent_v2/archive/2026-10-17-F3-postona-f3-x-oauth-t13-reservation-owner-guard-20261017` | 20410 bytes; SHA256 `62f8e4e5b8e707f1a572d8424ec59ed399c695d91298875399f18653f86900fa`; original blob `734e2559`; exact restore verified.
