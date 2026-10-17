@@ -70,7 +70,8 @@ test("10/2 live draft: the broad-first paragraph no longer warns, and 846 charac
   const check = localAnalysisCheck(live(), input);
   assert.deepEqual(check.hard, []);
   // The live points were three metric lines (the shape the editorial points replace): recorded, not paid for.
-  assert.deepEqual(check.warnings, ["X_POINTS_METRIC_RECAP:3", "APP_STORY_SHORTER_THAN_TARGET:846"], "length and points stay as telemetry");
+  // A案 (2026-10-14): this live draft also says "no confirmed reason / relation" four times, now recorded (telemetry only).
+  assert.deepEqual(check.warnings, ["REASON_ABSENCE_STATED:4", "X_POINTS_METRIC_RECAP:3", "APP_STORY_SHORTER_THAN_TARGET:846"], "length and points stay as telemetry");
   assert.deepEqual(qualityRewriteHints(check.warnings), [], "nothing worth a generation");
   assert.deepEqual(editorialPriorityWarnings(live(), input), []);
 });
@@ -81,16 +82,16 @@ test("10/2 live draft: delivered in one generation and one Fact call (was three 
   assert.equal(outcome.ok, true);
   assert.deepEqual(calls, ["generate", "fact"]);
   assert.deepEqual([outcome.trace.qualityRewrite, outcome.trace.deliveredGeneration, outcome.trace.generations], [false, 1, 1]);
-  assert.deepEqual(outcome.ok && outcome.packet.fact.quality_warnings, ["X_POINTS_METRIC_RECAP:3", "APP_STORY_SHORTER_THAN_TARGET:846"]);
+  assert.deepEqual(outcome.ok && outcome.packet.fact.quality_warnings, ["REASON_ABSENCE_STATED:4", "X_POINTS_METRIC_RECAP:3", "APP_STORY_SHORTER_THAN_TARGET:846"]);
 });
 
 test("the 486-character X body is inside the target: no length warning", () => {
   const packet = assemblePacket(input, live(), { generatedAt: NOW(), attempts: 1 });
   const post = formatSharedXPost(packet);
   // The disclaimer is appended by code and not measured. The body was 486; the shared title 「📌 今日のポイント」
-  // (2026-10-14) is two characters shorter than the morning's 「📌 今日の注目ポイント」, and moving the points above
-  // the lead adds nothing.
-  assert.equal(Array.from(post).length, 484 + 2 + Array.from(REPORT_DISCLAIMER_JA).length);
+  // (2026-10-14) is two characters shorter than the morning's 「📌 今日の注目ポイント」, moving the points above the lead
+  // adds nothing, and the lead and the context share one paragraph since Phase 2 (one line break instead of two).
+  assert.equal(Array.from(post).length, 483 + 2 + Array.from(REPORT_DISCLAIMER_JA).length);
   assert.deepEqual(sharedXPostWarnings(packet, post), []);
 });
 
@@ -156,7 +157,7 @@ test("app length: a complete story modestly under 900 is a warning only", () => 
     const length = narrative(analysis);
     assert.ok(length >= APP_STORY_REWRITE_BELOW_CHARS && length < 900, `narrative ${length}`);
     const check = localAnalysisCheck(analysis, input);
-    assert.deepEqual(check.warnings, ["X_POINTS_METRIC_RECAP:3", `APP_STORY_SHORTER_THAN_TARGET:${length}`]);
+    assert.deepEqual(check.warnings, ["REASON_ABSENCE_STATED:4", "X_POINTS_METRIC_RECAP:3", `APP_STORY_SHORTER_THAN_TARGET:${length}`]);
     assert.deepEqual(qualityRewriteHints(check.warnings), []);
   }
 });

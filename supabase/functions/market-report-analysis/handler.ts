@@ -22,7 +22,7 @@
 
 import type { MarketDataPacket } from "../market-report-data-packet/packet_schema.ts";
 import { decideRunWindow, type ReportType } from "../market-report-data-packet/session_logic.ts";
-import { buildAnalysisInput, type NewsExclusion, type NewsTextRow } from "./analysis_input.ts";
+import { buildAnalysisInput, type JapanMetrics, type NewsExclusion, type NewsTextRow } from "./analysis_input.ts";
 import {
   ANALYSIS_MODEL,
   type GenerationRecord,
@@ -62,6 +62,8 @@ export type Deps = {
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 /** Unset (default): the market-wide news selection. "all": every referenced item, as before 2026-10-14. */
 export const NEWS_SELECTION_ENV = "KABUMORI_MARKET_REPORT_NEWS_SELECTION";
+/** Unset (default): the Japanese market from the Nikkei 225 only (no ETF 1306). "legacy_1306": the pre-Phase-2 input. */
+export const JAPAN_METRICS_ENV = "KABUMORI_MARKET_REPORT_JAPAN_METRICS";
 
 /** "COMPANY_NOT_MARKET_WIDE:12,NEWS_TEXT_NOT_FACT_PASSED:1": exclusion counts by fixed reason code. */
 export function newsExclusionSummary(excluded: readonly NewsExclusion[]): string {
@@ -329,6 +331,7 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
     const morning = reportType === "close" ? await loadMorningReport(db, tradingDate) : null;
     // Market-wide news selection is the default; "all" restores the pre-2026-10-14 input without a deploy.
     const newsSelection: "market_wide" | "all" = deps.env(NEWS_SELECTION_ENV) === "all" ? "all" : "market_wide";
+    const japanMetrics: JapanMetrics = deps.env(JAPAN_METRICS_ENV) === "legacy_1306" ? "legacy_1306" : "nikkei_only";
     const input = buildAnalysisInput({
       dataPacket: dataPacket.payload,
       dataPacketId: dataPacket.id,
@@ -336,11 +339,13 @@ export async function handleRequest(req: Request, deps: Deps): Promise<Response>
       newsRows,
       morning,
       newsSelection,
+      japanMetrics,
     });
     if (input.yumeReview) diagnostics.yume_review = `${input.yumeReview.verdict}:${input.yumeReview.reason_code}`;
     diagnostics.news_items = String(input.news.length);
     // 除外ログ (PROJECT_RULES): which referenced news the market-wide report left out, and why (fixed codes only).
     diagnostics.news_selection = newsSelection;
+    diagnostics.japan_metrics = japanMetrics;
     diagnostics.news_excluded = String(input.excludedNews.length);
     if (input.excludedNews.length > 0) {
       diagnostics.news_excluded_reasons = newsExclusionSummary(input.excludedNews);

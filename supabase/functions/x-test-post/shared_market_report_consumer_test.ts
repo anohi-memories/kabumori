@@ -176,7 +176,9 @@ test("presentation v2 packet: the X post is the ~500-character digest, formatted
   const length = Array.from(body).length - Array.from(REPORT_DISCLAIMER_JA).length - 2;
   assert.ok(length >= X_POST_TARGET_MIN_CHARS && length <= X_POST_TARGET_MAX_CHARS, `length ${length}`);
   assert.equal(result.text, appendKabumoriReportFixedHashtags(body));
-  for (const heading of ["📌 今日のポイント", "📰 ", "👀 明日以降の注目点", "💬 今日のひとこと"]) assert.ok(body.includes(heading), heading);
+  // Phase 2: ゆめちゃん's call closes the post with its own 🔮 (no 💬 title); a model closing keeps 💬.
+  const closingHeading = shared.report.yume ? "\n\n🔮" : "💬 今日のひとこと";
+  for (const heading of ["📌 今日のポイント", "📰 ", "👀 明日以降の注目点", closingHeading]) assert.ok(body.includes(heading), heading);
   const values = log[1].args[1] as Record<string, unknown>;
   assert.deepEqual([values.api_cost_usd, values.web_search_calls, values.fact_check_status], [0, 0, "passed"]);
   assert.deepEqual((values.market_data as { quality_warnings: string[] }).quality_warnings, []);

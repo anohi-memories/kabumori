@@ -53,8 +53,8 @@ test("market-wide selection: an ordinary company's disclosure is left out with a
   ]);
 });
 
-test("a company item that can move a major sector (semiconductors / AI, high or above) stays, at most two of them", () => {
-  const chip = (ref: string) => item({ ref, scope: "company", severity: "critical", categories: ["ai_tech", "corporate"], company: "AI（9984）" });
+test("a major company's news (here ソフトバンクグループ, high or above) stays, at most two company items (Phase 2 rule)", () => {
+  const chip = (ref: string) => item({ ref, scope: "company", severity: "critical", categories: ["ai_tech", "corporate"], company: "ソフトバンクグループ（9984）" });
   assert.ok(isMarketMovingCompanyNews(chip("news:a")));
   assert.ok(!isMarketMovingCompanyNews(item({ scope: "broad", categories: ["semiconductors"] })), "only company items are judged here");
   const { kept, excluded } = selectMarketWideNews([chip("news:a"), chip("news:b"), chip("news:c")]);
@@ -84,16 +84,15 @@ test("10/7 close (28 company items, 1 geopolitics): only the market-wide item re
   const referenced = close1007.data.payload.news_refs.items.map((ref) => `news:${ref.ref_id}`);
   const accounted = new Set([...wide.news.map((news) => news.ref), ...wide.excludedNews.map((news) => news.ref)]);
   for (const ref of referenced.filter((ref) => close1007.news.some((row) => `news:${row.id}` === ref))) assert.ok(accounted.has(ref), ref);
-  assert.ok(wide.excludedNews.every((news) => /^(NEWS_TEXT_NOT_FACT_PASSED|COMPANY_NOT_MARKET_WIDE|COMPANY_NEWS_CAP|NEWS_ITEM_CAP)$/.test(news.reason)));
+  assert.ok(wide.excludedNews.every((news) => /^(NEWS_TEXT_NOT_FACT_PASSED|COMPANY_NOT_MARKET_WIDE|COMPANY_NEWS_CAP|BROAD_NO_MARKET_LINK_CAP|NEWS_ITEM_CAP)$/.test(news.reason)));
   assert.match(newsExclusionSummary(wide.excludedNews), /^COMPANY_NOT_MARKET_WIDE:\d+/);
 });
 
-test("9/30 close: the two AI company items of critical severity stay as sector news; the rest of the company items go", () => {
+test("9/30 close: the SBI subsidiaries' merger (critical, tagged ai_tech by a keyword) no longer passes as market-moving", () => {
   const wide = inputOf(close0930, { newsSelection: "market_wide" });
-  const companies = wide.news.filter((news) => news.scope === "company");
-  assert.ok(companies.length <= MAX_COMPANY_NEWS_ITEMS);
-  assert.ok(companies.every((news) => isMarketMovingCompanyNews(news)));
-  assert.ok(wide.news.filter((news) => news.scope === "broad").length >= 5, "the broad items are all still there");
+  assert.deepEqual(wide.news.filter((news) => news.scope === "company"), [], "an ai_tech tag is not a market-wide effect (Phase 2)");
+  assert.ok(wide.news.some((news) => news.categories.includes("semiconductors")), "the AI/semiconductor policy news stays");
+  assert.ok(wide.news.filter((news) => news.scope === "broad").length >= 5, "the market-linked broad items are still there");
 });
 
 test("the pure builder keeps the old input by default (fixtures and replays); the handler opts into market_wide", () => {
@@ -198,9 +197,9 @@ test("prompt: ゆめちゃん talks to the reader with her own reading of the fa
     const prompt = String(generationRequestBody(input, []).instructions);
     assert.ok(prompt.startsWith("あなたは日本株の市場レポート編集者です。この取引日の市場を、かぶモリのAI評論家「ゆめちゃん」"));
     assert.ok(prompt.includes("情報の羅列ではなく、ゆめちゃん自身の解釈を読んでもらうこと"));
-    assert.ok(prompt.includes("新聞記事・ニュース速報・業務報告書のような硬い文にせず"));
-    assert.ok(prompt.includes("判断には必ず根拠（入力の事実）を添えます"));
-    assert.ok(prompt.includes("同じ情報（同じ指標の値、同じニュース、同じ注意点）を項目をまたいで何度も繰り返しません"));
+    assert.ok(prompt.includes("新聞記事・ニュース速報・業務報告書・AIの要約のような硬い文にしません"));
+    assert.ok(prompt.includes("判断には根拠（入力の事実）を添え"));
+    assert.ok(prompt.includes("同じ情報を繰り返しません。今日のポイント（points_ja）に書いたことを本文でそのまま言い直さず"));
     assert.ok(prompt.includes("AIらしい機械的な言い回し"));
     assert.ok(prompt.includes("yume 以外の項目では今日の値動きを予想せず"), "a direction call lives in yume only");
     assert.ok(prompt.includes("yume の stance と同じ向きにし、逆の向きを書きません"), "X never contradicts her call");
