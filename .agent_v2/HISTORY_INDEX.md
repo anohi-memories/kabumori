@@ -655,3 +655,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-oauth-stack-integration-ios-return-20261017`). L4 accepted, PR247 `27e2135c041fb8c37bbf9c68adbe4f6fa66ea5e8`, production NO_GO.
 
 - 2026-10-17 | F10 | `orchestration-v3-issue244-integration-preflight-f10-20261017` | L10 PASS_PREFLIGHT; Draft PR248; migration NO_GO, PR172 stale archive found | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-issue244-integration-preflight-f10-20261017/` | SHA256 `32dd41424a65ac49de6a9e690e0217ceec4e8d2a6f249dd75f5d48da5a447e91`, byte/blob readback verified.
+
+## F5 Phase13 architecture design completed — 2026-10-17
+- task_id: `common-account-f5-postona-disposable-supabase-architecture-plan-20261017`, L5 PASS_SOURCE_DESIGN / PRODUCTION_NO_GO, Draft PR #250 head `2a626cd49f55611258c7695f0b84cb2a917d4595`.
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-postona-disposable-supabase-architecture-plan-20261017/files/.agent_v2/tasks/F5.md`.
+- bytes: 21427; SHA256: `6291c1525b2e3d112c65937d82beeb8c088dd67bca4cecfb72317b02dcc64a98`; original/archive blob: `f6e61db476860c1a67196a8964f0ed3dfc02f0f8`; full restore verified; MANIFEST/SHA256SUMS saved; append-only.
