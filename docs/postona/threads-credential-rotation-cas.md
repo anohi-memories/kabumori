@@ -30,7 +30,7 @@ TASK: `postona-f4-threads-credential-rotate-cas-sql-contract-20261017`。適用�
 | `secret_id` | `social_accounts.vault_access_token_secret_id` | PR124 の `complete`。初回は `vault.create_secret`、再接続では **同じ id のまま** `vault.update_secret`。H5 の owner の取引から呼ばれる |
 | `recorded_at`・`expires_at` | `threads_account_credential_custody`（G4） | 接続: `record_threads_credential_custody`（接続の取引の中だけ）。延長: 今回の `rotate_threads_credential_custody` |
 | 期限の読み出し | `threads_account_credential_expires_at`（G4） | 「同じ secret」かつ「最新の確認より後の記録」のときだけ期限を返し、ほかは NULL（＝期限切れ） |
-| F5 の柵 | `private.account_lifecycle_assert_brand_service_active(brand, 'x_autopost')`（F5 PR165） | F4 の柵 `threads_manual_publish_owner_fence(brand)` 経由で使う（投稿と同じ対応表） |
+| F5 の判断 | `private.account_lifecycle_service_state_refusal(user, 'x_autopost')`（F5 Phase 4。「1人を指定して判断し、その人のライフサイクルのロックを COMMIT まで保つ」唯一の判断）と、所有者の規則 `private.account_lifecycle_brand_owner(brand)`（F5 PR165） | どちらも変えずに使う。**判断する人を先に決めて明示的に渡す**（§3）。コードの対応は投稿の柵と同じ |
 | 削除の後片付け | `cleanup_threads_provider_footprint`（F4）。G5 のリースの判定 `private.account_lifecycle_cleanup_authorized` と作業場所のロックの後に、アカウントの行を削除する | 期限の記録とリースは、外部キーの cascade で一緒に消える |
 | 切断 | `disconnect_threads_account`（F4、ゲートは閉じたまま） | 同上 |
 
@@ -50,7 +50,7 @@ TASK: `postona-f4-threads-credential-rotate-cas-sql-contract-20261017`。適用�
 - 前提が欠けていれば適用を拒否する。前提は次のとおり。
   - 期限の記録の表の形と、読み出し口の本文（md5 で固定）
   - 投稿の試行の表の列
-  - F4 の柵と F5 の判定が owner だけのものであること
+  - F5 の判断と所有者の規則が、owner だけのものであること
   - 削除のロックと検査
 
 ## 3. 使い方（H5 の owner の通り道から。利用者からは呼べない）
@@ -79,6 +79,21 @@ TASK: `postona-f4-threads-credential-rotate-cas-sql-contract-20261017`。適用�
 - 待った後に確定した行を読み直し、壁時計で判定する。
 - ロックの前に1つだけ確認する。「このアカウントにこの id のリースがあるか」。無ければすぐ `LEASE_NOT_HELD` にする。このため、関係ない呼び出しが所有者のライフサイクルの行の待ち列に並ばない（競合 stray で確認）。
 
+### 3.1 判断した人と、ロックした所有者を同じ人に結び付ける（J2 V2 R1 の修正）
+
+- **元の問題**（J2 が PG17 で再現）:
+  - claim は、F5 の柵に作業場所を渡していた。柵は中で所有者 A を選び、A の行を待つ。
+  - 待つ間に所有者が B（サービス終了済み）に変わると、claim は後から B を読み、B のリースを出していた。
+- **直し方**: F5 の関数は変えずに、判断する人を先に決め、F5 の判断に明示的に渡す。
+  - claim: F5 の所有者の規則で A を決め、`service_state_refusal(A)` に渡す。
+  - rotate: リースを取った人を渡す。リースの id は1回の claim を指すので、その人は変わらない。いまの所有者を読み直すことはしない。
+- 作業場所のロックの後に、所有者の membership を FOR SHARE で読む（COMMIT まで変わらない）。その所有者が**判断した人と同じでなければ `OWNER_CHANGED`**。
+- 結果:
+  - 待つ間に所有者が変わったら拒否される。
+  - 変わって戻った（ABA）場合も、最後の所有者は「判断した人」そのもので、その人のライフサイクルの行はこの取引がロックしている。
+  - F5 が判断していない人に、リースや書き換えが渡ることはない。
+- ロックの順（ライフサイクル → 作業場所 → …）は変えていない。判断を作業場所のロックの後にやり直すこともしない。
+
 ## 4. 拒否の一覧（拒否は何も変えない）と store port への対応
 
 PR255 の `RefreshStore` に合わせた対応の提案。
@@ -88,7 +103,8 @@ PR255 の `RefreshStore` に合わせた対応の提案。
 | `BUSY`・`LEASE_HELD`・`PUBLISH_IN_FLIGHT` | ロックの待ちが長い、ほかのリースがある、投稿の途中（`creating_container`・`publishing`、または5分のグラントが有効） | `"busy"` | `PUBLISH_IN_FLIGHT` は `"conflict"`。`BUSY` はリースの期限内なら1回だけ再試行し、だめなら `"conflict"` |
 | `ACCOUNT_NOT_FOUND`・`CONNECTION_NOT_VERIFIED`・`WORKSPACE_CHANGED`・F5 の `SERVICE_NOT_ACTIVE`・`WORKSPACE_INACTIVE`・`ACCOUNT_LIFECYCLE_BLOCKED` | 切断・削除・サービス終了・停止・ロック・所有者が不明・別の作業場所 | `null`（gone） | `"conflict"` |
 | `CUSTODY_UNKNOWN`・`CREDENTIAL_EXPIRED` | 期限の記録が今の資格情報のものでない、または期限切れ | いまは `null`（投稿は既に止まる。PR255 の port に `"reauth_required"` を足すのは後続） | `"conflict"` |
-| `LEASE_NOT_HELD`・`OWNER_CHANGED`・`STALE_CREDENTIAL`・`EXPIRY_INVALID`・`EXPIRY_NOT_EXTENDED` | リースが無い・別・期限切れ・使い済み、所有者の変更、版の違い、おかしな期限 | — | `"conflict"`（新しいトークンは捨て、Vault に書かない） |
+| `OWNER_CHANGED` | 判断した人と、ロックした所有者が違う（判断の間に所有者が変わった） | `"busy"`（次の回に、新しい所有者について判断し直す） | `"conflict"` |
+| `LEASE_NOT_HELD`・`STALE_CREDENTIAL`・`EXPIRY_INVALID`・`EXPIRY_NOT_EXTENDED` | リースが無い・別・期限切れ・使い済み、版の違い、おかしな期限 | — | `"conflict"`（新しいトークンは捨て、Vault に書かない） |
 | `SERVER_ONLY`・`REQUEST_INVALID` | 利用者の JWT の情報付きで呼んだ、形の誤り | 例外（実装の誤り） | 例外（実装の誤り） |
 
 - `credentialVersion` は `<account>|<secret_id>|<custody_recorded_at>` のような、外から意味の分からない文字列で持つ（commit に account id が無いため）。
@@ -112,6 +128,11 @@ H5 の owner の通り道（専用の owner の役割、`db.<ref>:5432` の直�
 
 ## 6. F5 に確かめてほしいこと
 
+- **判断する人を明示的に渡す使い方の同意**（J2 V2 R1）。F5 のファイルは変えていない。次の2つを、ほかの持ち主が使ってよい安定した口として扱ってほしい。
+  - `private.account_lifecycle_service_state_refusal(user, service)`: F5 の Phase 4 の文書で「ほかの持ち主のための唯一の判断」とされているもの。
+  - `private.account_lifecycle_brand_owner(brand)`
+  - 名前・引数・返すコード・ロックの順が変わるときは、F4 に知らせてほしい（この候補は、適用の前提でこの2つを確かめている）。
+  - 同意はまだ得ていない（Report に記録）。
 - 延長を許すのは、作業場所の所有者の POSTONA が **active のときだけ**（停止・終了・削除中・ロック・所有者が不明なら拒否）。投稿と同じ方針で、切断の「取り除くことはいつでも可」とは違う。
 - **削除が優先**される。
   - リースは行であってロックではない。後片付けは、アカウントの行を消すとき cascade でリースも消す（テスト §13）。
@@ -135,20 +156,20 @@ H5 の owner の通り道（専用の owner の役割、`db.<ref>:5432` の直�
 - G5 の本物のマイグレーション: T13・Phase 4・F5 のサービス状態・Phase 6
 - X と Phase 2a-2
 - PR124: ツリーにあるファイル。PR124 の版とバイト単位で同じことを確かめた
-- G4 の投稿の一式、後片付け、切断、F4 の柵
+- G4 の投稿の一式、後片付け、切断、F4 の柵（世界の一部。この候補は F4 の柵を使わなくなった）
 
 | 部分 | 内容 |
 |---|---|
-| 前提 | 次の7件で、適用を拒否すること: F4 の柵が無い、柵を service_role が実行できる、API の役割が owner のメンバー、読み出し口の本文が違う、期限の記録の表の形が違う、試行の表にグラントの期限が無い、superuser で適用した。もう一度の適用も拒否 |
+| 前提 | 次の7件で、適用を拒否すること: F5 の判断が無い、判断を service_role が実行できる、API の役割が owner のメンバー、読み出し口の本文が違う、期限の記録の表の形が違う、試行の表にグラントの期限が無い、superuser で適用した。もう一度の適用も拒否 |
 | 1つの接続で順に（`postona_threads_rotation_behavior.sql`、14節） | ACL。claim から rotate、Vault の書き込みまでを通し、**投稿のリリースが新しいトークンを渡すこと**。投稿の途中（作成中・公開中・有効なグラント）は拒否し、予約だけ・終わったグラントは通す。リプレイ（使い済みのリースは今の版でも拒否、新しいリースでも古い版は拒否）。別のアカウント・リース・secret・作業場所。所有者が2人・別の1人。F5 の各状態（終了・停止・ロック・アカウント削除・POSTONA 削除）と、active に戻した後の同じリース。再接続（その場の更新）と、記録の無い確認。切断。期限（過去・61日超・記録より前・NULL・infinity・期限切れ・記録なし）。リース（2つ目・期限切れ・引き継ぎ・返却）。Vault の失敗で一緒に戻ること。利用者の権限での呼び出し。削除の後片付け。リースの後に secret の id が変わった場合（アカウント側・期限の記録側） |
-| 2つの接続の競合（10種） | 切断・再接続・投稿のリリース・所有者の凍結・同じ rotate の二重・claim の二重・ロックの待ちの上限（BUSY）・ロックの順（ライフサイクルが先、デッドロックなし。rotate と claim のそれぞれ）・関係ないリースが待ち列に並ばないこと |
-| fail-before | 候補が無いと、テストが動かない（リースの表が無い） |
+| 2つの接続の競合（13種） | 切断・再接続・投稿のリリース・所有者の凍結・同じ rotate の二重・claim の二重・ロックの待ちの上限（BUSY）・ロックの順（ライフサイクルが先、デッドロックなし。rotate と claim のそれぞれ）・関係ないリースが待ち列に並ばないこと。**J2 R1**: claim の判断の待ちの間に所有者がサービス終了の人へ移る（拒否、リースなし、その後の安定した claim も拒否）・rotate の待ちの間に所有者が戻る ABA（リースの人について判断して拒否）・リースの人の書き換え（拒否） |
+| fail-before | 候補が無いと、テストが動かない（リースの表が無い）。**J2 R1 の3つの競合は、PR258 の元の候補（`713955b5`）ではどれも失敗する** |
 | ミューテーション | 候補を壊すと、テストが必ず失敗すること（件数と結果は Report） |
 
 ## 9. V2 の後の統合は安全か
 
 - この候補は **追加だけ**（新しい表1つと関数6つ）。既存の関数・表・権限は変えない。
-- 適用の順: G4 の投稿の一式 → F4 の柵 →（後片付け・切断）→ この候補。
+- 適用の順: G4 の投稿の一式 → F5 のサービス状態（PR165）→（後片付け・切断）→ この候補。
 - PR251 の V2 のレビューの対象（OAuth の入口・アプリの戻り・既存の SQL）の振る舞いは変わらない。
 - 新しいリースの表は、アカウントの削除で cascade する。そのため、切断・後片付けは今までどおり完了する（テスト §8・§13）。
 - ただし、**動かすのは次がそろってから**。スイッチ・定期実行・配備は OFF のまま。

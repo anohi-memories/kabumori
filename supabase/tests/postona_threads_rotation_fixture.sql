@@ -96,3 +96,11 @@ begin
   v_out := rot.rotate((select i.v from rot.ids i where i.k = 'acct'), (select i.v::jsonb from rot.ids i where i.k = 'claim'), p_lease => gen_random_uuid());
   return coalesce(v_out ->> 'code', v_out ->> 'status') || ' ' || (clock_timestamp() - v_t0 < interval '1 second')::text;
 end $$;
+-- One call (one jsonb) and whether it had to wait: '<code or status> waited|fast' (half a second or more = waited).
+create function rot.timed(p_sql text) returns text language plpgsql as $$
+declare v_t0 timestamptz := clock_timestamp(); v_out jsonb;
+begin
+  execute p_sql into v_out;
+  return coalesce(v_out ->> 'code', v_out ->> 'status') || ' '
+         || case when clock_timestamp() - v_t0 >= interval '0.5 seconds' then 'waited' else 'fast' end;
+end $$;
