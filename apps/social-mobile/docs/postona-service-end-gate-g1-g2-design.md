@@ -172,3 +172,19 @@ export type ServiceLifecycle = {
 - 関門が合図でもう一度聞くこと（2件）。
 - 関門の中の写しを `open()` に置き換えること（1件）。
 - 関門のテストの部品表に、新しいモジュールを足すこと。
+
+## 10. F4＋F5 の結合（2026-10-17 JST）
+
+TASK: `postona-f4-f5-service-end-g1-g2-joint-integration-20261017`。結合用のブランチ `claude/f4-f5-postona-service-end-g1-g2-integration-20261017` で行った。F4 PR236・F5 PR235 の元のブランチと、F5 の作業場所は変えていない。
+
+- **入力**:
+  - F4 PR236 `605d8776c6be2e33ec247af7c82a99270cf32b82` と F5 PR235 `9480f24b68c209f6bf33b499dc11824cf4595fdd`。
+  - 共通の祖先は PR230 `e6725a165cd8f116a964926cdfceaa9334590491`。両方で変えたファイルは無い。
+  - `--no-ff` でマージした（マージコミット `d237b6c5ac9780a42657c9dfc5b1cb2b05c9dc84`）。衝突なし、どちらの変更も落ちていない。
+- **接続**: F5 が自分の文書（`docs/f5-postona-service-end-entitlement-epoch.md` §5）と `lifecycle-epoch.ts` に書いた手順のうち、2〜4 だけを行った。
+  - 2: `lifecycle-epoch.ts` を1行の再 export `export { useServiceLifecycleEpoch as useLifecycleEpoch } from '@/features/service-lifecycle/service-lifecycle';` にし、`LIFECYCLE_SIGNAL_CONNECTED = true` にした（状態は持たせない）。
+  - 3: `tests/pending/gate-seam-connect.pending.mjs` が通ることを確かめて消した。`tests/service-enrollment-lifecycle.test.mjs` の seam の約束のテストを、接続した後の形にした。F5 の `tests/support/gate-epoch-mutations.py` の seam のミューテーション3種を、接続した後の文に合わせた。
+  - 4: F4 の保留テストの「関門」の分は、本物の provider でふつうのテストとして有効にした（`tests/service-end-g1-g2-integration.test.mjs`）。
+  - 5: 関門の中の写しを `open()` に置き換える手順は**行っていない**（任意の残り）。その写しは関門が自分で描くので、同じ人の新しいログインでも残る（結合テストで固定した）。そのため、これが無くても G1／G2 は成り立つ。
+- **結合テスト**（本物の provider・seam・関門・surface・利用終了の画面を、1つのフックの実行環境で一緒に描く。ルーティングは `_layout.tsx` を描いて確かめる）: 9件。接続の前（マージコミット `d237b6c5`）では5件が失敗、接続の後は 9/9 合格。
+- F5 のミューテーションの一式は、結合ブランチで 13/13 を検出した（F5 が冗長と決めている6種は、予定どおり残る。無効は0）。

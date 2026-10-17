@@ -1,9 +1,10 @@
 // POSTONA service end: the ServiceEnrollmentGate refreshes on the person's lifecycle epoch (F5, G1; F4/F5 contract
 // "design B", docs/postona-service-end-gate-g1-g2-design.md).
 //
-// The REAL gate is transpiled and driven through a hook runtime (tests/support/enrollment-harness.mjs). F4's
-// ServiceLifecycleProvider is not in this stack, so the gate's one lifecycle input -- `useLifecycleEpoch(userId)` --
-// is replaced by a TYPED per-person counter (tests/support/lifecycle-signal.ts). What these tests pin:
+// The REAL gate is transpiled and driven through a hook runtime (tests/support/enrollment-harness.mjs). The gate's one
+// lifecycle input -- `useLifecycleEpoch(userId)` -- is replaced here by a TYPED per-person counter
+// (tests/support/lifecycle-signal.ts); the seam itself is connected to F4's provider (the joint F4+F5 assembly is
+// proven with the real provider in tests/service-end-g1-g2-integration.test.mjs). What these tests pin:
 //   * a signal for the person signed in discards the decided answer in the very next render (the app is closed
 //     before any request), asks the server again with the CURRENT login's token, and only the server's answer opens;
 //   * a signal for anybody else, a refresh of the same login, sign-out and a new person change nothing / clear it;
@@ -18,7 +19,8 @@ import { join, resolve } from 'node:path';
 
 import { fakeServer, flush, gateHarness, sessionOf, tokenOf } from './support/enrollment-harness.mjs';
 import { createLifecycleSignal } from './support/lifecycle-signal.ts';
-import * as seam from '../src/features/service-enrollment/lifecycle-epoch.ts';
+import vm from 'node:vm';
+import ts from 'typescript';
 
 const root = resolve(import.meta.dirname, '..');
 const read = (path) => readFile(join(root, path), 'utf8');
@@ -340,10 +342,19 @@ test('G1: the local mock preview is never gated and ignores the signal', async (
 // ------------------------------------------------------------------------------------------------ contracts
 
 test('the seam: the gate\'s only lifecycle input is a read of a per-person number, typed, and the gate never produces the signal', async () => {
+  // Connected (F5 connection step 2): the seam is exactly F4's per-person epoch hook, re-exported -- nothing else.
+  const providerHook = (userId) => (userId === 'user-A' ? 3 : 0);
+  const module = { exports: {} };
+  const js = ts.transpileModule(await read('src/features/service-enrollment/lifecycle-epoch.ts'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  vm.runInNewContext(js, { module, exports: module.exports, require: (name) => {
+    assert.equal(name, '@/features/service-lifecycle/service-lifecycle', `the seam imports only F4's provider module, not ${name}`);
+    return { useServiceLifecycleEpoch: providerHook };
+  } });
+  const seam = module.exports;
   assert.equal(typeof seam.useLifecycleEpoch, 'function');
-  assert.equal(seam.useLifecycleEpoch('user-A'), seam.useLifecycleEpoch(null), 'unconnected: everybody is at epoch 0');
-  assert.equal(seam.useLifecycleEpoch('user-A'), 0);
-  assert.equal(seam.LIFECYCLE_SIGNAL_CONNECTED, false, 'F4\'s provider is not in this stack; see the status comment in lifecycle-epoch.ts');
+  assert.equal(seam.useLifecycleEpoch('user-A'), 3, 'the gate reads F4\'s per-person number');
+  assert.equal(seam.useLifecycleEpoch(null), 0);
+  assert.equal(seam.LIFECYCLE_SIGNAL_CONNECTED, true, 'connected to F4\'s ServiceLifecycleProvider (see the status comment in lifecycle-epoch.ts)');
   const gate = code(await read('src/features/service-enrollment/service-enrollment-gate.tsx'));
   assert.match(gate, /import \{ useLifecycleEpoch \} from '@\/features\/service-enrollment\/lifecycle-epoch';/u);
   assert.doesNotMatch(gate, /bump\s*\(/u, 'the gate consumes the epoch; the end surface (F4) alone produces it');

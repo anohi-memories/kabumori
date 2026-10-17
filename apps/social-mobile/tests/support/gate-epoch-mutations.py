@@ -14,9 +14,10 @@ M = [
      "        let outcome = await enrollment.ensure({ userId, accessToken });\n        if (outcome.kind === 'reenroll_required') outcome = await enrollment.explicit({ userId, accessToken }, (c, sg) => reactivateServiceExplicitly(transportFor(c), 'x_autopost', outcome.lifecycleVersion, sg));\n        if (!cancelled && mine === request.current) setView({ userId, loginId, epoch, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });"),
     ('the error view is not tagged with the epoch (no retry is shown)', G, "if (!cancelled && mine === request.current) setView({ userId, loginId, epoch, request: mine, kind: 'error' });\n      }\n    });", "if (!cancelled && mine === request.current) setView({ userId, loginId, epoch: -1, request: mine, kind: 'error' });\n      }\n    });"),
     ('the gate imports the F4 provider directly', G, "from '@/features/service-enrollment/lifecycle-epoch';", "from '@/features/service-lifecycle/service-lifecycle';"),
-    ('the seam answers a non-zero epoch for a person', S, "export const useLifecycleEpoch: LifecycleEpochHook = () => 0;", "export const useLifecycleEpoch: LifecycleEpochHook = (userId) => (userId ? 1 : 0);"),
-    ('the seam claims to be connected', S, "export const LIFECYCLE_SIGNAL_CONNECTED = false;", "export const LIFECYCLE_SIGNAL_CONNECTED = true;"),
-    ('the seam becomes a stateful provider', S, "export const useLifecycleEpoch: LifecycleEpochHook = () => 0;", "import { useState } from 'react';\nexport const useLifecycleEpoch: LifecycleEpochHook = () => useState(0)[0];"),
+    # The seam after the joint F4+F5 connection: a stateless re-export of F4's per-person epoch hook.
+    ('the seam answers a constant instead of F4\'s number', S, "export { useServiceLifecycleEpoch as useLifecycleEpoch } from '@/features/service-lifecycle/service-lifecycle';", "export const useLifecycleEpoch: LifecycleEpochHook = () => 0;"),
+    ('the seam claims not to be connected', S, "export const LIFECYCLE_SIGNAL_CONNECTED = true;", "export const LIFECYCLE_SIGNAL_CONNECTED = false;"),
+    ('the seam becomes a stateful provider', S, "export { useServiceLifecycleEpoch as useLifecycleEpoch } from '@/features/service-lifecycle/service-lifecycle';", "import { useState } from 'react';\nexport const useLifecycleEpoch: LifecycleEpochHook = () => useState(0)[0];"),
     ('the gate produces the signal itself', G, "  const epoch = useLifecycleEpoch(userId);", "  const epoch = useLifecycleEpoch(userId); const bump = () => {}; bump();"),
     ('the sign-out reset is gone', G, "  useEffect(() => () => enrollment.reset(), []);", "  useEffect(() => () => undefined, []);"),
 ]
