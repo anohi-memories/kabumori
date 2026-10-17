@@ -672,3 +672,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-token-refresh-source-design-20261017`). L4 accepted, PR251 `3163928d5fa3b8e6984f6350ce5a8faf31d23ffc`, production and pilot NO_GO.
 
 - 2026-10-17 | F10 | `orchestration-v3-final-legacy-snapshot-and-pilot-readiness-f10-20261017` | L10 PASS_SNAPSHOT_AND_READINESS; Draft PR252 legacy snapshot and PR253 rollout readiness | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-final-legacy-snapshot-and-pilot-readiness-f10-20261017/` | SHA256 `6e887b0d488e41c8b784f3cf3859f3fad9390af3235226c5944b93572f969203`; blob/byte restoration verified.
+
+## F5 Phase13 D-1 baseline contract v2 archive — 2026-10-17
+- task_id: `common-account-f5-phase13-baseline-contract-extend-20261017`; L5 PASS_SOURCE_FIX / PRODUCTION_NO_GO; Draft PR254 HEAD `503a6ca85ebd6f1482b530f6025074b930d7f944`.
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-baseline-contract-extend-20261017/files/.agent_v2/tasks/F5.md`.
+- 21023 bytes; SHA256 `d4eba107b1ee18e3aeb3ca2ac9b82dc6de381985fb45d3e99dded73d62c65ce3`; original/archive Git blob `1d24dbc76c58813ac8ef62133a8b09f20316439e`; restore matched; MANIFEST/SHA256SUMS stored; append-only.
