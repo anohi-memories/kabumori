@@ -1,0 +1,98 @@
+# F6 — PR231 import解析の推測ミス回避 P2 修正
+- task_id: common-ai-f6-pr231-regex-division-parser-bypass-fix-20261016
+- slot: F6
+- owner: claude
+- status: done
+- next_owner: none
+- start_code: F6
+- completion_code: L6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- production_mutation_window: CLOSED
+- previous_archive: .agent_v2/archive/2026-10-16-f6-pr231-lexer-source-fix.md
+- source: 独立Claude Code PR231 review shared with ChatGPT, CHANGES_REQUIRED/P2. Review is chat-provided, no GitHub review registration.
+- dependencies: protected Draft PR #187→#198→#205→#219→#222→#231. PR216 independent.
+
+## 目的
+独立レビューで確認されたP2のみ解消する。PR231 `2a696aff24be01538bd0d9c5a1eb0afa07421483` の `supabase/functions/_shared/ai_provider/isolation_test.ts` `lexModule` の正規表現/除算推測ミスと `textEdges` の非重複matchAllにより本物の `import()` が見落とされる。旧R1b/R1cは修正済み。A1費用精算は合格済みで変更禁止。生の正規表現を継ぎ足すだけの場当たり的修正は禁止。
+
+## 再現・回帰
+実際のguard関数でまず下記の4パターンの合法TS/JS・実動的importを独立fixtureにて再現し、PR231で未検出→変更後に拒否されることを証明（危険な本物のAPI/secret/台帳の呼び出しはしない）。
+1. `w.if(1) / <any>["import/*", import("../ai_provider/mod.ts"), "*/('./types.ts')"] / 2`
+2. `const of = 2; of / <any>["import/*", import("../ai_provider/mod.ts"), "*/('./types.ts')"] / 2`
+3. `function(){ return 1; } / ["import/*", import("../ai_provider/mod.ts"), "*/('./types.ts')"] / 2` の有効な周辺文脈
+4. `/'/.test("x")` を除算と誤認する逆方向の反例。J1独立レビュー提供の詳細を参照。
+`textEdges` が非重複一致で別の候補を消費する構造を排除する。import/export/fromの候補を各位置から個別解析、又は本物のTS/JSパーサで字句文脈を識別。パーサ不確定の場合は必ずfail closed。正規表現・文字列を無条件拒否する戦略は安全でも正常な既存importを誤拒否しないか検証する。AST/lexerと二重検査の見落としゼロを優先。
+
+## 対象範囲
+F6所有 `supabase/functions/_shared/ai_provider/isolation_test.ts` と必要な隔離回帰テスト、`docs/ai-provider/F6_*`、自身のF6 TASK/ACTIVEのみ。許可list、bridge、H5、POSTONA F3/F4、F5、J1、旧G6のworktree/TASK/ソースは変更不可。課金・retry/adapter/DB/RPC/migration等を変更しない。
+
+## 安全・開始ゲート
+fresh origin/main と新旧ACTIVE_TASK/CURRENT_STATEの必要metadata、PROJECT_RULES/ORCHESTRATION、PR231/222のhead/base/祖先、作業対象重複・他slotのbranch/checkout/worktreeの独立を検証。不明な競合や未コミット変更があればSTOP。別のworktreeでsource-only Draft候補。独立レビュー環境も触らない。
+NO_G0: 直接production、paid API、Auth/RLS/SQL/RPC/Edge/Cron、secret、SNS実投稿、merge、deploy。本番スイッチOFF。
+
+## テスト・完了
+旧4反例のbefore失敗→after拒否の証拠、合法named/type-only importとR1cの成功、旧R1b・comment trivia・computed・transitive・alias・symlink・configなどの回帰、mutation、provider/bridge/market-report offlineテスト、予算のA1既存回帰を実行。既知のshared型エラー5件や権限制限1件をPASSと言わずNOT_VERIFIED維持。diff-checkとPR head/base read-back、changed_files、commit/push、衝突、残留リスクをReportに記載。
+status review_required/next_owner chatgptへ戻しL6送付。レビュー要否はChatGPTが判断し、全面再レビューを自動割当しない。
+
+## Report
+- task_id: common-ai-f6-pr231-regex-division-parser-bypass-fix-20261016
+- result: **FIXED_SOURCE_ONLY（P2 を直した。Draft PR #234、#231 の上に積む）**
+  - 字句解析から独立した読み取り `rawEdges` を作った。ソース全体の `import` / `export` / `from` を一つずつ単独で読むので、字句解析が `/` の推測を外しても、本物の読み込みは必ず見つかる。候補は互いを飲み込まない
+  - 字句解析の `/` の推測も正しくした（プロパティ名の `if`、変数名の `of`、関数式・クラス式の `}`、三項演算子と `case` / ラベルの `:`、いちばん外側の文、`export default`、`for await`）
+  - 許可リストは広げていない。A1（費用）、retry、adapter、台帳、DB / RPC / migration には触れていない
+  - 本番・Secret・Edge・Cron・設定の変更は 0。有料の呼び出しも 0
+- branch / commit / PR
+  - `claude/f6-pr231-parser-fix-20261017`（新しい独立した worktree `/Users/yuya/Developer/kabumori-f6-parser-fix`、#231 の head `2a696aff` から作成）
+  - commit `2ba13ee17f75eff129048e630efbd3faa3bd9232`（push 済み、`git ls-remote` で同じ値を確認）
+  - Draft PR [#234](https://github.com/anohi-memories/kabumori/pull/234)。読み返し: OPEN / Draft、base `claude/f6-pr222-import-lexer-20261016`（#231、head `2a696aff24be01538bd0d9c5a1eb0afa07421483` のまま）、head `2ba13ee17f75eff129048e630efbd3faa3bd9232`、3 ファイル、MERGEABLE
+  - #231 はレビューされた状態のまま変えていない。順番は #187 → #198 → #205 → #219 → #222 → #231 → #234
+- changed_files（3）
+  - `supabase/functions/_shared/ai_provider/isolation_test.ts`（`rawEdges`、ブロックコメントを最初の `*/` で閉じる trivia、字句解析の `/` の推測、トークンの位置、構文が読めた位置の記録、テスト）
+  - `docs/ai-provider/F6_PR231_RAW_SCAN_FIX.md`（新規）、`docs/ai-provider/F6_J1_R1B_R1C_LEXER.md`（`textEdges` の節に、置き換えたことを書き足した）
+- 4 つの反例 直す前 / 直した後（本物のファイルに同じ細工。直す前 = #231 `2a696aff`。F6 の検査と H5 の検査を両方流す。#231 では計 16 件、直した後は 17 件）
+  - Q1 `w.if(1) / <any>["import/*", import("../ai_provider/mod.ts"), "*/('./types.ts')"] / 2`: 直す前は 16 件すべて通る → 直した後は止める
+  - Q2 `const of = 2; of / <any>[同じ] / 2`: 同上
+  - Q3 `function () { return 1; } / <any>[同じ] / 2`: 同上
+  - Q4（逆向き、正規表現を割り算と取り違える）`switch (k) { case 1: { } /'/.test("import/*"), import("../ai_provider/mod.ts"), \`*/("./types.ts")\`, /'/.test("y"); }`: 同上。レビューの詳しい形はチャットにしか無かったので、同じ原理で本物の `import()` が隠れる形を F6 が組み立てた
+  - 以前の細工（R1b の文字列の断片、R1a のコメント、別名の `executeAiRequest`、新しい Edge が bridge を使う）は、直す前も後も止める
+  - R1c の再現、コメントだらけの型だけの読み込み、正規表現・割り算・コメントの混ざった普通の読み込みは、直す前も後も通る
+  - 直す前の状態どうしの比較でも Q1〜Q4 は 16 件すべて通ることを確かめた。最終の commit でもう一度比べて、全 12 項目が想定どおり
+- テストの中の確認（`PR231 review:` のテスト）
+  - 4 つの反例で検査全体が止める。さらに、構文（推測が正しくなった）と `rawEdges`（字句解析を使わない）が、それぞれ単独で本物の import を見つける
+  - 偽のコメントの候補と、その中の本物の候補の両方が読まれる（重ならない一致の問題が無い）
+  - `rawEdges` だけでも R1c の形を正しく読む
+  - `/` の読み方 21 通り
+  - 正規表現・割り算・三項演算子・関数が混ざった普通のコードを止めない
+- tests（Deno 2.9.6、`--deny-net`、偽の鍵、本物の鍵の環境変数を外した子プロセス）
+  - 共通AI基盤 `_shared/ai_provider/`: **146 PASS / 0 FAIL**（型の確認つき。#231 は 145。504 / 時間切れ / 切断の 1 回だけの送信、mark_sent の不明、retry の上限、同じ callId、A1 の `unknown` / `upper_bound` と予算の上限、OpenAI の経路、切り替え無しのテストを含む）
+  - H5 bridge `offline_run.sh`: **27 PASS / 0 FAIL**
+  - 市況レポート `market-report-analysis/`: **324 PASS / 0 FAIL**（型の確認つき。`primary_both` を含む）
+  - main（`3717b61c`）と合わせた木（merge-tree 衝突なし）: 共通AI基盤＋市況レポート **507 PASS / 0 FAIL**
+  - 関数フォルダの全 509 ファイル（テストを含む）を新しい字句解析で読めた（エラー 0）。デプロイされるファイルで構文以外の候補が出るのは 7 つで、どれも文中の `from "FRED"` のような言葉（行き先にならず、検査に影響しない）
+  - R1 / R1a / R1b / R1c の既存テスト（コメント、計算、エスケープ、中継、別名、シンボリックリンク、読めないファイル、設定）はすべてそのまま通る
+  - わざと壊す確認 12 種類（候補が互いを飲み込む、字句解析が成功したら `rawEdges` を使わない、ブロックコメントが最初の `*/` を越える、プロパティの `if`、`of` を常にキーワード、関数式の本体をブロック扱い、三項演算子を追わない、いちばん外側を文の場所にしない、`default` の後を割り算、`for await` を制御文にしない、構文が読めた位置を無視）: **すべて検知**。1 回目はブロックコメントの改変が残ったので、`rawEdges` だけで R1c を正しく読むテストを足して検知を確かめた
+  - lint（`--no-config`）0 件、`git diff --check` OK、秘密情報の文字列 0
+  - `_shared` 全体の既知の型エラー 5 件と、権限で止まる 1 件（`brand/ai_lab_event_dedupe_test.ts`）は、**再実行していない（NOT_VERIFIED のまま。PASS 扱いしない）**。どちらのファイルも変えていない
+- collision checks
+  - #187 `a7e1d3f3`、#198 `4223d5c0`、#205 `4cd2cbdd`、#216 `1dc7b72e`、#219 `be35cc93`、#222 `11835df1`、#231 `2a696aff` は変わっていない（Draft のまま）
+  - main（`3717b61c`）と merge-tree で衝突なし
+  - `_shared/ai_provider/` に触れる開いた PR は F6 自身の stack と古い G6 の #148 / #150 / #157 / #162 だけ（他の slot とは重ならない）
+  - 独立レビューの環境、H5 / F2 / F3 / F4 / F5 / J1 / G1 / 旧 G6 の TASK・PR・worktree・コードには触れていない
+- remaining_risk / NOT_VERIFIED
+  - CI で動く静的な検査で、実行時の囲い（sandbox）ではない。`eval` / `new Function` / `Worker` の文字列、functions の外の設定、本番の deploy の設定は見ない
+  - 字句解析は完全な TypeScript の構文解析ではない。推測を外す書き方はまだありうるが、その場合も `rawEdges` が読み込みを見つける（止める側に倒れる）か、ファイル全体が読めずに止まる
+  - 説明の文字列やコメントに import 風の文字があると止まる（運用上の制限。今は該当なし）
+  - レビューの 4 つ目の反例の正確な形は、チャットの共有分を見ていない（同じ原理の形で確かめた）
+  - `_shared` 全体の型エラー 5 件・権限で止まる 1 件、本物の provider、本番の台帳と動きは NOT_VERIFIED
+- source_only: yes。merge 0、deploy 0、paid_calls 0、production の変更 0、Secret の値・`.env` は読んでいない
+- production: **NO_GO のまま**
+- next_recommendation
+  - L6 で評価する。再レビューが要るかは ChatGPT が判断する（全面の再レビューは割り当てない）
+  - マージの判断は #187 → #198 → #205 → #219 → #222 → #231 → #234 の順で別に
+
+## L6 decision 2026-10-17
+- verdict: PASS_SOURCE_FIX / SECURITY_DELTA_VERIFICATION_PENDING / MERGE_HOLD / PRODUCTION_NO_GO
+- source: Draft PR234 head 2ba13ee17f75eff129048e630efbd3faa3bd9232; base PR231 head 2a696aff24be01538bd0d9c5a1eb0afa07421483.
+- Tests are Claude report only: provider146, bridge27, market324, merged507 PASS, 12 mutations. Five prior shared type errors not rerun, one permission-blocked test NOT_VERIFIED. Exact fourth independent reported reproducer was reconstructed, not independently matched.
+- Decision: source-task complete. Prior independent review found security P2 in parser, therefore one final focused review of PR234 delta with a distinct Claude Code checkout if necessary; no blanket Codex review. No merge/deploy/live API authorization.
