@@ -89,10 +89,10 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - blocker: AI ledger user_id erasure and safe deletion source-only candidate; F5 account deletion integration separate; production/managed/merge/deploy NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
