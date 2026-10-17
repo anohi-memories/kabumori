@@ -13,20 +13,12 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 import * as enrollmentModule from '../src/domain/service-enrollment.ts';
+import { b64url, contextOf, fakeServer, flush, gateHarness, loginUuid, sessionOf, tokenOf } from './support/enrollment-harness.mjs';
 
 const {
   createEnrollmentGate, createSessionBoundTransport, EnrollmentCancelledError, EnrollmentUnavailableError,
   loginSessionIdOf, parseServiceAnswer, reactivateServiceExplicitly, startServiceAutomatically,
 } = enrollmentModule;
-
-// Synthetic unsigned access tokens with only the claims the client reads (sub, session_id): a person's
-// login N, and the same login's token after a refresh. Built at run time; not credentials.
-const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
-const loginUuid = (user, login) => `00000000-0000-4000-8000-${String(user.charCodeAt(0)).padStart(6, '0')}${String(login).padStart(6, '0')}`;
-const tokenOf = (user, login = 1, refresh = 0) => `${b64url({ alg: 'none' })}.${b64url({ sub: `user-${user}`, session_id: loginUuid(user, login), iat: refresh })}.unsigned`;
-const sessionOf = (user, login = 1, refresh = 0) => ({ access_token: tokenOf(user, login, refresh), user: { id: `user-${user}` } });
-const contextOf = (user, login = 1, refresh = 0) => ({ userId: `user-${user}`, accessToken: tokenOf(user, login, refresh) });
-const flush = () => new Promise((r) => setImmediate(r));
 
 const root = resolve(import.meta.dirname, '..');
 const read = (path) => readFile(join(root, path), 'utf8');
@@ -60,28 +52,6 @@ test('R5: the exact active answer is ready; every incomplete or wrong active ans
 });
 
 // ---------------------------------------------------------------------------------------------
-// A fake PostgREST endpoint: records every RPC with the token it carried; answers can be held.
-function fakeServer(answer) {
-  const requests = [];
-  const held = [];
-  const fetchImpl = (url, init) => {
-    const fn = String(url).split('/rpc/')[1];
-    const token = init.headers.Authorization.replace(/^Bearer /u, '');
-    const entry = { fn, token, body: JSON.parse(init.body), signal: init.signal };
-    requests.push(entry);
-    const reply = answer(entry);
-    const respond = (value) => ({ ok: value.ok ?? true, status: value.status ?? 200, json: async () => value.body });
-    if (reply === 'hold') {
-      return new Promise((resolve, reject) => {
-        held.push({ entry, release: (value) => resolve(respond(value)) });
-        init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
-      });
-    }
-    return Promise.resolve(respond(reply));
-  };
-  return { requests, held, fetchImpl };
-}
-
 test('R4: the transport sends the token it was created with, to the exact RPC, and nothing once cancelled', async () => {
   const server = fakeServer(() => ({ body: ACTIVE }));
   const transport = createSessionBoundTransport({ url: 'https://fixture.supabase.co/', apiKey: 'sb_publishable_fixture', accessToken: 'token-A', fetch: server.fetchImpl });
@@ -124,99 +94,6 @@ test('R4: a pending request of A is cancelled when B starts or on sign-out, and 
 });
 
 // ---------------------------------------------------------------------------------------------
-// The real gate, transpiled, with a hook runtime that tracks effect dependencies and cleanups.
-function depsEqual(a, b) {
-  return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
-}
-
-async function gateHarness(server) {
-  const slots = [];
-  let cursor = 0;
-  let pending = [];
-  const react = {
-    useState(initial) {
-      const i = cursor++;
-      if (!(i in slots)) slots[i] = { value: typeof initial === 'function' ? initial() : initial };
-      const slot = slots[i];
-      return [slot.value, (next) => { slot.value = typeof next === 'function' ? next(slot.value) : next; }];
-    },
-    useRef(initial) { const i = cursor++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
-    useMemo(factory, deps) {
-      const i = cursor++;
-      if (slots[i] && depsEqual(slots[i].deps, deps)) return slots[i].value;
-      slots[i] = { deps, value: factory() };
-      return slots[i].value;
-    },
-    useCallback(callback, deps) { return react.useMemo(() => callback, deps); },
-    useEffect(effect, deps) {
-      const i = cursor++;
-      if (!slots[i] || !depsEqual(slots[i].deps, deps)) {
-        const previous = slots[i];
-        slots[i] = { deps, cleanup: previous?.cleanup };
-        pending.push({ i, effect });
-      }
-    },
-  };
-  let session = null;
-  const modules = {
-    react,
-    'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
-    'react-native': { ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View' },
-    '@/constants/theme': { colors: {}, typography: {} },
-    '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
-    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
-    '@/data/repository-selection': { selectDataSource: () => ({ kind: 'supabase' }) },
-    '@/domain/service-enrollment': enrollmentModule,
-    '@/lib/supabase': { getSupabaseConfig: () => ({ ok: true, config: { url: 'https://fixture.supabase.co', publishableKey: 'sb_publishable_fixture' } }) },
-    '@/providers/auth-provider': { useAuth: () => ({ session }) },
-    '@/app/account-deletion': { __esModule: true, default: 'AccountDeletionScreen' },
-  };
-  const source = await read('src/features/service-enrollment/service-enrollment-gate.tsx');
-  const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const module = { exports: {} };
-  vm.runInNewContext(js, { module, exports: module.exports, require: (name) => { assert.ok(Object.hasOwn(modules, name), `unexpected import ${name}`); return modules[name]; } });
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = server.fetchImpl;
-  const CHILDREN = { type: 'APP' };
-  let tree = null;
-  function render() {
-    cursor = 0;
-    pending = [];
-    tree = module.exports.ServiceEnrollmentGate({ children: CHILDREN });
-    for (const { i, effect } of pending) {
-      slots[i].cleanup?.();
-      const cleanup = effect();
-      slots[i].cleanup = typeof cleanup === 'function' ? cleanup : undefined;
-    }
-    return tree;
-  }
-  async function settle() {
-    for (let round = 0; round < 5; round += 1) {
-      await new Promise((r) => setImmediate(r));
-      render();
-    }
-    return tree;
-  }
-  function find(node, predicate) {
-    if (!node || typeof node !== 'object') return null;
-    if (Array.isArray(node)) { for (const child of node) { const hit = find(child, predicate); if (hit) return hit; } return null; }
-    if (predicate(node)) return node;
-    return find(node.props?.children, predicate);
-  }
-  return {
-    CHILDREN,
-    setSession(next) { session = next; },
-    render, settle,
-    isApp: () => tree === CHILDREN || find(tree, (n) => n === CHILDREN) !== null || tree?.props?.children === CHILDREN,
-    button: (label) => find(tree, (n) => n.type === 'ActionButton' && n.props.label === label),
-    hasSignOut: () => find(tree, (n) => n.type === 'SignOutButton') !== null,
-    unmount() { for (const slot of slots) if (slot && typeof slot.cleanup === 'function') slot.cleanup(); },
-    /** After unmount(): the next render mounts a fresh gate (the module's shared gate survives, as in the app). */
-    clear() { slots.length = 0; tree = null; },
-    restore() { globalThis.fetch = originalFetch; },
-  };
-}
-
 const ENDED = (version) => ({ body: { status: 'reenroll_required', service: 'x_autopost', lifecycle_version: version } });
 
 test('R2: A clicks 「利用登録する」, then the session switches to B: no restart is ever sent for B', async () => {
