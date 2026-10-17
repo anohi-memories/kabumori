@@ -1,0 +1,2828 @@
+{
+  "audit_id": "kabumori-pause-final-readonly-audit-20261017",
+  "project_id": "wsmznyzcvmuitkglfeuj",
+  "repository": "anohi-memories/kabumori",
+  "source_commit": "3c7480b7ba6aed548afdc683c73a796369ec0287",
+  "method": {
+    "production_database": "Explicit BEGIN READ ONLY; SELECT catalog/aggregates; COMMIT, via Supabase execute_sql",
+    "edge": "list_edge_functions/get_edge_function only; no invocation",
+    "logs": "query_logs, explicit UTC range; aggregate fields only",
+    "github": "gh api GET workflows/runs/jobs/hooks; fresh main source checkout",
+    "log_window_utc": [
+      "2026-10-16T10:20:00Z",
+      "2026-10-17T10:20:00Z"
+    ],
+    "post_stop_comparison_start_utc": "2026-10-17T02:00:00Z",
+    "comparison_note": "Conservative comparison boundary after latest observed disabled Cron run at 01:45 UTC; not an independently proven exact stop time.",
+    "production_mutations": false,
+    "repository_documentation_writes_authorized": true
+  },
+  "cron_before": {
+    "cron": [
+      {
+        "jobid": 1,
+        "active": true,
+        "jobname": "dispatch-scheduled-posts",
+        "schedule": "* * * * *",
+        "edge_function": "x-test-post",
+        "command_fingerprint": "88b3310282eedc9f49d56878992b1094"
+      },
+      {
+        "jobid": 2,
+        "active": false,
+        "jobname": "important-news-fetch",
+        "schedule": "*/10 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "2c8f14fed199e046f132e24807fa6184"
+      },
+      {
+        "jobid": 3,
+        "active": false,
+        "jobname": "important-news-judgement",
+        "schedule": "7,27,47 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "f5710a7fcd5cfdf377571aa8f21d700d"
+      },
+      {
+        "jobid": 4,
+        "active": false,
+        "jobname": "important-news-generation",
+        "schedule": "14,34,54 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "bb538949dc3b80ae2d51d75bdecea91a"
+      },
+      {
+        "jobid": 5,
+        "active": true,
+        "jobname": "kabumori-stocks-master-sync",
+        "schedule": "3 21 * * *",
+        "edge_function": "stocks-master-sync",
+        "command_fingerprint": "f226ca87d622e26bd336f64bb9031235"
+      },
+      {
+        "jobid": 6,
+        "active": true,
+        "jobname": "kabumori-stocks-new-listing-sync",
+        "schedule": "8 21 * * *",
+        "edge_function": "stocks-new-listing-sync",
+        "command_fingerprint": "a95a87154802ffd16005d8e85aa7ec07"
+      },
+      {
+        "jobid": 8,
+        "active": false,
+        "jobname": "important-news-publish-ready",
+        "schedule": "*/5 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "d984a09e0653723047f7f42cb346cbb7"
+      },
+      {
+        "jobid": 9,
+        "active": true,
+        "jobname": "send-push-notifications-dispatch",
+        "schedule": "* * * * *",
+        "edge_function": "send-push-notifications",
+        "command_fingerprint": "063d74cb47703c20263dae641e29c49b"
+      },
+      {
+        "jobid": 10,
+        "active": false,
+        "jobname": "personalized-reports-morning",
+        "schedule": "35 23 * * 0-4",
+        "edge_function": "personalized-reports",
+        "command_fingerprint": "16f16bdbb30f31b28893c98d24378c98"
+      },
+      {
+        "jobid": 11,
+        "active": false,
+        "jobname": "personalized-reports-close",
+        "schedule": "15 8 * * 1-5",
+        "edge_function": "personalized-reports",
+        "command_fingerprint": "9e035986e78aafd3aecced203d1431e9"
+      },
+      {
+        "jobid": 12,
+        "active": false,
+        "jobname": "mic-ingest-fred-2100",
+        "schedule": "0 21 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "e8beb0924999d2afdc44a1a16da2173d"
+      },
+      {
+        "jobid": 13,
+        "active": false,
+        "jobname": "mic-ingest-fred-0100",
+        "schedule": "0 1 * * 2-6",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "e8beb0924999d2afdc44a1a16da2173d"
+      },
+      {
+        "jobid": 14,
+        "active": false,
+        "jobname": "mic-ingest-mof-jgb-0600",
+        "schedule": "0 6 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "c80cc49937a0b9ebaaabb116e62b385c"
+      },
+      {
+        "jobid": 15,
+        "active": false,
+        "jobname": "mic-ingest-mof-jgb-0900",
+        "schedule": "0 9 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "c80cc49937a0b9ebaaabb116e62b385c"
+      },
+      {
+        "jobid": 16,
+        "active": false,
+        "jobname": "mic-ingest-eia-1500",
+        "schedule": "0 15 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "0966c05514162a690afbd230de74a591"
+      },
+      {
+        "jobid": 17,
+        "active": false,
+        "jobname": "mic-ingest-eia-1900",
+        "schedule": "0 19 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "0966c05514162a690afbd230de74a591"
+      },
+      {
+        "jobid": 18,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-fred-2100",
+        "schedule": "15 21 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "3c49830dc4d0d1db085d15bb21623d85"
+      },
+      {
+        "jobid": 19,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-fred-0100",
+        "schedule": "15 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "3c49830dc4d0d1db085d15bb21623d85"
+      },
+      {
+        "jobid": 20,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0600",
+        "schedule": "15 6 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "0cb64ce954f2e0b14b2bb68a5f8bd3e8"
+      },
+      {
+        "jobid": 21,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0900",
+        "schedule": "15 9 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "0cb64ce954f2e0b14b2bb68a5f8bd3e8"
+      },
+      {
+        "jobid": 22,
+        "active": false,
+        "jobname": "mic-evaluator-commodities-after-eia-1500",
+        "schedule": "15 15 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "f9855ff72f937e55b681cb8d1a2d2917"
+      },
+      {
+        "jobid": 23,
+        "active": false,
+        "jobname": "mic-evaluator-commodities-after-eia-1900",
+        "schedule": "15 19 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "f9855ff72f937e55b681cb8d1a2d2917"
+      },
+      {
+        "jobid": 24,
+        "active": false,
+        "jobname": "mic-ingest-frankfurter-fx-1730",
+        "schedule": "30 17 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "7d14037a7c383f9871521656ab11ee27"
+      },
+      {
+        "jobid": 25,
+        "active": false,
+        "jobname": "mic-ingest-frankfurter-fx-0130",
+        "schedule": "30 1 * * 2-6",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "7d14037a7c383f9871521656ab11ee27"
+      },
+      {
+        "jobid": 26,
+        "active": false,
+        "jobname": "mic-evaluator-fx-after-frankfurter-1730",
+        "schedule": "45 17 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "108269ec7587bef6cfc2eb61dff39ec4"
+      },
+      {
+        "jobid": 27,
+        "active": false,
+        "jobname": "mic-evaluator-fx-after-frankfurter-0130",
+        "schedule": "45 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "108269ec7587bef6cfc2eb61dff39ec4"
+      },
+      {
+        "jobid": 28,
+        "active": false,
+        "jobname": "market-report-data-packet-morning",
+        "schedule": "50 22 * * 0-4",
+        "edge_function": "market-report-data-packet",
+        "command_fingerprint": "69b29f53d08a7cfae536af0633bbb32f"
+      },
+      {
+        "jobid": 29,
+        "active": false,
+        "jobname": "market-report-data-packet-close",
+        "schedule": "15 7 * * 1-5",
+        "edge_function": "market-report-data-packet",
+        "command_fingerprint": "fb80310ff7a6e824c181d5696d3a6bab"
+      },
+      {
+        "jobid": 30,
+        "active": false,
+        "jobname": "market-report-analysis-morning",
+        "schedule": "55 22 * * 0-4",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "82f3090e7feb1a8c52376914d42053ad"
+      },
+      {
+        "jobid": 31,
+        "active": false,
+        "jobname": "market-report-analysis-morning-retry",
+        "schedule": "5 23 * * 0-4",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "82f3090e7feb1a8c52376914d42053ad"
+      },
+      {
+        "jobid": 32,
+        "active": false,
+        "jobname": "market-report-analysis-close",
+        "schedule": "20 7 * * 1-5",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "216cf5dae2503140793e4eb9f46ce0da"
+      },
+      {
+        "jobid": 33,
+        "active": false,
+        "jobname": "market-report-analysis-close-retry",
+        "schedule": "35 7 * * 1-5",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "216cf5dae2503140793e4eb9f46ce0da"
+      },
+      {
+        "jobid": 34,
+        "active": false,
+        "jobname": "mic-evaluator-equity-index-after-fred-2100",
+        "schedule": "15 21 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "69868bf0e0e7220efffdcec52133ac4e"
+      },
+      {
+        "jobid": 35,
+        "active": false,
+        "jobname": "mic-evaluator-equity-index-after-fred-0100",
+        "schedule": "15 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "69868bf0e0e7220efffdcec52133ac4e"
+      },
+      {
+        "jobid": 36,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-fred-2100",
+        "schedule": "15 21 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "897e88a195e76936bf17ac30820ff7e7"
+      },
+      {
+        "jobid": 37,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-fred-0100",
+        "schedule": "15 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "897e88a195e76936bf17ac30820ff7e7"
+      },
+      {
+        "jobid": 38,
+        "active": false,
+        "jobname": "important-news-shadow",
+        "schedule": "*/10 * * * *",
+        "edge_function": "important-news-shadow",
+        "command_fingerprint": "c0a89803846abb2464a1af02934266e1"
+      },
+      {
+        "jobid": 39,
+        "active": false,
+        "jobname": "mic-ingest-estat-daily",
+        "schedule": "0 22 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "41ba602f2868cb98894840ee8b21c306"
+      },
+      {
+        "jobid": 40,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-estat",
+        "schedule": "15 22 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "5897f34fa917aa8be5895829b6c31d30"
+      },
+      {
+        "jobid": 41,
+        "active": false,
+        "jobname": "mic-scenario-after-state-0100",
+        "schedule": "25 1 * * 2-6",
+        "edge_function": "market-intelligence-scenario-evaluator",
+        "command_fingerprint": "3d59207b4429c610522a5d26928ced50"
+      },
+      {
+        "jobid": 42,
+        "active": false,
+        "jobname": "mic-scenario-after-state-weekday",
+        "schedule": "25 6,9,21,22 * * 1-5",
+        "edge_function": "market-intelligence-scenario-evaluator",
+        "command_fingerprint": "3d59207b4429c610522a5d26928ced50"
+      },
+      {
+        "jobid": 43,
+        "active": false,
+        "jobname": "news-discovery-observer-official",
+        "schedule": "1,16,31,46 * * * *",
+        "edge_function": "news-discovery-observer",
+        "command_fingerprint": "948498aa95bd9811fb271d3316f5eb3c"
+      },
+      {
+        "jobid": 44,
+        "active": false,
+        "jobname": "market-report-broadcast-worker",
+        "schedule": "* * * * *",
+        "edge_function": "market-report-broadcast-worker",
+        "command_fingerprint": "66978b8ec1134a94c57173fb4d841eb8"
+      }
+    ],
+    "tables": [
+      "close_report_settings",
+      "post_execution_logs",
+      "scheduled_posts",
+      "brand_settings",
+      "brands",
+      "alert_settings",
+      "useful_tip_schedule_settings",
+      "morning_report_settings",
+      "device_push_tokens",
+      "us_premarket_report_settings",
+      "important_news_monitor_settings",
+      "important_news_candidates",
+      "important_news_monitor_runs",
+      "important_news_company_ir_sources",
+      "notifications",
+      "alert_category_settings",
+      "market_report_consumer_settings",
+      "brand_memberships",
+      "important_news_shadow_candidates",
+      "important_news_shadow_runs",
+      "news_discovery_signal_tickers",
+      "news_discovery_signal_entities",
+      "news_discovery_search_config",
+      "news_discovery_searches",
+      "news_discovery_run_sources",
+      "news_discovery_signals",
+      "news_discovery_runs",
+      "social_mobile_content_settings",
+      "personalized_ondemand_settings",
+      "personalized_analysis_jobs",
+      "market_report_broadcast_settings"
+    ],
+    "read_only": "on",
+    "observed_at": "2026-10-17T10:17:11.925401+00:00"
+  },
+  "cron_after": {
+    "cron": [
+      {
+        "jobid": 1,
+        "active": true,
+        "jobname": "dispatch-scheduled-posts",
+        "schedule": "* * * * *",
+        "edge_function": "x-test-post",
+        "command_fingerprint": "88b3310282eedc9f49d56878992b1094"
+      },
+      {
+        "jobid": 2,
+        "active": false,
+        "jobname": "important-news-fetch",
+        "schedule": "*/10 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "2c8f14fed199e046f132e24807fa6184"
+      },
+      {
+        "jobid": 3,
+        "active": false,
+        "jobname": "important-news-judgement",
+        "schedule": "7,27,47 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "f5710a7fcd5cfdf377571aa8f21d700d"
+      },
+      {
+        "jobid": 4,
+        "active": false,
+        "jobname": "important-news-generation",
+        "schedule": "14,34,54 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "bb538949dc3b80ae2d51d75bdecea91a"
+      },
+      {
+        "jobid": 5,
+        "active": true,
+        "jobname": "kabumori-stocks-master-sync",
+        "schedule": "3 21 * * *",
+        "edge_function": "stocks-master-sync",
+        "command_fingerprint": "f226ca87d622e26bd336f64bb9031235"
+      },
+      {
+        "jobid": 6,
+        "active": true,
+        "jobname": "kabumori-stocks-new-listing-sync",
+        "schedule": "8 21 * * *",
+        "edge_function": "stocks-new-listing-sync",
+        "command_fingerprint": "a95a87154802ffd16005d8e85aa7ec07"
+      },
+      {
+        "jobid": 8,
+        "active": false,
+        "jobname": "important-news-publish-ready",
+        "schedule": "*/5 * * * *",
+        "edge_function": "important-news-monitor",
+        "command_fingerprint": "d984a09e0653723047f7f42cb346cbb7"
+      },
+      {
+        "jobid": 9,
+        "active": true,
+        "jobname": "send-push-notifications-dispatch",
+        "schedule": "* * * * *",
+        "edge_function": "send-push-notifications",
+        "command_fingerprint": "063d74cb47703c20263dae641e29c49b"
+      },
+      {
+        "jobid": 10,
+        "active": false,
+        "jobname": "personalized-reports-morning",
+        "schedule": "35 23 * * 0-4",
+        "edge_function": "personalized-reports",
+        "command_fingerprint": "16f16bdbb30f31b28893c98d24378c98"
+      },
+      {
+        "jobid": 11,
+        "active": false,
+        "jobname": "personalized-reports-close",
+        "schedule": "15 8 * * 1-5",
+        "edge_function": "personalized-reports",
+        "command_fingerprint": "9e035986e78aafd3aecced203d1431e9"
+      },
+      {
+        "jobid": 12,
+        "active": false,
+        "jobname": "mic-ingest-fred-2100",
+        "schedule": "0 21 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "e8beb0924999d2afdc44a1a16da2173d"
+      },
+      {
+        "jobid": 13,
+        "active": false,
+        "jobname": "mic-ingest-fred-0100",
+        "schedule": "0 1 * * 2-6",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "e8beb0924999d2afdc44a1a16da2173d"
+      },
+      {
+        "jobid": 14,
+        "active": false,
+        "jobname": "mic-ingest-mof-jgb-0600",
+        "schedule": "0 6 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "c80cc49937a0b9ebaaabb116e62b385c"
+      },
+      {
+        "jobid": 15,
+        "active": false,
+        "jobname": "mic-ingest-mof-jgb-0900",
+        "schedule": "0 9 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "c80cc49937a0b9ebaaabb116e62b385c"
+      },
+      {
+        "jobid": 16,
+        "active": false,
+        "jobname": "mic-ingest-eia-1500",
+        "schedule": "0 15 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "0966c05514162a690afbd230de74a591"
+      },
+      {
+        "jobid": 17,
+        "active": false,
+        "jobname": "mic-ingest-eia-1900",
+        "schedule": "0 19 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "0966c05514162a690afbd230de74a591"
+      },
+      {
+        "jobid": 18,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-fred-2100",
+        "schedule": "15 21 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "3c49830dc4d0d1db085d15bb21623d85"
+      },
+      {
+        "jobid": 19,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-fred-0100",
+        "schedule": "15 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "3c49830dc4d0d1db085d15bb21623d85"
+      },
+      {
+        "jobid": 20,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0600",
+        "schedule": "15 6 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "0cb64ce954f2e0b14b2bb68a5f8bd3e8"
+      },
+      {
+        "jobid": 21,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0900",
+        "schedule": "15 9 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "0cb64ce954f2e0b14b2bb68a5f8bd3e8"
+      },
+      {
+        "jobid": 22,
+        "active": false,
+        "jobname": "mic-evaluator-commodities-after-eia-1500",
+        "schedule": "15 15 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "f9855ff72f937e55b681cb8d1a2d2917"
+      },
+      {
+        "jobid": 23,
+        "active": false,
+        "jobname": "mic-evaluator-commodities-after-eia-1900",
+        "schedule": "15 19 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "f9855ff72f937e55b681cb8d1a2d2917"
+      },
+      {
+        "jobid": 24,
+        "active": false,
+        "jobname": "mic-ingest-frankfurter-fx-1730",
+        "schedule": "30 17 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "7d14037a7c383f9871521656ab11ee27"
+      },
+      {
+        "jobid": 25,
+        "active": false,
+        "jobname": "mic-ingest-frankfurter-fx-0130",
+        "schedule": "30 1 * * 2-6",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "7d14037a7c383f9871521656ab11ee27"
+      },
+      {
+        "jobid": 26,
+        "active": false,
+        "jobname": "mic-evaluator-fx-after-frankfurter-1730",
+        "schedule": "45 17 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "108269ec7587bef6cfc2eb61dff39ec4"
+      },
+      {
+        "jobid": 27,
+        "active": false,
+        "jobname": "mic-evaluator-fx-after-frankfurter-0130",
+        "schedule": "45 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "108269ec7587bef6cfc2eb61dff39ec4"
+      },
+      {
+        "jobid": 28,
+        "active": false,
+        "jobname": "market-report-data-packet-morning",
+        "schedule": "50 22 * * 0-4",
+        "edge_function": "market-report-data-packet",
+        "command_fingerprint": "69b29f53d08a7cfae536af0633bbb32f"
+      },
+      {
+        "jobid": 29,
+        "active": false,
+        "jobname": "market-report-data-packet-close",
+        "schedule": "15 7 * * 1-5",
+        "edge_function": "market-report-data-packet",
+        "command_fingerprint": "fb80310ff7a6e824c181d5696d3a6bab"
+      },
+      {
+        "jobid": 30,
+        "active": false,
+        "jobname": "market-report-analysis-morning",
+        "schedule": "55 22 * * 0-4",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "82f3090e7feb1a8c52376914d42053ad"
+      },
+      {
+        "jobid": 31,
+        "active": false,
+        "jobname": "market-report-analysis-morning-retry",
+        "schedule": "5 23 * * 0-4",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "82f3090e7feb1a8c52376914d42053ad"
+      },
+      {
+        "jobid": 32,
+        "active": false,
+        "jobname": "market-report-analysis-close",
+        "schedule": "20 7 * * 1-5",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "216cf5dae2503140793e4eb9f46ce0da"
+      },
+      {
+        "jobid": 33,
+        "active": false,
+        "jobname": "market-report-analysis-close-retry",
+        "schedule": "35 7 * * 1-5",
+        "edge_function": "market-report-analysis",
+        "command_fingerprint": "216cf5dae2503140793e4eb9f46ce0da"
+      },
+      {
+        "jobid": 34,
+        "active": false,
+        "jobname": "mic-evaluator-equity-index-after-fred-2100",
+        "schedule": "15 21 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "69868bf0e0e7220efffdcec52133ac4e"
+      },
+      {
+        "jobid": 35,
+        "active": false,
+        "jobname": "mic-evaluator-equity-index-after-fred-0100",
+        "schedule": "15 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "69868bf0e0e7220efffdcec52133ac4e"
+      },
+      {
+        "jobid": 36,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-fred-2100",
+        "schedule": "15 21 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "897e88a195e76936bf17ac30820ff7e7"
+      },
+      {
+        "jobid": 37,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-fred-0100",
+        "schedule": "15 1 * * 2-6",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "897e88a195e76936bf17ac30820ff7e7"
+      },
+      {
+        "jobid": 38,
+        "active": false,
+        "jobname": "important-news-shadow",
+        "schedule": "*/10 * * * *",
+        "edge_function": "important-news-shadow",
+        "command_fingerprint": "c0a89803846abb2464a1af02934266e1"
+      },
+      {
+        "jobid": 39,
+        "active": false,
+        "jobname": "mic-ingest-estat-daily",
+        "schedule": "0 22 * * 1-5",
+        "edge_function": "market-intelligence-ingest",
+        "command_fingerprint": "41ba602f2868cb98894840ee8b21c306"
+      },
+      {
+        "jobid": 40,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-estat",
+        "schedule": "15 22 * * 1-5",
+        "edge_function": "market-intelligence-state-evaluator",
+        "command_fingerprint": "5897f34fa917aa8be5895829b6c31d30"
+      },
+      {
+        "jobid": 41,
+        "active": false,
+        "jobname": "mic-scenario-after-state-0100",
+        "schedule": "25 1 * * 2-6",
+        "edge_function": "market-intelligence-scenario-evaluator",
+        "command_fingerprint": "3d59207b4429c610522a5d26928ced50"
+      },
+      {
+        "jobid": 42,
+        "active": false,
+        "jobname": "mic-scenario-after-state-weekday",
+        "schedule": "25 6,9,21,22 * * 1-5",
+        "edge_function": "market-intelligence-scenario-evaluator",
+        "command_fingerprint": "3d59207b4429c610522a5d26928ced50"
+      },
+      {
+        "jobid": 43,
+        "active": false,
+        "jobname": "news-discovery-observer-official",
+        "schedule": "1,16,31,46 * * * *",
+        "edge_function": "news-discovery-observer",
+        "command_fingerprint": "948498aa95bd9811fb271d3316f5eb3c"
+      },
+      {
+        "jobid": 44,
+        "active": false,
+        "jobname": "market-report-broadcast-worker",
+        "schedule": "* * * * *",
+        "edge_function": "market-report-broadcast-worker",
+        "command_fingerprint": "66978b8ec1134a94c57173fb4d841eb8"
+      }
+    ],
+    "read_only": "on",
+    "observed_at": "2026-10-17T10:27:01.667735+00:00",
+    "news_statuses": [
+      {
+        "count": 115,
+        "status": "duplicate",
+        "last_created_at": "2026-10-16T04:00:22.808151+00:00",
+        "last_updated_at": "2026-10-16T04:00:22.808151+00:00"
+      },
+      {
+        "count": 332,
+        "status": "generation_failed",
+        "last_created_at": "2026-10-16T19:30:11.678978+00:00",
+        "last_updated_at": "2026-10-16T19:47:16.981871+00:00"
+      },
+      {
+        "count": 430,
+        "status": "published",
+        "last_created_at": "2026-10-16T21:40:14.167051+00:00",
+        "last_updated_at": "2026-10-16T21:50:02.377068+00:00"
+      },
+      {
+        "count": 30,
+        "status": "ready_for_publish",
+        "last_created_at": "2026-09-10T08:20:32.121441+00:00",
+        "last_updated_at": "2026-09-10T08:47:53.989967+00:00"
+      },
+      {
+        "count": 3369,
+        "status": "rejected",
+        "last_created_at": "2026-10-16T23:00:14.698408+00:00",
+        "last_updated_at": "2026-10-16T23:07:04.395378+00:00"
+      }
+    ],
+    "notifications": [
+      {
+        "count": 187,
+        "push_status": "sent",
+        "source_type": "important_news",
+        "last_created_at": "2026-10-16T21:50:02.457608+00:00"
+      },
+      {
+        "count": 25,
+        "push_status": "sent",
+        "source_type": "personalized_report",
+        "last_created_at": "2026-10-12T23:35:10.722912+00:00"
+      }
+    ],
+    "pending_posts": [
+      {
+        "status": "pending",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T11:55:49+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T13:23:05+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "interaction",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T11:41:36+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "useful_tip",
+        "created_at": "2026-10-11T15:00:01.242808+00:00",
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-18T10:27:47+00:00"
+      }
+    ],
+    "weekly_planner": {
+      "md5": "43547f187cead21021847989b8400873",
+      "references": {
+        "is_active": true,
+        "scheduled_posts": true,
+        "useful_tip_schedule_settings": true
+      }
+    },
+    "active_news_runs": 0,
+    "new_news_since_0200": 0,
+    "useful_tip_settings": [
+      {
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "updated_at": "2026-08-29T23:40:15.745204+00:00",
+        "window_a_end": "12:10:00",
+        "window_b_end": "19:40:00",
+        "cooldown_days": 150,
+        "posts_per_week": 7,
+        "window_a_start": "11:50:00",
+        "window_b_start": "19:10:00",
+        "collision_minutes": 20
+      }
+    ],
+    "new_posts_since_0200": 0,
+    "updated_news_since_0200": 0,
+    "new_notifications_since_0200": 0
+  },
+  "cron_unchanged": true,
+  "runtime": {
+    "runs": [
+      {
+        "kind": "news_monitor",
+        "count": 1,
+        "status": "failed",
+        "trigger_type": "scheduled",
+        "last_started_at": "2026-10-15T07:10:02.510479+00:00"
+      },
+      {
+        "kind": "news_monitor",
+        "count": 370,
+        "status": "completed",
+        "trigger_type": "scheduled",
+        "last_started_at": "2026-10-17T00:00:03.216628+00:00"
+      },
+      {
+        "kind": "news_discovery",
+        "count": 14,
+        "status": "completed_with_errors",
+        "trigger_type": "scheduled",
+        "last_started_at": "2026-10-16T15:01:00.807722+00:00"
+      },
+      {
+        "kind": "news_discovery",
+        "count": 233,
+        "status": "completed",
+        "trigger_type": "scheduled",
+        "last_started_at": "2026-10-17T00:01:00.821619+00:00"
+      }
+    ],
+    "settings": {
+      "news": {
+        "id": true,
+        "is_active": true,
+        "updated_at": "2026-09-10T08:53:08.392226+00:00",
+        "auto_publish": true,
+        "luna_enabled": true,
+        "interval_minutes": 20,
+        "sol_escalation_enabled": true
+      },
+      "close": [
+        {
+          "brand_id": "kabumori",
+          "is_active": true,
+          "updated_at": "2026-09-11T09:54:37.309905+00:00"
+        }
+      ],
+      "morning": [
+        {
+          "brand_id": "kabumori",
+          "is_active": true,
+          "updated_at": "2026-09-03T15:03:09.117027+00:00"
+        }
+      ],
+      "consumer": {
+        "id": true,
+        "x_enabled": true,
+        "updated_at": "2026-10-13T11:49:27.29397+00:00",
+        "app_enabled": true
+      },
+      "ondemand": {
+        "id": true,
+        "updated_at": "2026-10-13T14:28:35.316162+00:00",
+        "max_attempts": 2,
+        "lease_seconds": 300,
+        "max_parallel_jobs": 4,
+        "daily_request_limit": 5,
+        "ondemand_requests_enabled": false,
+        "public_market_feed_enabled": true
+      },
+      "broadcast": {
+        "id": true,
+        "enabled": true,
+        "keep_days": 14,
+        "chunk_size": 500,
+        "updated_at": "2026-10-13T14:39:24.021693+00:00",
+        "lease_seconds": 180,
+        "sending_enabled": true,
+        "max_chunk_attempts": 3,
+        "max_parallel_chunks": 4,
+        "messages_per_second": 300,
+        "max_devices_per_user": 20,
+        "plan_chunks_per_call": 40,
+        "max_report_age_minutes": 120,
+        "allow_with_legacy_personalized_reports": true
+      }
+    },
+    "observed_at": "2026-10-17T10:18:13.553869+00:00",
+    "other_tables": [
+      "device_push_tokens",
+      "us_premarket_report_settings",
+      "us_premarket_report_runs",
+      "personalized_reports",
+      "notifications",
+      "market_report_cycles",
+      "market_report_packets",
+      "market_report_consumer_settings",
+      "market_report_generation_traces",
+      "personalized_ondemand_settings",
+      "personalized_analysis_jobs",
+      "personalized_analysis_results",
+      "market_report_broadcast_deliveries",
+      "market_report_broadcast_settings",
+      "market_report_broadcasts",
+      "market_report_broadcast_chunks"
+    ],
+    "analysis_jobs": null,
+    "pending_posts": [
+      {
+        "status": "pending",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "started_at": null,
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T11:55:49+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "started_at": null,
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T13:23:05+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "useful_tip",
+        "created_at": "2026-10-11T15:00:01.242808+00:00",
+        "started_at": null,
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T10:17:26+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "interaction",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "started_at": null,
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T11:41:36+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "useful_tip",
+        "created_at": "2026-10-11T15:00:01.242808+00:00",
+        "started_at": null,
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-18T10:27:47+00:00"
+      }
+    ]
+  },
+  "queues_extra": {
+    "cycles": [
+      {
+        "count": 5,
+        "cycle_status": "completed",
+        "report_status": "failed",
+        "last_created_at": "2026-10-06T22:50:01.04608+00:00",
+        "last_updated_at": "2026-10-06T23:05:53.019647+00:00"
+      },
+      {
+        "count": 3,
+        "cycle_status": "blocked",
+        "report_status": "pending",
+        "last_created_at": "2026-09-28T22:50:02.661504+00:00",
+        "last_updated_at": "2026-09-28T22:50:03.048363+00:00"
+      },
+      {
+        "count": 1,
+        "cycle_status": "completed",
+        "report_status": "pending",
+        "last_created_at": "2026-09-17T07:15:00.845057+00:00",
+        "last_updated_at": "2026-09-17T07:15:01.192379+00:00"
+      },
+      {
+        "count": 26,
+        "cycle_status": "completed",
+        "report_status": "completed",
+        "last_created_at": "2026-10-16T07:15:01.437839+00:00",
+        "last_updated_at": "2026-10-16T07:22:05.038767+00:00"
+      }
+    ],
+    "read_only": "on",
+    "broadcasts": [
+      {
+        "count": 6,
+        "status": "completed",
+        "last_created_at": "2026-10-16T07:22:05.659067+00:00",
+        "last_updated_at": "2026-10-16T07:22:07.039995+00:00"
+      }
+    ],
+    "observed_at": "2026-10-17T10:25:15.259065+00:00",
+    "recent_storage": [
+      {
+        "name": "generated/2026-10-17.png",
+        "bucket_id": "morning-greeting-assets",
+        "created_at": "2026-10-16T18:51:04.179999+00:00",
+        "updated_at": "2026-10-16T18:51:04.179999+00:00"
+      },
+      {
+        "name": "generated/2026-10-16.png",
+        "bucket_id": "morning-greeting-assets",
+        "created_at": "2026-10-15T19:09:37.266449+00:00",
+        "updated_at": "2026-10-15T19:09:37.266449+00:00"
+      },
+      {
+        "name": "generated/2026-10-15.png",
+        "bucket_id": "morning-greeting-assets",
+        "created_at": "2026-10-14T19:26:48.745974+00:00",
+        "updated_at": "2026-10-14T19:26:48.745974+00:00"
+      }
+    ],
+    "posting_windows": [
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "ai_salaryman_lab",
+        "is_active": true,
+        "post_type": "brand_post"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": false,
+        "post_type": "close_report"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": true,
+        "post_type": "interaction"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": true,
+        "post_type": "interaction"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": true,
+        "post_type": "morning_greeting"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": false,
+        "post_type": "morning_report"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": true,
+        "post_type": "tip"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": true,
+        "post_type": "tip"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": true,
+        "post_type": "tip"
+      },
+      {
+        "brand_id": "kabumori",
+        "is_active": false,
+        "post_type": "us_premarket_report"
+      }
+    ],
+    "broadcast_chunks": [
+      {
+        "count": 6,
+        "status": "done",
+        "last_updated_at": "2026-10-16T07:22:07.039995+00:00"
+      }
+    ],
+    "schedule_routines": [
+      {
+        "args": "p_chunk_id uuid, p_lease_token uuid, p_lease_version bigint",
+        "schema": "public",
+        "proname": "begin_market_report_broadcast_chunk",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "9b1773751bc6cbf951e421b2584798d5"
+      },
+      {
+        "args": "p_limit integer",
+        "schema": "public",
+        "proname": "claim_market_report_broadcast_chunks",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "50494658c4328aec569f09233dba765c"
+      },
+      {
+        "args": "p_limit integer",
+        "schema": "public",
+        "proname": "claim_pending_push_notifications",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "abdf9ccb66d4a8b758e4130453169db7"
+      },
+      {
+        "args": "p_window_hours integer",
+        "schema": "public",
+        "proname": "enqueue_important_news_notifications",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": true,
+        "source_fingerprint": "35baf3f5a74a73d9149bd743b773bd13"
+      },
+      {
+        "args": "p_window_hours integer",
+        "schema": "public",
+        "proname": "enqueue_important_news_notifications_phase5_base",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": true,
+        "source_fingerprint": "6ac61cb6450e14c1ad2c9961cba23322"
+      },
+      {
+        "args": "p_window_hours integer",
+        "schema": "public",
+        "proname": "enqueue_market_critical_notifications",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": true,
+        "source_fingerprint": "d785faf43e12e0eacaf5f0acba4be661"
+      },
+      {
+        "args": "",
+        "schema": "public",
+        "proname": "enqueue_market_report_broadcasts",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "e5410df56a3ae64c077824c5c392fda1"
+      },
+      {
+        "args": "p_job_id uuid",
+        "schema": "public",
+        "proname": "enqueue_personalized_analysis_notification",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "955e1ba575a93aca7774b35157de5e96"
+      },
+      {
+        "args": "p_report_id uuid",
+        "schema": "public",
+        "proname": "enqueue_personalized_report_notification",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "e2022f0faac082e11758dc13bfde2f0a"
+      },
+      {
+        "args": "p_scheduled_post_id uuid, p_message text",
+        "schema": "public",
+        "proname": "fail_scheduled_post",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "b0a0475e085c93fd4b9b8c5b637cbe45"
+      },
+      {
+        "args": "p_chunk_id uuid, p_lease_token uuid, p_lease_version bigint, p_results jsonb, p_error_code text",
+        "schema": "public",
+        "proname": "finish_market_report_broadcast_chunk",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "bfc19d40fa2f38b2c8755a8e84519796"
+      },
+      {
+        "args": "p_level text, p_jst_date date",
+        "schema": "public",
+        "proname": "get_daily_kabumori_tip",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": true,
+        "source_fingerprint": "4b7865539dc54335a1748666e0683e13"
+      },
+      {
+        "args": "p_job_id uuid",
+        "schema": "public",
+        "proname": "mark_personalized_analysis_notification_failed",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "272fa3496fc091356e1aedba8112e934"
+      },
+      {
+        "args": "p_user_id uuid, p_report_type text",
+        "schema": "public",
+        "proname": "market_report_broadcast_eligible",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "771553d1b9ac6d0db62fa2037d1f8962"
+      },
+      {
+        "args": "p_broadcast_id uuid",
+        "schema": "public",
+        "proname": "market_report_broadcast_send_allowed",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "c2f5b9cce2a5141407b047ba80448f54"
+      },
+      {
+        "args": "p_date date",
+        "schema": "public",
+        "proname": "plan_daily_posts",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": true,
+        "source_fingerprint": "7d1ac21c07ef62dbdaa4a9aa5c3aed24"
+      },
+      {
+        "args": "p_broadcast_id uuid",
+        "schema": "public",
+        "proname": "plan_market_report_broadcast",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "b111e511f556e76a0eaa4e90e7fbd61d"
+      },
+      {
+        "args": "p_limit integer",
+        "schema": "public",
+        "proname": "purge_market_report_broadcasts",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "7288486573c03b4c49f7f490faa3e488"
+      },
+      {
+        "args": "p_scheduled_post_id uuid, p_retry_at timestamp with time zone, p_message text",
+        "schema": "public",
+        "proname": "retry_scheduled_post",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "a8a627d33db64a7a5289bd718b59aba7"
+      },
+      {
+        "args": "p_brand_id text, p_target_date date, p_source text, p_plan jsonb, p_activate boolean, p_request_key text",
+        "schema": "public",
+        "proname": "write_daily_content_plan",
+        "has_http": false,
+        "security_definer": true,
+        "has_gate_reference": false,
+        "source_fingerprint": "578dd863d864e9f504ef0ceed7740ba5"
+      }
+    ],
+    "broadcast_deliveries": [
+      {
+        "count": 6,
+        "status": "sent",
+        "last_updated_at": "2026-10-16T07:22:07.039995+00:00"
+      }
+    ]
+  },
+  "recent_activity": {
+    "post_0200": [
+      {
+        "count": 5,
+        "status": "started",
+        "last_at": "2026-10-17T10:18:00.996991+00:00",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post"
+      },
+      {
+        "count": 5,
+        "status": "succeeded",
+        "last_at": "2026-10-17T10:18:07.29553+00:00",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post"
+      },
+      {
+        "count": 1,
+        "status": "started",
+        "last_at": "2026-10-17T06:02:00.991917+00:00",
+        "brand_id": "kabumori",
+        "post_type": "interaction"
+      },
+      {
+        "count": 1,
+        "status": "succeeded",
+        "last_at": "2026-10-17T06:02:10.244208+00:00",
+        "brand_id": "kabumori",
+        "post_type": "interaction"
+      },
+      {
+        "count": 2,
+        "status": "started",
+        "last_at": "2026-10-17T09:02:00.783706+00:00",
+        "brand_id": "kabumori",
+        "post_type": "tip"
+      },
+      {
+        "count": 2,
+        "status": "succeeded",
+        "last_at": "2026-10-17T09:02:06.612223+00:00",
+        "brand_id": "kabumori",
+        "post_type": "tip"
+      },
+      {
+        "count": 1,
+        "status": "failed",
+        "last_at": "2026-10-17T10:19:40.802353+00:00",
+        "brand_id": "kabumori",
+        "post_type": "useful_tip"
+      },
+      {
+        "count": 1,
+        "status": "started",
+        "last_at": "2026-10-17T10:19:01.023737+00:00",
+        "brand_id": "kabumori",
+        "post_type": "useful_tip"
+      }
+    ],
+    "observed_at": "2026-10-17T10:25:54.998094+00:00",
+    "new_posts_0200": 0,
+    "news_after_0200": {
+      "runs": 0,
+      "created": 0,
+      "updated": 0
+    },
+    "claim_definition": "\ndeclare\n  claimed_id uuid;\nbegin\n  -- Dedicated report planners retain their own settings, JPX-business-day,\n  -- fixed-center-time, and ON CONFLICT duplicate safeguards.\n  perform public.plan_morning_report();\n  perform public.plan_close_report();\n\n  -- Keep the existing generic and specialised planner sequence intact.\n  perform public.plan_daily_posts();\n  perform public.plan_weekly_useful_tips();\n  perform public.plan_us_premarket_report();\n\n  select id into claimed_id\n  from public.scheduled_posts\n  where status = 'pending'\n    and scheduled_for <= now()\n  order by scheduled_for\n  for update skip locked\n  limit 1;\n\n  if claimed_id is null then\n    return;\n  end if;\n\n  update public.scheduled_posts\n  set status = 'running',\n      started_at = now(),\n      attempt_count = attempt_count + 1\n  where id = claimed_id;\n\n  insert into public.post_execution_logs (scheduled_post_id, post_type, status, message, brand_id)\n  select id, post_type, 'started', 'Scheduled post claimed', brand_id\n  from public.scheduled_posts\n  where id = claimed_id;\n\n  return query\n  select * from public.scheduled_posts\n  where id = claimed_id;\nend;\n",
+    "pending_kabumori": [
+      {
+        "status": "pending",
+        "post_type": "interaction",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-17T11:41:36+00:00"
+      },
+      {
+        "status": "pending",
+        "post_type": "useful_tip",
+        "created_at": "2026-10-11T15:00:01.242808+00:00",
+        "attempt_count": 0,
+        "scheduled_for": "2026-10-18T10:27:47+00:00"
+      }
+    ],
+    "unsafe_notifications": 0,
+    "notifications_after_0200": 0
+  },
+  "triggers_and_cron_history": {
+    "triggers": [
+      {
+        "schema": "public",
+        "tgname": "trg_alert_category_settings_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "alert_category_settings",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_alert_settings_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "alert_settings",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "brand_memberships",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "brands",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "account_lifecycle_account_changed",
+        "proname": "account_lifecycle_account_changed",
+        "tgenabled": "O",
+        "table_name": "common_accounts",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "account_lifecycle_guard_account_delete",
+        "proname": "account_lifecycle_guard_account_delete",
+        "tgenabled": "O",
+        "table_name": "common_accounts",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "account_lifecycle_touch_account",
+        "proname": "account_lifecycle_touch_account",
+        "tgenabled": "O",
+        "table_name": "common_accounts",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_device_push_tokens_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "device_push_tokens",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "important_news_candidates_updated_at",
+        "proname": "set_important_news_updated_at",
+        "tgenabled": "O",
+        "table_name": "important_news_candidates",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "important_news_company_ir_sources_updated_at",
+        "proname": "set_important_news_updated_at",
+        "tgenabled": "O",
+        "table_name": "important_news_company_ir_sources",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "important_news_monitor_settings_updated_at",
+        "proname": "set_important_news_updated_at",
+        "tgenabled": "O",
+        "table_name": "important_news_monitor_settings",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_data_packets_match_cycle",
+        "proname": "market_data_packets_match_cycle",
+        "tgenabled": "O",
+        "table_name": "market_data_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_data_packets_no_delete",
+        "proname": "market_data_packets_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_data_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_data_packets_no_truncate",
+        "proname": "market_data_packets_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_data_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_data_packets_no_update",
+        "proname": "market_data_packets_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_data_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_market_events_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "market_events",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_cycles_guard_update",
+        "proname": "market_report_cycles_guard_update",
+        "tgenabled": "O",
+        "table_name": "market_report_cycles",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_generation_traces_no_delete",
+        "proname": "market_report_generation_traces_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_report_generation_traces",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_generation_traces_no_truncate",
+        "proname": "market_report_generation_traces_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_report_generation_traces",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_generation_traces_no_update",
+        "proname": "market_report_generation_traces_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_report_generation_traces",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_packets_match_cycle",
+        "proname": "market_report_packets_match_cycle",
+        "tgenabled": "O",
+        "table_name": "market_report_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_packets_no_delete",
+        "proname": "market_data_packets_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_report_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_packets_no_truncate",
+        "proname": "market_data_packets_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_report_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "market_report_packets_no_update",
+        "proname": "market_data_packets_reject_change",
+        "tgenabled": "O",
+        "table_name": "market_report_packets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_market_state_current_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "market_state_current",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_fed_statement_diffs_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "mic_fed_statement_diffs",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_metric_domain_map_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "mic_metric_domain_map",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_scenario_current_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "mic_scenario_current",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_scenario_runs_guard_terminal",
+        "proname": "mic_scenario_runs_guard_terminal",
+        "tgenabled": "O",
+        "table_name": "mic_scenario_evaluation_runs",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_scenario_evidence_reject_mutation",
+        "proname": "mic_scenario_reject_mutation",
+        "tgenabled": "O",
+        "table_name": "mic_scenario_evidence",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_scenario_evidence_reject_truncate",
+        "proname": "mic_scenario_reject_mutation",
+        "tgenabled": "O",
+        "table_name": "mic_scenario_evidence",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_scenario_history_reject_mutation",
+        "proname": "mic_scenario_reject_mutation",
+        "tgenabled": "O",
+        "table_name": "mic_scenario_history",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_scenario_history_reject_truncate",
+        "proname": "mic_scenario_reject_mutation",
+        "tgenabled": "O",
+        "table_name": "mic_scenario_history",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_source_registry_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "mic_source_registry",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_state_evaluation_runs_guard_terminal_status",
+        "proname": "mic_state_evaluation_runs_guard_terminal_status",
+        "tgenabled": "O",
+        "table_name": "mic_state_evaluation_runs",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_state_evidence_reject_mutation",
+        "proname": "mic_state_evidence_reject_mutation",
+        "tgenabled": "O",
+        "table_name": "mic_state_evidence",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_mic_state_evidence_reject_truncate",
+        "proname": "mic_state_evidence_reject_mutation",
+        "tgenabled": "O",
+        "table_name": "mic_state_evidence",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "set_post_execution_log_brand_id",
+        "proname": "set_post_execution_log_brand_id",
+        "tgenabled": "O",
+        "table_name": "post_execution_logs",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "post_execution_logs",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "posting_windows",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_profiles_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "profiles",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "publish_claims",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "published_content_fingerprints",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "scheduled_posts",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "account_lifecycle_guard_entitlement_identity",
+        "proname": "account_lifecycle_guard_entitlement_identity",
+        "tgenabled": "O",
+        "table_name": "service_entitlements",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "account_lifecycle_touch_entitlement",
+        "proname": "account_lifecycle_touch_entitlement",
+        "tgenabled": "O",
+        "table_name": "service_entitlements",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "social_account_oauth_states",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_accounts_x_refresh_reset_on_reconnect",
+        "proname": "x_account_refresh_reset_on_reconnect",
+        "tgenabled": "O",
+        "table_name": "social_accounts",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "social_accounts",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_content_settings_version",
+        "proname": "social_mobile_content_settings_version",
+        "tgenabled": "O",
+        "table_name": "social_mobile_content_settings",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_stocks_master_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "stocks_master",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "trg_tracked_stocks_updated_at",
+        "proname": "kabumori_set_updated_at",
+        "tgenabled": "O",
+        "table_name": "tracked_stocks",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "x_account_refresh_rollout",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "tgenabled": "O",
+        "table_name": "x_account_refresh_state_v2",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "public",
+        "tgname": "x_account_refresh_state_v2_health",
+        "proname": "x_account_refresh_health_mirror",
+        "tgenabled": "O",
+        "table_name": "x_account_refresh_state_v2",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "storage",
+        "tgname": "enforce_bucket_name_length_trigger",
+        "proname": "enforce_bucket_name_length",
+        "tgenabled": "O",
+        "table_name": "buckets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "storage",
+        "tgname": "protect_bucket_control_insert",
+        "proname": "protect_bucket_control_columns",
+        "tgenabled": "O",
+        "table_name": "buckets",
+        "has_url_args": false,
+        "args_fingerprint": "7077189cb8f3ebf7ecd754cb79d2f480"
+      },
+      {
+        "schema": "storage",
+        "tgname": "protect_bucket_control_update",
+        "proname": "protect_bucket_control_columns",
+        "tgenabled": "O",
+        "table_name": "buckets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "storage",
+        "tgname": "protect_bucket_control_update_role",
+        "proname": "enforce_bucket_lifecycle_service_role",
+        "tgenabled": "O",
+        "table_name": "buckets",
+        "has_url_args": false,
+        "args_fingerprint": "7077189cb8f3ebf7ecd754cb79d2f480"
+      },
+      {
+        "schema": "storage",
+        "tgname": "protect_buckets_delete",
+        "proname": "protect_delete",
+        "tgenabled": "O",
+        "table_name": "buckets",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "storage",
+        "tgname": "protect_objects_delete",
+        "proname": "protect_delete",
+        "tgenabled": "O",
+        "table_name": "objects",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      {
+        "schema": "storage",
+        "tgname": "update_objects_updated_at",
+        "proname": "update_updated_at_column",
+        "tgenabled": "O",
+        "table_name": "objects",
+        "has_url_args": false,
+        "args_fingerprint": "d41d8cd98f00b204e9800998ecf8427e"
+      }
+    ],
+    "cron_runs": [
+      {
+        "count": 2160,
+        "jobid": 1,
+        "active": true,
+        "status": "succeeded",
+        "jobname": "dispatch-scheduled-posts",
+        "last_end": "2026-10-17T10:24:00.183989+00:00",
+        "last_start": "2026-10-17T10:24:00.166751+00:00"
+      },
+      {
+        "count": 154,
+        "jobid": 2,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "important-news-fetch",
+        "last_end": "2026-10-17T00:00:00.409457+00:00",
+        "last_start": "2026-10-17T00:00:00.373246+00:00"
+      },
+      {
+        "count": 78,
+        "jobid": 3,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "important-news-judgement",
+        "last_end": "2026-10-17T00:07:00.526426+00:00",
+        "last_start": "2026-10-17T00:07:00.398267+00:00"
+      },
+      {
+        "count": 77,
+        "jobid": 4,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "important-news-generation",
+        "last_end": "2026-10-16T23:54:00.799636+00:00",
+        "last_start": "2026-10-16T23:54:00.742872+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 5,
+        "active": true,
+        "status": "succeeded",
+        "jobname": "kabumori-stocks-master-sync",
+        "last_end": "2026-10-16T21:03:00.188354+00:00",
+        "last_start": "2026-10-16T21:03:00.173745+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 6,
+        "active": true,
+        "status": "succeeded",
+        "jobname": "kabumori-stocks-new-listing-sync",
+        "last_end": "2026-10-16T21:08:00.263711+00:00",
+        "last_start": "2026-10-16T21:08:00.235908+00:00"
+      },
+      {
+        "count": 309,
+        "jobid": 8,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "important-news-publish-ready",
+        "last_end": "2026-10-17T00:05:00.324149+00:00",
+        "last_start": "2026-10-17T00:05:00.272639+00:00"
+      },
+      {
+        "count": 2160,
+        "jobid": 9,
+        "active": true,
+        "status": "succeeded",
+        "jobname": "send-push-notifications-dispatch",
+        "last_end": "2026-10-17T10:24:00.185702+00:00",
+        "last_start": "2026-10-17T10:24:00.168152+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 10,
+        "active": false,
+        "status": null,
+        "jobname": "personalized-reports-morning",
+        "last_end": null,
+        "last_start": null
+      },
+      {
+        "count": 1,
+        "jobid": 11,
+        "active": false,
+        "status": null,
+        "jobname": "personalized-reports-close",
+        "last_end": null,
+        "last_start": null
+      },
+      {
+        "count": 1,
+        "jobid": 12,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-fred-2100",
+        "last_end": "2026-10-16T21:00:00.381373+00:00",
+        "last_start": "2026-10-16T21:00:00.314356+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 13,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-fred-0100",
+        "last_end": "2026-10-17T01:00:00.149471+00:00",
+        "last_start": "2026-10-17T01:00:00.101145+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 14,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-mof-jgb-0600",
+        "last_end": "2026-10-16T06:00:00.301481+00:00",
+        "last_start": "2026-10-16T06:00:00.261415+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 15,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-mof-jgb-0900",
+        "last_end": "2026-10-16T09:00:00.287417+00:00",
+        "last_start": "2026-10-16T09:00:00.242439+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 16,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-eia-1500",
+        "last_end": "2026-10-16T15:00:00.474414+00:00",
+        "last_start": "2026-10-16T15:00:00.384434+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 17,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-eia-1900",
+        "last_end": "2026-10-16T19:00:00.293983+00:00",
+        "last_start": "2026-10-16T19:00:00.233806+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 18,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-rates-after-fred-2100",
+        "last_end": "2026-10-16T21:15:00.364046+00:00",
+        "last_start": "2026-10-16T21:15:00.316668+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 19,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-rates-after-fred-0100",
+        "last_end": "2026-10-17T01:15:00.265186+00:00",
+        "last_start": "2026-10-17T01:15:00.205399+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 20,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0600",
+        "last_end": "2026-10-16T06:15:00.550688+00:00",
+        "last_start": "2026-10-16T06:15:00.461751+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 21,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0900",
+        "last_end": "2026-10-16T09:15:00.322081+00:00",
+        "last_start": "2026-10-16T09:15:00.248494+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 22,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-commodities-after-eia-1500",
+        "last_end": "2026-10-16T15:15:00.637393+00:00",
+        "last_start": "2026-10-16T15:15:00.482985+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 23,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-commodities-after-eia-1900",
+        "last_end": "2026-10-16T19:15:00.273212+00:00",
+        "last_start": "2026-10-16T19:15:00.211952+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 24,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-frankfurter-fx-1730",
+        "last_end": "2026-10-16T17:30:00.35462+00:00",
+        "last_start": "2026-10-16T17:30:00.312627+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 25,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-frankfurter-fx-0130",
+        "last_end": "2026-10-17T01:30:00.213928+00:00",
+        "last_start": "2026-10-17T01:30:00.189831+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 26,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-fx-after-frankfurter-1730",
+        "last_end": "2026-10-16T17:45:00.51859+00:00",
+        "last_start": "2026-10-16T17:45:00.439039+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 27,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-fx-after-frankfurter-0130",
+        "last_end": "2026-10-17T01:45:00.297655+00:00",
+        "last_start": "2026-10-17T01:45:00.210829+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 28,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-data-packet-morning",
+        "last_end": "2026-10-15T22:50:00.435673+00:00",
+        "last_start": "2026-10-15T22:50:00.380617+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 29,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-data-packet-close",
+        "last_end": "2026-10-16T07:15:00.332088+00:00",
+        "last_start": "2026-10-16T07:15:00.282756+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 30,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-analysis-morning",
+        "last_end": "2026-10-15T22:55:00.868039+00:00",
+        "last_start": "2026-10-15T22:55:00.783074+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 31,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-analysis-morning-retry",
+        "last_end": "2026-10-15T23:05:00.338757+00:00",
+        "last_start": "2026-10-15T23:05:00.301598+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 32,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-analysis-close",
+        "last_end": "2026-10-16T07:20:00.477223+00:00",
+        "last_start": "2026-10-16T07:20:00.440673+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 33,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-analysis-close-retry",
+        "last_end": "2026-10-16T07:35:00.252254+00:00",
+        "last_start": "2026-10-16T07:35:00.211455+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 34,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-equity-index-after-fred-2100",
+        "last_end": "2026-10-16T21:15:00.373402+00:00",
+        "last_start": "2026-10-16T21:15:00.318327+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 35,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-equity-index-after-fred-0100",
+        "last_end": "2026-10-17T01:15:00.271834+00:00",
+        "last_start": "2026-10-17T01:15:00.23611+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 36,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-macro-after-fred-2100",
+        "last_end": "2026-10-16T21:15:00.371772+00:00",
+        "last_start": "2026-10-16T21:15:00.310673+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 37,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-macro-after-fred-0100",
+        "last_end": "2026-10-17T01:15:00.280437+00:00",
+        "last_start": "2026-10-17T01:15:00.22597+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 38,
+        "active": false,
+        "status": null,
+        "jobname": "important-news-shadow",
+        "last_end": null,
+        "last_start": null
+      },
+      {
+        "count": 1,
+        "jobid": 39,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-ingest-estat-daily",
+        "last_end": "2026-10-16T22:00:00.563846+00:00",
+        "last_start": "2026-10-16T22:00:00.524858+00:00"
+      },
+      {
+        "count": 1,
+        "jobid": 40,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-evaluator-macro-after-estat",
+        "last_end": "2026-10-16T22:15:00.323118+00:00",
+        "last_start": "2026-10-16T22:15:00.261162+00:00"
+      },
+      {
+        "count": 2,
+        "jobid": 41,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-scenario-after-state-0100",
+        "last_end": "2026-10-17T01:25:00.209531+00:00",
+        "last_start": "2026-10-17T01:25:00.189505+00:00"
+      },
+      {
+        "count": 5,
+        "jobid": 42,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "mic-scenario-after-state-weekday",
+        "last_end": "2026-10-16T22:25:00.263831+00:00",
+        "last_start": "2026-10-16T22:25:00.231633+00:00"
+      },
+      {
+        "count": 103,
+        "jobid": 43,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "news-discovery-observer-official",
+        "last_end": "2026-10-17T00:01:00.290592+00:00",
+        "last_start": "2026-10-17T00:01:00.258122+00:00"
+      },
+      {
+        "count": 1543,
+        "jobid": 44,
+        "active": false,
+        "status": "succeeded",
+        "jobname": "market-report-broadcast-worker",
+        "last_end": "2026-10-17T00:07:00.522747+00:00",
+        "last_start": "2026-10-17T00:07:00.400601+00:00"
+      }
+    ]
+  },
+  "planner_catalog": {
+    "cron_call_paths": [
+      {
+        "jobid": 1,
+        "active": true,
+        "jobname": "dispatch-scheduled-posts",
+        "calls_planner": false,
+        "edge_function": "x-test-post"
+      },
+      {
+        "jobid": 5,
+        "active": true,
+        "jobname": "kabumori-stocks-master-sync",
+        "calls_planner": false,
+        "edge_function": "stocks-master-sync"
+      },
+      {
+        "jobid": 6,
+        "active": true,
+        "jobname": "kabumori-stocks-new-listing-sync",
+        "calls_planner": false,
+        "edge_function": "stocks-new-listing-sync"
+      },
+      {
+        "jobid": 9,
+        "active": true,
+        "jobname": "send-push-notifications-dispatch",
+        "calls_planner": false,
+        "edge_function": "send-push-notifications"
+      }
+    ],
+    "planner_definition": "\ndeclare\n  window_row public.posting_windows%rowtype;\n  random_seconds integer;\n  local_now timestamp;\n  effective_start time;\n  probability_bucket integer;\n  candidate_local timestamp;\n  candidate_time timestamptz;\n  candidate_found boolean;\n  selection_attempt integer;\nbegin\n  for window_row in\n    select w.*\n    from public.posting_windows w\n    join public.brands b on b.id = w.brand_id\n    where w.is_active\n      and b.is_active\n      and b.publish_mode in ('dry_run', 'live')\n    order by (w.post_type = 'interaction'), w.brand_id, w.post_type, w.slot_no\n  loop\n    probability_bucket := mod(\n      abs(hashtextextended(\n        p_date::text || ':' || window_row.brand_id || ':' || window_row.post_type || ':' || window_row.slot_no,\n        0\n      )),\n      10000\n    )::integer;\n    if probability_bucket >= floor(window_row.daily_probability * 10000)::integer then\n      continue;\n    end if;\n\n    if exists (\n      select 1 from public.scheduled_posts\n      where brand_id = window_row.brand_id\n        and schedule_date = p_date\n        and post_type = window_row.post_type\n        and slot_no = window_row.slot_no\n    ) then\n      continue;\n    end if;\n\n    local_now := now() at time zone window_row.timezone;\n    effective_start := window_row.start_time;\n    if p_date = local_now::date then\n      if local_now::time >= window_row.end_time then continue; end if;\n      if local_now::time > window_row.start_time then\n        effective_start := (local_now + interval '1 minute')::time;\n      end if;\n    end if;\n\n    candidate_found := false;\n    for selection_attempt in 1..40 loop\n      random_seconds := floor(\n        random() * (extract(epoch from (window_row.end_time - effective_start)) + 1)\n      )::integer;\n      candidate_local := p_date + effective_start + random_seconds * interval '1 second';\n      candidate_time := candidate_local at time zone window_row.timezone;\n\n      if window_row.post_type = 'interaction' then\n        if exists (\n          select 1 from public.scheduled_posts other_post\n          where other_post.brand_id = window_row.brand_id\n            and other_post.schedule_date = p_date\n            and other_post.post_type <> 'interaction'\n            and other_post.status in ('pending', 'running', 'succeeded')\n            and other_post.scheduled_for between\n              candidate_time - interval '20 minutes'\n              and candidate_time + interval '20 minutes'\n        ) then\n          continue;\n        end if;\n\n        if exists (\n          select 1 from public.posting_blackouts blackout\n          where blackout.is_active\n            and (candidate_time at time zone blackout.timezone)::time\n              between blackout.start_time and blackout.end_time\n        ) then\n          continue;\n        end if;\n      end if;\n\n      candidate_found := true;\n      exit;\n    end loop;\n    if not candidate_found then continue; end if;\n\n    insert into public.scheduled_posts\n      (brand_id, schedule_date, post_type, slot_no, scheduled_for)\n    values (window_row.brand_id, p_date, window_row.post_type, window_row.slot_no, candidate_time)\n    on conflict (brand_id, schedule_date, post_type, slot_no) do nothing;\n  end loop;\n\n  return query\n  select * from public.scheduled_posts\n  where schedule_date = p_date\n  order by scheduled_for;\nend;\n",
+    "external_trigger_functions": null
+  },
+  "edge_invocations": {
+    "result": [
+      {
+        "after_0200_utc": 0,
+        "count": 291,
+        "first_at": "2026-10-16T10:20:02.562000",
+        "last_at": "2026-10-17T00:07:03.656000",
+        "path": "/functions/v1/important-news-monitor",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 7,
+        "first_at": "2026-10-16T15:00:03.316000",
+        "last_at": "2026-10-17T01:30:02.145000",
+        "path": "/functions/v1/market-intelligence-ingest",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 2,
+        "first_at": "2026-10-16T21:25:11.821000",
+        "last_at": "2026-10-16T22:25:02.026000",
+        "path": "/functions/v1/market-intelligence-scenario-evaluator",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 11,
+        "first_at": "2026-10-16T15:15:02.221000",
+        "last_at": "2026-10-17T01:45:02.300000",
+        "path": "/functions/v1/market-intelligence-state-evaluator",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 726,
+        "first_at": "2026-10-16T10:20:01.787000",
+        "last_at": "2026-10-17T00:05:01.456000",
+        "path": "/functions/v1/market-report-broadcast-worker",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 45,
+        "first_at": "2026-10-16T10:31:12.297000",
+        "last_at": "2026-10-16T23:46:11.287000",
+        "path": "/functions/v1/news-discovery-observer",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 431,
+        "count": 1250,
+        "first_at": "2026-10-16T10:20:01.124000",
+        "last_at": "2026-10-17T10:19:00.853000",
+        "path": "/functions/v1/send-push-notifications",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 1,
+        "first_at": "2026-10-16T21:03:04.184000",
+        "last_at": "2026-10-16T21:03:04.184000",
+        "path": "/functions/v1/stocks-master-sync",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 0,
+        "count": 1,
+        "first_at": "2026-10-16T21:08:01.297000",
+        "last_at": "2026-10-16T21:08:01.297000",
+        "path": "/functions/v1/stocks-new-listing-sync",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 415,
+        "count": 1221,
+        "first_at": "2026-10-16T10:20:01.551000",
+        "last_at": "2026-10-17T10:17:00.967000",
+        "path": "/functions/v1/x-test-post",
+        "status": "200",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 7,
+        "count": 11,
+        "first_at": "2026-10-16T13:11:07.324000",
+        "last_at": "2026-10-17T09:02:06.646000",
+        "path": "/functions/v1/x-test-post",
+        "status": "201",
+        "user_agent": "pg_net/0.20.4"
+      },
+      {
+        "after_0200_utc": 1,
+        "count": 2,
+        "first_at": "2026-10-16T11:11:13.786000",
+        "last_at": "2026-10-17T10:19:40.836000",
+        "path": "/functions/v1/x-test-post",
+        "status": "500",
+        "user_agent": "pg_net/0.20.4"
+      }
+    ]
+  },
+  "deployed_source_excerpts": {
+    "deployed_x": {
+      "slug": "x-test-post",
+      "version": 145,
+      "bundle_sha256": "804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895",
+      "updated_at": 1791411094142,
+      "file": "functions/x-test-post/index.ts",
+      "hits": [
+        {
+          "line": 78,
+          "text": "  loadBrandContext,\n} from \"../_shared/brand/brand_context.ts\";\nimport { assertBrandPublishAllowed } from \"../_shared/brand/publish_guard.ts\";\nimport { loadBrandXTokens } from \"../_shared/brand/token_loader.ts\";\nimport { xOAuthClientRegistryFromEnv } from \"../_shared/x_v2_account_refresh.ts\";\nimport { createVaultAccountCredentialRpc, VaultAccountXAuth } from \"./vault_account_auth.ts\";\nimport {"
+        },
+        {
+          "line": 3272,
+          "text": "    supabaseUrl,\n    serviceRoleKey,\n    \"claim_due_post\",\n    {},\n  ) as ScheduledPost[];\n  return result[0] ?? null;\n}"
+        },
+        {
+          "line": 3286,
+          "text": "}\n\nDeno.serve(async (req) => {\n  if (req.method !== \"POST\") {\n    return new Response(JSON.stringify({ error: \"POST method required\" }), {\n      status: 405,\n      headers: { ...jsonHeaders, Allow: \"POST\" },"
+        },
+        {
+          "line": 3358,
+          "text": "          brandId: \"kabumori\",\n        });\n        assertBrandPublishAllowed(brandContext);\n        const tokens = await loadBrandXTokens({\n          context: brandContext,\n          supabaseUrl,\n          serviceRoleKey,"
+        },
+        {
+          "line": 3963,
+          "text": "    }\n\n    const scheduledPost = await claimDuePost(supabaseUrl, serviceRoleKey);\n    if (!scheduledPost) {\n      return jsonResponse({ status: \"idle\", message: \"No post is due\" }, 200);\n    }\n    scheduledPostId = scheduledPost.id;"
+        },
+        {
+          "line": 3977,
+          "text": "      brandId: brandIdFromScheduledRow(scheduledPost.brand_id),\n    });\n    assertBrandPublishAllowed(brandContext);\n    const xAuth: XAuthContext = await (async () => {\n      // Every brand except legacy Kabumori publishes through its own Vault-backed\n      // X account: exact account, exact Vault refs, generic refresh port. The\n      // credential read runs before generation, so a blocked or"
+        }
+      ]
+    },
+    "deployed_news": {
+      "slug": "important-news-monitor",
+      "version": 104,
+      "bundle_sha256": "5bc70ea129f35487987476341805fdad7db3c765c19738e0b6e668460204919a",
+      "updated_at": 1791374686292,
+      "file": "functions/important-news-monitor/index.ts",
+      "hits": [
+        {
+          "line": 670,
+          "text": "async function monitorIsActive(supabaseUrl: string, serviceRoleKey: string): Promise<boolean> {\n  const result = await fetch(\n    `${supabaseUrl}/rest/v1/important_news_monitor_settings?id=eq.true&select=is_active`,\n    { headers: headers(serviceRoleKey) },\n  );\n  if (!result.ok) throw new Error(\"NEWS_MONITOR_SETTINGS_FAILED\");\n  const rows = await result.json() as Array<{ is_active?: unknown }>;"
+        },
+        {
+          "line": 674,
+          "text": "  );\n  if (!result.ok) throw new Error(\"NEWS_MONITOR_SETTINGS_FAILED\");\n  const rows = await result.json() as Array<{ is_active?: unknown }>;\n  return rows[0]?.is_active === true;\n}\n\ntype AutoPublishSettings = {"
+        },
+        {
+          "line": 675,
+          "text": "  if (!result.ok) throw new Error(\"NEWS_MONITOR_SETTINGS_FAILED\");\n  const rows = await result.json() as Array<{ is_active?: unknown }>;\n  return rows[0]?.is_active === true;\n}\n\ntype AutoPublishSettings = {\n  enabled: boolean;"
+        },
+        {
+          "line": 705,
+          "text": "  const params = new URLSearchParams({\n    select: \"id,company_code,company_name,entity_key,feed_url,feed_format\",\n    is_active: \"eq.true\",\n    order: \"company_code.asc\",\n  });\n  const result = await fetch(`${supabaseUrl}/rest/v1/important_news_company_ir_sources?${params}`, {\n    headers: headers(serviceRoleKey),"
+        },
+        {
+          "line": 1372,
+          "text": "  const params = new URLSearchParams({\n    select: \"id,user_id,stocks_master!inner(ticker_code,company_name)\",\n    is_active: \"eq.true\",\n    \"stocks_master.ticker_code\": `eq.${tickerCode}`,\n  });\n  const result = await fetch(`${supabaseUrl}/rest/v1/tracked_stocks?${params}`, {\n    headers: headers(serviceRoleKey),"
+        },
+        {
+          "line": 1661,
+          "text": "): Promise<Record<string, unknown>> {\n  try {\n    const result = await fetch(`${supabaseUrl}/rest/v1/rpc/enqueue_important_news_notifications`, {\n      method: \"POST\",\n      headers: headers(serviceRoleKey),\n      body: JSON.stringify({ p_window_hours: IMPORTANT_NEWS_PUSH_WINDOW_HOURS }),\n    });"
+        },
+        {
+          "line": 1678,
+          "text": "}\n\nDeno.serve(async (req) => {\n  if (req.method !== \"POST\") return response({ error: \"POST_REQUIRED\" }, 405);\n\n  const cronSecret = Deno.env.get(\"IMPORTANT_NEWS_CRON_SECRET\");\n  if (!isConfiguredImportantNewsCronSecret(cronSecret)) {"
+        },
+        {
+          "line": 1681,
+          "text": "  if (req.method !== \"POST\") return response({ error: \"POST_REQUIRED\" }, 405);\n\n  const cronSecret = Deno.env.get(\"IMPORTANT_NEWS_CRON_SECRET\");\n  if (!isConfiguredImportantNewsCronSecret(cronSecret)) {\n    return response({ error: \"SERVER_CONFIGURATION_MISSING\" }, 500);\n  }\n  if (!isValidImportantNewsCronSecret(cronSecret, importantNewsCronSecretHeader(req))) {"
+        },
+        {
+          "line": 1771,
+          "text": "      });\n    }\n    if (body.mode === \"publish_dry_run\" || body.mode === \"publish_ready\") {\n      const dryRun = body.mode === \"publish_dry_run\";\n      if (dryRun && typeof body.candidateId !== \"string\") {\n        return response({ error: \"PUBLISH_DRY_RUN_CANDIDATE_ID_REQUIRED\" }, 400);\n      }"
+        }
+      ]
+    }
+  },
+  "edge_inventory": [
+    {
+      "slug": "x-test-post",
+      "status": "ACTIVE",
+      "version": 145,
+      "verify_jwt": false,
+      "updated_at": 1791411094142,
+      "bundle_sha256": "804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895"
+    },
+    {
+      "slug": "important-news-monitor",
+      "status": "ACTIVE",
+      "version": 104,
+      "verify_jwt": false,
+      "updated_at": 1791374686292,
+      "bundle_sha256": "5bc70ea129f35487987476341805fdad7db3c765c19738e0b6e668460204919a"
+    },
+    {
+      "slug": "stocks-master-sync",
+      "status": "ACTIVE",
+      "version": 40,
+      "verify_jwt": false,
+      "updated_at": 1788498926991,
+      "bundle_sha256": "141063aefa9511ca609a412ef0748083dd11ba3b81f3425a8b6e8d8ca235e575"
+    },
+    {
+      "slug": "stocks-new-listing-sync",
+      "status": "ACTIVE",
+      "version": 39,
+      "verify_jwt": false,
+      "updated_at": 1788498926991,
+      "bundle_sha256": "1dab95557bd205997cd768158c5b1dcf984fbb83a298fdee24f40120c550432b"
+    },
+    {
+      "slug": "send-push-notifications",
+      "status": "ACTIVE",
+      "version": 39,
+      "verify_jwt": false,
+      "updated_at": 1789199846117,
+      "bundle_sha256": "d7881f6daa3003fadbb71418758d2ba0ca834636fd55b4c3573dcb3e7e3d84ca"
+    },
+    {
+      "slug": "x-oauth-connect",
+      "status": "ACTIVE",
+      "version": 42,
+      "verify_jwt": false,
+      "updated_at": 1789531941913,
+      "bundle_sha256": "96a5d3ea5a938a1f972e1a74aa6013f6a18934926ffcd30c2b4fb0f1746b7f98"
+    },
+    {
+      "slug": "personalized-reports",
+      "status": "ACTIVE",
+      "version": 46,
+      "verify_jwt": false,
+      "updated_at": 1790341875757,
+      "bundle_sha256": "2fe1b50edf59a1a6acd8f688d03862f24e1c8ac989f7f79b10cf5aa2af15633b"
+    },
+    {
+      "slug": "market-intelligence-ingest",
+      "status": "ACTIVE",
+      "version": 51,
+      "verify_jwt": false,
+      "updated_at": 1791119428882,
+      "bundle_sha256": "e92dd56f004678a26dd3180f18abfbe2ff6880a4fb3531dab016fccc4bd0c387"
+    },
+    {
+      "slug": "market-intelligence-state-evaluator",
+      "status": "ACTIVE",
+      "version": 36,
+      "verify_jwt": false,
+      "updated_at": 1791357108494,
+      "bundle_sha256": "e54b1d1d06e951bcb2e15290cb7aa5018489d4166ef4207257cc865f05a5e65d"
+    },
+    {
+      "slug": "brand-post-dry-run",
+      "status": "ACTIVE",
+      "version": 29,
+      "verify_jwt": false,
+      "updated_at": 1789301792465,
+      "bundle_sha256": "3ee9b0167cb94d318eabce8ece054643467398367799c6b0b0628a85bb26af58"
+    },
+    {
+      "slug": "market-report-data-packet",
+      "status": "ACTIVE",
+      "version": 24,
+      "verify_jwt": false,
+      "updated_at": 1790688198972,
+      "bundle_sha256": "b7d08f4be6685a3baf2ab784a9c69c86fdee4d11eb577ba4d555480204c4b27e"
+    },
+    {
+      "slug": "market-report-analysis",
+      "status": "ACTIVE",
+      "version": 35,
+      "verify_jwt": false,
+      "updated_at": 1791945094760,
+      "bundle_sha256": "036f46e75ff2528611005b8f379c1f28cfa8707fbe03ef0d6ef7d8f1052db67e"
+    },
+    {
+      "slug": "important-news-shadow",
+      "status": "ACTIVE",
+      "version": 27,
+      "verify_jwt": false,
+      "updated_at": 1790037140691,
+      "bundle_sha256": "559695babe6ddd925ff99df010a1a4798571d41a677e9270cd8e948af2aebe53"
+    },
+    {
+      "slug": "x-oauth-connect-user",
+      "status": "ACTIVE",
+      "version": 23,
+      "verify_jwt": false,
+      "updated_at": 1789856530176,
+      "bundle_sha256": "4cd7375395b92919085032b514ae7c1086238e8b3571dc65aa8421cd722715ef"
+    },
+    {
+      "slug": "social-mobile-brand-dry-run",
+      "status": "ACTIVE",
+      "version": 21,
+      "verify_jwt": true,
+      "updated_at": 1791624805280,
+      "bundle_sha256": "872a17c1e59839cf487822feb9df8e1d1c64f8d8561219ded4338dde12ede01b"
+    },
+    {
+      "slug": "social-mobile-history-learning",
+      "status": "ACTIVE",
+      "version": 21,
+      "verify_jwt": true,
+      "updated_at": 1790135565236,
+      "bundle_sha256": "0ec1bc506e85f1b54ab63dba3b5848598107cfb53549bac4edb3958cc4636979"
+    },
+    {
+      "slug": "account-delete",
+      "status": "ACTIVE",
+      "version": 18,
+      "verify_jwt": true,
+      "updated_at": 1790210823880,
+      "bundle_sha256": "0f1cc97736e3e1add7e3f8068bcb83fec85dc421f83d7fe2a9276b6cb8f60c62"
+    },
+    {
+      "slug": "market-intelligence-scenario-evaluator",
+      "status": "ACTIVE",
+      "version": 15,
+      "verify_jwt": false,
+      "updated_at": 1790666082420,
+      "bundle_sha256": "f58d251118bc728eedea2467fb3e6666ccbc9492c137b6dba7e176b00fcb5c04"
+    },
+    {
+      "slug": "social-mobile-account-delete",
+      "status": "ACTIVE",
+      "version": 13,
+      "verify_jwt": true,
+      "updated_at": 1790687133691,
+      "bundle_sha256": "cc4c90cb958fb774dcc3d3694545b1b91b2cdc3310482eb2b48afb79973d8b4b"
+    },
+    {
+      "slug": "news-discovery-observer",
+      "status": "ACTIVE",
+      "version": 16,
+      "verify_jwt": false,
+      "updated_at": 1791374700407,
+      "bundle_sha256": "9144feebe1f80be3d7c6007bed8db583eacc3f00a5d0c6b2dc7bd819c23954cf"
+    },
+    {
+      "slug": "social-mobile-publish-setting",
+      "status": "ACTIVE",
+      "version": 7,
+      "verify_jwt": true,
+      "updated_at": 1791263432250,
+      "bundle_sha256": "485fa7131cce6353f412bd8bf24c43b2f592273e2da099a9d0509c3660ab7e82"
+    },
+    {
+      "slug": "social-mobile-consult",
+      "status": "ACTIVE",
+      "version": 5,
+      "verify_jwt": true,
+      "updated_at": 1791624801941,
+      "bundle_sha256": "e877fca3068ba2740b3032fc938946eb3c417daa340bfb1792a9a4893992a019"
+    },
+    {
+      "slug": "market-report-broadcast-worker",
+      "status": "ACTIVE",
+      "version": 1,
+      "verify_jwt": false,
+      "updated_at": 1791902194376,
+      "bundle_sha256": "0b6d3756c84cc10f26259fc055d558641cceac00b1031b67e17df7707830d2d8"
+    }
+  ],
+  "cautions": [
+    "cron.job_run_details succeeded means SQL submission success, not downstream HTTP/AI/X success.",
+    "Run-detail LEFT JOIN count=1 with null last_start/last_end is a no-match placeholder, not an invocation.",
+    "No user IDs, notification texts, Expo tokens, OAuth values, request headers, Vault contents or Cron command bodies retained.",
+    "Limited-window logs and trigger heuristics do not prove absence of every external scheduler or transitive RPC path.",
+    "Production continues autonomously; queue count decreased from 3 to 2 during audit without auditor writes."
+  ]
+}
