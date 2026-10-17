@@ -664,3 +664,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 ## F6 PR249 consumer_calls reviewed source candidate — 2026-10-17
 - task_id: `common-ai-f6-postona-consumer-calls-pg-offline-candidate-20261017`, L6 PASS_SOURCE_CANDIDATE; independent Claude PASS_SOURCE_REVIEW P0/P1/P2=0, P3x5; PR249 Draft head `e589e2c39886fde582bd31a4c25fd4f6839fac49`, no merge/deploy/production.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr249-consumer-calls-reviewed.md`; original/archive blob `3b81a3e68e376a6680c142162de3e785f7421f7a`, 11391 chars, read-back match; archive commit `ddee6356b3f42daedc48de366f80fb27a04e9432`. SHA256/MANIFEST independently NOT_VERIFIED.
+
+## F4 POSTONA Threads OAuth stack integration archive — 2026-10-17
+- task_id: `postona-f4-threads-oauth-stack-integration-ios-return-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `1ece8b7a`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-stack-integration-ios-return-20261017/F4.md`
+- bytes: 13570; SHA256: `208ad7922012d3ffe413b639ac968572aa365129f21627091aca109d68a7e1f7`; original_blob: `c685b38cc5eaf0743c52718b24879041c2759dfe`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-token-refresh-source-design-20261017`). L4 accepted, PR251 `3163928d5fa3b8e6984f6350ce5a8faf31d23ffc`, production and pilot NO_GO.
