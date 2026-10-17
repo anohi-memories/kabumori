@@ -56,22 +56,20 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-pr251-android-intent-filter-p2-fix-20261017
+- status: ready
+- task_id: postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
-- recommended_model: Sonnet5（中）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR251 HEAD 3163928d; J2 V2 Android P2; J2 PR258 review independent
-- blocker: production/pilot NO_GO; no real OAuth
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-credential-rotate-cas-sql-contract-20261017/F4.md
-- slot_use: Android callback filter P2 minimal fix and offline regression
+- dependencies: PR258 head 713955b5 and J2 V2 owner-fence race; F5 lifecycle interface coordinated
+- blocker: source candidate only, actual Vault and managed unapproved; production/pilot NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-pr251-android-intent-filter-p2-fix-20261017/F4.md
+- slot_use: minimal CAS SQL owner race P2 correction and PG17 regression
 
-
-- l4_verdict_20261017_android: PASS_SOURCE_FIX / J2_R1_P2_FIXED_IN_SOURCE / LIMITED_RECHECK_PENDING / PRODUCTION_AND_PILOT_NO_GO; PR260 HEAD 8e1534f2fa1d39f8f1c321ed2cf69705fddf1421 Draft.
 ## F5
 - slot: F5
 - status: ready
@@ -185,22 +183,20 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017
+- status: ready
+- task_id: postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
-- recommended_model: Sol（高）
+- recommended_model: Luna（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: PR258 HEAD 713955b5; F4 Android P2 independent
-- blocker: V2 CHANGES_REQUIRED P2 R1 claim owner/fence race; original PG17 proof PASS incl23 mutations, independent race FAIL; production/pilot NO_GO; H5/F5 contracts pending
-- previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017/
-- slot_use: PR258 five-file source-only SQL and PG17 review
+- dependencies: PR260 head 8e1534f2 on PR251, F4 SQL fix independent
+- blocker: managed/real Android App Links validation not authorized, production/pilot NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017/
+- slot_use: read-only two-file Android OAuth callback P2 recheck
 
-
-- v2_verdict_20261017_pr258: CHANGES_REQUIRED / P2 R1 lease owner mismatch after lifecycle fence wait; PR258 unchanged; F4/F5 contract correction required; PRODUCTION_AND_PILOT_NO_GO.
 ## J3
 - slot: J3
 - status: idle
