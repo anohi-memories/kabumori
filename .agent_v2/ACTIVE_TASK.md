@@ -186,17 +186,17 @@
 
 ## J2
 - slot: J2
-- status: ready
+- status: review_required
 - task_id: postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
 - dependencies: PR258 HEAD 713955b5; F4 Android P2 independent
-- blocker: production/pilot NO_GO; managed Vault and H5/F5 owner contracts not validated
+- blocker: V2 CHANGES_REQUIRED P2 R1 claim owner/fence race; original PG17 proof PASS incl23 mutations, independent race FAIL; production/pilot NO_GO; H5/F5 contracts pending
 - previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017/
 - slot_use: PR258 five-file source-only SQL and PG17 review
 
