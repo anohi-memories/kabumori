@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-threads-oauth-stack-integration-ios-return-20261017
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
@@ -69,6 +69,8 @@
 - blocker: Meta OAuth, managed Supabase, device and pilot unapproved; production NO_GO
 - previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-connect-gap-readiness-20261017/F4.md
 - slot_use: source-only Threads stack integration and iOS callback safety
+
+- l4_verdict_20261017_threads: PASS_SOURCE_CANDIDATE / FOCUSED_REVIEW_REQUIRED / PRODUCTION_AND_PILOT_NO_GO; PR251 HEAD 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc, OAuth flags OFF, no real Meta/managed validation.
 
 ## F5
 - slot: F5
