@@ -72,10 +72,10 @@
 
 ## F5
 - slot: F5
-- status: review_required
+- status: done
 - task_id: common-account-f5-postona-disposable-supabase-architecture-plan-20261017
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -87,6 +87,8 @@
 - review_required: restricted Phase12 #233 safety check only before future managed apply
 - slot_use: read-only/source-only POSTONA disposable Supabase architecture design; NO project creation, migration, real OAuth/SNS, merge/deploy
 - latest_result: 2026-10-17 JST DESIGN_COMPLETE_SOURCE_ONLY; Draft PR250 head 2a626cd49f55611258c7695f0b84cb2a917d4595 on PR233 499a9e1f; 17 new offline tests / 101 harness tests PASS; F4 PR243 preflight REFUSED (10 failing) as designed; finding F-1: Phase12 contract misses ensure_my_profile() and social_accounts.platform (oracle, local PG17); no managed/production access, no project, no inventory; production NO_GO
+
+- l5_verdict: PASS_SOURCE_DESIGN / PRODUCTION_NO_GO (2026-10-17); PR250 head 2a626cd49f55611258c7695f0b84cb2a917d4595; 6 new files, 101 offline tests reported; baseline contract F-1 and inert X stand-in F-2 block managed validation; next task needs archive before overwrite.
 
 ## F6
 - slot: F6
