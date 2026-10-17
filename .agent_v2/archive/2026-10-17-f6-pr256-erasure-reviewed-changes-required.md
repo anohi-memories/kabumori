@@ -1,0 +1,132 @@
+# F6 — POSTONA AI台帳 user_id 匿名化と安全な削除契約（source-only）
+- task_id: common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017
+- owner: claude
+- slot: F6
+- status: done
+- next_owner: none
+- start_code: F6
+- completion_code: L6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- production_permission: NO_GO
+- production_mutation_window: CLOSED
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr249-consumer-calls-reviewed.md
+- dependency: Draft PR #249 exact HEAD e589e2c39886fde582bd31a4c25fd4f6839fac49 on #241; #249 independent Claude PASS_SOURCE_REVIEW P0/P1/P2 none, P3 x5; underlying Draft Provider/Bridge stack.
+- handoff_to_F5: F5/G5 owns account/service deletion orchestration and entitlement revocation. F6 must not change F5 code without separate coordination.
+
+## 目的
+PR249 independent reviewの本番blockerのうち、既存 `ai_ledger` reservations/usage_events/budget_bucketsに残るuser_idの不可逆的な仮名化（削除・再識別不能性は確認対象）、`ai_calls.forget_user`との安全な順序、削除直後の再claimリスクの抑止を、**本番未適用のソース候補と独立ローカルPostgreSQL検証**として作る。個人情報や会計監査の保持義務との整合は推測せず設計で明記。POSTONA運用は継続保護。
+
+## 前提と作業開始ゲート
+PROJECT_RULES、旧新ORCHESTRATION/ACTIVE_TASK/CURRENT_STATE最新metadata、F5 Phase13進行状況、G5/POSTONA G3/G4/F3/F4/H5/旧G6/F6のowner、PR249/241最新HEADとPR変更対象、fresh origin/main、独立clean worktree、task_id重複、migration timestamp/DB schema/SECURITY DEFINERの新旧競合を検査。今回F5は別Phase13 TASKがreview_requiredなので、削除フローや共通アカウントの実装は触れず、依存契約のみ整理。競合すればSTOP/Report。
+
+## ソース候補の範囲
+1. 既存 `20261010050613_ai_provider_budget_ledger.sql` と現行台帳関連migration/trigger/RPCの正本をread-only解析。追記専用、監査・請求費用の意味と未確定/upper_bound計上を守る。
+2. **新規migration候補のみ**で、対象ユーザー識別子の保持/匿名化/削除手続、admin(service_role)-only実行可能性、RLS/SECURITY DEFINER/search_path、既存台帳のimmutability例外の最小性、他ユーザー影響ゼロ、row count/footprint read-back、監査可能性を設計しテスト。不可逆変換、衝突防止、匿名化後の再関連付け、FK/一意性を検証する。user_idの変更が監査に与える影響を明示し、法務/保持ポリシー未確定ならproduction blocker。
+3. `ai_calls_forget_user` に先立つentitlement停止と、bridge最大deadline >=60s経過/全inflight消滅、以後同主体の再claim禁止が成立するかローカルで検証。外側のアプリ認可の正式停止はF5/G5責任。P3の `forget_user` 後再claim、rollback時の行消失、system+brand_refの扱いは安全なrunbook/テストを作り再レビュー不要の範囲で対処。回避不能なら未完了blockerとして切り出す。
+4. `purge_content`定期処理、`recover_stale`→`abandon`の安全な運用（実Cron作成禁止）は、監査/削除保持方針・idempotencyと併せ**運用設計・非本番mock**を作る。削除対象と保持期間未確定は明示する。
+5. F5へ渡す「account deletion integration contract」を文書化：呼び出し主体/権限/epoch、stop entitlement → wait deadline+inflight → ai_calls.forget_user → ai_ledger匿名化 → deletion footprint確認 の順序候補、冪等性・再試行・部分失敗・補償動作・全段階のreadback。順序は実際のSQLと認証境界を見て妥当性確認し修正する。
+6. 既存PR249 migration、既存ledger migration、F5/Auth/POSTONA/Edge/H5 Bridge/既存Cron、isolation/課金ロジックの書き換え禁止。既存台帳の意味を変える必要があればSTOPして別owner確認。検証対象SQLは新規追加の候補のみ。
+
+## テスト・安全
+新規migration候補や純粋なテスト/設計を独立worktreeで追加可。本番・managed Supabaseへの接続（read-onlyも含む）、実DB適用、Secret、実Anthropic/OpenAI API課金、実SNS投稿、Cron作成/起動、merge/deployは禁止。検証は隔離したローカルPostgreSQL 17でのみ許可。権限matrix、匿名化前後の監査/請求整合、cross-user、並行claimと削除、リトライ、異常中断、rollback、P3残余リスクを重点検査。安全なローカル環境が無ければソース分析だけでSTOP/NOT_VERIFIED。
+
+## 完了条件
+変更対象一覧、SQL候補とテスト、F5/G5に引き渡すowner別契約、retention/privacyの未決、PR head/base/readback、ローカルDB隔離証跡、テスト結果、remaining_issuesをReportに記載。PRはDraft、source-only、production NO_GO。DB/RLS/SECURITY DEFINERを新規変更した場合は既存PR249と重複しない変更部分のみ**独立限定レビュー**を別途判断。Codex自動投入・旧レビューの反復禁止。完了時 status review_required / next_owner chatgpt / L6。
+## Report
+- task_id: common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017
+- result: **SOURCE_CANDIDATE_DONE（Draft PR #256）。台帳の利用者 ID を消す migration の候補＋削除の順番の決まり（F5 / G5 向け）＋ P3 3 件への対応＋後片付けの見本。ローカルの PostgreSQL だけで runner の 10 の部分すべて PASS、わざと壊した写し 26/26 を検出**
+  - どの DB にも適用していない。Supabase・本番には読むだけでも接続していない。有料の呼び出し・SNS への投稿・Cron の作成・merge・deploy・Secret の変更は 0
+  - 既存の migration（台帳・#249）のファイル、F5 / 認証 / POSTONA / Edge / H5 bridge / 既存の Cron、isolation・課金の実装は変えていない。台帳の 2 つの trigger の中身は、**新しい migration の候補の中で**置き換える（下の「例外」）
+- branch / commit / PR
+  - `claude/f6-ledger-user-erasure-20261017`（新しい独立した worktree `/Users/yuya/Developer/kabumori-f6-ledger-erasure`、#249 の head `e589e2c39886fde582bd31a4c25fd4f6839fac49` から作成）
+  - commit `1830320bd93fcfa458411dcf00f130d87d607d39`（push 済み、`git ls-remote` で同じ値を確認）
+  - Draft PR [#256](https://github.com/anohi-memories/kabumori/pull/256)。読み返し: OPEN / Draft、base `claude/f6-postona-consumer-calls-pg-20261017`（#249、`e589e2c39886fde582bd31a4c25fd4f6839fac49`）、head `1830320bd93fcfa458411dcf00f130d87d607d39`、11 ファイル、MERGEABLE
+- 作業前の確認
+  - fresh main `4b659249acd335b1a692c170ffd9c7bcd865676e`。task_id の重複なし。F5（Phase13、#250 `2a626cd49f55611258c7695f0b84cb2a917d4595`）は done、F3 / F4 も done、旧 G3 / G4 / G5 / G6 / H5 も done
+  - migration の衝突なし: 開いた PR の migration の最新は #249 の `20261017120000`。この候補 `20261017150000` はどれとも重ならない。台帳・call store のファイルに触れる開いた PR は #249 だけ（この stack の土台）
+  - #249 の独立レビューの P3（5 件）の本文はリポジトリに無く、TASK に書かれた 3 件（forget_user 後の再 claim、rollback で行が消える、system＋brand_ref）に対応。残り 2 件は **NOT_AVAILABLE**
+- changed_files（11、すべて新規）
+  - `supabase/migrations/20261017150000_ai_ledger_user_erasure.sql`（候補）
+  - `supabase/tests/ai_ledger_user_erasure_run.sh` / `_behavior.sql` / `_fixture.sql` / `_facts.sql` / `_rollback.sql` / `_mutations.sh`（確認と rollback）
+  - `supabase/tests/ai_consumer_call_store_rollback_preflight.sql`（P3: #249 の rollback の前に読むだけで確かめる）
+  - `supabase/tests/ai_call_store_maintenance_mock.ts` / `_test.ts`（定期の後片付けの見本、本番に出さない）
+  - `docs/ai-provider/F6_POSTONA_LEDGER_USER_ERASURE_CANDIDATE.md`
+- 中身（docs §2〜§5）
+  - 消し方: 案 5 つを比べ、**削除のたびに新しいランダムの「消した人」の ID 1 つに置き換える**案を採用
+    - 形は `00000000-0000-0000-…`（version 0、62 bit のランダム）なので、本物の ID（version 4）とぶつからない
+    - 元の ID から計算しない。一緒に保存しない。RPC も返さない
+    - 対象は予約・利用の記録・利用者ごとの桶・利用者だけの枠（無効にする）。ほかの列・合計・時刻は 1 文字も変えない。桶の `updated_at` も変えない（消した時刻を残さないため）
+  - 例外（最小）: 消す関数の取引の中だけで立つ印があり、その利用者の行で、`user_id` だけが本物 → 消した人の形に変わる更新だけを通す
+    - 変わる既存の定義はちょうど 2 つ（`ai_ledger.reservation_transition`、`usage_events_append_only` の関数）
+    - 次はどれも、今までと同じ error で断る: 印なし、ほかの列も一緒に変わる、別の人の行、本物の形への付け替え、消した人 → 本物、消した人 → 別の消した人、削除、truncate
+  - RPC 4 つ（SECURITY DEFINER・`search_path = ''`・service_role だけ。2 つの schema の権限を適用の最後に確かめる）
+    - `ai_ledger_erase_user`: 保存の場所に行が残る・送信中の試みがあるときは断る。利用者の lock と予約の lock を取り、最後に台帳と保存の場所に ID が残っていないことを確かめる。冪等
+    - `ai_ledger_user_footprint`: 数だけ
+    - `ai_calls_forget_system_brand`: `u_`＋16 進 24 文字だけ、system の行だけ、処理中なら断る
+    - `ai_calls_recovery_candidates`: 利用者 ID・brand・結果を返さない
+  - 消しても残るもの（docs §5）: 消した人の行どうしのつながり、`request_id`（利用者 ID と operationId の一方向のハッシュ）、`provider_request_id`、DB の物理的な痕跡とバックアップ・PITR、サーバーの記録。**法的・保持の判断はしていない**（本番の前の決めごと）
+- F5 / G5 に渡す決まり（docs §6、調査で今の削除の流れを確認）
+  - 順番:
+    1. POSTONA の入口は利用権が active のときだけ認可する
+    2. 利用権が `ended` になった後、60 秒＋余裕を待つ
+    3. `ai_calls_forget_user`
+    4. `ai_calls_forget_system_brand`（ワークスペースの slug）
+    5. `ai_ledger_erase_user`
+    6. 読み返し `ai_ledger_user_footprint` が全部 0 → checkpoint
+    7. ログインの削除の直前にもう一度（最後の掃除）＋ `residue` に AI の数を足す
+  - どれも冪等、1 回の取引で全部か何もしないか。断られたら後片付けを待ってやり直す。取り消しは要らない
+  - **F5 の変更が要る**: checkpoint の名前と書き込みの口（今は `session_revocation` / `storage_cleanup` だけ）、`residue` への AI の数の追加、X の saga の `social_and_login` の経路（共通アカウントの流れの外でログインを消す）の扱い
+- P3（docs §7）
+  - forget_user 後の再 claim: 上の順番＋消す関数が断る＋読み返し＋最後の掃除
+  - rollback で行が消える: 読むだけの preflight（処理中・24 時間より新しい行があれば止める）
+  - system＋brand_ref: 専用の RPC と、読み返しの brand の数
+- 定期の後片付け（docs §8）
+  - 順番: `recover_stale` → 一覧 → abandon（audit は bridge の登録と台帳から作る。登録に無い機能は推測しない）→ 出力の削除
+  - 冪等。頻度の案は 5〜10 分。**Cron は作っていない**（別承認）
+- tests（ローカルの PostgreSQL 17.11 だけ。`listen_addresses = ''`、Unix socket `/private/tmp/f6er-sock`、データは作業用のフォルダ、クラスタの識別子 `7697622470591612174`。runner が毎回 TCP なしを確かめる）
+  - runner の 10 の部分: **すべて PASS**
+    - isolation: PASS
+    - behaviour:
+      - 保存の場所なし → 断る、持ち主でない → 断る（どちらも catalog 不変）
+      - 2 回目の適用は失敗して不変
+      - 振る舞いの 10 項目すべて: 断る場合、消し方（他の人の行・合計・要約が不変、ID がどの表にも残らない）、元に戻せないこと、冪等、例外の範囲 11 通り、権限、system＋brand、一覧、削除の順番の通し（遅れた claim も最後の掃除で 0 に）、予算が動き続けること
+    - supabase の既定の権限、superuser でない持ち主: PASS
+    - legacy（この候補を入れた後）: 台帳のテスト 18 項目、#249 の保存の場所のテスト 14 項目、本物の H5 bridge の e2e 9 件がそのまま PASS
+    - concurrency: PASS
+      - E1: 同じ人を 20 本同時 → 1 本が実行、19 本は 0 件
+      - E2: 20 人同時 → 自分の行だけ、合計不変
+      - E3: 削除中の予約は待つ
+      - E4: 削除中の claim は利用者の lock で待つ
+      - E3・E4 とも、読み返しと掃除のやり直しで 0 に
+    - adverse: 危ない権限の形 7 通りを拒否、catalog 不変: PASS
+    - rollback: 変わる既存の定義はちょうど 2 つ、データ不変、rollback で catalog が完全に戻る、消したものは戻らない: PASS
+    - preflight（P3）: PASS
+    - maintenance（見本、2 回目は何も変えない）: PASS
+  - わざと壊した写し: **26 killed / 0 survived**（例外の条件 7、消す RPC 10、保存の場所の補助 6、権限 3）。最初は 1 個見逃した → テストを強めて検出
+  - `migration_source_invariants_test.ts`（共通、変更なし）: 11 PASS
+  - main（`88ed1dc3f8a8476583a9bb496dd286f907e07e2f`）と合わせた木（merge-tree `528c889e9ab0c842be784e67f701b9788d3994e7`、衝突なし）: この runner の 10 の部分＋ #249 の runner の 10 の部分すべて PASS、共通AI基盤＋市況レポート＋ bridge 546 PASS / 0 FAIL、invariants 11 PASS
+  - lint（`--no-config`）0 件、`git diff --check` OK、秘密情報の文字列 0
+  - NOT_RUN: Supabase の本物の環境、PostgREST（本物）、`_shared` 全体の既知の型エラー 5 件・権限で止まる 1 件
+  - 後片付け: ローカルのクラスタを止め、データ・socket のフォルダ・合わせた木を削除
+- collision: 新しい 11 ファイルに触れる開いた PR は無い（開いた PR 118 本を確認）。読み返し（すべて OPEN / Draft、head は変わっていない）
+  - 土台の stack: #249 `e589e2c39886fde582bd31a4c25fd4f6839fac49`、#241 `84cfcd4c0b9916bed0f5e2897f24f6ffd4c443e6`、#239 `f590b80fbbaa926be08d5e215ad87b373f402ff2`、#237 `d0c85b3e7f1247333ae132a8cc15e2c16bc183bb`、#234 `2ba13ee17f75eff129048e630efbd3faa3bd9232`、#231 `2a696aff24be01538bd0d9c5a1eb0afa07421483`、#222 `11835df1b99f4f3f23006af7f1a27ea6ae51f0e4`、#219 `be35cc93205fedd6af1321aaeb1fc38d71e9b946`、#205 `4cd2cbdd51a68bc537cd0fc81dc8f1c7ee059f21`、#198 `4223d5c01389474406291c8e4578207e317638b9`、#187 `a7e1d3f3f6b3812e9b8b0c0f7c29835e25505d6b`
+  - F5: #250 `2a626cd49f55611258c7695f0b84cb2a917d4595`
+- remaining_issues / 本番の前の決めごと（docs §9）
+  1. 法的・保持の判断: 仮名にした台帳の記録を会計のために残してよいか、何か月か。プライバシーの告知
+  2. F5 / G5 の変更: 削除の流れへの組み込み、checkpoint、`residue`、`social_and_login` の経路
+  3. POSTONA の入口での利用権の確認（#241 の設計の実装）
+  4. 新しい部分だけの独立の限られたレビュー（台帳の例外、4 つの RPC、lock の順番。#249 と重ならない部分）
+  5. 本番の適用の承認（台帳 → 保存の場所 → この候補）、後片付けの仕事の承認
+  6. NOT_VERIFIED: Supabase のバックアップ・PITR・記録の保持、Anthropic 側の保持、P3 の残り 2 件
+  - rollback の順番: この候補 → 保存の場所（preflight の後）→ 台帳
+- production: **NO_GO**
+- next_owner: chatgpt（独立の限られたレビューを出すかの判断。F5 / G5 への決まりの受け渡し）
+- recommended_model: 独立のレビューは Opus 5.5（高）または Sol（高）。F5 の組み込みは Opus 5.5（高）
+
+## L6 decision 2026-10-17
+- verdict: PASS_SOURCE_CANDIDATE / FOCUSED_REVIEW_REQUIRED / MERGE_HOLD / PRODUCTION_NO_GO
+- verified PR256 OPEN Draft HEAD 1830320bd93fcfa458411dcf00f130d87d607d39, base #249 candidate, 11 changed files, unmerged.
+- implementer-reported local PostgreSQL 17.11 isolation, 10 sections PASS, mutation26/26, legacy & bridge9, integrated546 PASS. Independent execution NOT_RUN. Managed Supabase and live PostgREST NOT_VERIFIED.
+- focused independent review ONLY new ledger immutability exceptions/4 SECURITY DEFINER RPCs/cross-user concurrency/user-erasure contract. Previous PR249 approved areas not reviewed again.
+- blockers: F5/G5 deletion integration, entrypoint entitlement enforcement, live retention/privacy decisions, scheduled cleanup, remaining P3 details, production approval. No permission for merge/deploy/paid calls/managed DB changes.
