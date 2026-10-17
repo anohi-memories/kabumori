@@ -371,6 +371,8 @@ done here):
 | the legacy `social-mobile-account-delete` | **not deployed** on the disposable (a call answers 404) except as the inert stand-in, which refuses every action but `preview` / `run`, and `run` only for a user with no X workspace | the client closure is #197 (`apps/social-mobile/docs/j5-postona-deletion-boundary.md`, pinned in `external`); the **server** closure is F3 / G3's and is **not claimed** here |
 | the real saga, if ever deployed | answers `SCOPE_CHANGED` when the requested scope differs from the current one (`supabase/functions/social-mobile-account-delete/delete_logic.ts:156`); `social_and_login` is its login-deleting scope | separate approval, F3 |
 
+*(Update, D-2 implemented: the stand-in is a testing-only injection at the F5 validation-harness boundary, NOT a deployed Edge function — see `docs/common-account/phase13-d2-x-saga-standin.md`. It validates F5's orchestration on a local synthetic database; managed M12, which needs a saga reachable inside the project, stays blocked. The paragraph below is the earlier proposal, kept as history.)*
+
 The stand-in (D-2) is a new Edge source that does not exist yet: a pinned, reviewed function that answers `preview` with
 `{ ok: true, scope: 'social_only', state: 'none' }` and `run` with the saga's success shape for a user with no X workspace, imports
 nothing, calls no URL, and refuses everything else. Its contract belongs to F3 / G3; F5 pins its bytes in a lock like the
