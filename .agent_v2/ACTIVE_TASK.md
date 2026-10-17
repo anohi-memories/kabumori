@@ -74,23 +74,20 @@
 - l4_verdict_20261017_android: PASS_SOURCE_FIX / J2_R1_P2_FIXED_IN_SOURCE / LIMITED_RECHECK_PENDING / PRODUCTION_AND_PILOT_NO_GO; PR260 HEAD 8e1534f2fa1d39f8f1c321ed2cf69705fddf1421 Draft.
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017
+- status: ready
+- task_id: common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: G4 D-2_IMPLEMENTATION_GO and F3/G3 PASS_CONTRACT_REVIEW; PR254/250/233, F3 PR204 and F5 PR214
-- blocker: R2' POSTONA-only real X scope unresolved; G3 T13; managed unapproved, production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-baseline-contract-extend-20261017/
-- review_required: conditional, no automatic wide review; Phase12 #233 P2x4 focused gate remains independent
-- slot_use: testing-only dependency-injected inert X saga stand-in; no production X cleanup, F3/G3/F4/F6, Auth, DB, OAuth, SNS or deployment
-- latest_result: 2026-10-17 JST SOURCE_CANDIDATE_COMPLETE; Draft PR259 head 422c101aff4bb475db075abf2c0e9423582069ae on PR254 503a6ca8; offline inert X saga stand-in injected only at the F5 harness boundary (deps.x / deps.rpc / fake network routes), single registered simulated->done conversion, structural production exclusion E1-E6 + tripwires + X-side DB observer; 36 stand-in + 151 harness + 143 account-delete + 10 PG17 e2e tests, 38/38 new and 35/66/37/49 old mutants; no production/managed access; R2' (F3), T13 managed/enabled-publish legs (PR257 source candidate only), managed M12, #233 limited recheck remain; production NO_GO
-
-- l5_verdict: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO (2026-10-17); PR259 Draft HEAD 422c101aff4bb475db075abf2c0e9423582069ae, inert simulated X only, no production paths. Reported 36 stand-in, 151 harness, 143 account-delete, 10 PG17 E2E PASS; 38/38 mutations; R2' and managed M12 remain blocked. Archive before reuse.
+- dependencies: Phase13 PR259/254/250, Phase12 PR233, F4 #243; F3 R2'/T13 unresolved
+- blocker: hosted project, production schema catalog, migration/deploy, OAuth and actual managed validations NOT approved; PRODUCTION_NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/
+- review_required: Phase12 #233 independent focused P2x4 pre-apply gate, no broad review
+- slot_use: source-only hosted disposable Supabase preflight/cost/go-no-go readiness; no real Supabase action
 
 ## F6
 - slot: F6
