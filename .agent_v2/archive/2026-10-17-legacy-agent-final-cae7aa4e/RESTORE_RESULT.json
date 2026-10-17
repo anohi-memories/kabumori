@@ -1,0 +1,13 @@
+{
+  "source_commit": "cae7aa4e8d90dc58b314dec5430187ddbb7fda08",
+  "restored_files": 33,
+  "manifest_files": 33,
+  "complete_path_set": "PASS",
+  "size_sha256_blob_source_bytes": "PASS",
+  "mismatches": [],
+  "sha256sums_check": "PASS",
+  "sha256sums_ok_lines": 33,
+  "restore_directory": "a new empty directory outside the repository (removed after the test)",
+  "existing_archive_mutations": 0,
+  "legacy_mutations": 0
+}
