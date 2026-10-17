@@ -720,3 +720,7 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - bytes 21903, SHA256 `a11d31fdd31fa3c44be0a19d195c9e4afd95589923d490968c597073334bdb3f`, original/restored blob `cfded2dabdb48617fa3425be25c42665b7ee4cdf`, exact read-back match, MANIFEST and SHA256SUMS recorded, append-only.
 
 - 2026-10-17 | F10 | `orchestration-v3-incremental-index-fastpath-f10-20261017` | L10 PASS（V3の索引の差分更新）; Draft PR229 HEAD `27e1e33bb50b612ada9bc83e37a4fac129586a2e`; 55 tests, 4 GET/21,760 bytes/1.6秒（読み取りのみ） | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-incremental-index-fastpath-f10-20261017/` | SHA256 `1183bb63fd70aa9d2d5b64f58c03dfd4660fe51932f04a0bab7817b32a8ab6f8`; blob/byte restoration verified.
+
+## F6 PR261 focused privacy P2 source fix archive — 2026-10-17
+- task_id: `common-ai-f6-pr256-policy-pii-erasure-p2-fix-20261017`; L6 PASS_SOURCE_FIX / PRODUCTION_NO_GO; PR261 Draft, head `017c7eb7803a134e83d1f128576b62bc69b4fcb4` at verification.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr261-privacy-source-fix.md`; blob original/archive `30ec6313fb38eb86527b51be22d006915021c065`, 11842 characters, Git blob read-back match; archive commit `553d81d257b1693cb8f5562f26445aa80d639c3e`. Independent SHA256/MANIFEST not verified.
