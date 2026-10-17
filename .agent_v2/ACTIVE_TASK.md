@@ -154,7 +154,7 @@
 
 ## F10
 - slot: F10
-- status: ready
+- status: in_progress
 - task_id: orchestration-v3-final-legacy-snapshot-and-pilot-readiness-f10-20261017
 - owner: claude
 - next_owner: claude
