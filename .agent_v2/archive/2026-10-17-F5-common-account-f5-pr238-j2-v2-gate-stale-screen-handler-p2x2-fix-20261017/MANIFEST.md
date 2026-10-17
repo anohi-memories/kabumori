@@ -1,0 +1,11 @@
+# F5 completed TASK archive
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-17-F5-common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017/files/.agent_v2/tasks/F5.md
+- size_bytes: 13886
+- SHA256: 870a151a03d1ef954daf11a2ccaf37644000005d0be2a9a14535d8f756592b85
+- original_blob: 613352853abee5daa675c7b48b076fadd1e3c817
+- archive_blob: 613352853abee5daa675c7b48b076fadd1e3c817
+- source_task_id: common-account-f5-pr238-j2-v2-gate-stale-screen-handler-p2x2-fix-20261017
+- restore_verification: exact UTF-8 content and Git blob matched on read-back 2026-10-17
+- prior_PR: https://github.com/anohi-memories/kabumori/pull/240
+- archive_policy: append-only
