@@ -72,10 +72,10 @@
 
 ## F5
 - slot: F5
-- status: ready
+- status: review_required
 - task_id: common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -86,6 +86,7 @@
 - previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/
 - review_required: Phase12 #233 independent focused P2x4 pre-apply gate, no broad review
 - slot_use: source-only hosted disposable Supabase preflight/cost/go-no-go readiness; no real Supabase action
+- latest_result: 2026-10-18 JST D-3_SPEC_COMPLETE; Draft PR 265 head 65f723a2169f113bba9053526a2d36a49807ac59 on PR259 422c101a; hosted disposable preflight package (gates PG1-PG7 with separate en/ja consent phrases, read-back sheet verifier, sourced+dated cost envelopes E0=USD0/E1=USD25, PG2a/PG2b split); findings: pg_dump --schema-only needs SELECT (CONNECT-only login cannot), CONNECT-only login creation is a production write, D-2 stand-in is not deployable so hosted M12 excluded, F4 preflight refuses an auth-callback-only list; 165 harness + 14 package tests, 43/43 new mutants, F4 refusal and dump-privilege scripts PASS; no managed/production access, no project, no login, no spend; no gate open; production NO_GO
 
 ## F6
 - slot: F6
