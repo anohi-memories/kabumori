@@ -188,19 +188,19 @@
 
 ## J2
 - slot: J2
-- status: ready
+- status: review_required
 - task_id: postona-j2-pr238-auth-cross-user-review-20261017
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
 - dependencies: PR238 b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6
-- blocker: limited Auth/cross-user source review pending; production NO_GO
+- blocker: CHANGES_REQUIRED P2×2: embedded management flow lost after new-login ready; obsolete reenroll callback send-time owner/epoch/request fence missing (user-switch form inherited). Production NO_GO.
 - previous_archive: .agent_v2/archive/2026-10-17-J2-focused-review-closed/
-- slot_use: POSTONA G1/G2 joint integration focused review
+- slot_use: PR238 focused review complete; existing68 PASS, adverse3 PASS/3 FAIL (2 causes), baseline1 PASS; return V2 to POSTONA G4ちゃ. No product or production changes.
 
 ## J3
 - slot: J3
