@@ -94,11 +94,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-postona-claude-bridge-integration-preflight-20261017
 - owner: claude
-- next_owner: chatgpt
-- blocker: PREFLIGHT_DONE source-only Draft PR #239 (f590b80f, base PR237 d0c85b3e): docs contracts for POSTONA consult + post generation via H5 bridge (one-JSON consult input with POSTONA sanitizer as validateFacts, {text} post wrapper, user subject without slug brand, operationId, error mapping, Haiku proposal) + offline contract test 6 PASS; nothing wired; blockers: personal data to Anthropic (standing rule) + privacy notice, ledger POSTONA policies (DB), durable call store (DB), slug brand / cron subject, per-user quota + entitlement, isolation allowlist F6+H5, static pins, paid quality check, x-test-post deploy bundle; provider153 bridge27 market324 merged541 PASS; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_PREFLIGHT PR239; personal data transfer to Anthropic requires explicit policy decision; billing/entitlement/durable idempotency and F4 integration remain; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
