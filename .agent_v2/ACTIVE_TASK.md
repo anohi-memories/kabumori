@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-threads-oauth-connect-gap-readiness-20261017
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Sonnet5（高）
@@ -69,6 +69,8 @@
 - blocker: real Threads OAuth and Meta testing unverified; production NO_GO
 - previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-sandbox-isolation-preflight-20261017/F4.md
 - slot_use: source-only integration gap audit
+
+- l4_verdict: PASS_GAP_AUDIT / IMPLEMENTATION_REQUIRED / PRODUCTION_NO_GO; PR247 27e2135c041fb8c37bbf9c68adbe4f6fa66ea5e8 Draft; no real OAuth or production use.
 
 ## F5
 - slot: F5
