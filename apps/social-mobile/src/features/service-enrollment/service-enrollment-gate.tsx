@@ -21,6 +21,7 @@ import {
 import { getSupabaseConfig } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import AccountDeletionScreen from '@/app/account-deletion';
+import { useLifecycleEpoch } from '@/features/service-enrollment/lifecycle-epoch';
 
 // Each request carries the access token of the session it was started for -- never a shared client's
 // later token -- and the gate cancels it (unsent) when the person signs out, or another person or another
@@ -35,13 +36,17 @@ function transportFor(context: EnrollmentContext) {
 
 const enrollment = createEnrollmentGate((context, signal) => startServiceAutomatically(transportFor(context), 'x_autopost', signal));
 
-type Owner = { userId: string | null; loginId: string | null };
+// Everything the gate decided belongs to ONE person, ONE login (the token's session id) and ONE lifecycle epoch
+// (the count of times that person's service-end surface reported an answered end). A different epoch is a
+// different question: what was decided at epoch N is never what the app is opened on at epoch N+1.
+type Owner = { userId: string | null; loginId: string | null; epoch: number };
 type GateView =
   | (Owner & { request: number; kind: 'loading' })
   | (Owner & { request: number; kind: 'error' })
   | (Owner & { request: number; kind: 'outcome'; outcome: EnrollmentOutcome; noticeAcknowledged: boolean });
 
-const isOwner = (owner: Owner, userId: string | null, loginId: string | null) => owner.userId === userId && owner.loginId === loginId;
+const isOwner = (owner: Owner, userId: string | null, loginId: string | null, epoch: number) =>
+  owner.userId === userId && owner.loginId === loginId && owner.epoch === epoch;
 
 /**
  * Real-data sessions are enrolled in X autopost (common-account `x_autopost` entitlement) before the
@@ -49,6 +54,12 @@ const isOwner = (owner: Owner, userId: string | null, loginId: string | null) =>
  * credential and enables no publishing; "Xを接続" remains the separate posting authorization. A refused
  * or ended enrollment keeps the app closed; an ended one is restarted only by the person's own click,
  * sent at once for that person and login. The local mock preview is never gated.
+ *
+ * A lifecycle signal for the person signed in (their epoch changed: the service-end surface saw an answered
+ * end) discards the decided answer at once, so the app is closed in that very render, and asks the server
+ * again with the CURRENT login's token. The signal carries no verdict: only the server's answer opens the app
+ * again, and that ask is the automatic start, which never restarts an ended service. A signal for someone
+ * else is invisible here (the epoch read is the signed-in person's own).
  */
 export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   const { session } = useAuth();
@@ -56,13 +67,16 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   const accessToken = session?.access_token ?? null;
   // The login of this session; null when the token cannot be identified (never enrolled, never ready).
   const loginId = userId && accessToken ? loginSessionIdOf(userId, accessToken) : null;
+  const epoch = useLifecycleEpoch(userId);
   const selection = useMemo(() => selectDataSource(), []);
-  const [view, setView] = useState<GateView>({ userId: null, loginId: null, request: 0, kind: 'loading' });
+  const [view, setView] = useState<GateView>({ userId: null, loginId: null, epoch: 0, request: 0, kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   // Every automatic run and every click is one request; only the latest may change the view.
   const request = useRef(0);
   // The person and login the gate shows now; queued work and answers only apply while they are unchanged.
-  const currentOwner = useRef<Owner>({ userId, loginId });
+  const currentOwner = useRef<Owner>({ userId, loginId, epoch });
+  // The person and epoch the previous run of the automatic effect asked for (to tell a lifecycle signal from a retry).
+  const askedFor = useRef<{ userId: string | null; epoch: number }>({ userId, epoch });
   const explicitInFlight = useRef(false);
   // The deletion view is opened for one user only; another user never inherits it.
   const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
@@ -71,12 +85,17 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   useEffect(() => () => enrollment.reset(), []);
 
   useEffect(() => {
-    currentOwner.current = { userId, loginId };
-  }, [userId, loginId]);
+    currentOwner.current = { userId, loginId, epoch };
+  }, [userId, loginId, epoch]);
 
   // Automatic enrollment for the current login (first render, another person, another login of the same
-  // person, an explicit retry). A token refresh of the same login does not re-enroll.
+  // person, a lifecycle signal for this person, an explicit retry). A token refresh of the same login does not
+  // re-enroll.
   useEffect(() => {
+    // A new epoch for the SAME person: the remembered answer is dropped (and any pending request cancelled
+    // unsent) so that the ask below really goes to the server instead of reusing what was decided before.
+    if (askedFor.current.userId === userId && askedFor.current.epoch !== epoch) enrollment.reset();
+    askedFor.current = { userId, epoch };
     if (selection.kind === 'mock' || !userId || !accessToken) return;
     const mine = ++request.current;
     let cancelled = false;
@@ -84,32 +103,32 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
     // before anything is sent: a cleanup since it was queued (unmount on sign-out or recovery, another
     // person or login, a retry) or a newer request cancels it unsent, so it cannot recreate gate state.
     void Promise.resolve().then(async () => {
-      if (cancelled || mine !== request.current || !isOwner(currentOwner.current, userId, loginId)) return;
+      if (cancelled || mine !== request.current || !isOwner(currentOwner.current, userId, loginId, epoch)) return;
       try {
         const outcome = await enrollment.ensure({ userId, accessToken });
-        if (!cancelled && mine === request.current) setView({ userId, loginId, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });
+        if (!cancelled && mine === request.current) setView({ userId, loginId, epoch, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });
       } catch (failure) {
         if (failure instanceof EnrollmentCancelledError) return;
-        if (!cancelled && mine === request.current) setView({ userId, loginId, request: mine, kind: 'error' });
+        if (!cancelled && mine === request.current) setView({ userId, loginId, epoch, request: mine, kind: 'error' });
       }
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt, selection, userId, loginId]);
+  }, [attempt, selection, userId, loginId, epoch]);
 
   const retry = useCallback(() => {
     enrollment.reset();
-    setView({ userId, loginId, request: ++request.current, kind: 'loading' });
+    setView({ userId, loginId, epoch, request: ++request.current, kind: 'loading' });
     setAttempt((value) => value + 1);
-  }, [userId, loginId]);
+  }, [userId, loginId, epoch]);
 
   // The person's own click: sent now, once, for exactly this person and login, at the version the server
   // reported. Nothing is remembered for later, so another person or a later login never inherits it.
   const reenroll = useCallback(() => {
     if (explicitInFlight.current || !userId || !accessToken || !loginId) return;
-    if (view.kind !== 'outcome' || !isOwner(view, userId, loginId) || view.outcome.kind !== 'reenroll_required') return;
+    if (view.kind !== 'outcome' || !isOwner(view, userId, loginId, epoch) || view.outcome.kind !== 'reenroll_required') return;
     const lifecycleVersion = view.outcome.lifecycleVersion;
-    const clicked: Owner = { userId, loginId };
+    const clicked: Owner = { userId, loginId, epoch };
     const mine = ++request.current;
     explicitInFlight.current = true;
     setView({ ...clicked, request: mine, kind: 'loading' });
@@ -118,23 +137,23 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
         reactivateServiceExplicitly(transportFor(context), 'x_autopost', lifecycleVersion, signal))
       .then(
         (outcome) => {
-          if (mine === request.current && isOwner(currentOwner.current, clicked.userId, clicked.loginId)) {
+          if (mine === request.current && isOwner(currentOwner.current, clicked.userId, clicked.loginId, clicked.epoch)) {
             setView({ ...clicked, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });
           }
         },
         (failure: unknown) => {
           if (failure instanceof EnrollmentCancelledError) return;
-          if (mine === request.current && isOwner(currentOwner.current, clicked.userId, clicked.loginId)) {
+          if (mine === request.current && isOwner(currentOwner.current, clicked.userId, clicked.loginId, clicked.epoch)) {
             setView({ ...clicked, request: mine, kind: 'error' });
           }
         },
       )
       .finally(() => { explicitInFlight.current = false; });
-  }, [accessToken, loginId, userId, view]);
+  }, [accessToken, epoch, loginId, userId, view]);
 
   if (selection.kind === 'mock') return <>{children}</>;
   // Everything decided is tagged with the person and login it belongs to; nobody else sees it.
-  const current: GateView = isOwner(view, userId, loginId) ? view : { userId, loginId, request: 0, kind: 'loading' };
+  const current: GateView = isOwner(view, userId, loginId, epoch) ? view : { userId, loginId, epoch, request: 0, kind: 'loading' };
   if (loginId !== null && current.kind === 'outcome' && current.outcome.kind === 'ready'
       && (!current.outcome.sharedAccountNotice || current.noticeAcknowledged)) {
     return <>{children}</>;

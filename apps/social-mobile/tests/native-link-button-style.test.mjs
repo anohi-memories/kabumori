@@ -150,18 +150,20 @@ test('the detectors accept the compositions that do work on native', () => {
   assert.deepEqual(brokenLink(good), []);
 });
 
-test('the two login-methods buttons are standalone pressables that navigate on press', async () => {
+test('the two login-methods buttons are standalone pressables that act on press', async () => {
   const sf = await parse('src/app/login-methods.tsx');
+  // The X connection button navigates; the service-end button opens the service-lifecycle surface for the person
+  // signed in (outside the enrollment gate, so re-authentication does not destroy the flow -- F4 G2).
   const cases = [
-    ['投稿用のX接続を確認する', '/accounts'],
-    ['利用終了・共通IDの管理', '/account-deletion'],
+    ['投稿用のX接続を確認する', (onPress) => onPress.includes('router.push') && onPress.includes("'/accounts'"), 'navigates to /accounts'],
+    ['利用終了・共通IDの管理', (onPress) => onPress.includes('lifecycle.open(userId)') && !onPress.includes('router.push'), 'opens the service-lifecycle surface'],
   ];
-  for (const [label, route] of cases) {
+  for (const [label, acts, what] of cases) {
     const found = pressableWithLabel(sf, label);
     assert.ok(found, `${label}: pressable exists`);
     assert.ok(!found.ancestors.some((a) => tagName(a) === 'Link'), `${label}: not wrapped in Link`);
     const onPress = attr(found.node, 'onPress')?.getText() ?? '';
-    assert.ok(onPress.includes('router.push') && onPress.includes(`'${route}'`), `${label}: navigates to ${route}`);
+    assert.ok(acts(onPress), `${label}: ${what}`);
     const style = attr(found.node, 'style')?.getText() ?? '';
     assert.ok(style.includes('styles.button'), `${label}: keeps the button style`);
     assert.ok(found.node.getText().includes('styles.buttonText'), `${label}: label style kept`);

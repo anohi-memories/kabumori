@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
+import { useServiceLifecycle } from '@/features/service-lifecycle/service-lifecycle';
 
 function label(provider: string): string {
   return (PROVIDER_LABELS as Record<string, string>)[provider] ?? provider;
@@ -31,6 +32,7 @@ export default function LoginMethodsScreen() {
   const { session, linkProvider, readiness, email, requestPasswordReset, releaseReport, accountDeletion } = useAuth();
   const { accounts } = useActiveAccount();
   const { status: dataStatus } = useDataStatus();
+  const lifecycle = useServiceLifecycle();
   const [identities, setIdentities] = useState<UserIdentity[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
@@ -167,7 +169,7 @@ export default function LoginMethodsScreen() {
         <Card>
           <Text style={{ color: colors.ink, fontWeight: '800' }}>利用終了・共通IDの管理</Text>
           <Text style={styles.muted}>POSTONAだけの利用終了と、共通IDの完全削除の違いを確認できます。{accountDeletion === 'available' ? '' : '利用終了と完全削除は現在準備中です。'}</Text>
-          <Pressable accessibilityRole="button" onPress={() => router.push('/account-deletion')} style={({ pressed }) => [styles.button, { backgroundColor: colors.danger }, pressed && styles.buttonPressed]}>
+          <Pressable accessibilityRole="button" onPress={() => { if (userId) lifecycle.open(userId); }} style={({ pressed }) => [styles.button, { backgroundColor: colors.danger }, pressed && styles.buttonPressed]}>
             <Text style={styles.buttonText}>利用終了・共通IDの管理</Text>
           </Pressable>
         </Card>
