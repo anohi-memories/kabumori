@@ -56,10 +56,10 @@
 
 ## F4
 - slot: F4
-- status: review_required
+- status: done
 - task_id: postona-f4-threads-credential-rotate-cas-sql-contract-20261017
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
@@ -70,6 +70,8 @@
 - previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-token-refresh-source-design-20261017/F4.md
 - slot_use: F4-owned Threads credential CAS SQL proposal and offline PG tests
 
+
+- l4_verdict_20261017_rotation: PASS_SOURCE_CANDIDATE / SQL_REVIEW_REQUIRED / PRODUCTION_AND_PILOT_NO_GO; PR258 HEAD 713955b5371cf4f1de4681ecec1737e1ccc7d4cd; source candidate only, no Vault/managed operation.
 ## F5
 - slot: F5
 - status: ready
