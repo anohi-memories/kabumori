@@ -91,19 +91,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-pr256-policy-pii-erasure-p2-fix-20261017
+- status: ready
+- task_id: common-ai-f6-f5-account-deletion-ai-cleanup-contract-20261017
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_SOURCE_FIX PR261: P2 policy PII and P3a/P3b guarded; P3c rollback preflight embed pending; F5/G5 deletion integration, privacy retention, managed checks and production NO_GO.
+- next_owner: claude
+- blocker: F5 Phase13 D-3 ready separate owner; F6 source-only deletion integration contract, PR261 unmerged; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: PR256 exact HEAD 1830320bd93fcfa458411dcf00f130d87d607d39 on reviewed PR249; F5/G5 deletion integration separate
-- previous_archive: .agent_v2/archive/2026-10-17-f6-pr256-erasure-reviewed-changes-required.md
-- slot_use: F6 PR256 P2 privacy residual policy_key/note repair and P3 scoped guards
+- dependencies: Draft PR249→256→261; F5 Phase13 D-3; G5/F4/POSTONA Auth and account deletion owner boundaries
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr261-privacy-source-fix.md
+- slot_use: F6 AI deletion RPC contract, F5 handoff and offline mock test only
 
 ## F7
 - slot: F7
