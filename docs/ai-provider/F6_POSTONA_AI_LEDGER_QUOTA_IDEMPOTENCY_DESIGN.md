@@ -143,6 +143,8 @@
 
 ## 4. DB の設計（**schema の草案だけ。migration は作っていない**）
 
+> 2026-10-17 追記: 実装の候補（`F6_POSTONA_CONSUMER_CALLS_PG_CANDIDATE.md`、migration `20261017120000_ai_consumer_call_store.sql`）では、表を台帳と**別の schema `ai_calls`** に置き、RPC の名前を `ai_calls_*` にした。台帳は出力を保存しない決まりで、台帳のテストもそれを確かめているため。`ai_ledger_forget_user`（台帳の利用者 ID の置き換え）は台帳の trigger の変更が要るので、まだ作っていない。
+
 すべて台帳と同じ流儀: `ai_ledger` schema、RLS あり・方針なし、全ロールから取り上げ、`public.ai_ledger_*(p jsonb) returns jsonb`、`security definer`、`set search_path = ''`、`service_role` だけが実行できる。適用後の確認（権限の漂流があれば止める）を同じく付ける。
 
 ### 4.1 保存の場所 `ai_ledger.consumer_calls`
