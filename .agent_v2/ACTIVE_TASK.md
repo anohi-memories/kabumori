@@ -72,10 +72,10 @@
 
 ## F5
 - slot: F5
-- status: ready
+- status: review_required
 - task_id: common-account-f5-postona-service-end-entitlement-epoch-g1-g2-20261017
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -86,6 +86,7 @@
 - slot_use: POSTONA G1 stale enrollment after service end, G2 same-user session turnover support within F5-owned ServiceEnrollmentGate and gate-only tests
 - previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-j1-v1-phase12-security-guards-p2x4-fix-20261016/
 - review_required: focused F4/F5 joint Auth and cross-user integration review after implementation only
+- latest_result: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; gate-side epoch refresh PR235 head 9480f24b Draft stacked on PR230 (e6725a16); 355 app tests, fail-before 15/19 then 19/19, tsc+lint clean, gate/seam mutants 13/13; seam to F4 provider NOT connected (LIFECYCLE_SIGNAL_CONNECTED=false) so G1 stays open in product until F4 provider lands; mocked harness only, no managed access; F4+F5 joint focused review pending.
 
 ## F6
 - slot: F6
