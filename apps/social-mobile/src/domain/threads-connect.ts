@@ -109,8 +109,9 @@ export function isRegisteredCallback(value: unknown): value is string {
  *   used by expo-web-browser only with `preferUniversalLinks: true`), and only with the Associated Domains
  *   entitlement for that host (`ios.associatedDomains` contains `applinks:<host>`). Older iOS falls back to a
  *   scheme-only session that would never return: refused up front (UNIVERSAL_LINK_UNSUPPORTED), never left waiting.
- * - Android: a verified App Link (`android.intentFilters`: VIEW, autoVerify, https + host, and a path covering the
- *   callback) brings the return to the app; the auth session itself needs no extra option.
+ * - Android: a verified App Link (`android.intentFilters`: VIEW, autoVerify, categories DEFAULT and BROWSABLE, https +
+ *   host with no explicit port, and a path covering the callback) brings the return to the app; the auth session
+ *   itself needs no extra option.
  * - Anything else, or anything missing: CALLBACK_NOT_CONFIGURED (nothing is started).
  */
 export type ThreadsAuthSessionOptions = { preferEphemeralSession: true; preferUniversalLinks: true };
@@ -145,10 +146,15 @@ export function threadsCallbackDelivery(input: {
     const verified = filters.some((entry) => {
       const filter = asRecord(entry);
       if (!filter || filter.autoVerify !== true || filter.action !== 'VIEW') return false;
+      // A browser VIEW is delivered only to a filter with BOTH categories (Expo renders `category` as given, adding none).
+      const categories = Array.isArray(filter.category) ? filter.category : [];
+      if (!categories.includes('DEFAULT') || !categories.includes('BROWSABLE')) return false;
       const data = Array.isArray(filter.data) ? filter.data : [filter.data];
       return data.some((item) => {
         const d = asRecord(item);
         if (!d || d.scheme !== 'https' || d.host !== url.hostname) return false;
+        // The callback has no port (checked above), and an explicit port (even 443) never matches a URI without one.
+        if (d.port !== undefined) return false;
         if (typeof d.path === 'string') return d.path === url.pathname;
         if (typeof d.pathPrefix === 'string') return url.pathname.startsWith(d.pathPrefix);
         return false;

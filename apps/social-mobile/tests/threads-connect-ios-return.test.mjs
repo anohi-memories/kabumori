@@ -58,6 +58,38 @@ test('Android: a verified App Link (VIEW + autoVerify + https host + covering pa
   assert.deepEqual(domain.threadsCallbackDelivery({ platform: 'web', callback: CALLBACK }), { ok: false, code: 'CALLBACK_NOT_CONFIGURED' });
 });
 
+// J2 V2 R1 (P2): a filter Android would never deliver the portless HTTPS callback through must not count. Expo 57
+// renders `category` as given (absent -> no category; DEFAULT/BROWSABLE are NOT added) and keeps an explicit `port`;
+// Android delivers a browser VIEW only to a filter with BROWSABLE and DEFAULT, and an authority with an explicit
+// port never matches a URI without one (Uri.getPort() is -1, even for 443).
+test('Android (J2 R1): DEFAULT and BROWSABLE are both required, and an explicit port never covers the portless callback', () => {
+  const delivery = (filter) => domain.threadsCallbackDelivery({ platform: 'android', callback: CALLBACK, androidIntentFilters: [filter] });
+  const NOT_CONFIGURED = { ok: false, code: 'CALLBACK_NOT_CONFIGURED' };
+  const withoutCategory = { ...ANDROID_FILTER }; delete withoutCategory.category;
+  for (const filter of [withoutCategory, { ...ANDROID_FILTER, category: [] }, { ...ANDROID_FILTER, category: ['DEFAULT'] },
+    { ...ANDROID_FILTER, category: ['BROWSABLE'] }, { ...ANDROID_FILTER, category: 'BROWSABLE' }, { ...ANDROID_FILTER, category: null },
+    { ...ANDROID_FILTER, category: ['android.intent.category.DEFAULT', 'android.intent.category.BROWSABLE'] }]) {
+    assert.deepEqual(delivery(filter), NOT_CONFIGURED, `categories ${JSON.stringify(filter.category)}`);
+  }
+  for (const port of ['8443', '443', 443, '']) {
+    assert.deepEqual(delivery({ ...ANDROID_FILTER, data: [{ ...ANDROID_FILTER.data[0], port }] }), NOT_CONFIGURED, `port ${JSON.stringify(port)}`);
+    assert.deepEqual(delivery({ ...ANDROID_FILTER, data: { scheme: 'https', host: 'links.postona.example', path: '/threads/callback', port } }), NOT_CONFIGURED, `single data, port ${JSON.stringify(port)}`);
+  }
+  // A malformed filter is not rescued by another malformed one.
+  assert.deepEqual(domain.threadsCallbackDelivery({ platform: 'android', callback: CALLBACK,
+    androidIntentFilters: [{ ...ANDROID_FILTER, category: [] }, { ...ANDROID_FILTER, data: [{ ...ANDROID_FILTER.data[0], port: '8443' }] }] }), NOT_CONFIGURED);
+  // Still valid: either order, extra categories, the exact path or a covering prefix, and a portless data entry next to
+  // one with a port (Android gives that filter both authorities; the portless one matches).
+  const OK = { ok: true, callback: CALLBACK };
+  assert.deepEqual(delivery({ ...ANDROID_FILTER, category: ['DEFAULT', 'BROWSABLE'] }), OK);
+  assert.deepEqual(delivery({ ...ANDROID_FILTER, category: ['BROWSABLE', 'DEFAULT', 'APP_BROWSER'] }), OK);
+  assert.deepEqual(delivery({ ...ANDROID_FILTER, data: { scheme: 'https', host: 'links.postona.example', path: '/threads/callback' } }), OK);
+  assert.deepEqual(delivery({ ...ANDROID_FILTER, data: [{ scheme: 'https', host: 'links.postona.example', pathPrefix: '/threads/' }] }), OK);
+  assert.deepEqual(delivery({ ...ANDROID_FILTER, data: [{ scheme: 'https', host: 'links.postona.example', port: '8443', pathPrefix: '/x' }, ANDROID_FILTER.data[0]] }), OK);
+  assert.deepEqual(domain.threadsCallbackDelivery({ platform: 'android', callback: CALLBACK,
+    androidIntentFilters: [{ ...ANDROID_FILTER, category: [] }, ANDROID_FILTER] }), OK, 'one deliverable filter is enough');
+});
+
 test('the starter reports the device reason and makes no request when there is no usable callback', async () => {
   for (const unavailableCode of [undefined, 'CALLBACK_NOT_CONFIGURED', 'UNIVERSAL_LINK_UNSUPPORTED']) {
     let calls = 0;
@@ -107,6 +139,19 @@ test('the real runtime wires the decision: iOS 17.4+ opens with preferUniversalL
   const aDeps = android.runtime.productionThreadsConnectDeps(() => null);
   await aDeps.openAuthSession('https://threads.com/oauth/authorize?x', CALLBACK);
   assert.equal(android.opened[0][2], undefined, 'Android needs no extra auth-session option');
+
+  // J2 R1: with a filter Android would not deliver through (no categories / an explicit port), the production adapter
+  // exposes no callback, so the starter refuses before any request and nothing is opened.
+  for (const filter of [{ ...ANDROID_FILTER, category: [] }, { ...ANDROID_FILTER, data: [{ ...ANDROID_FILTER.data[0], port: '8443' }] }]) {
+    const bad = await runtimeWith({ os: 'android', version: 34, extra: { threadsConnectCallbackUrl: CALLBACK }, android: { intentFilters: [filter] } });
+    const badDeps = bad.runtime.productionThreadsConnectDeps(() => null);
+    assert.equal(badDeps.registeredCallback, null, JSON.stringify(filter)); assert.equal(badDeps.unavailableCode, 'CALLBACK_NOT_CONFIGURED');
+    let requests = 0;
+    const starter = createThreadsConnectStarter({ ...badDeps, session: () => { requests += 1; return { userId: 'u1', token: 't' }; },
+      invoke: async () => { requests += 1; return { ok: true, payload: null }; } });
+    assert.deepEqual(JSON.parse(JSON.stringify(await starter.start())), { kind: 'unavailable', code: 'CALLBACK_NOT_CONFIGURED' });
+    assert.equal(requests, 0); assert.equal(bad.opened.length, 0);
+  }
 });
 
 test('X keeps its custom-scheme auth session, unchanged (no universal links)', async () => {
