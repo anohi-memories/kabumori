@@ -1,5 +1,12 @@
 # HISTORY_INDEX（検索用の軽量索引）
 
+## J2 PR251 archive verification — 2026-10-17
+
+- task_id: `postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017`; original commit `d6cee18234ebcc7c5b4765f237ecb26ca112b2f4`; snapshot `6ffc247609fcf4f2ab7f61c85ad454553e51904f`.
+- Original `.agent_v2/tasks/J2.md` → `.agent_v2/archive/2026-10-17-J2-postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017/J2.md`: 3185 bytes, SHA256 `e71898bd39955826044d5fc212b011f3c9af0f5049d7492f8968db0d1df5414f`.
+- Original `.agent_v2/reports/J2.md` → same folder `J2_REPORT.md`: 10602 bytes, SHA256 `114cc8e0883a40c66d68f3183045918faa6728892b8e14d4039a78f27d2fb490`.
+- Full byte restoration and original/archive Git blob match PASS; MANIFEST/SHA256SUMS added, snapshots unchanged.
+
 ## J2 PR238 archive verification — 2026-10-17
 
 - task_id: `postona-j2-pr238-auth-cross-user-review-20261017`; original commit `dfcf02f42e0daf28b1ebfa435ae84c7a6896b65b`; snapshot commit `3f80a62d5136b6d2c99950b46a9b090664fbbf0e`.
