@@ -89,10 +89,10 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-f5-account-deletion-ai-cleanup-contract-20261017
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - blocker: F5 Phase13 D-3 ready separate owner; F6 source-only deletion integration contract, PR261 unmerged; production NO_GO
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
