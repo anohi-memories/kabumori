@@ -1,4 +1,4 @@
-// Public entry point of the shared AI provider (Phase 1a + 1b). Import from here, not from the individual files.
+// Public entry point of the shared AI provider (Phase 1a + 1b, F6 M1 model policies). Import from here, not from the individual files.
 // Contracts: docs/ai-provider/PROVIDER_CONTRACT.md, docs/ai-provider/PHASE1B_LEDGER_DESIGN.md.
 
 export type {
@@ -34,7 +34,32 @@ export {
   InMemoryBudgetGuard,
 } from "./budget.ts";
 export { LedgerRpcError, type LedgerGuardOptions, SupabaseLedgerBudgetGuard } from "./ledger_guard.ts";
-export { AI_PROVIDER_CATALOG_VERSION, findModelSpec, listModelSpecs, type ModelSpec, type PriceTier } from "./model_catalog.ts";
+export {
+  AI_PROVIDER_CATALOG_VERSION,
+  findModelSpec,
+  listModelAliases,
+  listModelSpecs,
+  type ModelSpec,
+  type PriceTier,
+  resolveModelName,
+} from "./model_catalog.ts";
+export {
+  type AnthropicModelPolicy,
+  defineAnthropicModelPolicies,
+  executeWithModelPolicy,
+  MODEL_POLICY_PROVIDER,
+  type ModelPolicyAttribution,
+  type ModelPolicyCall,
+  type ModelPolicyDenial,
+  ModelPolicyError,
+  type ModelPolicyOutcome,
+  type ModelPolicyRegistry,
+  modelPolicyRequest,
+  type ModelPolicySelection,
+  type ResolvedModelChoice,
+  type ResolvedModelPolicy,
+  resolveModelChoice,
+} from "./model_policy.ts";
 export { attemptCostUsd, upperBoundAttemptCostUsd, upperBoundInputTokens, usageMonthJst } from "./cost.ts";
 export { assertSchemaSupported, SchemaUnsupportedError, toProviderSchema } from "./schema.ts";
 export { type SchemaIssue, validateAgainstSchema } from "./validate.ts";
