@@ -724,3 +724,10 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 ## F6 PR261 focused privacy P2 source fix archive — 2026-10-17
 - task_id: `common-ai-f6-pr256-policy-pii-erasure-p2-fix-20261017`; L6 PASS_SOURCE_FIX / PRODUCTION_NO_GO; PR261 Draft, head `017c7eb7803a134e83d1f128576b62bc69b4fcb4` at verification.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr261-privacy-source-fix.md`; blob original/archive `30ec6313fb38eb86527b51be22d006915021c065`, 11842 characters, Git blob read-back match; archive commit `553d81d257b1693cb8f5562f26445aa80d639c3e`. Independent SHA256/MANIFEST not verified.
+
+## J2 PR258 archive verification — 2026-10-17
+
+- task_id: `postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017`; original commit `bde6454848af7c5f115573bfb61917a8c135a981`; snapshot commit `99faf0170e1b1e7cd041a5a8cc6e7f60b3756663`.
+- `.agent_v2/tasks/J2.md` → `.agent_v2/archive/2026-10-17-J2-postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017/J2.md`: 2302 bytes, SHA256 `c9cd2dbf9ccacc94f318a681ff075c187468483fbc90a68ed32ad66784fc514a`.
+- `.agent_v2/reports/J2.md` → same folder `J2_REPORT.md`: 13798 bytes, SHA256 `7aeccb6ea949fe26100cd2c1681897780f51a9bff42607de62c0f72c1cf0399a`.
+- Original/archive Git blob IDs and exact-byte `git diff --quiet` restoration checks matched; MANIFEST.md, MANIFEST.json, and SHA256SUMS added without changing the archived snapshots.

@@ -183,19 +183,19 @@
 
 ## J2
 - slot: J2
-- status: ready
+- status: review_required
 - task_id: postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Luna（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
 - dependencies: PR260 head 8e1534f2 on PR251, F4 SQL fix independent
-- blocker: managed/real Android App Links validation not authorized, production/pilot NO_GO
+- blocker: PASS_FOCUSED_REVIEW; managed/real Android App Links validation remains unverified; production/pilot NO_GO
 - previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017/
-- slot_use: read-only two-file Android OAuth callback P2 recheck
+- slot_use: PR260 narrow rereview complete; 27/27 focused Threads tests pass; V2 review required before any broader rollout
 
 ## J3
 - slot: J3
