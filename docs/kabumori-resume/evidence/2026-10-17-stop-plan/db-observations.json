@@ -1,0 +1,843 @@
+{
+  "scope": "Investigation and planning only; production stop and workflow disable NOT authorized in this turn",
+  "recommended_model": "GPT-6（高）",
+  "base_main": "872516cd885e70e36c8714e7e972c75cd0229a79",
+  "database": {
+    "cron": [
+      {
+        "jobid": 1,
+        "active": true,
+        "jobname": "dispatch-scheduled-posts",
+        "command_fingerprint": "88b3310282eedc9f49d56878992b1094"
+      },
+      {
+        "jobid": 2,
+        "active": false,
+        "jobname": "important-news-fetch",
+        "command_fingerprint": "2c8f14fed199e046f132e24807fa6184"
+      },
+      {
+        "jobid": 3,
+        "active": false,
+        "jobname": "important-news-judgement",
+        "command_fingerprint": "f5710a7fcd5cfdf377571aa8f21d700d"
+      },
+      {
+        "jobid": 4,
+        "active": false,
+        "jobname": "important-news-generation",
+        "command_fingerprint": "bb538949dc3b80ae2d51d75bdecea91a"
+      },
+      {
+        "jobid": 5,
+        "active": true,
+        "jobname": "kabumori-stocks-master-sync",
+        "command_fingerprint": "f226ca87d622e26bd336f64bb9031235"
+      },
+      {
+        "jobid": 6,
+        "active": true,
+        "jobname": "kabumori-stocks-new-listing-sync",
+        "command_fingerprint": "a95a87154802ffd16005d8e85aa7ec07"
+      },
+      {
+        "jobid": 8,
+        "active": false,
+        "jobname": "important-news-publish-ready",
+        "command_fingerprint": "d984a09e0653723047f7f42cb346cbb7"
+      },
+      {
+        "jobid": 9,
+        "active": true,
+        "jobname": "send-push-notifications-dispatch",
+        "command_fingerprint": "063d74cb47703c20263dae641e29c49b"
+      },
+      {
+        "jobid": 10,
+        "active": false,
+        "jobname": "personalized-reports-morning",
+        "command_fingerprint": "16f16bdbb30f31b28893c98d24378c98"
+      },
+      {
+        "jobid": 11,
+        "active": false,
+        "jobname": "personalized-reports-close",
+        "command_fingerprint": "9e035986e78aafd3aecced203d1431e9"
+      },
+      {
+        "jobid": 12,
+        "active": false,
+        "jobname": "mic-ingest-fred-2100",
+        "command_fingerprint": "e8beb0924999d2afdc44a1a16da2173d"
+      },
+      {
+        "jobid": 13,
+        "active": false,
+        "jobname": "mic-ingest-fred-0100",
+        "command_fingerprint": "e8beb0924999d2afdc44a1a16da2173d"
+      },
+      {
+        "jobid": 14,
+        "active": false,
+        "jobname": "mic-ingest-mof-jgb-0600",
+        "command_fingerprint": "c80cc49937a0b9ebaaabb116e62b385c"
+      },
+      {
+        "jobid": 15,
+        "active": false,
+        "jobname": "mic-ingest-mof-jgb-0900",
+        "command_fingerprint": "c80cc49937a0b9ebaaabb116e62b385c"
+      },
+      {
+        "jobid": 16,
+        "active": false,
+        "jobname": "mic-ingest-eia-1500",
+        "command_fingerprint": "0966c05514162a690afbd230de74a591"
+      },
+      {
+        "jobid": 17,
+        "active": false,
+        "jobname": "mic-ingest-eia-1900",
+        "command_fingerprint": "0966c05514162a690afbd230de74a591"
+      },
+      {
+        "jobid": 18,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-fred-2100",
+        "command_fingerprint": "3c49830dc4d0d1db085d15bb21623d85"
+      },
+      {
+        "jobid": 19,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-fred-0100",
+        "command_fingerprint": "3c49830dc4d0d1db085d15bb21623d85"
+      },
+      {
+        "jobid": 20,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0600",
+        "command_fingerprint": "0cb64ce954f2e0b14b2bb68a5f8bd3e8"
+      },
+      {
+        "jobid": 21,
+        "active": false,
+        "jobname": "mic-evaluator-rates-after-mof-jgb-0900",
+        "command_fingerprint": "0cb64ce954f2e0b14b2bb68a5f8bd3e8"
+      },
+      {
+        "jobid": 22,
+        "active": false,
+        "jobname": "mic-evaluator-commodities-after-eia-1500",
+        "command_fingerprint": "f9855ff72f937e55b681cb8d1a2d2917"
+      },
+      {
+        "jobid": 23,
+        "active": false,
+        "jobname": "mic-evaluator-commodities-after-eia-1900",
+        "command_fingerprint": "f9855ff72f937e55b681cb8d1a2d2917"
+      },
+      {
+        "jobid": 24,
+        "active": false,
+        "jobname": "mic-ingest-frankfurter-fx-1730",
+        "command_fingerprint": "7d14037a7c383f9871521656ab11ee27"
+      },
+      {
+        "jobid": 25,
+        "active": false,
+        "jobname": "mic-ingest-frankfurter-fx-0130",
+        "command_fingerprint": "7d14037a7c383f9871521656ab11ee27"
+      },
+      {
+        "jobid": 26,
+        "active": false,
+        "jobname": "mic-evaluator-fx-after-frankfurter-1730",
+        "command_fingerprint": "108269ec7587bef6cfc2eb61dff39ec4"
+      },
+      {
+        "jobid": 27,
+        "active": false,
+        "jobname": "mic-evaluator-fx-after-frankfurter-0130",
+        "command_fingerprint": "108269ec7587bef6cfc2eb61dff39ec4"
+      },
+      {
+        "jobid": 28,
+        "active": false,
+        "jobname": "market-report-data-packet-morning",
+        "command_fingerprint": "69b29f53d08a7cfae536af0633bbb32f"
+      },
+      {
+        "jobid": 29,
+        "active": false,
+        "jobname": "market-report-data-packet-close",
+        "command_fingerprint": "fb80310ff7a6e824c181d5696d3a6bab"
+      },
+      {
+        "jobid": 30,
+        "active": false,
+        "jobname": "market-report-analysis-morning",
+        "command_fingerprint": "82f3090e7feb1a8c52376914d42053ad"
+      },
+      {
+        "jobid": 31,
+        "active": false,
+        "jobname": "market-report-analysis-morning-retry",
+        "command_fingerprint": "82f3090e7feb1a8c52376914d42053ad"
+      },
+      {
+        "jobid": 32,
+        "active": false,
+        "jobname": "market-report-analysis-close",
+        "command_fingerprint": "216cf5dae2503140793e4eb9f46ce0da"
+      },
+      {
+        "jobid": 33,
+        "active": false,
+        "jobname": "market-report-analysis-close-retry",
+        "command_fingerprint": "216cf5dae2503140793e4eb9f46ce0da"
+      },
+      {
+        "jobid": 34,
+        "active": false,
+        "jobname": "mic-evaluator-equity-index-after-fred-2100",
+        "command_fingerprint": "69868bf0e0e7220efffdcec52133ac4e"
+      },
+      {
+        "jobid": 35,
+        "active": false,
+        "jobname": "mic-evaluator-equity-index-after-fred-0100",
+        "command_fingerprint": "69868bf0e0e7220efffdcec52133ac4e"
+      },
+      {
+        "jobid": 36,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-fred-2100",
+        "command_fingerprint": "897e88a195e76936bf17ac30820ff7e7"
+      },
+      {
+        "jobid": 37,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-fred-0100",
+        "command_fingerprint": "897e88a195e76936bf17ac30820ff7e7"
+      },
+      {
+        "jobid": 38,
+        "active": false,
+        "jobname": "important-news-shadow",
+        "command_fingerprint": "c0a89803846abb2464a1af02934266e1"
+      },
+      {
+        "jobid": 39,
+        "active": false,
+        "jobname": "mic-ingest-estat-daily",
+        "command_fingerprint": "41ba602f2868cb98894840ee8b21c306"
+      },
+      {
+        "jobid": 40,
+        "active": false,
+        "jobname": "mic-evaluator-macro-after-estat",
+        "command_fingerprint": "5897f34fa917aa8be5895829b6c31d30"
+      },
+      {
+        "jobid": 41,
+        "active": false,
+        "jobname": "mic-scenario-after-state-0100",
+        "command_fingerprint": "3d59207b4429c610522a5d26928ced50"
+      },
+      {
+        "jobid": 42,
+        "active": false,
+        "jobname": "mic-scenario-after-state-weekday",
+        "command_fingerprint": "3d59207b4429c610522a5d26928ced50"
+      },
+      {
+        "jobid": 43,
+        "active": false,
+        "jobname": "news-discovery-observer-official",
+        "command_fingerprint": "948498aa95bd9811fb271d3316f5eb3c"
+      },
+      {
+        "jobid": 44,
+        "active": false,
+        "jobname": "market-report-broadcast-worker",
+        "command_fingerprint": "66978b8ec1134a94c57173fb4d841eb8"
+      }
+    ],
+    "pending": [
+      {
+        "status": "pending",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "scheduled_for": "2026-10-17T11:55:49+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "ai_salaryman_lab",
+        "post_type": "brand_post",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "scheduled_for": "2026-10-17T13:23:05+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "interaction",
+        "created_at": "2026-10-16T15:00:02.317028+00:00",
+        "scheduled_for": "2026-10-17T11:41:36+00:00"
+      },
+      {
+        "status": "pending",
+        "brand_id": "kabumori",
+        "post_type": "useful_tip",
+        "created_at": "2026-10-11T15:00:01.242808+00:00",
+        "scheduled_for": "2026-10-18T10:27:47+00:00"
+      }
+    ],
+    "windows": [
+      {
+        "id": "e5cc2e25-7128-48f7-898a-f3fc2703f87a",
+        "slot_no": 1,
+        "brand_id": "kabumori",
+        "end_time": "16:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "interaction",
+        "created_at": "2026-08-28T13:00:44.34644+00:00",
+        "start_time": "14:00:00",
+        "daily_probability": 0.65
+      },
+      {
+        "id": "4cbf0fd2-2a14-48fc-aa5a-234ba16cda15",
+        "slot_no": 2,
+        "brand_id": "kabumori",
+        "end_time": "22:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "interaction",
+        "created_at": "2026-08-28T13:00:44.34644+00:00",
+        "start_time": "20:00:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "9a391188-b299-4954-b9a4-19688aabcdd4",
+        "slot_no": 1,
+        "brand_id": "kabumori",
+        "end_time": "08:22:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": false,
+        "post_type": "morning_report",
+        "created_at": "2026-08-29T09:31:33.677012+00:00",
+        "start_time": "08:18:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "596fe04a-4846-4f71-b9c2-3b1b9448f4bc",
+        "slot_no": 1,
+        "brand_id": "kabumori",
+        "end_time": "23:10:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": false,
+        "post_type": "us_premarket_report",
+        "created_at": "2026-08-30T02:23:21.071065+00:00",
+        "start_time": "21:50:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "c5748286-317f-40cf-855a-2f5e92b3def8",
+        "slot_no": 1,
+        "brand_id": "kabumori",
+        "end_time": "11:45:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "tip",
+        "created_at": "2026-08-28T10:03:34.273557+00:00",
+        "start_time": "10:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "37897c37-795f-4114-afb8-63293945a51b",
+        "slot_no": 2,
+        "brand_id": "kabumori",
+        "end_time": "13:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "tip",
+        "created_at": "2026-08-28T10:03:34.273557+00:00",
+        "start_time": "12:15:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "f5e9754c-b654-4e1b-a636-8228fca58263",
+        "slot_no": 3,
+        "brand_id": "kabumori",
+        "end_time": "19:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "tip",
+        "created_at": "2026-08-28T10:03:34.273557+00:00",
+        "start_time": "17:00:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "df9ec725-dab4-4845-972d-57bbc5267795",
+        "slot_no": 1,
+        "brand_id": "kabumori",
+        "end_time": "17:02:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": false,
+        "post_type": "close_report",
+        "created_at": "2026-08-30T11:28:26.873977+00:00",
+        "start_time": "16:58:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "87fe0b40-fa3e-49cf-9cfa-d90f84636ea8",
+        "slot_no": 1,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "08:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "07:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "5eefef61-59ee-4a6a-86dd-a55845a8573f",
+        "slot_no": 2,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "10:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "09:00:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "4eb7f4d8-254f-48ac-854a-4dff45f1424f",
+        "slot_no": 3,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "11:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "10:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "7e02b95c-cd72-4815-b83e-544147d3c448",
+        "slot_no": 4,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "13:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "12:00:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "88c82cc9-5d39-4ea2-a688-7e07b7231d18",
+        "slot_no": 5,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "14:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "13:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "6d1b1c0d-be8b-447d-a186-95698e02a385",
+        "slot_no": 6,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "16:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "15:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "35333fa9-7f53-4607-ac0f-f25d1a76a1c8",
+        "slot_no": 7,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "18:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "17:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "b7f8c460-54fb-4018-ae32-b95b5631e16c",
+        "slot_no": 8,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "20:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "19:00:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "bccad0ee-7faa-48af-81ad-8a845b1549ec",
+        "slot_no": 9,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "21:30:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "20:30:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "c2f2fcd9-1787-4af2-a431-34f3f27e5de4",
+        "slot_no": 10,
+        "brand_id": "ai_salaryman_lab",
+        "end_time": "23:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "brand_post",
+        "created_at": "2026-09-14T10:41:32.471429+00:00",
+        "start_time": "22:00:00",
+        "daily_probability": 1
+      },
+      {
+        "id": "0b7ff5ce-9107-4a35-8016-0f0310562ca0",
+        "slot_no": 1,
+        "brand_id": "kabumori",
+        "end_time": "07:00:00",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "post_type": "morning_greeting",
+        "created_at": "2026-09-05T00:20:18.224794+00:00",
+        "start_time": "06:30:00",
+        "daily_probability": 1
+      }
+    ],
+    "planners": [
+      {
+        "args": "",
+        "source": "\ndeclare\n  claimed_id uuid;\nbegin\n  -- Dedicated report planners retain their own settings, JPX-business-day,\n  -- fixed-center-time, and ON CONFLICT duplicate safeguards.\n  perform public.plan_morning_report();\n  perform public.plan_close_report();\n\n  -- Keep the existing generic and specialised planner sequence intact.\n  perform public.plan_daily_posts();\n  perform public.plan_weekly_useful_tips();\n  perform public.plan_us_premarket_report();\n\n  select id into claimed_id\n  from public.scheduled_posts\n  where status = 'pending'\n    and scheduled_for <= now()\n  order by scheduled_for\n  for update skip locked\n  limit 1;\n\n  if claimed_id is null then\n    return;\n  end if;\n\n  update public.scheduled_posts\n  set status = 'running',\n      started_at = now(),\n      attempt_count = attempt_count + 1\n  where id = claimed_id;\n\n  insert into public.post_execution_logs (scheduled_post_id, post_type, status, message, brand_id)\n  select id, post_type, 'started', 'Scheduled post claimed', brand_id\n  from public.scheduled_posts\n  where id = claimed_id;\n\n  return query\n  select * from public.scheduled_posts\n  where id = claimed_id;\nend;\n",
+        "proname": "claim_due_post",
+        "fingerprint": "674b80997bbc24f9c1f0b5f35ab51d31"
+      },
+      {
+        "args": "p_date date",
+        "source": "\ndeclare\n  settings public.close_report_settings%rowtype;\n  candidate timestamptz;\nbegin\n  select * into settings from public.close_report_settings where id = true;\n  if not found or not settings.is_active then return; end if;\n  if extract(isodow from p_date) in (6, 7) then return; end if;\n  if exists (\n    select 1 from public.market_holidays\n    where market = 'JPX' and holiday_date = p_date\n  ) then return; end if;\n\n  candidate := (p_date + settings.center_time) at time zone settings.timezone;\n  insert into public.scheduled_posts\n    (schedule_date, post_type, slot_no, scheduled_for)\n  values (p_date, 'close_report', 1, candidate)\n  on conflict (brand_id, schedule_date, post_type, slot_no) do nothing;\n\n  return query\n  select * from public.scheduled_posts\n  where schedule_date = p_date and post_type = 'close_report'\n  order by scheduled_for;\nend;\n",
+        "proname": "plan_close_report",
+        "fingerprint": "fc6ff837ac22ade78fa3485c65457967"
+      },
+      {
+        "args": "p_date date",
+        "source": "\ndeclare\n  window_row public.posting_windows%rowtype;\n  random_seconds integer;\n  local_now timestamp;\n  effective_start time;\n  probability_bucket integer;\n  candidate_local timestamp;\n  candidate_time timestamptz;\n  candidate_found boolean;\n  selection_attempt integer;\nbegin\n  for window_row in\n    select w.*\n    from public.posting_windows w\n    join public.brands b on b.id = w.brand_id\n    where w.is_active\n      and b.is_active\n      and b.publish_mode in ('dry_run', 'live')\n    order by (w.post_type = 'interaction'), w.brand_id, w.post_type, w.slot_no\n  loop\n    probability_bucket := mod(\n      abs(hashtextextended(\n        p_date::text || ':' || window_row.brand_id || ':' || window_row.post_type || ':' || window_row.slot_no,\n        0\n      )),\n      10000\n    )::integer;\n    if probability_bucket >= floor(window_row.daily_probability * 10000)::integer then\n      continue;\n    end if;\n\n    if exists (\n      select 1 from public.scheduled_posts\n      where brand_id = window_row.brand_id\n        and schedule_date = p_date\n        and post_type = window_row.post_type\n        and slot_no = window_row.slot_no\n    ) then\n      continue;\n    end if;\n\n    local_now := now() at time zone window_row.timezone;\n    effective_start := window_row.start_time;\n    if p_date = local_now::date then\n      if local_now::time >= window_row.end_time then continue; end if;\n      if local_now::time > window_row.start_time then\n        effective_start := (local_now + interval '1 minute')::time;\n      end if;\n    end if;\n\n    candidate_found := false;\n    for selection_attempt in 1..40 loop\n      random_seconds := floor(\n        random() * (extract(epoch from (window_row.end_time - effective_start)) + 1)\n      )::integer;\n      candidate_local := p_date + effective_start + random_seconds * interval '1 second';\n      candidate_time := candidate_local at time zone window_row.timezone;\n\n      if window_row.post_type = 'interaction' then\n        if exists (\n          select 1 from public.scheduled_posts other_post\n          where other_post.brand_id = window_row.brand_id\n            and other_post.schedule_date = p_date\n            and other_post.post_type <> 'interaction'\n            and other_post.status in ('pending', 'running', 'succeeded')\n            and other_post.scheduled_for between\n              candidate_time - interval '20 minutes'\n              and candidate_time + interval '20 minutes'\n        ) then\n          continue;\n        end if;\n\n        if exists (\n          select 1 from public.posting_blackouts blackout\n          where blackout.is_active\n            and (candidate_time at time zone blackout.timezone)::time\n              between blackout.start_time and blackout.end_time\n        ) then\n          continue;\n        end if;\n      end if;\n\n      candidate_found := true;\n      exit;\n    end loop;\n    if not candidate_found then continue; end if;\n\n    insert into public.scheduled_posts\n      (brand_id, schedule_date, post_type, slot_no, scheduled_for)\n    values (window_row.brand_id, p_date, window_row.post_type, window_row.slot_no, candidate_time)\n    on conflict (brand_id, schedule_date, post_type, slot_no) do nothing;\n  end loop;\n\n  return query\n  select * from public.scheduled_posts\n  where schedule_date = p_date\n  order by scheduled_for;\nend;\n",
+        "proname": "plan_daily_posts",
+        "fingerprint": "7d1ac21c07ef62dbdaa4a9aa5c3aed24"
+      },
+      {
+        "args": "p_date date",
+        "source": "\ndeclare\n  settings public.morning_report_settings%rowtype;\n  candidate timestamptz;\nbegin\n  select * into settings from public.morning_report_settings where id = true;\n  if not found or not settings.is_active then return; end if;\n\n  if extract(isodow from p_date) in (6, 7) then return; end if;\n  if exists (\n    select 1 from public.market_holidays\n    where market = 'JPX' and holiday_date = p_date\n  ) then return; end if;\n\n  candidate := (p_date + settings.center_time) at time zone settings.timezone;\n  insert into public.scheduled_posts\n    (schedule_date, post_type, slot_no, scheduled_for)\n  values (p_date, 'morning_report', 1, candidate)\n  on conflict (brand_id, schedule_date, post_type, slot_no) do nothing;\n\n  return query\n  select * from public.scheduled_posts\n  where schedule_date = p_date and post_type = 'morning_report'\n  order by scheduled_for;\nend;\n",
+        "proname": "plan_morning_report",
+        "fingerprint": "92a9ad3bea1f96d77d57cf20e8862725"
+      },
+      {
+        "args": "p_date date",
+        "source": "\ndeclare\n  settings public.us_premarket_report_settings%rowtype;\n  selected_start time;\n  selected_end time;\n  span_seconds integer;\n  candidate timestamptz;\n  attempt integer;\nbegin\n  select * into settings from public.us_premarket_report_settings where id = true;\n  if not found or not settings.is_active then return; end if;\n  if extract(isodow from p_date) in (6, 7) then return; end if;\n  if exists (\n    select 1 from public.market_holidays\n    where market = 'NYSE' and holiday_date = p_date\n  ) then return; end if;\n  if exists (\n    select 1 from public.scheduled_posts\n    where schedule_date = p_date and post_type = 'us_premarket_report'\n  ) then\n    return query select * from public.scheduled_posts\n      where schedule_date = p_date and post_type = 'us_premarket_report';\n    return;\n  end if;\n\n  if public.is_us_daylight_saving(p_date) then\n    selected_start := settings.summer_window_start;\n    selected_end := settings.summer_window_end;\n  else\n    selected_start := settings.winter_window_start;\n    selected_end := settings.winter_window_end;\n  end if;\n  span_seconds := extract(epoch from (selected_end - selected_start))::integer;\n\n  for attempt in 1..settings.max_resamples loop\n    candidate := (\n      p_date + selected_start + floor(random() * (span_seconds + 1)) * interval '1 second'\n    ) at time zone settings.timezone;\n    exit when not exists (\n      select 1 from public.scheduled_posts existing\n      where existing.status in ('pending', 'running', 'succeeded')\n        and abs(extract(epoch from (existing.scheduled_for - candidate))) <= settings.collision_minutes * 60\n    );\n    candidate := null;\n  end loop;\n  if candidate is null then return; end if;\n\n  insert into public.scheduled_posts (schedule_date, post_type, slot_no, scheduled_for)\n  values (p_date, 'us_premarket_report', 1, candidate)\n  on conflict (brand_id, schedule_date, post_type, slot_no) do nothing;\n\n  return query select * from public.scheduled_posts\n    where schedule_date = p_date and post_type = 'us_premarket_report';\nend;\n",
+        "proname": "plan_us_premarket_report",
+        "fingerprint": "e384a47adbc19ce3a675091b2a81b90e"
+      },
+      {
+        "args": "p_week_start date",
+        "source": "\ndeclare\n  s public.useful_tip_schedule_settings%rowtype;\n  d date;\n  today_jst date := (now() at time zone 'Asia/Tokyo')::date;\n  candidate timestamptz;\n  local_candidate timestamp;\n  use_a boolean;\n  attempt integer;\nbegin\n  select * into s from public.useful_tip_schedule_settings where id=true;\n  if not found or not s.is_active then return; end if;\n  for d in\n    select day_date from (\n      select p_week_start+i as day_date,\n        abs(hashtextextended((p_week_start+i)::text||':'||p_week_start::text,0)) as rank_key\n      from generate_series(0,6) i\n    ) ranked order by rank_key limit s.posts_per_week\n  loop\n    if d < today_jst then continue; end if;\n    if exists(select 1 from public.scheduled_posts where schedule_date=d and post_type='useful_tip') then continue; end if;\n    use_a := mod(abs(hashtextextended(d::text||':useful_tip_window',0)),2)=0;\n    for attempt in 1..40 loop\n      if attempt=21 then use_a := not use_a; end if;\n      if use_a then\n        local_candidate := d+s.window_a_start+floor(random()*(extract(epoch from (s.window_a_end-s.window_a_start))+1))*interval '1 second';\n      else\n        local_candidate := d+s.window_b_start+floor(random()*(extract(epoch from (s.window_b_end-s.window_b_start))+1))*interval '1 second';\n      end if;\n      candidate := local_candidate at time zone s.timezone;\n      if candidate <= now() then continue; end if;\n      if exists(\n        select 1 from public.scheduled_posts p where p.schedule_date=d\n        and p.status in ('pending','running','succeeded')\n        and p.scheduled_for between candidate-(s.collision_minutes||' minutes')::interval\n                                and candidate+(s.collision_minutes||' minutes')::interval\n      ) then continue; end if;\n      if exists(\n        select 1 from public.posting_blackouts b where b.is_active\n        and (candidate at time zone b.timezone)::time between b.start_time and b.end_time\n      ) then continue; end if;\n      insert into public.scheduled_posts(schedule_date,post_type,slot_no,scheduled_for)\n      values(d,'useful_tip',1,candidate) on conflict do nothing;\n      exit;\n    end loop;\n  end loop;\n  return query select * from public.scheduled_posts\n    where schedule_date between greatest(p_week_start,today_jst) and p_week_start+6\n      and post_type='useful_tip' order by scheduled_for;\nend\n",
+        "proname": "plan_weekly_useful_tips",
+        "fingerprint": "43547f187cead21021847989b8400873"
+      }
+    ],
+    "read_only": "on",
+    "observed_at": "2026-10-17T10:36:40.789794+00:00",
+    "us_settings": [
+      {
+        "id": true,
+        "brand_id": "kabumori",
+        "timezone": "Asia/Tokyo",
+        "is_active": false,
+        "updated_at": "2026-08-30T02:23:21.071065+00:00",
+        "max_resamples": 40,
+        "collision_minutes": 20,
+        "summer_window_end": "22:10:00",
+        "winter_window_end": "23:10:00",
+        "summer_window_start": "21:50:00",
+        "winter_window_start": "22:50:00"
+      }
+    ],
+    "table_columns": [
+      {
+        "columns": "id:boolean, is_active:boolean, window_start:time without time zone, center_time:time without time zone, window_end:time without time zone, futures_target_time:time without time zone, timezone:text, holiday_edition_enabled:boolean, updated_at:timestamp with time zone, brand_id:text",
+        "table_name": "close_report_settings"
+      },
+      {
+        "columns": "id:boolean, is_active:boolean, window_start:time without time zone, center_time:time without time zone, window_end:time without time zone, timezone:text, holiday_edition_enabled:boolean, updated_at:timestamp with time zone, brand_id:text",
+        "table_name": "morning_report_settings"
+      },
+      {
+        "columns": "id:uuid, post_type:text, slot_no:smallint, start_time:time without time zone, end_time:time without time zone, timezone:text, is_active:boolean, created_at:timestamp with time zone, daily_probability:numeric, brand_id:text",
+        "table_name": "posting_windows"
+      },
+      {
+        "columns": "id:boolean, is_active:boolean, summer_window_start:time without time zone, summer_window_end:time without time zone, winter_window_start:time without time zone, winter_window_end:time without time zone, timezone:text, collision_minutes:integer, max_resamples:integer, updated_at:timestamp with time zone, brand_id:text",
+        "table_name": "us_premarket_report_settings"
+      },
+      {
+        "columns": "id:boolean, is_active:boolean, posts_per_week:smallint, cooldown_days:integer, window_a_start:time without time zone, window_a_end:time without time zone, window_b_start:time without time zone, window_b_end:time without time zone, collision_minutes:integer, timezone:text, updated_at:timestamp with time zone",
+        "table_name": "useful_tip_schedule_settings"
+      }
+    ],
+    "close_settings": [
+      {
+        "id": true,
+        "brand_id": "kabumori",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "updated_at": "2026-09-11T09:54:37.309905+00:00",
+        "window_end": "17:02:00",
+        "center_time": "17:00:00",
+        "window_start": "16:58:00",
+        "futures_target_time": "15:45:00",
+        "holiday_edition_enabled": false
+      }
+    ],
+    "useful_settings": [
+      {
+        "id": true,
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "updated_at": "2026-08-29T23:40:15.745204+00:00",
+        "window_a_end": "12:10:00",
+        "window_b_end": "19:40:00",
+        "cooldown_days": 150,
+        "posts_per_week": 7,
+        "window_a_start": "11:50:00",
+        "window_b_start": "19:10:00",
+        "collision_minutes": 20
+      }
+    ],
+    "morning_settings": [
+      {
+        "id": true,
+        "brand_id": "kabumori",
+        "timezone": "Asia/Tokyo",
+        "is_active": true,
+        "updated_at": "2026-09-03T15:03:09.117027+00:00",
+        "window_end": "08:22:00",
+        "center_time": "08:20:00",
+        "window_start": "08:18:00",
+        "holiday_edition_enabled": false
+      }
+    ]
+  },
+  "catalog": {
+    "observed_at": "2026-10-17T10:37:35.653143+00:00",
+    "settings_triggers": [
+      {
+        "tgname": "social_mobile_deletion_guard",
+        "proname": "social_mobile_account_deletion_guard",
+        "table_name": "posting_windows",
+        "source_fingerprint": "dc37138099df32c24142addf012e9132"
+      }
+    ],
+    "settings_consumers": [
+      {
+        "proname": "plan_close_report",
+        "fingerprint": "fc6ff837ac22ade78fa3485c65457967",
+        "referenced_settings": [
+          "close_report_settings"
+        ]
+      },
+      {
+        "proname": "plan_morning_report",
+        "fingerprint": "92a9ad3bea1f96d77d57cf20e8862725",
+        "referenced_settings": [
+          "morning_report_settings"
+        ]
+      },
+      {
+        "proname": "plan_us_premarket_report",
+        "fingerprint": "e384a47adbc19ce3a675091b2a81b90e",
+        "referenced_settings": [
+          "us_premarket_report_settings"
+        ]
+      },
+      {
+        "proname": "plan_weekly_useful_tips",
+        "fingerprint": "43547f187cead21021847989b8400873",
+        "referenced_settings": [
+          "useful_tip_schedule_settings"
+        ]
+      }
+    ],
+    "active_planner_calls": {
+      "count": 0,
+      "oldest_start": null
+    },
+    "scheduled_brand_default": "'kabumori'::text"
+  },
+  "queue_writers": {
+    "observed_at": "2026-10-17T10:38:58.054424+00:00",
+    "queue_writers": [
+      {
+        "args": "p_date date",
+        "proname": "plan_close_report",
+        "fingerprint": "fc6ff837ac22ade78fa3485c65457967",
+        "uses_windows": false,
+        "uses_settings": true
+      },
+      {
+        "args": "p_date date",
+        "proname": "plan_daily_posts",
+        "fingerprint": "7d1ac21c07ef62dbdaa4a9aa5c3aed24",
+        "uses_windows": true,
+        "uses_settings": false
+      },
+      {
+        "args": "p_date date",
+        "proname": "plan_morning_report",
+        "fingerprint": "92a9ad3bea1f96d77d57cf20e8862725",
+        "uses_windows": false,
+        "uses_settings": true
+      },
+      {
+        "args": "p_date date",
+        "proname": "plan_us_premarket_report",
+        "fingerprint": "e384a47adbc19ce3a675091b2a81b90e",
+        "uses_windows": false,
+        "uses_settings": true
+      },
+      {
+        "args": "p_week_start date",
+        "proname": "plan_weekly_useful_tips",
+        "fingerprint": "43547f187cead21021847989b8400873",
+        "uses_windows": false,
+        "uses_settings": true
+      }
+    ],
+    "relevant_table_policies": [
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "close_report_settings",
+        "policyname": "admin_select_close_report_settings"
+      },
+      {
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "close_report_settings",
+        "policyname": "admin_update_close_report_settings"
+      },
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "morning_report_settings",
+        "policyname": "admin_select_morning_report_settings"
+      },
+      {
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "morning_report_settings",
+        "policyname": "admin_update_morning_report_settings"
+      },
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "posting_windows",
+        "policyname": "admin_select_posting_windows"
+      },
+      {
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "posting_windows",
+        "policyname": "admin_update_posting_windows"
+      },
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "posting_windows",
+        "policyname": "social_mobile_member_select_posting_windows"
+      },
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "scheduled_posts",
+        "policyname": "admin_select_scheduled_posts"
+      },
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "scheduled_posts",
+        "policyname": "social_mobile_member_select_scheduled_posts"
+      },
+      {
+        "cmd": "SELECT",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "useful_tip_schedule_settings",
+        "policyname": "admin_select_useful_tip_schedule_settings"
+      },
+      {
+        "cmd": "UPDATE",
+        "roles": [
+          "authenticated"
+        ],
+        "tablename": "useful_tip_schedule_settings",
+        "policyname": "admin_update_useful_tip_schedule_settings"
+      }
+    ]
+  },
+  "posting_window_trigger": [
+    {
+      "proname": "social_mobile_account_deletion_guard",
+      "prosrc": "\ndeclare\n  v_workspace text;\n  v_lease uuid;\nbegin\n  if tg_table_name = 'brands' then\n    v_workspace := new.id;\n  elsif tg_table_name in ('x_account_refresh_state_v2', 'x_account_refresh_rollout') then\n    select a.brand_id into v_workspace from public.social_accounts a where a.id = new.social_account_id;\n  else\n    v_workspace := new.brand_id;\n  end if;\n  if v_workspace is null or v_workspace !~ '^u_' then\n    return new;\n  end if;\n  -- Creation of a workspace or membership serializes with deletion; the\n  -- tombstone is then read with a fresh (post-lock) snapshot.\n  if tg_op = 'INSERT' and tg_table_name in ('brands', 'brand_memberships') then\n    if current_setting('transaction_isolation') <> 'read committed' then\n      raise exception 'SOCIAL_MOBILE_WORKSPACE_CREATION_REQUIRES_READ_COMMITTED';\n    end if;\n    perform public.social_mobile_account_deletion_workspace_lock(v_workspace);\n  end if;\n  select d.lease_token into v_lease from public.social_mobile_account_deletions d where d.workspace_id = v_workspace;\n  if not found then\n    return new;\n  end if;\n  if v_lease is not null and current_setting('kabumori.social_mobile_deletion_lease', true) = v_lease::text then\n    return new;\n  end if;\n  raise exception 'SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS';\nend;\n"
+    }
+  ],
+  "prior_deployed_bundle_analysis": {
+    "slug": "x-test-post",
+    "version": 145,
+    "bundle_sha256": "804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895",
+    "settings_references": [],
+    "source_note": "get_edge_function result read during preceding audit; latest version must be revalidated before any execution."
+  },
+  "safety": {
+    "production_write": false,
+    "workflow_disable": false,
+    "workflow_cancel": false,
+    "edge_invoke": false,
+    "sns_invoke": false,
+    "ai_api_invoke": false
+  }
+}

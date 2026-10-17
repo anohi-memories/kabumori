@@ -1,0 +1,63 @@
+{
+  "pr": 245,
+  "merged": true,
+  "merge_commit": "872516cd885e70e36c8714e7e972c75cd0229a79",
+  "main_contains_merge": true,
+  "files": [
+    {
+      "path": "docs/kabumori-resume/FINAL_AUDIT_2026-10-17.md",
+      "bytes": 13720,
+      "sha256": "39815926569a40fde8ec2f0edc99b6b60b6659ae4ac63be4402e0bebc6ad59e5",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/README.md",
+      "bytes": 2212,
+      "sha256": "91215d59b472b5977317f151e3a56a34f21f167c1f8a9f4ecbacb90d85f79411",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/SHA256SUMS",
+      "bytes": 686,
+      "sha256": "320a50f338b0416eafe502c625c884bed0b5662713d38a640871b62d066d834b",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/github-readback.json",
+      "bytes": 2834,
+      "sha256": "fe422ad1bb1d1724718251246727a3d06e552d024ebc8615d2c85002026afece",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/github-runs.json",
+      "bytes": 3086,
+      "sha256": "45a652c773e14dac4e474f91fbc5a55146abe0004b3e258fc8e6e8602e70fbe2",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/github-workflows.json",
+      "bytes": 271,
+      "sha256": "419bca55013c0760d4a58b5abff327b729fb8519295b00fc10b7a4a369498a65",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/log-observations.sql",
+      "bytes": 804,
+      "sha256": "7fa0d4796549a367b237e03e3cb33863c03eeae0bc0e305a531e4672280fbc81",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/observations.json",
+      "bytes": 100041,
+      "sha256": "79b242d04273022c33ec555eaedcba725a42e692a6da0f5585679ee9da7efae5",
+      "byte_equal": true
+    },
+    {
+      "path": "docs/kabumori-resume/evidence/2026-10-17-final-audit/postgres-observations.sql",
+      "bytes": 5574,
+      "sha256": "661d18b42ffd4ac37a8804d9d0d6c06977f5099bac55abc87573a0bdb979eb22",
+      "byte_equal": true
+    }
+  ],
+  "readback": "PASS 9/9 byte-equal at merge commit; current main includes merge and has no later changes to these paths"
+}
