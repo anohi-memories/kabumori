@@ -1,0 +1,116 @@
+# F6 — POSTONA Claude API 接続インターフェース整理・オフライン準備
+- task_id: common-ai-f6-postona-claude-bridge-integration-preflight-20261017
+- slot: F6
+- owner: claude
+- status: done
+- next_owner: none
+- start_code: F6
+- completion_code: L6
+- return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
+- recommended_model: **Opus5.5（高）**
+- production_mutation_window: CLOSED
+- previous_archive: .agent_v2/archive/2026-10-17-f6-pr237-escaped-keyword-fix.md
+- dependencies: common Claude API candidate Draft PR187→198→205→219→222→231→234→237; H5 bridge candidate PR198; inventory PR216; POSTONA F3 and F4/F5 own active branches; no merges.
+
+## 目的
+POSTONAのAI相談機能とAI投稿文生成を、既存共通Claude API基盤およびH5 bridgeへ安全に接続するための**境界整理・契約確定・mockオフライン接続準備**。先にインターフェースと依存関係を整え、POSTONA F3/F4等の所有コードを勝手に変更しない。今回はprovider自身の新しいセキュリティ修正やPOSTONA live callは行わない。かぶモリ休止方針・共通IDの継続を尊重。
+
+## 必須開始ゲート
+PROJECT_RULES.md、旧新ORCHESTRATION、旧新ACTIVE_TASK/CURRENT_STATEの最新metadata、G3/G4/F3/F4/F5/G5/H5/旧G6/F6、現在のTASK/Report/PR headsと変更対象競合、clean独立worktree、fresh origin/main、task_id重複を確認。F4はPOSTONA service lifecycle F4+F5統合作業 ready なので、その所有ファイルには一切変更しない。他slotのcheckout/reset/rebase/dirty worktree禁止。ブランチの積み上げ順を確認し、確定しない依存はblockerとして報告。
+
+## 既知の接続箇所（最新ソースを必ず再検証）
+- POSTONA AI相談: `supabase/functions/social-mobile-consult/logic.ts`（旧OpenAI呼び出し）。
+- POSTONA 投稿文生成: `supabase/functions/_shared/brand/brand_post_generator.ts`（旧OpenAI呼び出し）。
+- 共通AI provider: `supabase/functions/_shared/ai_provider/**`、H5 consumer bridge `supabase/functions/_shared/ai_consumer_bridge/**`。
+- モデル選択: `social_ai_model_policy.ts`、現状の差異を確認。
+- 以前のinventoryではbrand_id UUIDの不整合、POSTONA費用台帳未接続、レスポンスのtext/JSON契約、timeout/cap、利用権境界が課題。古いinventoryを正とせず最新コードと照合する。
+
+## F6が今回すること
+1. F3/F4/F5/G3/G4/H5と重ならないread-only呼び出し面・auth/brand/user境界・SDK/ledger依存・モデル/料金契約を抽出。各フローを source path + current symbol + caller + scopeで記載。
+2. AI相談・投稿生成の両系統について `request/response`、provider/model policy、callId/idempotency、予算・上限・tenant/brand entitlement、missing usage/timeout/unknown cost、error normalization、JSON `{text}`/文字列互換、キー管理を明文化。
+3. **F6所有の接続アダプター/テストのみ**で最小のオフライン mock candidateを用意できるなら実装。F3/F4/H5等の所有source、OpenAI本番fallback、provider security guard既存実装を改変する必要があれば STOPし、具体的な依頼先/変更ファイルを記載。設計のみで完了しても可、推測で安全性を埋めない。
+4. F3/F4への接続順・依存PR、stack merge strategy、変更ファイル競合一覧、事前テストを提示。F4がAuth/利用終了を統合している間はPOSTONA画面やサービスゲートに書き込まない。
+
+## 許可範囲と安全
+F6所有の `docs/ai-provider/F6_*`、`supabase/functions/_shared/ai_provider/**` の新規独立adapter/mock testのうち所有・競合確認されたファイル、自身TASK/ACTIVEのみ。既存 provider isolation/retry/ledger/securityを変更しない。POSTONA相談/投稿生成本体、H5 bridge、F3/F4/F5共通アカウント、DB/Auth/RLS/RPC/Edge/Cron、かぶモリ休止制御は禁止。実Anthropic/OpenAI API課金、SNS投稿、Secrets、deploy、merge、本番switchは禁止。reviewは必要なAuth/費用境界だけで判断し、Codexの自動反復レビューは不要。
+
+## 成果物・完了
+差分を小さくしたsource-only文書/optional mock PR、両POSTONAフローの契約表、依存PR・ファイルowner/衝突確認、実行したoffline/deny-netテスト、changed_files、commit/pushとPR head/base readback、remaining_issues、NOT_VERIFIED/production NO_GOをTASK末尾Reportへ記載。status review_required/next_owner chatgptにしてL6返却。次にPOSTONA担当へ接続指示を渡す。
+
+## Report
+- task_id: common-ai-f6-postona-claude-bridge-integration-preflight-20261017
+- result: **PREFLIGHT_DONE / SOURCE_ONLY（Draft PR #239）。技術的には両系統とも H5 bridge 経由で Claude に載る（オフラインで確認）。本番の前に F6 だけでは決められない前提が 9 つ**
+  - 何もつないでいない。POSTONA の相談・投稿文の生成、H5 bridge、アプリ、DB、既存の provider の検査には触れていない
+  - 本番・Secret・Edge・Cron・設定の変更は 0。有料の呼び出しも 0
+- branch / commit / PR
+  - `claude/f6-postona-claude-contract-20261017`（新しい独立した worktree `/Users/yuya/Developer/kabumori-f6-postona-contract`、#237 の head `d0c85b3e` から作成）
+  - commit `f590b80fbbaa926be08d5e215ad87b373f402ff2`（push 済み、`git ls-remote` で同じ値を確認）
+  - Draft PR [#239](https://github.com/anohi-memories/kabumori/pull/239)。読み返し: OPEN / Draft、base `claude/f6-pr234-escaped-keyword-20261017`（#237、head `d0c85b3e7f1247333ae132a8cc15e2c16bc183bb` のまま）、head `f590b80fbbaa926be08d5e215ad87b373f402ff2`、2 ファイル、MERGEABLE
+  - 読むためだけに fresh main から作った worktree（push していない）は片付けた
+- changed_files（2）
+  - `docs/ai-provider/F6_POSTONA_CLAUDE_INTERFACE_PREFLIGHT.md`（新規）
+  - `supabase/functions/_shared/ai_provider/postona_claude_contract_test.ts`（新規、オフラインの契約の確認だけ。deploy されるファイルからは読まれない）
+- 調べた元
+  - POSTONA のコード: fresh main `d71e2812`（読み取り専用の調査の助手 2 つ＋ F6 が要点を自分で確認）。対象ファイルは stack の土台 `c8a4ff36`・`d71e2812`・今の main `4d6b9a4c` で同じ
+  - 共通AI基盤と H5 bridge: #237 `d0c85b3e`
+- 呼び出し面（docs §1。すべて path + symbol + 呼び出し元 + 範囲で記載）
+  - AI 相談: `social-mobile-consult/logic.ts` `handleSocialMobileConsult` ← アプリ `consult.tsx` `ask()` / `consult-client.ts` `requestConsult`。利用者の JWT（`/auth/v1/user`）、owner の確認、strict JSON Schema、`gpt-6-luna`、出力 900、25 秒、送り直しなし。**利用権・利用者ごとの上限・費用の記録・二重送信の防止は無い**
+  - AI 投稿文の生成: `_shared/brand/brand_post_generator.ts` `generateBrandPost` ← 試し投稿（`social-mobile-brand-dry-run`、利用者）、利用者のブランドの予約投稿（`vault_account_brand_post.ts`、Cron と service role）、会社員AIらぼ（`ai_lab_scheduled_brand_post.ts` と `x-test-post/index.ts` の差し替え、system）。自由文、`gpt-6-luna`、**時間の上限なし**、費用は計算するが**どこにも記録しない**、利用権の確認なし
+  - ブランド ID は UUID ではない（`brands.id` は `^[a-z][a-z0-9_]{1,40}$`、利用者のワークスペースは `u_` ＋ md5 の 24 文字）
+- 契約の案（docs §2）
+  - つなぎ方: POSTONA の本人とブランドの確認は今のまま → H5 bridge `execute(credential, { feature, operationId, input })`
+  - 主体: 相談と試し投稿は確かめた利用者（**ブランド無し**。台帳は UUID のみ）。会社員AIらぼは system。予約投稿は決める必要あり
+  - 相談: 入力を 1 本の JSON（保存済みの設定・履歴・発言）、今の JSON の決まりと `sanitizeConsultModelOutput` をそのまま使う、エラーはアプリの今のコードに対応づけ（新しく `CONSULT_QUOTA_EXCEEDED` だけ足す）
+  - 投稿文: `{ text }` の JSON で包む、`BrandPostDraft` の形は変えない、長さの決まりを bridge の確認に、時間の上限を付ける、`max_tokens` で切れた出力は失敗になる（今は無制限の決まり以外で切れた文を返している → 安全側に変わる）
+  - 重複の防止は operationId（相談: 発言ごと、試し投稿: 依頼ごと、予約投稿: 予約の行、会社員AIらぼ: トピックの claim ＋ 回数）。課金の可能性がある失敗は送り直さない（#219 / #222）
+  - モデルの案: どちらも Haiku 5.5（値段は今の `gpt-6-luna` と同じ）。1 回の上限額（多めの見積もり）は Haiku で相談 $0.0044・投稿 $0.0012〜0.0019、Sonnet で相談 $0.089、Opus で相談 $0.18。**品質は確かめていない**
+- F6 だけでは決められない前提（docs §3）
+  1. **個人情報（相談の自由文・設定・ペルソナ・投稿のテーマ）を Anthropic に送ってよいか**。決まり「個人情報の Anthropic への送信は禁止」に当たりうる。プライバシーの表記も今は OpenAI（利用者の判断）
+  2. 台帳の POSTONA の枠（本番の DB、別承認）
+  3. bridge の二重送信を防ぐ保存の場所の耐久的な実装（DB ＋ source、担当を決める）
+  4. ブランドの数え方と、予約投稿（Cron）の主体
+  5. 利用者ごとの上限と利用権の確認（POSTONA。F4 / F5 の利用権の作業と合わせる）
+  6. isolation の許可（F6）と H5 の検査「どの関数も bridge を読まない」（H5）を同時に直す
+  7. 決め打ちのテストの更新（`social_ai_model_policy_test.ts`、`x-test-post` の固定、アプリの `api.openai.com` の偽物）
+  8. Claude での日本語の品質の確認（有料、別承認）
+  9. `x-test-post` の deploy で、まだ出ていない変更も一緒に出る
+- つなぐ順番（docs §4）: 段階 0 = F6 / H5 の stack を順に merge（つながっていないので本番は変わらない）→ 段階 1 = DB（枠・保存の場所、別承認）→ 段階 2 = 相談（フラグ、既定は OpenAI、**F4 の完了の後**）→ 段階 3 = 試し投稿 → 段階 4 = 会社員AIらぼ → 段階 5 = 利用者のブランドの予約投稿（休眠中）。戻し方はフラグ
+- ファイルの持ち主と衝突（docs §5）
+  - POSTONA の相談・投稿文の生成と呼び出し元、`social_ai_model_policy.ts`: POSTONA / X の担当。この PR はテストが import するだけ
+  - `apps/social-mobile/**`: F4（利用終了の統合、ready）/ POSTONA。触れていない
+  - `ai_consumer_bridge/**`: H5。テストが import するだけ
+  - これらのファイルに触れる開いた PR は H5 の #198 と F3 の #182（`_shared/brand/` のテスト 1 本）だけ。重ならない
+  - #187 `a7e1d3f3`、#198 `4223d5c0`、#205 `4cd2cbdd`、#216 `1dc7b72e`、#219 `be35cc93`、#222 `11835df1`、#231 `2a696aff`、#234 `2ba13ee1`、#237 `d0c85b3e` は変わっていない（Draft のまま）
+- tests（Deno 2.9.6、`--deny-net`、偽の鍵、本物の鍵の環境変数を外した子プロセス）
+  - 新しい `postona_claude_contract_test.ts`: **6 PASS**
+    - 相談の JSON の決まりが provider でそのまま使える
+    - 本物の H5 bridge を通した相談（1 本の JSON の入力、POSTONA の返答の検査を確認に、送信 1 回、台帳に postona / consult / 利用者・ブランド無し、同じ operationId の二重送信は送らない）
+    - 決まりに合わない返答は止まる、確かめていない呼び出しは何も送らない
+    - slug のブランド ID は主体にできない（何も送らない）
+    - 504 は 1 回で不明・最大額
+    - 投稿文の `{ text }` と 140 字の決まり
+  - 共通AI基盤 `_shared/ai_provider/`: **153 PASS / 0 FAIL**（型の確認つき。#237 の 147 ＋ 新しい 6）
+  - H5 bridge `offline_run.sh`: **27 PASS / 0 FAIL**（H5 の isolation の検査を含む。テストファイルは対象外なのでそのまま通る）
+  - 市況レポート `market-report-analysis/`: **324 PASS / 0 FAIL**
+  - main（`4d6b9a4c`）と合わせた木（merge-tree 衝突なし）: 共通AI基盤＋市況レポート＋ bridge **541 PASS / 0 FAIL**
+  - scratch の確かめ: 相談の JSON の決まりが provider の変換を通る、上限額の表
+  - lint（`--no-config`）0 件、`git diff --check` OK、秘密情報の文字列 0
+  - `_shared` 全体の既知の型エラー 5 件と権限で止まる 1 件は再実行していない（NOT_VERIFIED のまま）
+- remaining_issues / NOT_VERIFIED
+  - Claude での日本語の相談・投稿の品質、相談の入力の形を変えたときの振る舞い（有料の評価なし）
+  - 本物の Anthropic の応答、実際の請求、本番の台帳と保存の場所
+  - 各関数の `verify_jwt`（`supabase/config.toml` が main に無い）、プライバシーの表記のページの中身（リポジトリの外）
+  - `x-test-post` の Edge の実行時間との関係
+  - 契約のテストの登録の値（モデル、上限、期限、指示）は例で、本番の設定ではない
+- source_only: yes。merge 0、deploy 0、paid_calls 0、production の変更 0、Secret の値・`.env` は読んでいない
+- production: **NO_GO のまま**
+- next_recommendation
+  - L6 で評価する。§3 の 1（個人情報の送信）を利用者に確認する
+  - 判断がそろったら、POSTONA 担当へ docs §7 の依頼を渡す（相談 → 試し投稿 → 会社員AIらぼ → 予約投稿の順。F4 の完了の後）
+  - F6 の次の作業の候補: 台帳の POSTONA の枠の案（DB の変更は別承認）、isolation の許可の変更（つなぐときに H5 と同時に）
+
+## L6 decision 2026-10-17
+- verdict: PASS_PREFLIGHT / SOURCE_ONLY / PRODUCTION_NO_GO. Scope was documentation + mock contract tests, not POSTONA integration.
+- verified PR239: Draft OPEN HEAD f590b80fbbaa926be08d5e215ad87b373f402ff2, base F6 PR237 branch, 2 changed files; no merge/deploy observed.
+- Reported tests 6 new, provider153/bridge27/market324/combined541 PASS. Independent execution NOT_RUN. Existing 5 shared type errors and one permission-blocked test NOT_VERIFIED.
+- blockers: Anthropic personal-data restriction and privacy disclosures, durable billing/idempotency DB, user quotas/entitlement, slug brand versus UUID identity, simultaneous F6/H5 guard policy, POSTONA F4 ownership, quality, deploy bundling. User decision required before any personal-data Anthropic transfer. No production permission.
