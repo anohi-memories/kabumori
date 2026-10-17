@@ -1,0 +1,10 @@
+{
+  "task_id": "orchestration-v3-pr229-security-review-high-medium-fixes-f10-20261016",
+  "original_path": ".agent_v2/tasks/F10.md",
+  "archive_path": ".agent_v2/archive/2026-10-17-F10-orchestration-v3-pr229-security-review-high-medium-fixes-f10-20261016/files/.agent_v2/tasks/F10.md",
+  "size_bytes": 15505,
+  "sha256": "cdd142dd0267cb5fca6310e276b3ba66d19067db717b7b732deaab04f119a9b9",
+  "git_blob_sha": "cae39109576e98ca061b4b779ddcc723e54c0e16",
+  "source_commit": "main (see Git history for exact commit)",
+  "restore_verified": true
+}
