@@ -686,3 +686,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - 21023 bytes; SHA256 `d4eba107b1ee18e3aeb3ca2ac9b82dc6de381985fb45d3e99dded73d62c65ce3`; original/archive Git blob `1d24dbc76c58813ac8ef62133a8b09f20316439e`; restore matched; MANIFEST/SHA256SUMS stored; append-only.
 
 - 2026-10-17 | F3 | `postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016` | L3 PASS_SOURCE_CANDIDATE, Draft PR224 HEAD `2a9d6473`, production NO_GO | `.agent_v2/archive/2026-10-17-F3-postona-f3-x-reservation-oauth-entitlement-dispatch-integration-20261016` | original+Report 22959 UTF8 bytes, SHA256 `cf38895ab2280281ef3aa7c2d123e77881f263e330e6bb1e57cb3d8cad0521e5`, blob `6ed87f24`, byte-equal restore verified.
+
+## F4 POSTONA Threads token refresh design archive — 2026-10-17
+- task_id: `postona-f4-threads-token-refresh-source-design-20261017`
+- original_path: `.agent_v2/tasks/F4.md` (state at `2a53ef01`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-token-refresh-source-design-20261017/F4.md`
+- bytes: 11333; SHA256: `7aff085d4f7191d32fcb0e15598a73c6de2e1fae5464c3573ebbe7b343037bdd`; original_blob: `07aa01a1b375a64726fa5fca9700776790b87d08`
+- exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-credential-rotate-cas-sql-contract-20261017`). L4 accepted, PR255 `7bd54218a45e78f45448aea3ef72ed769f629325`, not wired, production and pilot NO_GO.
