@@ -183,17 +183,17 @@
 
 ## J2
 - slot: J2
-- status: ready
+- status: review_required
 - task_id: postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017
 - owner: codex
-- next_owner: codex
+- next_owner: chatgpt
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
 - dependencies: PR251 HEAD 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc
-- blocker: no real OAuth or managed testing; production and pilot NO_GO
+- blocker: V2 CHANGES_REQUIRED P2 R1 Android callback-filter validation; focused106 PASS, adverse6 PASS/2 FAIL; no real OAuth/managed testing; production and pilot NO_GO
 - previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr238-auth-cross-user-review-20261017/
 - slot_use: read-only one-pass focused OAuth edge/redirect review
 
