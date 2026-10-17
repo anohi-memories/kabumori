@@ -718,3 +718,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017`, L5 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; Draft PR259 head `422c101aff4bb475db075abf2c0e9423582069ae`.
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/files/.agent_v2/tasks/F5.md`.
 - bytes 21903, SHA256 `a11d31fdd31fa3c44be0a19d195c9e4afd95589923d490968c597073334bdb3f`, original/restored blob `cfded2dabdb48617fa3425be25c42665b7ee4cdf`, exact read-back match, MANIFEST and SHA256SUMS recorded, append-only.
+
+- 2026-10-17 | F10 | `orchestration-v3-incremental-index-fastpath-f10-20261017` | L10 PASS（V3の索引の差分更新）; Draft PR229 HEAD `27e1e33bb50b612ada9bc83e37a4fac129586a2e`; 55 tests, 4 GET/21,760 bytes/1.6秒（読み取りのみ） | `.agent_v2/archive/2026-10-17-F10-orchestration-v3-incremental-index-fastpath-f10-20261017/` | SHA256 `1183bb63fd70aa9d2d5b64f58c03dfd4660fe51932f04a0bab7817b32a8ab6f8`; blob/byte restoration verified.

@@ -1,0 +1,10 @@
+{
+  "task_id": "orchestration-v3-incremental-index-fastpath-f10-20261017",
+  "original_path": ".agent_v2/tasks/F10.md",
+  "archive_path": ".agent_v2/archive/2026-10-17-F10-orchestration-v3-incremental-index-fastpath-f10-20261017/files/.agent_v2/tasks/F10.md",
+  "size_bytes": 15619,
+  "sha256": "1183bb63fd70aa9d2d5b64f58c03dfd4660fe51932f04a0bab7817b32a8ab6f8",
+  "git_blob_sha": "83e098b7e984f462da75992b2b6c5f0d9dfd1cb7",
+  "source_commit": "df1b2d4513eddd0b343c306eb12ac5272d0af3cb",
+  "restore_verified": true
+}
