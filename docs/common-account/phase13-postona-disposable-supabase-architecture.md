@@ -51,6 +51,8 @@ What this phase found that changes the plan (none is fixed here; each has an own
 | **D-4** | Redirect allow-list for the first pass | **`auth-callback` exact only; Q-1 decides whether a pattern is needed** / both URLs exact, as #243 requires today |
 | **D-5** | Apply P1 / P2 to the disposable although production already has them? | **yes, then compare their objects with the production inventory (section 4.4 fidelity check)** / start from a baseline that already contains them |
 
+*(Update, D-3 package: the hosted branch is specified gate by gate in `docs/common-account/phase13-d3-hosted-sandbox-preflight.md`. It corrects the A2 export (pg_dump --schema-only needs SELECT, so a CONNECT-only login cannot run it), makes the CONNECT-only login's creation a separate consent, and keeps M12 out of the first managed pass because the D-2 stand-in is not a deployed function.)*
+
 ## 2. Evidence base (exact heads, read with `gh pr view` on 2026-10-17 JST)
 
 | Item | PR | Head | Notes |
