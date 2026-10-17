@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-x-oauth-t13-reservation-owner-guard-20261017",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-17-F3-postona-f3-x-oauth-t13-reservation-owner-guard-20261017/files/.agent_v2/tasks/F3.md",
+  "size": 20410,
+  "sha256": "62f8e4e5b8e707f1a572d8424ec59ed399c695d91298875399f18653f86900fa",
+  "original_git_blob": "734e255962f901771fefba497e5e0b8031d0b6f3",
+  "original_commit": "8cbab04b5e8a0105e82374b50f5cd50faf656608",
+  "archive_commit": "7baaa4d54e49a2e62d1f55d244c969c4aef03950",
+  "restoration": "byte-identical; Git blob-identical"
+}
