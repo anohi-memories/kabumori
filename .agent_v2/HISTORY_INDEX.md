@@ -692,3 +692,7 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F4.md` (state at `2a53ef01`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-threads-token-refresh-source-design-20261017/F4.md`
 - bytes: 11333; SHA256: `7aff085d4f7191d32fcb0e15598a73c6de2e1fae5464c3573ebbe7b343037bdd`; original_blob: `07aa01a1b375a64726fa5fca9700776790b87d08`
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-threads-credential-rotate-cas-sql-contract-20261017`). L4 accepted, PR255 `7bd54218a45e78f45448aea3ef72ed769f629325`, not wired, production and pilot NO_GO.
+
+## F6 PR256 erasure source candidate and independent CHANGES_REQUIRED — 2026-10-17
+- task_id: `common-ai-f6-postona-ledger-user-erasure-offline-candidate-20261017`; L6 PASS_SOURCE_CANDIDATE, subsequent independent Claude PR256 review CHANGES_REQUIRED: P2 policy_key/note PII retention, P3x3. Draft PR256 HEAD `1830320bd93fcfa458411dcf00f130d87d607d39` (no merge/production).
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-17-f6-pr256-erasure-reviewed-changes-required.md`; blob SHA both `12ad2381fad6d6fbef8d387eda56d53e3cddeb60`, 11052 chars, read-back equality verified. archive commit `82a8a58bca08eb80a346f901f43ec09b84558bff`. Independent SHA256/MANIFEST NOT_VERIFIED.
