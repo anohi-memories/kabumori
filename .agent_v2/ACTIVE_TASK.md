@@ -157,18 +157,18 @@
 
 ## F10
 - slot: F10
-- status: done
-- task_id: orchestration-v3-pr229-n1-n2-focused-correction-f10-20261017
+- status: ready
+- task_id: orchestration-v3-issue244-integration-preflight-f10-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: PR #229 HEAD 284286248e561e55e8aef7682081998878d05cfa; independent rereview N1/N2 only; previous F10 TASK archived
-- blocker: L10 PASS_SOURCE_FIX / V3_CUTOVER_NO_GO — independent N1/N2 rereview PASS; ChatGPT connector/branch CAS proof pending
-- slot_use: PR229 N1 pushurl/N2 BOM source correction accepted L10; F10 done/unreserved; V3 cutover NO_GO
+- dependencies: Issue #244; Draft PR #229; protected Draft PR #172; prior task archived
+- blocker: V3 cutover/main merge/pilot write NO_GO until preflight/history preservation/30-slot consistency checked
+- slot_use: V3 Issue244 independent read-only integration preflight and migration candidate design
 
 ## J1
 - slot: J1
