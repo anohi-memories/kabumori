@@ -56,22 +56,20 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-threads-token-refresh-source-design-20261017
+- status: ready
+- task_id: postona-f4-threads-credential-rotate-cas-sql-contract-20261017
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR251 3163928d pending focused review, F5 baseline contract, H5 token-owner contract
-- blocker: no live Meta credential or pilot approval; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-oauth-stack-integration-ios-return-20261017/F4.md
-- slot_use: Threads token refresh design and offline contracts, no OAuth network
+- dependencies: PR251/J2 pending scoped review, PR255 refresh design, H5 Vault, F5 lifecycle fences
+- blocker: source-only CAS contract; managed/no real Meta, pilot and production NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-threads-token-refresh-source-design-20261017/F4.md
+- slot_use: F4-owned Threads credential CAS SQL proposal and offline PG tests
 
-
-- l4_verdict_20261017_refresh: PASS_SOURCE_DESIGN / IMPLEMENTATION_PENDING / PRODUCTION_AND_PILOT_NO_GO; PR255 head 7bd54218a45e78f45448aea3ef72ed769f629325; no real refresh or DB activity.
 ## F5
 - slot: F5
 - status: ready
@@ -185,21 +183,19 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr238-auth-cross-user-review-20261017
+- status: ready
+- task_id: postona-j2-pr251-threads-oauth-entry-redirect-focused-review-20261017
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: PR238 b8e91ea8eb7c28e44820f15da5f697a9b3d4f8d6
-- blocker: CHANGES_REQUIRED P2×2: embedded management flow lost after new-login ready; obsolete reenroll callback send-time owner/epoch/request fence missing (user-switch form inherited). Production NO_GO.
-- previous_archive: .agent_v2/archive/2026-10-17-J2-focused-review-closed/
-- slot_use: PR238 focused review complete; existing68 PASS, adverse3 PASS/3 FAIL (2 causes), baseline1 PASS; return V2 to POSTONA G4ちゃ. No product or production changes.
-
-- v2_verdict_20261017: CHANGES_REQUIRED accepted P2x2; F5 gate fix and F4 integrated regressions needed; production NO_GO.
+- dependencies: PR251 HEAD 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc
+- blocker: no real OAuth or managed testing; production and pilot NO_GO
+- previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr238-auth-cross-user-review-20261017/
+- slot_use: read-only one-pass focused OAuth edge/redirect review
 
 ## J3
 - slot: J3
