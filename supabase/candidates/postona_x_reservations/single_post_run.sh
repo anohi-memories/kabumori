@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# POSTONA X single manual post (005, M1) proof on a disposable LOCAL PostgreSQL only. Never a remote project.
+# POSTONA X single manual post (005, M1; Edge path on 005 + 006) proof on a disposable LOCAL PostgreSQL only. Never a remote project.
 # Baseline: G5's production-shaped world from the G5/F5 candidate SOURCE (PR #165: lifecycle, enrollment, Phase 3b
 # service-write guard, core fence, brand state), the Stage 3B publish authority (real migration + PR #182's test
 # stand-ins), the live X onboarding with PR #257's T13 wrapper, the reservation candidate 001-004 (+ G5 binding 003),
-# G4's predicate as PR #257's TEST DOUBLE, then 005. Then: refusals / atomic apply, SQL behaviour, the REAL single-post
-# HTTP handler -> driver -> SQL -> fake X end to end, rollback / re-apply.
+# G4's predicate as PR #257's TEST DOUBLE, then 005. Then: refusals / atomic apply, SQL behaviour (005's own steps), then
+# 006 (the Edge code calls its steps), the REAL single-post HTTP handler -> driver -> SQL -> fake X end to end, rollback /
+# re-apply. 006's own proofs: single_post_live_fence_run.sh.
 # Usage: RESV_PGHOST=/private/tmp/<socket-dir> RESV_PGPORT=<port> RESV_PGSUPER=<local superuser> \
 #        RESV_G5_SOURCE_DIR=<dir with supabase/migrations + supabase/tests of the G5 candidate commit> single_post_run.sh
 # The cluster must also listen on 127.0.0.1 (trust auth). Optional: SINGLE_POST_CANDIDATE=<file> (mutation runs).
@@ -127,6 +128,11 @@ wait "$h"
 [[ "$(as_api "select state from postona_x_resv.post_now_begin('$A76', '$REQ76', 'busy', '$SHA76')")" == claimed ]] || fail "C repeat did not re-arm"
 echo "C_BUSY_FENCE_RELEASED_REARMED_PASS"
 
+# 006 (M1-F1): the Edge code uses its preflight / record / readback. The people get their publish switch ON (B6).
+own "$db" -f "$here/006_postona_x_single_post_live_fence.sql" >/dev/null
+own "$db" -c "update public.social_accounts set publish_enabled = true where id in (select account from t_ids.people)" >/dev/null
+echo "LIVE_FENCE_006_APPLIED"
+
 # E2E: the REAL single-post HTTP handler / driver / SQL with a fake X (MOCK_ONLY Auth, G4, credentials, X).
 if ! RESV_SP_API_URL="postgres://$apilogin@127.0.0.1:$port/$db" RESV_SP_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" DENO_NO_PACKAGE_JSON=1 \
   deno test --no-config --allow-net=127.0.0.1:"$port" --allow-read --allow-env=RESV_SP_API_URL,RESV_SP_OWNER_URL \
@@ -136,7 +142,8 @@ fi
 grep -E "passed|failed" "$tmp/e2e" | tail -1
 echo "E2E_SINGLE_POST_AUTHORIZED_SENT_READBACK_PASS"
 
-# RB: rollback removes the functions (rows stay valid reservation rows); re-apply works.
+# RB: rollback (006 first, then 005) removes the functions (rows stay valid reservation rows); re-apply works.
+own "$db" -f "$here/006_postona_x_single_post_live_fence_rollback.sql" >/dev/null
 own "$db" -f "$here/005_postona_x_single_post_rollback.sql" >/dev/null
 [[ "$(val -c "select (to_regprocedure('postona_x_resv.post_now_begin(text,uuid,text,text)') is null and to_regprocedure('postona_x_resv.post_now_get(uuid)') is null
   and to_regprocedure('postona_x_resv.single_post_fence(uuid,text)') is null)::text")" == true ]] || fail "RB left 005"

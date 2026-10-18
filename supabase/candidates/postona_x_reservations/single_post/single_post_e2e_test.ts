@@ -1,7 +1,8 @@
 // POSTONA X single manual post (M1) end to end on a disposable LOCAL PostgreSQL (run through single_post_run.sh only):
 //   Request -> postona-x-single-post http.ts -> Auth (fake GoTrue) -> real driver -> postona_resv_api (claims with the
-//   session id) -> 005: T13 + owner / G5 / G4 / authority -> x_publisher -> fake X -> finish -> read-back on a SEPARATE
-//   connection; app contract parser on the answer.
+//   session id) -> 005 + 006: T13 + owner / G5 / G4 / authority / publish switch / F5 live workspace state -> the
+//   generation-bound credential -> preflight -> x_publisher -> fake X -> record -> read-back on a SEPARATE connection;
+//   app contract parser on the answer.
 // MOCK_ONLY: GoTrue answers, G4's verified predicate (PR #257's TEST DOUBLE over what the guarded onboarding recorded), the
 // X credential source and X itself. Real Supabase Auth, G4, tokens and X are NOT proven here; a mock answer is never
 // evidence of a real X post.
@@ -57,7 +58,16 @@ const fakeX = async (_url: string, init?: RequestInit) => {
   return Response.json({ data: { id: String(nextId), text: call.text } }, { status: 201 });
 };
 let credentialOverride: ((account: string) => string | null) | null = null;
-const credentials = { available: true, accessTokenFor: (account: string) => Promise.resolve(credentialOverride ? credentialOverride(account) : `fake-x-token-${account}`) };
+// MOCK_ONLY G4 source: the fake token plus the database's generation read at the same moment (the G3 contract).
+const credentials = {
+  available: true,
+  credentialFor: async (account: string) => {
+    const token = credentialOverride ? credentialOverride(account) : `fake-x-token-${account}`;
+    if (token === null) return null;
+    const generation = String((await owner<[string]>("select postona_x_resv.x_credential_generation($1)", [account]))[0][0]);
+    return { token, generation };
+  },
+};
 const ENV = { get: (n: string) => ({ SUPABASE_URL: "https://project.example.invalid", SUPABASE_ANON_KEY: "publishable", POSTONA_RESV_DATABASE_URL: "unused" } as Record<string, string>)[n] };
 const realConnect = createDriverConnect({ databaseUrl: API_URL, allowInsecureLoopback: true });
 const handler = (o: { connect?: PgConnect; readConnect?: PgConnect } = {}) => createSinglePostHttpHandler(ENV, {
@@ -95,6 +105,7 @@ Deno.test("M1: one synthetic text post -- authorized, sent once with the account
   if (answer.result.kind !== "sent") return;
   assert.deepEqual(xCalls.slice(before), [{ token: `fake-x-token-${P(61).account}`, text: "はじめての手入力投稿 #POSTONA" }]);
   assert.deepEqual(await row(answer.result.reservationId), ["published", answer.result.xPostId, "PUBLISHED"]);
+  assert.deepEqual([answer.result.simulated, answer.result.afterFreeze], [true, false], "a fake X result is marked simulated");
   // The same request again: the stored result, no second send.
   const again = await post(token, P(61).account, "はじめての手入力投稿 #POSTONA", answer.requestId);
   assert.deepEqual(again.result, answer.result);
@@ -157,7 +168,7 @@ Deno.test("the read-back differs from what X answered: uncertain (never reported
   const tampering: PgConnect = async () => {
     const s = await realConnect();
     return { release: s.release, client: { queryArray: async (q: { text: string; args?: unknown[] }) => {
-      if (q.text.includes("post_now_get")) await owner("update postona_x_resv.reservations set provider_post_id = '1790000000000000001' where id = $1::uuid", [rid = String(q.args?.[0])]);
+      if (q.text.includes("post_now_readback")) await owner("update postona_x_resv.reservations set provider_post_id = '1790000000000000001' where id = $1::uuid", [rid = String(q.args?.[0])]);
       return await s.client.queryArray(q);
     } } };
   };
