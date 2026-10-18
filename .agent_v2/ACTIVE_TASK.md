@@ -93,11 +93,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-postona-openai-consult-offline-one-request-integration-20261018
 - owner: claude
-- next_owner: chatgpt
-- blocker: AI consultation server-side POSTONA entitlement/stop enforcement missing, mock-only; F5 X M1 and F1 UI source changes protected; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_OFFLINE_INTEGRATION PR273, live POSTONA consult remains unconnected; production entitlement, operationId, actual call store/quota, managed RLS and API verification NOT_VERIFIED; production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
