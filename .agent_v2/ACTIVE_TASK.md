@@ -41,10 +41,10 @@
 
 ## F3
 - slot: F3
-- status: in_progress
+- status: review_required
 - task_id: postona-f3-m1-single-text-post-offline-end-to-end-20261018
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
