@@ -1,0 +1,11 @@
+# F5 D-3 final archive
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/files/.agent_v2/tasks/F5.md
+- size_bytes: 20888
+- SHA256: 8eeba0f79434dcd58e6d15cf078f77e2dd2fabb4113d12edf55e76124a26c4d2
+- original_blob: ebe36f62ebec8bdc67bf0eba52d5012134664e30
+- archive_blob: ebe36f62ebec8bdc67bf0eba52d5012134664e30
+- source_commit: f31f622fb9e8bf2bbd34193205a4e2b989611fa9
+- implementation_PR: https://github.com/anohi-memories/kabumori/pull/265
+- restore: exact source/archive Git blob and text match
+- policy: append-only
