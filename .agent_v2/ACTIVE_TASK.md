@@ -8,19 +8,19 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: postona-f1-m2-restart-pending-uncertain-guard-20261018
+- status: ready
+- task_id: postona-f1-m3-simulated-afterfreeze-ui-contract-20261019
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- previous_archive: .agent_v2/archive/2026-10-18-F1-postona-m1-single-post-contract-adapter-L1/
-- dependencies: PR #274 UI → PR #277 adapter, F3 PR #272 durable readback, G2 visual QA, F4 credential, F5 entitlement
-- blocker: server-side durable restart safety not verified; read-only/offline F1-only scope; send disabled; independent clean worktree and fresh origin/main required
-- slot_use: Issue269 approved milestone 2: restart/pending/uncertain guard and duplicate-send avoidance, no API/DB/Auth/production operations
+- previous_archive: .agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/
+- dependencies: PR #274 UI → PR #277 adapter → PR #283 restart guard, F3 PR #278 simulated/afterFreeze contract, F3 PR #272
+- blocker: real send not connected (F3 publish switch OFF, F4 credential source / F5 entitlement not live); send disabled; independent clean worktree and fresh origin/main required
+- slot_use: G1 TASK 2026-10-19: apply F3 PR278 simulated/afterFreeze result marks to the manual X post screen and adapter, source-only, no API/DB/Auth/production operations
 
 ## F2
 - slot: F2

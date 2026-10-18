@@ -1,3 +1,7 @@
+## F1 M3 simulated / afterFreeze 結果契約のUI・アダプター反映（2026-10-19）
+- G1 指示により F1 `postona-f1-m3-simulated-afterfreeze-ui-contract-20261019` を ready/claude、Sonnet5（高）、F1→L1、返却先 かぶモリアプリG1のちゃ（新F1担当）として登録。F3 PR #278 の simulated（印が無ければ true）／afterFreeze を F1 の手入力X投稿画面と単発投稿アダプターに反映するソース限定TASK。送信ボタンは常時disabled、実接続・実SNS・DB/Auth/Edge/Cron変更なし。
+- 前F1 M2 done TASK+Report は `.agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/` に保存。15796 bytes、SHA256 `2d22de9b43d6cd01747f02555084e2dba4f299ab446ebacae9a18c22970d9a78`、原本/復元Git blob `c8dffbda56cb181e13a748b3fac9885b1f024353`、原commit `bb709d38ec81113706926117834354a05e289945`、MANIFEST.json/SHA256SUMS/HISTORY_INDEX 記録済み（復元確認済み）。PR283 HEAD `b4b761c4dd43cc4c8c1ee1533413b46f088ba21f` Draft・未マージ（L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO）。
+
 ## F5 shared owner epoch source-only TASK（2026-10-19）
 - 指令室 Issue #269 comment #6251536852 承認により `common-account-f5-shared-owner-epoch-monotonic-source-candidate-20261019` を F5 ready/claude、Opus5.5（高）、完了 L5 として登録。複数アプリ共通のブランド所有者epoch・ABA耐性・ACLのsource候補と隔離PG17のみ。G4 PR282のowner epochはTEST-ONLY stand-inであり本F5実装ではない。J2限定重点レビューSol（高）を実適用前の必須ゲートとする。
 - 前M2 done TASK+Reportは `.agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/` 保存。原本blob一致、24155 bytes、SHA256 `89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908`、MANIFEST/SHA256SUMS/HISTORY_INDEX更新・復元確認済み。fresh main／独立clean worktree／30枠変更path/owner競合は実装開始前に要検証。共有membership writer競合時はSTOP。
