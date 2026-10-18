@@ -188,22 +188,20 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017
+- status: ready
+- task_id: postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
-- recommended_model: Luna（高）
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: PR260 head 8e1534f2 on PR251, F4 SQL fix independent
-- blocker: PASS_FOCUSED_REVIEW; managed/real Android App Links validation remains unverified; production/pilot NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-J2-postona-j2-pr258-threads-credential-cas-sql-focused-review-20261017/
-- slot_use: PR260 narrow rereview complete; 27/27 focused Threads tests pass; V2 review required before any broader rollout
+- dependencies: PR263 HEAD a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705 and F5 checked-owner contract ACK
+- blocker: F5 agreement pending; no managed/production operation approved
+- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/
+- slot_use: read-only PR263 four-file focused PG17 owner-fence race rereview
 
-
-- v2_verdict_20261018: PASS_FOCUSED_REVIEW / PRODUCTION_AND_PILOT_NO_GO; PR260 HEAD 8e1534f2fa1d39f8f1c321ed2cf69705fddf1421, Android original P2 closed; native validation remains.
 ## J3
 - slot: J3
 - status: idle
