@@ -5,7 +5,7 @@
 This file is derived. The canonical state of each slot is the header of its TASK file. If this index
 disagrees with a TASK header, the TASK header wins and this index is stale.
 
-- source_digest: 16a51cce0bb65239869257f1324a7fffddebb6c0dd0c7312fffaafd2ee6751c6
+- source_digest: 923b3c92b7dc0d959353f2c977693a72756f79f1a49ffa398db60cc155f6cdaa
 
 ## G1
 - task_id: none
