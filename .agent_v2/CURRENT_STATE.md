@@ -1,3 +1,11 @@
+## POSTONA総合指令室｜2026-10-18 F1/J3 initial assignments
+- Coordination issue: #269 (六室統合・初回X投稿の最短経路); user approved proceeding. This entry records two **source-only task registrations**, not real execution/deployment.
+- F1: `postona-f1-x-manual-publish-ui-source-20261018` / ready / next_owner claude / Sonnet5（高） / F1→L1 / return_to かぶモリアプリG1のちゃ（新F1担当）。X手入力単発投稿のUI/preview/ホーム導線のみ。送信契約未接続の間はAPI send disabled。前かぶモリAI B0 TASK/Reportは `.agent_v2/archive/2026-10-18-F1-kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014/` に15569-byte SHA256 `7b601b2c01d982dc99aed3a45616bdd48349b6a02b10b30835898088b10ea1fc` で保存、Git blob一致・restore read-back・HISTORY_INDEX登録。旧G1 TASKは保護。
+- J3: `kabumori-j3-f2-pr213-p1p2-focused-rereview-20261018` / ready / next_owner codex / Sol（高） / J3→V3 / return_to かぶモリアプリG1のちゃ（運用休止・全体統括）。PR #213 P1無認証AI生成入口＋P2 planner復旧所有者のみのsource限定レビュー。J3旧worktree未確認のため新規clean独立checkoutを必須とし、確保不能ならSTOP。以前のJ3重複レビューは中止archive済み、PASS扱い不可。
+- F2: `kabumori-f2-pause-delivery-runtime-candidate-20261015` remains **review_required** / L2 waiting. `F2.md`先頭の古いreadyを新TASKとして読まない。J3 V3後にG1がL2整理・archive・競合判定。F2はPOSTONAへ未割当。
+- F3/F4/F5/F6: 既存TASKはdoneのまま。現行TASK/Reportの最終archive、fresh main、独立worktreeと新旧30枠の変更対象競合確認後に、別々の新TASKを検討する。F3/G4/F5のX identity/token/T13接続を優先、F6既存AI相談は並行 source-only 調整。
+- X/Threads実投稿、managed/prod Supabase、Auth/DB/RPC/Edge/Cron、paid AI、PR merge/deploy/EAS、Issue #131延期の勝手な解除：**すべてNO_GO**。実投稿は別途承認と限定安全ゲートが必要。
+
 ## F5 Phase13 D-3 hosted disposable Supabase構築前preflight設計 — 2026-10-17
 - F5 task_id `common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017` / ready / next_owner claude / Opus5.5（高） / F5→L5 / return_to 共通アカウントG5のちゃ（新F5担当）。D-2 L5 accepted PR259 Draft head 422c101aff4bb475db075abf2c0e9423582069ae。D-2 TASK+Reportはappend-only archive `.agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/`、MANIFEST/SHA256SUMS/restore/HISTORY_INDEX完了。
 - 新TASKは構築・課金・本番schema読み取りを一切実施せず、独立hosted Supabaseの設定・DB baseline/migration順・Cron/HTTP/SNS隔離・F4 preflight・テストユーザー/Auth/RLS/RPC/Edge・Free枠/予算/teardown・各段階の個別承認条件を文書/オフライン試験で具体化。Phase12 PR233限定安全確認は別レビューで実施。F3 R2'/T13とmanaged M12は未解決。本番・managed操作・OAuth/SNS/merge/deploy PRODUCTION_NO_GO。開始時はfresh origin/main、30枠の変更対象競合と独立worktree再確認。
