@@ -802,3 +802,10 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/files/.agent_v2/tasks/F5.md`.
 - size: 28694 bytes; SHA256 `58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54`; source/archive Git blob `0def34270d24a39510b21a78b803e9ba0905f160`. Restore equality PASS. Original commit `c34070ccea65498bc1bfa10109cb6e5adf63c416`; append-only MANIFEST.md and SHA256SUMS.
 - PR275 HEAD `ec0b3a6f4432c1d01ba3671f57d8a508c06d8777` Draft; followups Issue267 G5 ACK `6246624018` and Issue266 AI ACK `6247539818`.
+
+## F1 M1 archive 2026-10-18
+- task_id: postona-f1-m1-manual-ui-single-post-contract-adapter-20261018
+- source: .agent_v2/tasks/F1.md
+- archive: .agent_v2/archive/2026-10-18-F1-postona-m1-single-post-contract-adapter-L1/F1.md
+- bytes: 20263; SHA256: 77eb6093a63bbc6768404da6fa51c19c0e3032838d06170a204438374b42769b
+- Git blob: 6ddf421bddb2b5784b00dbdd40abf62fbd31827d; restore verified; MANIFEST.json and SHA256SUMS present. Origin commit not separately verified.
