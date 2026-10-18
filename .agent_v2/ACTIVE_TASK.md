@@ -8,10 +8,10 @@
 
 ## F1
 - slot: F1
-- status: review_required
+- status: done
 - task_id: postona-f1-m2-restart-pending-uncertain-guard-20261018
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
