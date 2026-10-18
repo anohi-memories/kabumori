@@ -809,3 +809,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - archive: .agent_v2/archive/2026-10-18-F1-postona-m1-single-post-contract-adapter-L1/F1.md
 - bytes: 20263; SHA256: 77eb6093a63bbc6768404da6fa51c19c0e3032838d06170a204438374b42769b
 - Git blob: 6ddf421bddb2b5784b00dbdd40abf62fbd31827d; restore verified; MANIFEST.json and SHA256SUMS present. Origin commit not separately verified.
+
+- 2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018: `.agent_v2/archive/2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018/` F4 TASK with embedded Report; SHA256 1c605186278a1c9d4e39da22b94f37ef6b3eb0a14f614aee3213db4e46555efb; original blob 34ea870613fad189225171671f2828e53d69da0d; original L4 acceptance commit fd8981fc5e68fe4feeac9fbdfc50f6d7d2af744a; restore PASS.
