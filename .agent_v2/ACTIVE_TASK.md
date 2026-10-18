@@ -96,20 +96,19 @@
 
 ## F6
 - slot: F6
-- status: done
-- task_id: common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019
+- status: ready
+- task_id: common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019
 - owner: claude
-- next_owner: none
-- blocker: L6 PASS_OFFLINE_CONTRACT PR284 source-only; G5 verdict/recheck and POSTONA handler owner still unverified, real quotas/call store/managed/production NO_GO.
+- next_owner: claude
+- blocker: none for source-only start (独立clean worktree・PR競合の確認は開始ゲート). 共有コード変更・本物のSupabase・実AI・productionは対象外（必要なら提案だけでSTOP）。
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: Issue269 comment6251537519, Issue280, PR273 source contract, G5 M2 PR279 design; no handler/Auth source edits allowed.
-- previous_archive: .agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md
-- slot_use: F6 multi-app common AI offline contract completed; preserve until archive and next independently approved shared-AI task
-
+- dependencies: PR284 HEAD 9c8421344f7a363b5e4b8a892eb4e9ff4dc8e8f7 (stack base), PR273, PR249 ai_calls migration, H5 bridge PR198; G5 PR279 design only / Option B not approved; POSTONA handler owner NOT_CONFIRMED.
+- previous_archive: .agent_v2/archive/2026-10-19-F6-common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019/MANIFEST.md
+- slot_use: F6 multi-app common AI — offline conformance of the PR284 gateway contract against real OpenAI/Claude adapters, the real ledger guard and the ai_calls store (isolated PG); gap table only, no shared code change
 ## F7
 - slot: F7
 - status: ready
