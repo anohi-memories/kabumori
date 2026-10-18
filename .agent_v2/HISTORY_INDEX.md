@@ -794,3 +794,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - Provenance audit `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.audit/MANIFEST.md`; checksum file sibling `SHA256SUMS`; both GitHub read-back exact PASS. Source last recorded L6 commit `6a63f96f0dd4af76898c4bbb0e2d8feca78a9f58`, original creation commit NOT_VERIFIED. Archive append-only, original content unchanged.
 
 - 2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018: `.agent_v2/archive/2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018/` TASK+Report exact blob restore PASS; MANIFEST.md and SHA256SUMS recorded; prior V2 accepted.
+
+- 2026-10-18 | F3 | `postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018` | L3 source accepted / production NO_GO; PR278 `bf76a7c7` | `.agent_v2/archive/2026-10-18-F3-postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018` | bytes=25007 SHA256 `44eda7b2d975d979daaf6f24251d029b7e5e3096b850aa3a6c559e2a9a66e72c`; restore verified; ACTIVE status update blocked.
