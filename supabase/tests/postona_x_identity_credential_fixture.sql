@@ -1,8 +1,8 @@
 -- Fake-only test support for supabase/tests/postona_x_identity_credential_run.sh (F4 / G4,
 -- postona-f4-m1-x-identity-verified-credential-port-source-20261018). Applied on the world the runner builds (G5/F5's
--- REAL lifecycle, the live X onboarding with F3's T13 guard, F3's reservation candidates 001-004, PR #124's
--- provisioner, G4's X v2 with its attestation record, G4's 001 and 002). The Edge code exchange is faked by computing
--- its attestation with the fixture's fake key (PR #126's test fixture). Every value is fake. Disposable local DB only.
+-- REAL lifecycle + the TEST-ONLY F5 owner-epoch stand-in, the live X onboarding with F3's T13 guard, F3's candidates
+-- 001-006, PR #124's provisioner, G4's X v2 with its attestation record, G4's 001-003). The Edge code exchange is faked
+-- by computing its attestation with the fixture's fake key (PR #126's test fixture). Every value is fake.
 set timezone = 'UTC';
 
 create schema xg;
@@ -14,6 +14,9 @@ create function xg.h(p_tag text) returns text language sql immutable as $$
   select encode(sha256(convert_to('state:' || p_tag, 'UTF8')), 'hex') $$;
 create function xg.check(p_ok boolean, p_label text) returns void language plpgsql as $$
 begin if p_ok is not true then raise exception 'FAIL %', p_label; end if; end $$;
+
+-- SHA-256 hex of a text (the digest the attestation and the refresh re-attestation carry).
+create function xg.sha(p text) returns text language sql immutable as $$ select encode(sha256(convert_to(p, 'UTF8')), 'hex') $$;
 
 -- The person's verified JWT claims, as PostgREST / an owner channel carrying them sets them.
 create function xg.claims(p_user uuid, p_session uuid) returns void language plpgsql as $$
@@ -85,11 +88,21 @@ begin
   return v_account;
 end $$;
 
--- What G4 answers about one account, for one person: 'verified=<t|f> token=<tag|null> gen=<set|null>'.
+-- F3's generation as G4's credentialFor answers it (003), or 'null'. PL/pgSQL so that this fixture also installs on a
+-- world without 003 (the fail-before world of PR #276's candidates).
+create function xg.gen(p_account text) returns text language plpgsql as $$
+declare v text;
+begin
+  execute 'select c.generation from public.x_posting_credential_for($1) c' into v using p_account;
+  return coalesce(v, 'null');
+exception when undefined_function then
+  return 'n/a';
+end $$;
+-- What G4 answers about one account, for one person: 'verified=<t|f> token=<token|null> gen=<set|null>'.
 create function xg.view(p_user uuid, p_account text) returns text language sql as $$
   select format('verified=%s token=%s gen=%s', public.x_account_g4_verified(p_user, p_account)::text,
     coalesce(public.x_posting_access_token_for(p_account), 'null'),
-    case when public.x_account_credential_generation(p_account) is null then 'null' else 'set' end) $$;
+    case xg.gen(p_account) when 'null' then 'null' when 'n/a' then 'n/a' else 'set' end) $$;
 create function xg.ok_view(p_user uuid, p_account text, p_tag text) returns text language sql as $$
   select format('verified=true token=%s gen=set', xg.access(p_tag)) $$;
 create function xg.denied() returns text language sql immutable as $$ select 'verified=false token=null gen=null' $$;

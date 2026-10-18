@@ -181,6 +181,8 @@ else
 fi
 as_owner "$base" -f "$pr124_fixture" > /dev/null
 as_owner "$base" -f "$here/postona_x_oauth_hardening_test_fixture.sql" > /dev/null
+# TEST-ONLY F5 stand-in for the workspace owner epoch the attestation binds (J2 V2 R2; F5 owns the real one).
+as_owner "$base" -f "$here/postona_x_owner_epoch_f5_stand_in.sql" > /dev/null
 # The base keeps no provisioner (for the T9_MISSING case); t9 is the base plus PR #124's candidate.
 create_db "$t9" "$base"
 [[ "$(apply "$t9" "$owner" "$pr124_candidate")" == applied ]] || fail "PR #124's candidate did not apply"

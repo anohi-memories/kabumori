@@ -10,11 +10,14 @@
 --   public.complete_social_mobile_x_oauth_connection_v2(uuid,text,text,text,text,text)
 --   TABLE public.x_account_identity_attestations   (F4 M1, postona-f4-m1-x-identity-verified-credential-port-source-
 --       20261018) one row per X account: the attested connection complete_v2 made -- the person, the workspace,
---       the X user id, the two Vault references and the verified_at it wrote, in the same transaction. Nothing
---       else writes it. G4's verified predicate and server-only credential handoff
---       (candidates/postona_x_identity_credential/) accept an account only while its row still equals this record,
---       so a live (v1) complete -- which takes the X id and tokens as given and always rewrites verified_at --
---       leaves the account unverified until the next attested connect.
+--       the X user id, the two Vault references, the verified_at it wrote AND the SHA-256 of the two tokens the Edge
+--       signed (J2 V2 R1: content, not a timestamp), F5's workspace owner epoch (J2 V2 R2), the refresh generation and
+--       the assumed access-token expiry. Only this function and G4's refresh re-attestation
+--       (x_account_attest_refreshed_credential) write it. G4's verified predicate and server-only credential handoff
+--       (candidates/postona_x_identity_credential/) accept an account only while the stored tokens' digests, the row
+--       and the owner epoch still equal this record, so any other credential write -- a live (v1) complete, even in
+--       the same transaction as this one -- and any owner change (A -> B -> A included) leave the account unverified
+--       until the next attested connect.
 -- The upgrade (grant these to authenticated, deploy the Edge that attests, then revoke the old three) is
 -- a separate reviewed, user-authorized rollout: docs/postona/x-oauth-hardening-candidate-20261010.md.
 --
@@ -70,6 +73,23 @@ begin
   end if;
   if pg_catalog.to_regclass('public.x_account_identity_attestations') is not null then
     raise exception 'POSTONA_X_OAUTH_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  -- F5's workspace owner epoch (proposed F5 interface, J2 V2 R2) and the refresh core's state (its generation).
+  if pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)') is null
+     or (select p.prorettype from pg_catalog.pg_proc p
+         where p.oid = pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)')) is distinct from 'pg_catalog.int8'::pg_catalog.regtype
+     or (select p.proowner from pg_catalog.pg_proc p
+         where p.oid = pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)')) is distinct from v_owner
+     or exists (select 1 from pg_catalog.pg_roles r
+                where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                  and pg_catalog.has_function_privilege(r.oid, pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)'), 'EXECUTE')) then
+    raise exception 'POSTONA_X_OAUTH_PRECONDITION_OWNER_EPOCH';
+  end if;
+  if pg_catalog.to_regclass('public.x_account_refresh_state_v2') is null
+     or (select pg_catalog.count(*) from pg_catalog.pg_attribute a
+         where a.attrelid = pg_catalog.to_regclass('public.x_account_refresh_state_v2') and not a.attisdropped
+           and a.attname in ('social_account_id', 'generation')) <> 2 then
+    raise exception 'POSTONA_X_OAUTH_PRECONDITION_REFRESH_STATE';
   end if;
 
   -- G5's guard (T13): exists, returns void, owned by the table owner, executable by no API role.
@@ -149,6 +169,13 @@ create table public.x_account_identity_attestations (
   vault_refresh_token_secret_id uuid not null,
   verified_at timestamptz not null,
   attested_at timestamptz not null,
+  -- J2 V2 R1: the credential's content as signed (or as re-attested after a refresh), never a timestamp.
+  access_token_sha256 text not null check (access_token_sha256 ~ '^[0-9a-f]{64}$'),
+  refresh_token_sha256 text not null check (refresh_token_sha256 ~ '^[0-9a-f]{64}$'),
+  -- J2 V2 R2: F5's workspace owner epoch when attested; any later owner write moves it on for good.
+  owner_epoch bigint not null,
+  refresh_generation bigint not null,
+  access_expires_at timestamptz not null,
   check (vault_access_token_secret_id <> vault_refresh_token_secret_id)
 );
 alter table public.x_account_identity_attestations enable row level security;
@@ -339,17 +366,28 @@ begin
     -- The whole call fails: no secret, no consumed state, no status change.
     raise exception 'X_ACCOUNT_ALREADY_CONNECTED' using errcode = 'P0001';
   end;
-  -- F4 M1: what was attested, bound to this person and workspace, in this same transaction.
+  -- F4 M1: what was attested, bound to this person and workspace, in this same transaction: the signed tokens'
+  -- digests (R1), F5's owner epoch read under the owner membership's FOR SHARE above (R2), the refresh generation, and
+  -- the access-token expiry ASSUMED from X's documented 2-hour lifetime (not attested; NOT verified against real X).
   insert into public.x_account_identity_attestations
     (social_account_id, attestation_id, user_id, brand_id, platform_user_id, oauth_state_id,
-     vault_access_token_secret_id, vault_refresh_token_secret_id, verified_at, attested_at)
-  values (v_account.id, gen_random_uuid(), v_user, v_workspace, p_platform_user_id, v_state_id, v_access, v_refresh, now(), now())
+     vault_access_token_secret_id, vault_refresh_token_secret_id, verified_at, attested_at,
+     access_token_sha256, refresh_token_sha256, owner_epoch, refresh_generation, access_expires_at)
+  values (v_account.id, gen_random_uuid(), v_user, v_workspace, p_platform_user_id, v_state_id, v_access, v_refresh, now(), now(),
+          pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_access_token, 'UTF8')), 'hex'),
+          pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_refresh_token, 'UTF8')), 'hex'),
+          private.account_lifecycle_brand_owner_epoch(v_workspace),
+          coalesce((select st.generation from public.x_account_refresh_state_v2 st where st.social_account_id = v_account.id), 0),
+          pg_catalog.clock_timestamp() + interval '2 hours')
   on conflict (social_account_id) do update
     set attestation_id = excluded.attestation_id, user_id = excluded.user_id, brand_id = excluded.brand_id,
         platform_user_id = excluded.platform_user_id, oauth_state_id = excluded.oauth_state_id,
         vault_access_token_secret_id = excluded.vault_access_token_secret_id,
         vault_refresh_token_secret_id = excluded.vault_refresh_token_secret_id,
-        verified_at = excluded.verified_at, attested_at = excluded.attested_at;
+        verified_at = excluded.verified_at, attested_at = excluded.attested_at,
+        access_token_sha256 = excluded.access_token_sha256, refresh_token_sha256 = excluded.refresh_token_sha256,
+        owner_epoch = excluded.owner_epoch, refresh_generation = excluded.refresh_generation,
+        access_expires_at = excluded.access_expires_at;
 end;
 $$;
 
