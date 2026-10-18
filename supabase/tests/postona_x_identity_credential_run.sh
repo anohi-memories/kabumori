@@ -9,6 +9,7 @@
 #      F5 PR #178 83334a091ded5571cf595fd99d7a035627564735  G5/F5 Phase 3b guard (T13) + fixture, Phase 4, F5 workspace
 #                                                           service state, Phase 6
 #      G4 PR #124 c30f246409a77080cbc03aef6c4cb72b5481e125  the T9 personal-workspace provisioner + its test fixture
+#      F5 PR #285 3a5eef3d6b981e0646683ce101a22542fd0a4e2f  the shared brand owner epoch candidate (001_brand_owner_epoch.sql)
 #      F3 PR #278 bf76a7c7b54ff8aa1155aace2045235e9408c18a  reservation candidates 001-006 (005 single post, 006 live fence
 #                                                           with x_credential_generation), the T13 guard of the live X
 #                                                           onboarding, the G4 predicate contract (K1-K6) + helpers + test
@@ -16,8 +17,8 @@
 #                                                           x_credential_generation.ts (identical to PR #257 where shared)
 #    and, for fail-before only, PR #276 39ab57ab3648a4c727be8a31366e4a03b2fad9fc's own copies of the G4 candidates.
 # 2. On a LOCAL Unix-socket PostgreSQL 17 cluster, as a per-run non-superuser owner (CREATEROLE for F3's two roles):
-#    G5's lifecycle fixtures and REAL migrations, the TEST-ONLY F5 owner-epoch stand-in (postona_x_owner_epoch_f5_stand_in
-#    .sql: the interface G4 asks F5 to own), the live X onboarding, account deletion, Phase 2a-2, PR #124, PR #126's fake
+#    G5's lifecycle fixtures and REAL migrations, the membership RLS migration (20260918120000) and F5 PR #285's REAL owner
+#    epoch candidate (overlaid from 3a5eef3d), the live X onboarding, account deletion, Phase 2a-2, PR #124, PR #126's fake
 #    attestation key, F3's 001-006 and T13 guard, the refresh state aligned to the refresh core's production columns.
 #    Then, with PR #126 (this branch) on top:
 #      a. preconditions of PR #126 (owner epoch), 001, 002, 003; re-apply refused;
@@ -30,6 +31,8 @@
 #      f. supabase/tests/postona_x_identity_credential_e2e_test.ts: F3's C1-C5 and G1-G5 checkers and F3's real X
 #         publisher (counting fake X) over the real database through psql (separate sessions = the owner channel);
 #      g. mutations of 001 / 002 / 003 must FAIL the proof.
+# (2026-10-19, F4 postona-f4-pr282-pr285-owner-epoch-offline-integration-20261019: the TEST-ONLY epoch stand-in is gone; the
+# world installs F5 PR #285 3a5eef3d6b981e0646683ce101a22542fd0a4e2f's real candidate, whose getter answers NULL when unknown.)
 # Usage: XG_PGHOST=/private/tmp/<socket-dir> XG_PGPORT=<port> XG_PGSUPER=<superuser> supabase/tests/postona_x_identity_credential_run.sh
 # Roles postona_resv_api / postona_resv_worker are cluster-wide: run alone on its cluster.
 set -euo pipefail
@@ -51,7 +54,8 @@ PR124=c30f246409a77080cbc03aef6c4cb72b5481e125
 PR178=83334a091ded5571cf595fd99d7a035627564735
 PR278=bf76a7c7b54ff8aa1155aace2045235e9408c18a
 PR276=39ab57ab3648a4c727be8a31366e4a03b2fad9fc
-for sha in "$PR124" "$PR178" "$PR278" "$PR276"; do
+PR285=3a5eef3d6b981e0646683ce101a22542fd0a4e2f
+for sha in "$PR124" "$PR178" "$PR278" "$PR276" "$PR285"; do
   git -C "$repo" cat-file -e "${sha}^{commit}" 2>/dev/null || fail "missing git objects for $sha (fetch its branch first)"
 done
 
@@ -86,6 +90,7 @@ overlay "$PR178" supabase/tests/common_account_write_guard_fixture.sql \
   supabase/migrations/20261012230000_common_account_service_brand_state.sql \
   supabase/migrations/20261013120000_common_account_service_deletion_ownership.sql
 overlay "$PR124" supabase/candidates/postona_threads_oauth_workspace_candidate.sql supabase/tests/postona_threads_oauth_test_fixture.sql
+overlay "$PR285" supabase/candidates/common_account_brand_owner_epoch/001_brand_owner_epoch.sql
 r=supabase/candidates/postona_x_reservations; g=supabase/candidates/postona_x_oauth_t13_guard; f=supabase/functions/_shared/postona_reservations
 overlay "$PR278" "$r/001_postona_x_reservations.sql" "$r/002_postona_x_resv_api_role.sql" "$r/003_postona_x_resv_g5_binding.sql" \
   "$r/004_postona_x_resv_dispatch.sql" "$r/005_postona_x_single_post.sql" "$r/006_postona_x_single_post_live_fence.sql" \
@@ -149,7 +154,9 @@ need "$pre" "$m/20261013120000_common_account_service_deletion_ownership.sql"
 "${as_super[@]}" -d "$pre" -c 'create schema extensions; grant usage on schema extensions to public; create extension pgcrypto with schema extensions;' > /dev/null
 as_owner "$pre" -f "$t/postona_threads_oauth_test_fixture.sql" > /dev/null
 as_owner "$pre" -f "$t/postona_x_oauth_hardening_test_fixture.sql" > /dev/null
-as_owner "$pre" -f "$t/postona_x_owner_epoch_f5_stand_in.sql" > /dev/null
+# F5's owner epoch (PR #285, real candidate) after the membership RLS migration its precondition needs (as F5's runner).
+as_owner "$pre" -f "$m/20260918120000_social_mobile_brand_memberships.sql" > /dev/null
+need "$pre" "$c/common_account_brand_owner_epoch/001_brand_owner_epoch.sql"
 # The refresh state as the refresh core (20260925140000) shapes it in production: the two columns the fixture omits.
 q "$pre" -c "alter table public.x_account_refresh_state_v2 add column access_expires_at timestamptz, add column last_refreshed_at timestamptz" > /dev/null
 for f in "$c/postona_threads_oauth_workspace_candidate.sql" "$tree/$r/001_postona_x_reservations.sql" "$tree/$r/002_postona_x_resv_api_role.sql" \
@@ -159,12 +166,14 @@ for f in "$c/postona_threads_oauth_workspace_candidate.sql" "$tree/$r/001_poston
 done
 world="$(copy world "$pre")"
 need "$world" "$pr126"
-echo "PASS world: real G5 (T13 + Phase 4 + F5 + Phase 6) + F5 owner-epoch stand-in + live X onboarding + 2a-2 + #124 + F3 001-006 + F3 T13 guard + #126 v2 (attestation)"
+echo "PASS world: real G5 (T13 + Phase 4 + F5 + Phase 6) + F5 PR #285 owner epoch + live X onboarding + 2a-2 + #124 + F3 001-006 + F3 T13 guard + #126 v2 (attestation)"
 
 # ---- 2a. Preconditions -------------------------------------------------------------------------------------------
 expect() { local label="$1" db="$2" file="$3" code="$4" got; got="$(apply "$db" "$file")"; [[ "$got" == "$code" ]] || fail "$label: $got"; }
 db="$(copy p_126epoch "$pre")"; q "$db" -c "drop function private.account_lifecycle_brand_owner_epoch(text)" > /dev/null
 expect "PR #126 without F5's owner epoch" "$db" "$pr126" POSTONA_X_OAUTH_PRECONDITION_OWNER_EPOCH
+db="$(copy p_126cover "$pre")"; q "$db" -c "drop function private.account_lifecycle_brand_owner_epoch_covered()" > /dev/null
+expect "PR #126 with an epoch getter but not F5's real candidate (no coverage check: a stand-in)" "$db" "$pr126" POSTONA_X_OAUTH_PRECONDITION_OWNER_EPOCH
 db="$(copy p_attest "$world")"; q "$db" -c "drop table public.x_account_identity_attestations" > /dev/null
 expect "001 without the attestation record" "$db" "$g4" X_IDENTITY_CREDENTIAL_PRECONDITION_ATTESTATION
 db="$(copy p_f5 "$world")"; "${as_super[@]}" -d "$db" -c "grant execute on function private.account_lifecycle_service_state_readonly(uuid, text) to service_role" > /dev/null
@@ -184,7 +193,7 @@ db="$(copy p_cfor_g4 "$world")"
 expect "003 without G4's 001" "$db" "$cfor" X_CREDENTIAL_FOR_PRECONDITION_G4
 db="$(copy p_cfor_f3 "$world")"; need "$db" "$g4"; q "$db" -c "drop function postona_x_resv.x_credential_generation(text)" > /dev/null
 expect "003 without F3's generation (006)" "$db" "$cfor" X_CREDENTIAL_FOR_PRECONDITION_F3_GENERATION
-echo "PASS preconditions (PR126: owner epoch; 001: attestation, F5 reachable, owner epoch, refresh shape, superuser; 002: G4, not F3's DENY; 003: G4, F3 generation)"
+echo "PASS preconditions (PR126: owner epoch, coverage; 001: attestation, F5 reachable, owner epoch, refresh shape, superuser; 002: G4, not F3's DENY; 003: G4, F3 generation)"
 
 # ---- 2b/2e. The proof ---------------------------------------------------------------------------------------------
 A=101
@@ -327,6 +336,9 @@ mutate no_refresh_digest 001 "    and (select pg_catalog.encode(pg_catalog.sha25
 " ""
 mutate no_owner_epoch 001 "    and private.account_lifecycle_brand_owner_epoch(sa.brand_id) = a.owner_epoch
 " ""
+mutate epoch_null_as_match 001 "    and private.account_lifecycle_brand_owner_epoch(sa.brand_id) = a.owner_epoch
+" "    and coalesce(private.account_lifecycle_brand_owner_epoch(sa.brand_id), a.owner_epoch) = a.owner_epoch
+"
 mutate no_verified_at_binding 001 "    and a.verified_at = sa.verified_at
 " ""
 mutate no_reference_binding 001 "    and a.vault_access_token_secret_id = sa.vault_access_token_secret_id
@@ -355,7 +367,9 @@ mutate reattest_no_digest_check 001 "     or (select pg_catalog.encode(pg_catalo
          from vault.decrypted_secrets d where d.id = v_sa.vault_access_token_secret_id) is distinct from p_access_token_sha256
 " ""
 mutate reattest_no_generation_check 001 " or v_generation <= v_a.refresh_generation" ""
+mutate reattest_no_epoch_check 001 "     or private.account_lifecycle_brand_owner_epoch(v_sa.brand_id) is distinct from v_a.owner_epoch
+" ""
 mutate binding_allows_all 002 "  select public.x_account_g4_verified(p_user_id, p_social_account_id)" "  select true"
 mutate credential_for_other_generation 003 "postona_x_resv.x_credential_generation(p_social_account_id) as generation" "pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_social_account_id, 'UTF8')), 'hex') as generation"
 cat "$tree/XG_MANIFEST.txt"
-echo "ALL PASS (RUN: local disposable PG17, REAL G5/F5 lifecycle + TEST-ONLY F5 owner-epoch stand-in, F3's real candidates 001-006 and publisher with a counting fake X. MOCKED: the Edge code exchange's attestation (fake key), X, F5's owner epoch. NOT_RUN: managed Supabase Auth / PostgREST / Vault, real OAuth / tokens / X, production)"
+echo "ALL PASS (RUN: local disposable PG17, REAL G5/F5 lifecycle + F5 PR #285 owner epoch, F3's real candidates 001-006 and publisher with a counting fake X. MOCKED: the Edge code exchange's attestation (fake key), X. NOT_RUN: managed Supabase Auth / PostgREST / Vault, real OAuth / tokens / X, production)"

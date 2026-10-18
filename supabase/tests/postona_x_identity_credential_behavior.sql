@@ -216,6 +216,48 @@ select xg.check(public.x_account_attest_refreshed_credential(:'acct_g', xg.sha(x
                 '7 a write slipped in between: not re-attested');
 select xg.check(public.x_posting_access_token_for(:'acct_g') is null, '7 and nothing handed over');
 
+-- E. F5 PR #285's owner epoch, the real candidate: NULL = unknown = refuse (never 0, never a match); a rolled-back owner
+--    change moves nothing; an old epoch can never re-attest; a new attested connect recovers with the new epoch.
+select xg.enroll(130) as ep \gset
+select xg.enroll(131) as ep2 \gset
+select xg.connect_v2(:'ep', 'ep1', '1130', 'EP') as acct_ep \gset
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.ok_view(:'ep', :'acct_ep', 'EP'), 'E attested: ' || xg.view(:'ep', :'acct_ep'));
+select xg.check((select a.owner_epoch >= 1 and a.owner_epoch = private.account_lifecycle_brand_owner_epoch(a.brand_id)
+                 from public.x_account_identity_attestations a where a.social_account_id = :'acct_ep'), 'E the recorded epoch is F5''s');
+select xg.gen(:'acct_ep') as gen_ep \gset
+begin;
+update public.brand_memberships set user_id = :'ep2' where brand_id = public.social_mobile_account_deletion_workspace(:'ep') and user_id = :'ep' and role = 'owner';
+rollback;
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.ok_view(:'ep', :'acct_ep', 'EP') and xg.gen(:'acct_ep') = :'gen_ep', 'E a rolled-back owner change moves nothing');
+select row(a.*)::text as att_ep from public.x_account_identity_attestations a where a.social_account_id = :'acct_ep' \gset
+alter table public.brand_memberships disable trigger account_lifecycle_owner_epoch_row;
+select xg.check(private.account_lifecycle_brand_owner_epoch(public.social_mobile_account_deletion_workspace(:'ep')) is null, 'E F5 answers NULL when its coverage is broken');
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.denied(), 'E an unknown epoch never verifies: ' || xg.view(:'ep', :'acct_ep'));
+select xg.check(not exists (select 1 from public.x_posting_credential_for(:'acct_ep')) and postona_x_resv.g4_x_account_verified(:'ep', :'acct_ep') is false, 'E no credential, F3 predicate false');
+select xg.check(xg.connect_v2(:'ep', 'ep2', '1130', 'EP2') = 'ERR:X_OWNER_EPOCH_UNKNOWN', 'E an attested connect under an unknown epoch: fixed refusal');
+select xg.check((select row(a.*)::text from public.x_account_identity_attestations a where a.social_account_id = :'acct_ep') = :'att_ep'
+                and (select s.secret from vault.secrets s join public.social_accounts sa on sa.vault_access_token_secret_id = s.id where sa.id = :'acct_ep') = xg.access('EP'),
+                'E the refused connect wrote nothing (record, Vault)');
+alter table public.brand_memberships enable trigger account_lifecycle_owner_epoch_row;
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.ok_view(:'ep', :'acct_ep', 'EP'), 'E coverage back, nothing changed: usable again');
+update public.brand_memberships set user_id = :'ep2' where brand_id = public.social_mobile_account_deletion_workspace(:'ep') and user_id = :'ep' and role = 'owner';
+update public.brand_memberships set user_id = :'ep' where brand_id = public.social_mobile_account_deletion_workspace(:'ep') and user_id = :'ep2' and role = 'owner';
+select xg.check(private.account_lifecycle_brand_owner_epoch(public.social_mobile_account_deletion_workspace(:'ep'))
+                = (select a.owner_epoch + 2 from public.x_account_identity_attestations a where a.social_account_id = :'acct_ep'), 'E A -> B -> A moved F5''s epoch twice');
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.denied(), 'E A -> B -> A: not revived');
+select vault.update_secret((select vault_access_token_secret_id from public.social_accounts where id = :'acct_ep'), xg.access('EP-refreshed'));
+select vault.update_secret((select vault_refresh_token_secret_id from public.social_accounts where id = :'acct_ep'), xg.refresh('EP-refreshed'));
+insert into public.x_account_refresh_state_v2 (social_account_id) values (:'acct_ep') on conflict do nothing;
+update public.x_account_refresh_state_v2 set generation = generation + 1, last_refreshed_at = now(), access_expires_at = now() + interval '2 hours'
+ where social_account_id = :'acct_ep';
+select xg.check(public.x_account_attest_refreshed_credential(:'acct_ep', xg.sha(xg.access('EP-refreshed')), xg.sha(xg.refresh('EP-refreshed'))) is false,
+                'E a refresh re-attestation under the old epoch is refused');
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.denied(), 'E still nothing handed over');
+select xg.check(xg.connect_v2(:'ep', 'ep3', '1130', 'EP3') = :'acct_ep', 'E a new attested connect (connect)');
+select xg.check(xg.view(:'ep', :'acct_ep') = xg.ok_view(:'ep', :'acct_ep', 'EP3'), 'E recovered: ' || xg.view(:'ep', :'acct_ep'));
+select xg.check((select a.owner_epoch = private.account_lifecycle_brand_owner_epoch(a.brand_id) from public.x_account_identity_attestations a
+                 where a.social_account_id = :'acct_ep') and xg.gen(:'acct_ep') <> :'gen_ep', 'E with the current epoch and a new generation');
+
 -- 8. Session lost: the attested flow itself is T13-guarded (G5's real guard); a signed-out person gets nothing.
 select xg.enroll(108) as h \gset
 update auth.sessions set not_after = now() - interval '1 second' where user_id = :'h';

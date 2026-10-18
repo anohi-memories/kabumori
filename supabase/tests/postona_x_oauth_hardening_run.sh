@@ -181,8 +181,11 @@ else
 fi
 as_owner "$base" -f "$pr124_fixture" > /dev/null
 as_owner "$base" -f "$here/postona_x_oauth_hardening_test_fixture.sql" > /dev/null
-# TEST-ONLY F5 stand-in for the workspace owner epoch the attestation binds (J2 V2 R2; F5 owns the real one).
-as_owner "$base" -f "$here/postona_x_owner_epoch_f5_stand_in.sql" > /dev/null
+# F5's owner epoch (PR #285 candidate, read-only copy given by POSTONA_OWNER_EPOCH_CANDIDATE), after the membership
+# RLS migration that leaves no API role able to write memberships (its precondition, as F5's own runner applies it).
+as_owner "$base" -f "$migrations/20260918120000_social_mobile_brand_memberships.sql" > /dev/null
+[[ "$(apply "$base" "$owner" "${POSTONA_OWNER_EPOCH_CANDIDATE:?POSTONA_OWNER_EPOCH_CANDIDATE (F5 PR #285 001_brand_owner_epoch.sql) required}")" == applied ]] \
+  || fail "F5's owner epoch candidate did not apply: $(apply "$base" "$owner" "$POSTONA_OWNER_EPOCH_CANDIDATE")"
 # The base keeps no provisioner (for the T9_MISSING case); t9 is the base plus PR #124's candidate.
 create_db "$t9" "$base"
 [[ "$(apply "$t9" "$owner" "$pr124_candidate")" == applied ]] || fail "PR #124's candidate did not apply"
