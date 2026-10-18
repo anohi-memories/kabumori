@@ -79,23 +79,20 @@
 
 ## F5
 - slot: F5
-- status: done
-- task_id: postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018
+- status: ready
+- task_id: postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: POSTONA総合指令室 Issue269 comment6245437308; F3 PR224/257/262 and G4 token/verified owner; Issue267 ACK pending; PR233 pre-managed restricted recheck
-- blocker: real Auth/managed Supabase/production/migration/SNS unapproved; G4 credential owner and F3 sender contract still source-only
-- review_required: conditional only for new security boundary, Codex Sol（高）
-- previous_archive: .agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/
-- slot_use: initial manual X Auth→POSTONA entitlement→owner→T13→publish-enabled→pre-send recheck source-only local synthetic integration and Issue267 read-only ACK; no actual X or DB
-- latest_result: 2026-10-18 JST M1_CONTRACT_COMPLETE; Draft PR275 head ec0b3a6f4432c1d01ba3671f57d8a508c06d8777 on PR265 65f723a2; F5 chain contract for the first manual X post (B1 login -> B2 session -> B3 T13/entitlement -> B4 owner -> B5 G4 -> B6 switch -> B7 pre-send read -> mock X -> SIMULATED read-back): existing F5 functions satisfy every F5 boundary, no F5 production change; finding M1-F1 live send-time permission does not ask F5 (F3 must read common_account_brand_service_state); 13 PG17 chain tests + 31/31 mutants, F3's four proofs and F4's PR263 proof pass unmodified against the current F5 chain; Issue 267 ACK_WITH_CONDITIONS (reply drafted, not posted); no managed/production access, no real X/OAuth/token; no Phase 13 gate opened; production NO_GO
-
-- l5_verdict: PASS_SOURCE_CONTRACT / PRODUCTION_NO_GO (2026-10-18). PR275 Draft HEAD ec0b3a6f4432c1d01ba3671f57d8a508c06d8777; M1-F1 manual presend F5 read is missing in F3; Issue267 ACK_WITH_CONDITIONS decided, GitHub comment not posted; synthetic PG17 13 reported PASS, mutations 31/31; F5 source contract complete, managed/X real unverified. Report to POSTONA総合指令室 and await instruction. Archive before reuse.
+- previous_archive: .agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/
+- dependencies: Issue269 self-drive comments 6247635293 / 6247652574; Issue266 G5 ACK 6247539818; F6 PR273 AI consult owner; F5 PR275 M1 contract
+- blocker: AI JWT+owner+entitlement+plan callable API unproven, G6 handler integration HOLD. No new security RPC/grants without escalation.
+- review_required: conditional focused Sol（高） only if later shared security boundary authorized
+- slot_use: M2 source-only docs/offline synthetic deny tests and exact F5/G6 ACL gap proposal; no new Auth/RPC/RLS/Edge implementation, managed/prod/API/merge/deploy NO_GO
 
 ## F6
 - slot: F6
