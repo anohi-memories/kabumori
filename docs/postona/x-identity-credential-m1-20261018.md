@@ -123,4 +123,3 @@ G4 の 002 は、F3 の 001〜004 の後。PR126 は Issue #131 の残り（v1 �
 - 世代は F3 の `x_credential_generation`（64桁）そのもので、G4 は別の計算をしない。
 - F3 の `generationSourceViolations`（G1〜G5）と `credentialSourceViolations`（C1〜C5）を、本物の DB で確認した。
 - worker や API の役割への実行の許可は、F3 と G4 の別の手順（今回は付与していない）。
-
