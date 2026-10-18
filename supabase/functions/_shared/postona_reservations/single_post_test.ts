@@ -1,16 +1,20 @@
-// MOCK_ONLY: Auth verifier, database and publisher are in-memory fakes of their contracts; the real SQL / driver path is
-// proven by candidates/postona_x_reservations/single_post_run.sh.
+// MOCK_ONLY: Auth verifier, database, credential source and publisher are in-memory fakes of their contracts; the real
+// SQL / driver path is proven by candidates/postona_x_reservations/single_post_run.sh and single_post_live_fence_run.sh.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSinglePostHandler, POSTONA_X_SINGLE_POST_ENABLED } from "./single_post.ts";
+import { createSinglePostHandler, POSTONA_X_SINGLE_POST_ENABLED, type SinglePostTransport } from "./single_post.ts";
 import type { SinglePostDb, SinglePostFunction } from "./single_post_db.ts";
 import type { PublishResult } from "./worker.ts";
+import type { XGenerationCredential, XPostingGenerationCredentialSource } from "./x_credential_generation.ts";
+import type { XPostingCredentialSource } from "./x_publisher.ts";
 
 const USER = "11111111-1111-4111-8111-111111111111";
 const SESSION = "22222222-2222-4222-8222-222222222222";
 const RID = "33333333-3333-4333-8333-333333333333";
 const LEASE = "44444444-4444-4444-8444-444444444444";
 const REQ = "55555555-5555-4555-8555-555555555555";
+const GEN = "c".repeat(64);
+const X_TOKEN = "fake-x-token-sa_x-0001";
 const b64 = (v: unknown) => btoa(JSON.stringify(v)).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 const token = (claims: Record<string, unknown>) => `${b64({ alg: "HS256" })}.${b64(claims)}.sig`;
 const TOKEN = token({ sub: USER, session_id: SESSION });
@@ -32,91 +36,156 @@ function fakeDb(script: Script) {
 }
 const rows = (...r: Record<string, unknown>[]) => () => Promise.resolve({ ok: true as const, rows: r });
 const scalar = (answer: string) => rows({ answer });
-const publisher = (result: PublishResult | (() => Promise<PublishResult>), available = true) => {
-  const sent: string[] = [];
-  return { available, sent, publish: (_a: string, text: string) => { sent.push(text); return typeof result === "function" ? result() : Promise.resolve(result); } };
-};
-const happyDb = (stored: Record<string, unknown> = { state: "sent", provider_post_id: "1790000000000000001" }) => fakeDb({
-  begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), check: scalar("OK"), finish: scalar("published"),
-  get: rows({ reservation_id: RID, ...stored }),
-});
-const run = (deps: { db: SinglePostDb; readDb?: SinglePostDb; publisher: ReturnType<typeof publisher> }, req: { authorization?: string | null; body?: string; method?: string } = {}) =>
-  createSinglePostHandler({ enabled: true, auth, ...deps })({ method: req.method ?? "POST", authorization: req.authorization === undefined ? `Bearer ${TOKEN}` : req.authorization, body: req.body ?? body() });
+const okPreflight = rows({ verdict: "OK", credential_generation: GEN });
 
-test("the shipped gate is OFF; a full pass is: begin -> check -> one X create -> finish -> independent read-back = sent", async () => {
+/** MOCK_ONLY X: a generation-bound credential source and the publisher the handler builds per send. */
+function fakeX(result: PublishResult | (() => Promise<PublishResult>), credential: XGenerationCredential | null | (() => Promise<XGenerationCredential | null>) = { token: X_TOKEN, generation: GEN }, available = true) {
+  const sent: { account: string; text: string; token: string | null }[] = [];
+  const reasked: (string | null)[] = [];
+  const order: string[] = [];
+  const credentials: XPostingGenerationCredentialSource = {
+    available,
+    credentialFor: (_account) => { order.push("credential"); return typeof credential === "function" ? credential() : Promise.resolve(credential); },
+  };
+  const publisherFor = (source: XPostingCredentialSource) => ({
+    available: source.available,
+    publish: async (account: string, text: string): Promise<PublishResult> => {
+      const t = await source.accessTokenFor(account);
+      sent.push({ account, text, token: t });
+      reasked.push(await source.accessTokenFor(account), await source.accessTokenFor("sa_other"));
+      return typeof result === "function" ? result() : result;
+    },
+  });
+  return { credentials, publisherFor, sent, reasked, order };
+}
+const happyDb = (stored: Record<string, unknown> = { state: "sent", provider_post_id: "1790000000000000001", after_freeze: false, simulated: false }) => fakeDb({
+  begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), preflight: okPreflight, record: scalar("published"),
+  readback: rows({ reservation_id: RID, ...stored }),
+});
+type X = ReturnType<typeof fakeX>;
+const run = (deps: { db: SinglePostDb; readDb?: SinglePostDb; x: X; transport?: SinglePostTransport }, req: { authorization?: string | null; body?: string; method?: string } = {}) =>
+  createSinglePostHandler({ enabled: true, auth, db: deps.db, readDb: deps.readDb, credentials: deps.x.credentials, publisherFor: deps.x.publisherFor, transport: deps.transport ?? "x" })(
+    { method: req.method ?? "POST", authorization: req.authorization === undefined ? `Bearer ${TOKEN}` : req.authorization, body: req.body ?? body() });
+const published = (id = "1790000000000000001"): PublishResult => ({ kind: "published", providerPostId: id });
+
+test("the shipped gate is OFF; a full pass is: begin -> token+generation -> preflight -> one X create -> record -> independent read-back = sent", async () => {
   assert.equal(POSTONA_X_SINGLE_POST_ENABLED, false);
-  const off = await createSinglePostHandler({ enabled: false, auth, db: happyDb().db, publisher: publisher({ kind: "published", providerPostId: "1" }) })({ method: "POST", authorization: `Bearer ${TOKEN}`, body: body() });
+  const offX = fakeX(published("1"));
+  const off = await createSinglePostHandler({ enabled: false, auth, db: happyDb().db, credentials: offX.credentials, publisherFor: offX.publisherFor, transport: "x" })(
+    { method: "POST", authorization: `Bearer ${TOKEN}`, body: body() });
   assert.deepEqual(off, { status: 503, body: { ok: false, code: "NOT_AVAILABLE" } });
   const { db, calls } = happyDb();
   const read = happyDb();
-  const pub = publisher({ kind: "published", providerPostId: "1790000000000000001" });
-  assert.deepEqual(await run({ db, readDb: read.db, publisher: pub }), { status: 200, body: { ok: true, status: "sent", reservationId: RID, xPostId: "1790000000000000001" } });
-  assert.deepEqual(calls.map((c) => c.fn), ["begin", "check", "finish"]);
-  assert.deepEqual(read.calls.map((c) => c.fn), ["get"], "the read-back is a separate store");
+  const x = fakeX(published());
+  assert.deepEqual(await run({ db, readDb: read.db, x }),
+    { status: 200, body: { ok: true, status: "sent", reservationId: RID, xPostId: "1790000000000000001", simulated: false, afterFreeze: false } });
+  assert.deepEqual(calls.map((c) => c.fn), ["begin", "preflight", "record"]);
+  assert.deepEqual(read.calls.map((c) => c.fn), ["readback"], "the read-back is a separate store");
   assert.deepEqual(calls[0].args, ["sa_x", REQ, "本文", SHA]);
+  assert.deepEqual(calls[2].args, [RID, LEASE, "published", "1790000000000000001", null, "x"], "the transport is recorded");
   assert.ok(calls.every((c) => c.session === SESSION), "the verified token's session id travels to T13");
-  assert.deepEqual(pub.sent, ["本文"]);
+  assert.deepEqual(x.sent, [{ account: "sa_x", text: "本文", token: X_TOKEN }], "sent once with exactly the generation-checked token");
+  assert.deepEqual(x.reasked, [null, null], "the publisher's source answers that token once, for that account only");
 });
 
-test("refused before anything is recorded: bad body, no / unverified token, no session id, publisher unavailable", async () => {
+test("M1-F1 order: the token is read BEFORE the last preflight, so a change after the token read is still caught", async () => {
+  const order: string[] = [];
+  const x = fakeX(published());
+  const original = x.credentials.credentialFor;
+  x.credentials.credentialFor = (a) => { order.push("credential"); return original(a); };
+  const f = happyDb();
+  const call = f.db.call.bind(f.db);
+  f.db.call = (fn, args, s) => { order.push(fn); return call(fn, args, s); };
+  await run({ db: f.db, x });
+  assert.deepEqual(order, ["begin", "credential", "preflight", "record", "readback"]);
+});
+
+test("refused before anything is recorded: bad body, no / unverified token, no session id, source not connected / accessor-only", async () => {
   for (const b of [body({ extra: 1 }), body({ consent: { confirmed: false, contentSha256: SHA } }), body({ clientRequestId: "x" }), body({ text: "" }), "{", "[]"]) {
     const { db, calls } = happyDb();
-    assert.equal((await run({ db, publisher: publisher({ kind: "published", providerPostId: "1" }) }, { body: b })).status, 400, b);
+    assert.equal((await run({ db, x: fakeX(published("1")) }, { body: b })).status, 400, b);
     assert.equal(calls.length, 0);
   }
   for (const authorization of [null, "Bearer short", `Basic ${TOKEN}`, `Bearer ${token({ sub: USER })}`, `Bearer ${token({ sub: "other", session_id: SESSION })}`]) {
     const { db, calls } = happyDb();
-    const answer = await run({ db, publisher: publisher({ kind: "published", providerPostId: "1" }) }, { authorization });
+    const answer = await run({ db, x: fakeX(published("1")) }, { authorization });
     assert.equal(answer.status, 401, String(authorization));
     assert.equal(calls.length, 0);
   }
-  const { db, calls } = happyDb();
-  const pub = publisher({ kind: "published", providerPostId: "1" }, false);
-  assert.deepEqual(await run({ db, publisher: pub }), { status: 503, body: { ok: false, code: "X_NOT_AVAILABLE" } });
-  assert.equal(calls.length, 0, "nothing recorded when nothing could be sent");
-  assert.deepEqual(pub.sent, []);
+  for (const x of [fakeX(published("1"), undefined, false), { ...fakeX(published("1")), credentials: { available: true, accessTokenFor: () => Promise.resolve(X_TOKEN) } as never }]) {
+    const { db, calls } = happyDb();
+    assert.deepEqual(await run({ db, x }), { status: 503, body: { ok: false, code: "X_NOT_AVAILABLE" } });
+    assert.equal(calls.length, 0, "nothing recorded when nothing could be sent");
+    assert.deepEqual(x.sent, []);
+  }
 });
 
-test("database refusals keep their fixed codes; nothing is sent", async () => {
+test("database refusals keep their fixed codes (incl. publish OFF / credential degraded); nothing is sent", async () => {
   for (const [code, status] of [["POSTONA_RESV_SERVICE_NOT_ACTIVE", 403], ["POSTONA_RESV_AUTH_REQUIRED", 401], ["POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED", 403],
-    ["POSTONA_RESV_PUBLISH_AUTHORITY_REVOKED", 403], ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404], ["POSTONA_RESV_CONSENT_REQUIRED", 422],
+    ["POSTONA_RESV_PUBLISH_AUTHORITY_REVOKED", 403], ["POSTONA_RESV_PUBLISH_DISABLED", 403], ["POSTONA_RESV_CREDENTIAL_DEGRADED", 403],
+    ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404], ["POSTONA_RESV_CONSENT_REQUIRED", 422],
     ["POSTONA_RESV_IDEMPOTENCY_CONFLICT", 409], ["POSTONA_RESV_SERVICE_BUSY", 503], ["SOMETHING_ELSE", 500]] as const) {
-    const pub = publisher({ kind: "published", providerPostId: "1" });
-    const answer = await run({ db: fakeDb({ begin: () => Promise.resolve({ ok: false, code }) }).db, publisher: pub });
+    const x = fakeX(published("1"));
+    const answer = await run({ db: fakeDb({ begin: () => Promise.resolve({ ok: false, code }) }).db, x });
     assert.equal(answer.status, status, code);
-    assert.deepEqual(pub.sent, []);
+    assert.deepEqual(x.sent, []);
   }
-  const pub = publisher({ kind: "published", providerPostId: "1" });
-  assert.deepEqual(await run({ db: fakeDb({ begin: () => Promise.reject(new Error("reset")) }).db, publisher: pub }), { status: 503, body: { ok: false, code: "STORE_UNAVAILABLE" } });
-  assert.deepEqual(pub.sent, []);
+  const x = fakeX(published("1"));
+  assert.deepEqual(await run({ db: fakeDb({ begin: () => Promise.reject(new Error("reset")) }).db, x }), { status: 503, body: { ok: false, code: "STORE_UNAVAILABLE" } });
+  assert.deepEqual(x.sent, []);
 });
 
 test("a repeat of the same request never sends again: in_progress -> pending; stored sent / failed / uncertain are read back", async () => {
-  const pub = publisher({ kind: "published", providerPostId: "9" });
-  assert.deepEqual(await run({ db: fakeDb({ begin: rows({ reservation_id: RID, state: "in_progress" }) }).db, publisher: pub }),
-    { status: 200, body: { ok: true, status: "pending", reservationId: RID, code: "IN_PROGRESS" } });
+  const x = fakeX(published("9"));
+  assert.deepEqual(await run({ db: fakeDb({ begin: rows({ reservation_id: RID, state: "in_progress" }) }).db, x }),
+    { status: 200, body: { ok: true, status: "pending", reservationId: RID, code: "IN_PROGRESS", simulated: false } });
   for (const stored of [{ state: "sent", provider_post_id: "1790000000000000001" }, { state: "failed", outcome_code: "X_REJECTED_403" }, { state: "uncertain", outcome_code: "X_TIMEOUT" }]) {
-    const f = fakeDb({ begin: rows({ reservation_id: RID, state: stored.state }), get: rows({ reservation_id: RID, ...stored }) });
-    const answer = await run({ db: f.db, publisher: pub });
+    const f = fakeDb({ begin: rows({ reservation_id: RID, state: stored.state }), readback: rows({ reservation_id: RID, after_freeze: false, simulated: false, ...stored }) });
+    const answer = await run({ db: f.db, x });
     assert.equal(answer.status, 200);
     assert.equal((answer.body as { status: string }).status, stored.state);
-    assert.deepEqual(f.calls.map((c) => c.fn), ["begin", "get"]);
+    assert.deepEqual(f.calls.map((c) => c.fn), ["begin", "readback"]);
   }
-  assert.deepEqual(pub.sent, [], "never sent");
+  assert.deepEqual(x.sent, [], "never sent");
+  assert.deepEqual(x.order, [], "no token is even read for a repeat");
 });
 
 test("right before the X call: RELEASED -> pending, NOT_PUBLISHABLE -> failed, unreadable -> as stored; never sent", async () => {
-  for (const [verdict, stored, expected] of [["RELEASED", { state: "pending" }, "pending"], ["NOT_PUBLISHABLE", { state: "failed", outcome_code: "NOT_PUBLISHABLE_AT_SEND" }, "failed"],
+  for (const [verdict, stored, expected] of [["RELEASED", { state: "pending" }, "pending"], ["NOT_PUBLISHABLE", { state: "failed", outcome_code: "CREDENTIAL_CHANGED" }, "failed"],
     ["LEASE_LOST", { state: "uncertain", outcome_code: "LEASE_EXPIRED" }, "uncertain"]] as const) {
-    const pub = publisher({ kind: "published", providerPostId: "1" });
-    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), check: scalar(verdict), get: rows({ reservation_id: RID, ...stored }) });
-    assert.equal(((await run({ db: f.db, publisher: pub })).body as { status: string }).status, expected, verdict);
-    assert.deepEqual(pub.sent, []);
+    const x = fakeX(published("1"));
+    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), preflight: rows({ verdict, credential_generation: null }), readback: rows({ reservation_id: RID, ...stored }) });
+    assert.equal(((await run({ db: f.db, x })).body as { status: string }).status, expected, verdict);
+    assert.deepEqual(x.sent, []);
+    assert.ok(!f.calls.some((c) => c.fn === "record"), "nothing recorded by the handler");
   }
-  const pub = publisher({ kind: "published", providerPostId: "1" });
-  const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), check: () => Promise.reject(new Error("reset")), get: rows({ reservation_id: RID, state: "pending" }) });
-  assert.equal(((await run({ db: f.db, publisher: pub })).body as { status: string }).status, "pending");
-  assert.deepEqual(pub.sent, []);
+  const x = fakeX(published("1"));
+  const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), preflight: () => Promise.reject(new Error("reset")), readback: rows({ reservation_id: RID, state: "pending" }) });
+  assert.equal(((await run({ db: f.db, x })).body as { status: string }).status, "pending");
+  assert.deepEqual(x.sent, []);
+});
+
+test("credential generation: missing token / thrown source -> X_CREDENTIALS_UNAVAILABLE; another generation (or none from the database) -> CREDENTIAL_GENERATION_CHANGED; never sent", async () => {
+  const cases: [XGenerationCredential | null | (() => Promise<XGenerationCredential | null>), Record<string, unknown>, string][] = [
+    [null, { verdict: "OK", credential_generation: GEN }, "X_CREDENTIALS_UNAVAILABLE"],
+    [() => Promise.reject(new Error("vault down")), { verdict: "OK", credential_generation: GEN }, "X_CREDENTIALS_UNAVAILABLE"],
+    [{ token: "short", generation: GEN }, { verdict: "OK", credential_generation: GEN }, "X_CREDENTIALS_UNAVAILABLE"],
+    [{ token: X_TOKEN, generation: "d".repeat(64) }, { verdict: "OK", credential_generation: GEN }, "CREDENTIAL_GENERATION_CHANGED"],
+    [{ token: X_TOKEN, generation: GEN }, { verdict: "OK", credential_generation: null }, "CREDENTIAL_GENERATION_CHANGED"],
+    [{ token: X_TOKEN, generation: GEN.toUpperCase() }, { verdict: "OK", credential_generation: GEN.toUpperCase() }, "CREDENTIAL_GENERATION_CHANGED"],
+  ];
+  for (const [credential, preflight, code] of cases) {
+    const x = fakeX(published(), credential);
+    const recordArgs: unknown[][] = [];
+    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), preflight: rows(preflight),
+      record: scalar("failed"), readback: rows({ reservation_id: RID, state: "failed", outcome_code: code, after_freeze: false, simulated: false }) });
+    const call = f.db.call.bind(f.db);
+    f.db.call = (fn, args, s) => { if (fn === "record") recordArgs.push([...args]); return call(fn, args, s); };
+    const answer = await run({ db: f.db, x });
+    assert.deepEqual([(answer.body as { status: string }).status, recordArgs[0]?.[2], recordArgs[0]?.[4]], ["failed", "failed_before_send", code], code);
+    assert.deepEqual(x.sent, [], code);
+    assert.ok(!JSON.stringify(answer).includes(X_TOKEN));
+  }
 });
 
 test("X refused -> failed; X unknown / timeout / thrown / bad id -> uncertain; each sent exactly once", async () => {
@@ -127,39 +196,55 @@ test("X refused -> failed; X unknown / timeout / thrown / bad id -> uncertain; e
     [{ kind: "published", providerPostId: "12a" }, "uncertain", { state: "uncertain", outcome_code: "PROVIDER_POST_ID_INVALID" }],
   ];
   for (const [result, outcome, stored] of cases) {
-    const finishArgs: unknown[][] = [];
-    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), check: scalar("OK"),
-      finish: () => Promise.resolve({ ok: true, rows: [{ answer: outcome }] }), get: rows({ reservation_id: RID, ...stored }) });
+    const recordArgs: unknown[][] = [];
+    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), preflight: okPreflight,
+      record: () => Promise.resolve({ ok: true, rows: [{ answer: outcome }] }), readback: rows({ reservation_id: RID, ...stored }) });
     const original = f.db.call.bind(f.db);
-    f.db.call = (fn, args, s) => { if (fn === "finish") finishArgs.push([...args]); return original(fn, args, s); };
-    const pub = publisher(result);
-    const answer = await run({ db: f.db, publisher: pub });
+    f.db.call = (fn, args, s) => { if (fn === "record") recordArgs.push([...args]); return original(fn, args, s); };
+    const x = fakeX(result);
+    const answer = await run({ db: f.db, x });
     assert.equal((answer.body as { status: string }).status, stored.state, JSON.stringify(stored));
-    assert.equal(finishArgs[0][2], outcome);
-    assert.equal(pub.sent.length, 1);
+    assert.equal(recordArgs[0][2], outcome);
+    assert.equal(x.sent.length, 1);
   }
 });
 
 test("X said published but the result was not recorded, or the read-back differs: uncertain, never sent", async () => {
-  for (const finish of [() => Promise.reject(new Error("COMMIT lost")), scalar("lease_lost"), () => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_LEASE_LOST" })]) {
-    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), check: scalar("OK"), finish });
-    assert.deepEqual(await run({ db: f.db, publisher: publisher({ kind: "published", providerPostId: "1790000000000000001" }) }),
-      { status: 200, body: { ok: true, status: "uncertain", reservationId: RID, code: "RESULT_NOT_RECORDED" } });
+  for (const record of [() => Promise.reject(new Error("COMMIT lost")), scalar("lease_lost"), () => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_LEASE_LOST" })]) {
+    const f = fakeDb({ begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }), preflight: okPreflight, record });
+    assert.deepEqual(await run({ db: f.db, x: fakeX(published()) }),
+      { status: 200, body: { ok: true, status: "uncertain", reservationId: RID, code: "RESULT_NOT_RECORDED", simulated: false } });
   }
   for (const stored of [{ state: "sent", provider_post_id: "1790000000000000999" }, { state: "sent", provider_post_id: null }, { state: "weird" }]) {
     const { db } = happyDb();
-    const read = fakeDb({ get: rows({ reservation_id: RID, ...stored }) });
-    const answer = await run({ db, readDb: read.db, publisher: publisher({ kind: "published", providerPostId: "1790000000000000001" }) });
+    const read = fakeDb({ readback: rows({ reservation_id: RID, ...stored }) });
+    const answer = await run({ db, readDb: read.db, x: fakeX(published()) });
     assert.equal((answer.body as { status: string }).status, "uncertain", JSON.stringify(stored));
   }
   const { db } = happyDb();
-  const answer = await run({ db, readDb: fakeDb({ get: () => Promise.reject(new Error("down")) }).db, publisher: publisher({ kind: "published", providerPostId: "1790000000000000001" }) });
-  assert.deepEqual(answer.body, { ok: true, status: "uncertain", reservationId: RID, code: "READBACK_UNAVAILABLE" });
+  const answer = await run({ db, readDb: fakeDb({ readback: () => Promise.reject(new Error("down")) }).db, x: fakeX(published()) });
+  assert.deepEqual(answer.body, { ok: true, status: "uncertain", reservationId: RID, code: "READBACK_UNAVAILABLE", simulated: false });
+});
+
+test("M1-F3 / simulated marks: after_freeze is answered as stored (unknown = true); a simulated transport is recorded and answered simulated", async () => {
+  const frozen = happyDb({ state: "sent", provider_post_id: "1790000000000000001", after_freeze: true, simulated: false });
+  assert.deepEqual((await run({ db: frozen.db, x: fakeX(published()) })).body,
+    { ok: true, status: "sent", reservationId: RID, xPostId: "1790000000000000001", simulated: false, afterFreeze: true }, "the in-flight post is shown as posted, flagged");
+  const unknownMarks = happyDb({ state: "sent", provider_post_id: "1790000000000000001" });
+  assert.deepEqual((await run({ db: unknownMarks.db, x: fakeX(published()) })).body,
+    { ok: true, status: "sent", reservationId: RID, xPostId: "1790000000000000001", simulated: true, afterFreeze: true }, "missing marks never read as real / unfrozen");
+  const sim = happyDb();
+  const answer = await run({ db: sim.db, x: fakeX(published()), transport: "simulated" });
+  assert.equal((answer.body as { simulated: boolean }).simulated, true, "a simulated transport is never answered as a real post");
+  assert.equal(sim.calls.find((c) => c.fn === "record")?.args[5], "simulated");
+  const odd = happyDb();
+  await run({ db: odd.db, x: fakeX(published()), transport: "X" as never });
+  assert.equal(odd.calls.find((c) => c.fn === "record")?.args[5], "simulated", "only exactly 'x' is the real transport");
 });
 
 test("source: no Vault, no service-role key, no console, no token or text in any answer", async () => {
   const source = await Deno.readTextFile(new URL("./single_post.ts", import.meta.url));
   for (const banned of ["vault", "SERVICE_ROLE", "console.", "Deno.env"]) assert.ok(!source.includes(banned), banned);
-  const answer = await run({ db: happyDb().db, publisher: publisher({ kind: "published", providerPostId: "1790000000000000001" }) });
-  assert.ok(!JSON.stringify(answer).includes(TOKEN) && !JSON.stringify(answer).includes("本文"));
+  const answer = await run({ db: happyDb().db, x: fakeX(published()) });
+  assert.ok(!JSON.stringify(answer).includes(TOKEN) && !JSON.stringify(answer).includes(X_TOKEN) && !JSON.stringify(answer).includes("本文"));
 });

@@ -32,11 +32,30 @@ test("one read-committed transaction as postona_resv_api with the verified subje
   assert.equal(s.log.at(-1)?.text, "COMMIT");
 });
 
+test("006 steps only: preflight / record / readback call the M1-F1 functions; 005's check / finish / get are unreachable", async () => {
+  for (const [fn, args, sql] of [
+    ["preflight", ["r", "l"], "FROM postona_x_resv.post_now_preflight($1::uuid, $2::uuid) r"],
+    ["record", ["r", "l", "published", "1", null, "x"], "postona_x_resv.post_now_record($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text)"],
+    ["readback", ["r"], "FROM postona_x_resv.post_now_readback($1::uuid) r"],
+  ] as const) {
+    const s = scripted(() => [[JSON.stringify([{ answer: "ok" }])]]);
+    assert.equal((await createSinglePostDb(s.connect).call(fn, args, SUBJECT)).ok, true, fn);
+    assert.ok(s.log[4].text.includes(sql), `${fn}: ${s.log[4].text}`);
+  }
+  for (const fn of ["check", "finish", "get"]) {
+    const s = scripted(() => [[]]);
+    assert.deepEqual(await createSinglePostDb(s.connect).call(fn as never, ["r"], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" }, fn);
+    assert.equal(s.log.length, 0);
+  }
+  const short = scripted(() => [[]]);
+  assert.deepEqual(await createSinglePostDb(short.connect).call("record", ["r", "l", "published", "1", null], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" }, "the transport is required");
+});
+
 test("refusals keep POSTONA_RESV_* codes; a lock timeout is SERVICE_BUSY; anything else after the call is unknown (throw)", async () => {
-  assert.deepEqual(await createSinglePostDb(scripted(() => pgError("POSTONA_RESV_SERVICE_NOT_ACTIVE")).connect).call("check", ["r", "l"], SUBJECT), { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" });
-  assert.deepEqual(await createSinglePostDb(scripted(() => pgError("canceling statement due to lock timeout", "55P03")).connect).call("check", ["r", "l"], SUBJECT), { ok: false, code: "POSTONA_RESV_SERVICE_BUSY" });
-  assert.deepEqual(await createSinglePostDb(scripted(() => pgError("relation x secret")).connect).call("get", ["r"], SUBJECT), { ok: false, code: "DB_ERROR" });
-  await assert.rejects(() => createSinglePostDb(scripted(() => new TypeError("reset")).connect).call("finish", ["r", "l", "published", "1", null], SUBJECT), /SINGLE_POST_DB_OUTCOME_UNKNOWN/u);
-  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("get", ["r"], { userId: "x", sessionId: SUBJECT.sessionId }), { ok: false, code: "DB_REQUEST_INVALID" });
-  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("get", ["r"], { userId: SUBJECT.userId, sessionId: "" }), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await createSinglePostDb(scripted(() => pgError("POSTONA_RESV_SERVICE_NOT_ACTIVE")).connect).call("preflight", ["r", "l"], SUBJECT), { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" });
+  assert.deepEqual(await createSinglePostDb(scripted(() => pgError("canceling statement due to lock timeout", "55P03")).connect).call("preflight", ["r", "l"], SUBJECT), { ok: false, code: "POSTONA_RESV_SERVICE_BUSY" });
+  assert.deepEqual(await createSinglePostDb(scripted(() => pgError("relation x secret")).connect).call("readback", ["r"], SUBJECT), { ok: false, code: "DB_ERROR" });
+  await assert.rejects(() => createSinglePostDb(scripted(() => new TypeError("reset")).connect).call("record", ["r", "l", "published", "1", null, "x"], SUBJECT), /SINGLE_POST_DB_OUTCOME_UNKNOWN/u);
+  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("readback", ["r"], { userId: "x", sessionId: SUBJECT.sessionId }), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("readback", ["r"], { userId: SUBJECT.userId, sessionId: "" }), { ok: false, code: "DB_REQUEST_INVALID" });
 });

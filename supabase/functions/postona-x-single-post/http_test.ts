@@ -31,6 +31,13 @@ test("behind the gate: configuration required; oversized bodies refused; no G4 s
   })(new Request("https://fn.example/x", { method: "POST", headers: { authorization: `Bearer ${tokenWithSession}` }, body }));
   assert.deepEqual([response.status, await response.json()], [503, { ok: false, code: "X_NOT_AVAILABLE" }]);
   assert.equal(db.count(), 0, "no database when nothing could be sent");
+  // The older accessTokenFor-only source cannot say which generation its token belongs to: not connected.
+  const accessorOnly = await createSinglePostHttpHandler(env(FULL), {
+    enabled: true, connect: db.connect, auth: { verify: () => Promise.resolve({ userId: "11111111-1111-4111-8111-111111111111" }) },
+    credentials: { available: true, accessTokenFor: () => Promise.resolve("fake-x-token-0123456789") } as never, xFetch: () => Promise.reject(new Error("never")),
+  })(new Request("https://fn.example/x", { method: "POST", headers: { authorization: `Bearer ${tokenWithSession}` }, body }));
+  assert.deepEqual([accessorOnly.status, await accessorOnly.json()], [503, { ok: false, code: "X_NOT_AVAILABLE" }]);
+  assert.equal(db.count(), 0);
 });
 
 test("source: no service-role key, no Vault, no console in the entry", async () => {

@@ -4,14 +4,16 @@
  * Same discipline as postgres_db.ts (the reservation API adapter): one call = one session = ONE READ COMMITTED
  * transaction as postona_resv_api, the VERIFIED subject in request.jwt.claims (local to the transaction), every value a
  * bind parameter, one fixed function. In addition the claims carry the token's session_id: G5's T13 guard (inside
- * post_now_begin / post_now_check) requires it to be a live row of auth.sessions, so a signed-out token cannot send.
+ * post_now_begin / post_now_preflight) requires it to be a live row of auth.sessions, so a signed-out token cannot send.
+ * The steps are 006's (M1-F1): begin, preflight (answers the verdict and the credential generation), record (outcome +
+ * transport + after_freeze) and readback (adds after_freeze / simulated); 005's check / finish / get are not called.
  * Outcomes: { ok: true, rows } | { ok: false, code } (a POSTONA_RESV_* refusal: rolled back, nothing written) | THROW
  * (connection failure or an error after the call: the outcome is unknown -- the caller must read back, never resend).
  * Nothing is logged.
  */
 import type { PgConnect } from "./postgres_db.ts";
 
-export type SinglePostFunction = "begin" | "check" | "finish" | "get";
+export type SinglePostFunction = "begin" | "preflight" | "record" | "readback";
 export type SinglePostDbResult = { ok: true; rows: Record<string, unknown>[] } | { ok: false; code: string };
 export type SinglePostSubject = { userId: string; sessionId: string };
 export type SinglePostDb = { call(fn: SinglePostFunction, args: readonly unknown[], subject: SinglePostSubject): Promise<SinglePostDbResult> };
@@ -21,9 +23,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const CODE_RE = /^POSTONA_RESV_[A-Z_]{1,60}$/u;
 const CALLS: Record<SinglePostFunction, { sql: string; arity: number; scalar: boolean }> = {
   begin: { sql: "postona_x_resv.post_now_begin($1::text, $2::uuid, $3::text, $4::text)", arity: 4, scalar: false },
-  check: { sql: "postona_x_resv.post_now_check($1::uuid, $2::uuid)", arity: 2, scalar: true },
-  finish: { sql: "postona_x_resv.post_now_finish($1::uuid, $2::uuid, $3::text, $4::text, $5::text)", arity: 5, scalar: true },
-  get: { sql: "postona_x_resv.post_now_get($1::uuid)", arity: 1, scalar: false },
+  preflight: { sql: "postona_x_resv.post_now_preflight($1::uuid, $2::uuid)", arity: 2, scalar: false },
+  record: { sql: "postona_x_resv.post_now_record($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text)", arity: 6, scalar: true },
+  readback: { sql: "postona_x_resv.post_now_readback($1::uuid)", arity: 1, scalar: false },
 };
 
 function serverError(error: unknown): { code: string; message: string } | null {
