@@ -1,0 +1,12 @@
+{
+  "original_path": ".agent_v2/tasks/F1.md",
+  "archive_path": ".agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/F1.md",
+  "original_git_blob_sha": "d1422e0faa9bb9af79f385ca10422c989eec69ec",
+  "archive_git_blob_sha": "d1422e0faa9bb9af79f385ca10422c989eec69ec",
+  "size_bytes": 19894,
+  "sha256": "6ff5a42b1abe94e5c35bb7be52da195ad95742817c58cc878016bd5f8c736fa3",
+  "restore_verified": true,
+  "source_ref": "main at time of archive; original blob hash pinned",
+  "disposition": "L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO",
+  "task_id": "postona-f1-x-manual-publish-ui-source-20261018"
+}
