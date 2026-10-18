@@ -1,3 +1,8 @@
+## F5 shared owner epoch source-only TASK（2026-10-19）
+- 指令室 Issue #269 comment #6251536852 承認により `common-account-f5-shared-owner-epoch-monotonic-source-candidate-20261019` を F5 ready/claude、Opus5.5（高）、完了 L5 として登録。複数アプリ共通のブランド所有者epoch・ABA耐性・ACLのsource候補と隔離PG17のみ。G4 PR282のowner epochはTEST-ONLY stand-inであり本F5実装ではない。J2限定重点レビューSol（高）を実適用前の必須ゲートとする。
+- 前M2 done TASK+Reportは `.agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/` 保存。原本blob一致、24155 bytes、SHA256 `89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908`、MANIFEST/SHA256SUMS/HISTORY_INDEX更新・復元確認済み。fresh main／独立clean worktree／30枠変更path/owner競合は実装開始前に要検証。共有membership writer競合時はSTOP。
+- G6 AI認可Option B新RPC/handler接続はHOLD。全managed/prod/実SNS/有料AI/merge/deploy NO_GO。
+
 ## F5 M2 — POSTONA AI相談認可の不足API・ACL source-only 設計（2026-10-18）
 - 指令室 Issue269 #6247635293/#6247652574 の限定自走第2工程。F5 `postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018` = ready/claude、Opus5.5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。Issue266 #6247539818 のAI相談認可ACK_WITH_CONDITIONSに基づく。F5 M1 X投稿契約と別。F6/G6がAI handler・provider・ledgerを所有。
 - 前F5 M1 done TASK+Report archive `.agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/`; 28694 bytes、SHA256 `58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54`、原本/復元Git blob一致、MANIFEST/SHA256SUMS/HISTORY_INDEX記録済。新TASKは別のAuth/RPC/SECURITY DEFINER/GRANT実装を許可しない。独立worktree/fresh main/30枠競合はClaude着手時の必須STOPゲート。
