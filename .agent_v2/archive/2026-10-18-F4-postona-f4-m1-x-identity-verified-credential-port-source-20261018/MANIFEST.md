@@ -1,0 +1,11 @@
+# Archive MANIFEST — F4 M1 L4 complete
+- original_path: .agent_v2/tasks/F4.md
+- archive_path: .agent_v2/archive/2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018/F4.md
+- task_id: postona-f4-m1-x-identity-verified-credential-port-source-20261018
+- archived_size_bytes: 17696
+- SHA256: 1c605186278a1c9d4e39da22b94f37ef6b3eb0a14f614aee3213db4e46555efb
+- original_git_blob: 34ea870613fad189225171671f2828e53d69da0d
+- archive_git_blob: 34ea870613fad189225171671f2828e53d69da0d
+- source_commit: fd8981fc5e68fe4feeac9fbdfc50f6d7d2af744a (L4 accepted status)
+- restore_validation: PASS; original and archived Git blob byte-identical at archival readback
+- policy: append-only; Report embedded in F4.md
