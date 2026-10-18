@@ -98,10 +98,10 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - blocker: none for source-only start (独立clean worktree・PR競合の確認は開始ゲート). 共有コード変更・本物のSupabase・実AI・productionは対象外（必要なら提案だけでSTOP）。
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
