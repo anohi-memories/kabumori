@@ -737,3 +737,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original_path: `.agent_v2/tasks/F4.md` (state at `fba346f4`); archive_path: `.agent_v2/archive/2026-10-17-F4-postona-f4-pr251-android-intent-filter-p2-fix-20261017/F4.md`
 - bytes: 7872; SHA256: `c534a672571f95c8a8b0739416288ec08e4c978b2cd21214ec51644820198afe`; original_blob: `976b75fa622f1a40eb4020670b627becd844abad`
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017`). L4 accepted, PR260 `8e1534f2fa1d39f8f1c321ed2cf69705fddf1421`, production and pilot NO_GO.
+
+- 2026-10-18 | F10 | `orchestration-v3-pr229-namespace-gate-f10-20261017` | L10 PASS_NAMESPACE_ALIGNED, PR229 merged `6b78b6360f5a32bc8be2d4e73f677e4818d1d9ae` | `.agent_v2/archive/2026-10-18-F10-orchestration-v3-pr229-namespace-gate-f10-20261017/` | SHA256 `9d1e4a3e9ec8a5e3169d74c521420e45657617c7a925332d92a39fd2d6b6a638`, 13,799 bytes, blob/restore verified.
