@@ -41,7 +41,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-m1-single-text-post-offline-end-to-end-20261018
 - owner: claude
 - next_owner: claude
