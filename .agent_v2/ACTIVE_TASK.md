@@ -204,19 +204,19 @@
 
 ## J3
 - slot: J3
-- status: idle
-- task_id: none
+- status: ready
+- task_id: kabumori-j3-f2-pr213-p1p2-focused-rereview-20261018
 - owner: codex
-- next_owner: none
-- return_to: none
+- next_owner: codex
+- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V3
-- recommended_model: none
+- recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J3.md
 - current_report_path: .agent_v2/reports/J3.md
-- dependencies: none for new task; independent worktree and conflicts must be checked at new assignment
-- blocker: previous review user-cancelled; old worktree/uncommitted state NOT_VERIFIED; protect it at next startup
+- dependencies: F2 L2 pending; PR213 HEAD c10f1da593ba3dc365cf340e9569ae1caa9789b1; original findings PR218 HEAD e2730e7b83e07fb73be099ba20251581b2969f30; F8 R1 separate
+- blocker: Previous J3 cancelled worktree/uncommitted state NOT_VERIFIED. MUST use a verified independent clean checkout/worktree without touching old one; source-only/no real X/AI/managed/production.
 - previous_archive: .agent_v2/archive/2026-10-17-J3-duplicate-review-cancelled/
-- slot_use: available for a newly registered distinct task_id only; do not start while idle
+- slot_use: Independent narrow review of F2 R2 P1 unauthenticated AI-generation entry and R3 P2 wrong-owner planner restore, POSTONA/other-brand nonregression only. No broad review; G1 receives V3 before F2 L2 closure. No edits to F2 source.
 
 ## J4
 - slot: J4
