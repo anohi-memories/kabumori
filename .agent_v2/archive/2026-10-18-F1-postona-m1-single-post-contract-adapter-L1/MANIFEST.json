@@ -1,0 +1,12 @@
+{
+  "original_path": ".agent_v2/tasks/F1.md",
+  "archive_path": ".agent_v2/archive/2026-10-18-F1-postona-m1-single-post-contract-adapter-L1/F1.md",
+  "original_git_blob_sha": "6ddf421bddb2b5784b00dbdd40abf62fbd31827d",
+  "archive_git_blob_sha": "6ddf421bddb2b5784b00dbdd40abf62fbd31827d",
+  "original_commit": "blob SHA pinned; exact origin commit not independently resolved",
+  "size_bytes": 20263,
+  "sha256": "77eb6093a63bbc6768404da6fa51c19c0e3032838d06170a204438374b42769b",
+  "restore_verified": true,
+  "task_id": "postona-f1-m1-manual-ui-single-post-contract-adapter-20261018",
+  "disposition": "L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO"
+}
