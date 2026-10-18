@@ -96,11 +96,11 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019
 - owner: claude
-- next_owner: chatgpt
-- blocker: implementation start requires isolated clean F6 worktree and fresh full 30-slot PR/path check; G5 AI auth source-only unavailable, POSTONA handler ownership/HOLD, managed/production NO_GO.
+- next_owner: none
+- blocker: L6 PASS_OFFLINE_CONTRACT PR284 source-only; G5 verdict/recheck and POSTONA handler owner still unverified, real quotas/call store/managed/production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
@@ -108,7 +108,7 @@
 - current_report_path: .agent_v2/tasks/F6.md#report
 - dependencies: Issue269 comment6251537519, Issue280, PR273 source contract, G5 M2 PR279 design; no handler/Auth source edits allowed.
 - previous_archive: .agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md
-- slot_use: multi-app shared AI gateway request/auth verdict/feature policy/ledger/dedupe offline docs and isolated mock tests only
+- slot_use: F6 multi-app common AI offline contract completed; preserve until archive and next independently approved shared-AI task
 
 ## F7
 - slot: F7
