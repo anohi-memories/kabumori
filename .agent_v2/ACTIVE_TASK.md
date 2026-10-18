@@ -8,21 +8,20 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: postona-f1-x-manual-publish-ui-source-20261018
+- status: ready
+- task_id: postona-f1-m1-manual-ui-single-post-contract-adapter-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- previous_archive: .agent_v2/archive/2026-10-18-F1-kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014/
-- dependencies: POSTONA総合指令室 Issue269; F3 X manual publish/PR182/224/257/262; F4 G4 Issue131 X verified/token interface; F5 T13 service active; PR238 Auth UI protected
-- blocker: API real publish/actual verified credential/managed Auth remain unconnected; offline UI only. Must check independent clean F1 worktree and 30-slot conflicts before start; production/SNS/merge/deploy NO_GO.
-- slot_use: Implement POSTONA source-only X manual publish form/preview/safe disabled send and initial home navigation; no edits to schedule.tsx or F4/F5 Auth screens. Archive SHA256 7b601b2c01d982dc99aed3a45616bdd48349b6a02b10b30835898088b10ea1fc and restore verified before reassignment.
-
-- latest_L1: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR274 HEAD 007dc3d68bdb6c57e2cfb6831090f6544704a3c3 Draft unmerged, GitHub mergeable=false; offline tests Claude-reported, visual/live NOT_VERIFIED.
+- previous_archive: .agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/
+- dependencies: F3 PR272 single_post_contract.ts; F1 PR274 UI; F4 G4 verified credential Issue131; F5 T13; G2 visual QA
+- blocker: PR272/PR274 Draft unmerged, credential and managed T13 not connected; production NO_GO. Fresh worktree/30-slot conflicts must be checked
+- slot_use: offline mock/result adapter alignment only; send disabled, no real SNS/Auth/DB/API change
+- prior_L1: source UI PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; archive SHA256 6ff5a42b1abe94e5c35bb7be52da195ad95742817c58cc878016bd5f8c736fa3
 
 ## F2
 - slot: F2
