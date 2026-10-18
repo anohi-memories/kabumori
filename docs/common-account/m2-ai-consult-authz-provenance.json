@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "kind": "m2-ai-consult-provenance",
+  "note": "Every source the M2 findings cite, pinned by commit and git blob id, with the raw names that must appear in it and, where the finding is an ABSENCE, the names that must not.",
+  "sources": [
+    {
+      "id": "LIVE-CONSULT-HANDLER",
+      "pr": "main",
+      "commit": "ec0b3a6f4432c1d01ba3671f57d8a508c06d8777",
+      "path": "supabase/functions/social-mobile-consult/logic.ts",
+      "blob": "ab055c086d48707aac77853e9f5910d26d760cb4",
+      "present": [
+        "async function getUser(",
+        "async function assertOwnedSocialMobileWorkspace(",
+        "\"brand_memberships\"",
+        "\"brands\"",
+        "callOpenAiConsultModel",
+        "const REQUEST_KEYS = new Set([\"brand_id\", \"message\", \"history\"])",
+        "no service role in this function"
+      ],
+      "absent": [
+        "service_entitlements",
+        "common_accounts",
+        "x_autopost",
+        "account_lifecycle",
+        "common_account_brand_service_state"
+      ]
+    },
+    {
+      "id": "F5-P1-TABLE-GRANTS-AND-RLS",
+      "pr": "main",
+      "commit": "ec0b3a6f4432c1d01ba3671f57d8a508c06d8777",
+      "path": "supabase/migrations/20261001150000_common_account_lifecycle_foundation.sql",
+      "blob": "203574b8db1a454b96b694272a6e2e7efe40145e",
+      "present": [
+        "grant select (user_id, status, lifecycle_version, created_at, updated_at)",
+        "grant select (user_id, service_key, status, activated_at, ended_at, updated_at)",
+        "create policy common_accounts_select_own",
+        "create policy service_entitlements_select_own",
+        "revoke all on table public.service_entitlements from public, anon, authenticated, service_role;"
+      ],
+      "absent": []
+    },
+    {
+      "id": "MEMBERSHIP-AND-BRANDS-RLS",
+      "pr": "main",
+      "commit": "ec0b3a6f4432c1d01ba3671f57d8a508c06d8777",
+      "path": "supabase/migrations/20260918120000_social_mobile_brand_memberships.sql",
+      "blob": "bdb262579e9d68599c9736d669891b17ffe45e85",
+      "present": [
+        "create policy social_mobile_membership_self_select",
+        "create policy social_mobile_member_select_brands",
+        "using ((select auth.uid()) = user_id)"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F5-P3B-T13-GUARD",
+      "pr": "PR275",
+      "commit": "ec0b3a6f4432c1d01ba3671f57d8a508c06d8777",
+      "path": "supabase/migrations/20261010051938_common_account_service_write_guard.sql",
+      "blob": "da587631cfe8872e3ccf6fd521b919a5439c6574",
+      "present": [
+        "create function private.account_lifecycle_assert_active_service_write(p_user_id uuid, p_service_key text)",
+        "from auth.sessions s"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F5-P5-BRAND-STATE",
+      "pr": "PR275",
+      "commit": "ec0b3a6f4432c1d01ba3671f57d8a508c06d8777",
+      "path": "supabase/migrations/20261012230000_common_account_service_brand_state.sql",
+      "blob": "54b3a7cc390857d458e5f957476dd070a3984aac",
+      "present": [
+        "create function private.account_lifecycle_brand_owner(p_brand_id text)",
+        "create function private.account_lifecycle_service_state_readonly(p_user_id uuid, p_service_key text)",
+        "create function public.common_account_brand_service_state("
+      ],
+      "absent": []
+    },
+    {
+      "id": "F5-M1-CONTRACT",
+      "pr": "PR275",
+      "commit": "ec0b3a6f4432c1d01ba3671f57d8a508c06d8777",
+      "path": "docs/common-account/m1-manual-x-publish-auth-contract.md",
+      "blob": "f186b1e24e111e5c70a420957ffe1889c840462e",
+      "present": [
+        "M1-F6",
+        "ACK_WITH_CONDITIONS"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F6-PR273-SEAM-DOC",
+      "pr": "PR273",
+      "commit": "84ee0d6f7cf04b35f790d074435456b4e591a8d1",
+      "path": "docs/ai-provider/F6_POSTONA_OPENAI_CONSULT_OFFLINE_SEAM.md",
+      "blob": "13cab531d812edc71957fa5f39b714e66d31a995",
+      "present": [
+        "CONSULT_NOT_ENTITLED",
+        "common_accounts",
+        "service_entitlements",
+        "【F6 → F5】"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F6-PR273-SEAM-CODE",
+      "pr": "PR273",
+      "commit": "84ee0d6f7cf04b35f790d074435456b4e591a8d1",
+      "path": "supabase/tests/postona_consult_shared_provider_seam.ts",
+      "blob": "c64cdbe9f24f0def1646b26da65883ef7c89d2d3",
+      "present": [
+        "CONSULT_NOT_ENTITLED",
+        "service_entitlements"
+      ],
+      "absent": []
+    }
+  ]
+}
