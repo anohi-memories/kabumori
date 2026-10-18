@@ -758,3 +758,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017`, L5 PASS_SOURCE_SPEC / PRODUCTION_NO_GO; Draft PR265 HEAD `65f723a2169f113bba9053526a2d36a49807ac59`.
 - original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/files/.agent_v2/tasks/F5.md`.
 - size 20888 bytes; SHA256 `8eeba0f79434dcd58e6d15cf078f77e2dd2fabb4113d12edf55e76124a26c4d2`; original/restored blob `ebe36f62ebec8bdc67bf0eba52d5012134664e30`. Exact blob/content read-back passed; MANIFEST.md/SHA256SUMS recorded; append-only.
+
+- 2026-10-18 | F3 | `postona-f3-publish-enabled-t13-active-service-write-guard-20261017` | L3 PASS_SOURCE_CANDIDATE / production NO_GO; Draft PR262 dc00f923 | `.agent_v2/archive/2026-10-18-F3-postona-f3-publish-enabled-t13-active-service-write-guard-20261017` | 19478 bytes, SHA256 `f1abe5cbee686d64bc8b39095e60955fe8871c34bd6797afd92d175022a09d70`, blob `b2456a93`, restore checked.
