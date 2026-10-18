@@ -57,22 +57,20 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
+- status: ready
+- task_id: postona-f4-m1-x-identity-verified-credential-port-source-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR258 head 713955b5 and J2 V2 owner-fence race; F5 lifecycle interface coordinated
-- blocker: source candidate only, actual Vault and managed unapproved; production/pilot NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-pr251-android-intent-filter-p2-fix-20261017/F4.md
-- slot_use: minimal CAS SQL owner race P2 correction and PG17 regression
+- dependencies: Issue269 comment 6246316888 SOURCE_ONLY_GO; PR126 head 65f49f98; F3 PR257/262/224 and F5 T13; Issue131 limited source exception
+- blocker: OAuth identity attest and G3 credential port source candidate not complete; Issue131 production still deferred; real token/OAuth/SNS/managed/merge/deploy NO_GO
+- previous_archive: .agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/
+- slot_use: G4-owned X verified OAuth provider identity and server-only credential source, no G3/G5 source modification
 
-
-- l4_verdict_20261018: PASS_SOURCE_FIX / F5_ACK_PENDING / LIMITED_SQL_R1_RECHECK_RECOMMENDED / PRODUCTION_AND_PILOT_NO_GO; PR263 HEAD a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705 Draft.
 ## F5
 - slot: F5
 - status: ready
