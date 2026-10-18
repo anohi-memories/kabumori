@@ -760,3 +760,7 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - size 20888 bytes; SHA256 `8eeba0f79434dcd58e6d15cf078f77e2dd2fabb4113d12edf55e76124a26c4d2`; original/restored blob `ebe36f62ebec8bdc67bf0eba52d5012134664e30`. Exact blob/content read-back passed; MANIFEST.md/SHA256SUMS recorded; append-only.
 
 - 2026-10-18 | F3 | `postona-f3-publish-enabled-t13-active-service-write-guard-20261017` | L3 PASS_SOURCE_CANDIDATE / production NO_GO; Draft PR262 dc00f923 | `.agent_v2/archive/2026-10-18-F3-postona-f3-publish-enabled-t13-active-service-write-guard-20261017` | 19478 bytes, SHA256 `f1abe5cbee686d64bc8b39095e60955fe8871c34bd6797afd92d175022a09d70`, blob `b2456a93`, restore checked.
+
+## F6 to F5 AI deletion contract archive — 2026-10-18
+- task_id: `common-ai-f6-f5-account-deletion-ai-cleanup-contract-20261017`; L6 PASS_CONTRACT / PRODUCTION_NO_GO; PR264 Draft head `c558264218badd1ebbdb9063e70f8e7cce9ac23d` at previous verification.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-18-f6-f5-account-deletion-cleanup-contract.md`; archive commit `c9dc5d5cad885105881597e99cd47a60daaf22d8`, original/archive Git blob `42614c8bbdd1a258e39f938d115795407beaa4f5`, 9410 characters, exact UTF-8 readback comparison PASS. Independent SHA256/MANIFEST NOT_VERIFIED (follow-up required before declaring full archival compliance).
