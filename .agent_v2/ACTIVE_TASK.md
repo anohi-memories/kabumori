@@ -76,10 +76,10 @@
 
 ## F5
 - slot: F5
-- status: ready
+- status: review_required
 - task_id: common-account-f5-shared-owner-epoch-monotonic-source-candidate-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -90,6 +90,7 @@
 - blocker: independent clean worktree and exact membership ownership/PR overlap need verification before coding
 - review_required: focused Codex Sol（高） before production application; no J slot assigned
 - slot_use: shared cross-app owner epoch source candidate, offline tests only; AI Option B remains HOLD
+- latest_result: 2026-10-19 JST OWNER_EPOCH_SOURCE_CANDIDATE_COMPLETE; Draft PR285 head 3a5eef3d6b981e0646683ce101a22542fd0a4e2f on PR279 9dee53c5; private.account_lifecycle_brand_owner_epoch(p_brand_id text)->bigint (owner-only STABLE definer, NULL=refuse unless exactly one owner and recorded owner matches), bumps on every committed owner-row write incl. cascade/truncate, never decreases, history survives the rollback file, reconciliation at install, bypass detected + owner-only resync; 14 PG17 tests + 24/24 mutants + provenance 9 + doc test 6, harness 183; findings: authenticated keeps TRUNCATE/TRIGGER/REFERENCES on brand_memberships (L-1), PR282 stand-in returns 0 for unknown and lacks cross-check/history guard (L-2); NOT applied, no API grant, no other slot file edited; apply needs Sol review + PR233 recheck + user approval; J2 PR282 re-review still ready (no PASS claimed); production NO_GO
 
 ## F6
 - slot: F6
