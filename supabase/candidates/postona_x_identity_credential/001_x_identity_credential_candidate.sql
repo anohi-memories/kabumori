@@ -3,7 +3,8 @@
 -- postona-f4-pr276-j2-p2x2-provenance-owner-epoch-atomic-credential-fix-20261018; Issue #131 minimal source, Issue #269).
 -- Apply as a single reviewed file only AFTER: the live X onboarding (20260919120000 + 20260922003101), the X refresh
 -- core's state (20260925140000), G5/F5's lifecycle (Phase 3b T13 guard, Phase 4, the F5 workspace service state
--- 20261012230000) AND F5's workspace owner epoch (PROPOSED F5 interface, not yet delivered -- see the doc, section 7),
+-- 20261012230000) AND F5's workspace owner epoch (F5 PR #285 candidate common_account_brand_owner_epoch/001: the getter
+-- answers NULL = "unknown, refuse" and every comparison here is `=` / IS DISTINCT FROM, so NULL never verifies anything),
 -- PR #124's provisioner (T9) and G4's X v2 candidate with its attestation record (postona_x_oauth_hardening_candidate.sql).
 -- It changes none of them and grants nothing to any API role.
 --
@@ -68,7 +69,8 @@ begin
   -- F5: the owner rule, the read-only state decision and the owner epoch, owner-only definer functions no API role reaches.
   foreach v_fn in array array[pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner(text)'),
                               pg_catalog.to_regprocedure('private.account_lifecycle_service_state_readonly(uuid,text)'),
-                              pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)')] loop
+                              pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)'),
+                              pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch_covered()')] loop
     if v_fn is null
        or (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
        or not (select p.prosecdef from pg_catalog.pg_proc p where p.oid = v_fn)

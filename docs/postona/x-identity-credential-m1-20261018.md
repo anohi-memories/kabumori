@@ -123,3 +123,29 @@ G4 の 002 は、F3 の 001〜004 の後。PR126 は Issue #131 の残り（v1 �
 - 世代は F3 の `x_credential_generation`（64桁）そのもので、G4 は別の計算をしない。
 - F3 の `generationSourceViolations`（G1〜G5）と `credentialSourceViolations`（C1〜C5）を、本物の DB で確認した。
 - worker や API の役割への実行の許可は、F3 と G4 の別の手順（今回は付与していない）。
+
+## 8. F5 PR285（本物の owner epoch）との結合（2026-10-19、`postona-f4-pr282-pr285-owner-epoch-offline-integration-20261019`）
+
+- **口は一致**: 名前・引数・戻り値・性質が、G4 の依頼どおり。
+  - `private.account_lifecycle_brand_owner_epoch(text) → bigint`、STABLE・SECURITY DEFINER・`search_path=''`・owner だけ。
+- **違い（1）不明のとき**: PR285 は **NULL** を返す。
+  - 該当する場合: 記録が無い、所有者が0人か2人以上、trigger が無い・無効、session が trigger を守らない、記録と実際の所有者が違う。
+  - PR282 のテスト用の代役は「変化なし＝0」だった。
+- **G4 の扱い**:
+  - G4 の比較は `=` と `IS DISTINCT FROM` だけなので、NULL では確認済みにならない。
+  - 接続（`complete_v2`）は、epoch が NULL か 1 未満なら、**何も書く前に**固定のコード `X_OWNER_EPOCH_UNKNOWN` で拒否する。PR282 では not-null の生のエラーだった。
+  - 確認の記録は `owner_epoch >= 1` を求める。
+  - TS の契約の拒否のコードの一覧にも足した。
+- **違い（2）本物の判定**: 前提で、PR285 の `private.account_lifecycle_brand_owner_epoch_covered()`（owner だけ）があることを求める（代役では適用できない）。
+- **違い（3）PR285 の適用の前提**: anon／authenticated が membership を書けないこと。
+  - テストの世界では、F5 の実行スクリプトと同じく `20260918120000_social_mobile_brand_memberships.sql` を先に入れた。
+- TEST-ONLY の代役は削除した。テストは PR285 `3a5eef3d` の候補を読むだけで重ね置きして使う。
+- **F5 の限界（PR285 の文書、F5 の範囲）**: trigger を無効にした間に A→B→A を完全に戻してから有効に戻すと、getter は前の epoch を返す。
+  - G4 からは見抜けない（epoch を信じる前提）。
+  - trigger の無効化は管理の操作で、F5 の resync の手順の対象。
+- **延長の記録し直し（`x_account_attest_refreshed_credential`）の呼び出し元**:
+  - PR278・PR285・main のどこにも無い（未接続）。
+  - 呼ぶべきなのは、延長を commit する書き手。今の延長の仕組み（`commit_x_account_refresh_legacy_post`）は service_role の口で、legacy の投稿用。
+  - この関数は owner だけが実行できるので、service_role から呼ぶには、次のどちらかが要る。いずれも**延長の仕組みの持ち主の変更と別の承認**の範囲で、G4 からは何もしていない。
+    - 延長の仕組みの関数の中から、同じ取引で呼ぶ
+    - 新しい付与

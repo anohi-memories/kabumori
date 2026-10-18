@@ -127,4 +127,6 @@ export const X_CONNECT_V2_REFUSAL_CODES = Object.freeze([
   "X_IDENTITY_ACCOUNT_MISMATCH",
   "X_CREDENTIAL_SHAPE_INVALID",
   "X_ACCOUNT_ALREADY_CONNECTED",
+  // F5's owner epoch (PR #285) is unknown (NULL): refused before anything is written; never treated as 0.
+  "X_OWNER_EPOCH_UNKNOWN",
 ] as const);

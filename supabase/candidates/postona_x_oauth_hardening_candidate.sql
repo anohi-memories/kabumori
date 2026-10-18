@@ -85,6 +85,16 @@ begin
                   and pg_catalog.has_function_privilege(r.oid, pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)'), 'EXECUTE')) then
     raise exception 'POSTONA_X_OAUTH_PRECONDITION_OWNER_EPOCH';
   end if;
+  -- F5's real candidate (PR #285), not a stand-in: its coverage check exists, owner-only (the getter answers NULL =
+  -- "unknown, refuse" whenever the epoch cannot be vouched for; this file never turns NULL into a number).
+  if pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch_covered()') is null
+     or (select p.proowner from pg_catalog.pg_proc p
+         where p.oid = pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch_covered()')) is distinct from v_owner
+     or exists (select 1 from pg_catalog.pg_roles r
+                where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                  and pg_catalog.has_function_privilege(r.oid, pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner_epoch_covered()'), 'EXECUTE')) then
+    raise exception 'POSTONA_X_OAUTH_PRECONDITION_OWNER_EPOCH';
+  end if;
   if pg_catalog.to_regclass('public.x_account_refresh_state_v2') is null
      or (select pg_catalog.count(*) from pg_catalog.pg_attribute a
          where a.attrelid = pg_catalog.to_regclass('public.x_account_refresh_state_v2') and not a.attisdropped
@@ -173,7 +183,7 @@ create table public.x_account_identity_attestations (
   access_token_sha256 text not null check (access_token_sha256 ~ '^[0-9a-f]{64}$'),
   refresh_token_sha256 text not null check (refresh_token_sha256 ~ '^[0-9a-f]{64}$'),
   -- J2 V2 R2: F5's workspace owner epoch when attested; any later owner write moves it on for good.
-  owner_epoch bigint not null,
+  owner_epoch bigint not null check (owner_epoch >= 1),
   refresh_generation bigint not null,
   access_expires_at timestamptz not null,
   check (vault_access_token_secret_id <> vault_refresh_token_secret_id)
@@ -273,6 +283,7 @@ declare
   v_account public.social_accounts;
   v_access uuid;
   v_refresh uuid;
+  v_owner_epoch bigint;
 begin
   -- Shape (X ids are 64-bit decimal strings, usernames 1-15 of [A-Za-z0-9_]; tokens are printable ASCII
   -- without spaces, at most 4096; PostgreSQL bounds regex repetition at 255, so lengths are apart).
@@ -308,6 +319,12 @@ begin
    where m.brand_id = v_workspace and m.user_id = v_user and m.role = 'owner' for share;
   if not found then
     raise exception 'SOCIAL_MOBILE_ACCOUNT_NOT_OWNED' using errcode = 'P0001';
+  end if;
+  -- F5's owner epoch, read under the owner membership's FOR SHARE (no owner write can commit before this transaction
+  -- ends). NULL = unknown (no single owner, broken coverage, ...): refuse before anything is written, never as 0.
+  v_owner_epoch := private.account_lifecycle_brand_owner_epoch(v_workspace);
+  if v_owner_epoch is null or v_owner_epoch < 1 then
+    raise exception 'X_OWNER_EPOCH_UNKNOWN' using errcode = 'P0001';
   end if;
   -- The one irreversible claim: this person's, this workspace's X state, unexpired, unused.
   update public.social_account_oauth_states s set consumed_at = now()
@@ -376,7 +393,7 @@ begin
   values (v_account.id, gen_random_uuid(), v_user, v_workspace, p_platform_user_id, v_state_id, v_access, v_refresh, now(), now(),
           pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_access_token, 'UTF8')), 'hex'),
           pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(p_refresh_token, 'UTF8')), 'hex'),
-          private.account_lifecycle_brand_owner_epoch(v_workspace),
+          v_owner_epoch,
           coalesce((select st.generation from public.x_account_refresh_state_v2 st where st.social_account_id = v_account.id), 0),
           pg_catalog.clock_timestamp() + interval '2 hours')
   on conflict (social_account_id) do update
