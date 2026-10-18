@@ -94,17 +94,17 @@
 
 ## F6
 - slot: F6
-- status: review_required
+- status: done
 - task_id: common-ai-f6-f5-account-deletion-ai-cleanup-contract-20261017
 - owner: claude
-- next_owner: chatgpt
-- blocker: F5 Phase13 D-3 ready separate owner; F6 source-only deletion integration contract, PR261 unmerged; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_CONTRACT PR264 F5/G5 handoff ready; F5 integration, POSTONA AI entry entitlement, #249 READ COMMITTED, privacy retention and production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: Draft PR249→256→261; F5 Phase13 D-3; G5/F4/POSTONA Auth and account deletion owner boundaries
+- dependencies: Draft PR249→256→261→264; F5 Phase13 D-3 separate owner; F5/G5 account deletion integration needed
 - previous_archive: .agent_v2/archive/2026-10-17-f6-pr261-privacy-source-fix.md
 - slot_use: F6 AI deletion RPC contract, F5 handoff and offline mock test only
 
