@@ -159,18 +159,18 @@
 
 ## F10
 - slot: F10
-- status: done
-- task_id: orchestration-v3-gh-pilot-rule-integration-f10-20261018
+- status: ready
+- task_id: orchestration-f10-v3-automation-readiness-compat-source-20261018
 - owner: claude
-- next_owner: none
-- return_to: かぶモリ30枠統括のちゃ（このチャット）
+- next_owner: claude
+- return_to: かぶモリ軽量G方式・30枠統括のちゃ（このチャット）
 - completion_code: L10
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: PR229 merged; PR252 merged; Issue244; Draft PR248/253; prior F10 task archived
-- blocker: pilot G/H activation, main rule merge and slot assignment not authorized
-- slot_use: V3 pilot rules integration candidate and protected 30-slot routing
+- dependencies: Issue244 handoff; G10 pilot archived; previous F10 task archived
+- blocker: source-only Draft PR; no workflow/executor/CLI/CAS/live changes
+- slot_use: V3 automation readiness specification
 
 ## J1
 - slot: J1
