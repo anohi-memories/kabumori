@@ -159,18 +159,17 @@
 
 ## F10
 - slot: F10
-- status: ready
-- task_id: orchestration-f10-v3-automation-readiness-compat-source-20261018
+- status: idle
+- task_id: none
 - owner: claude
-- next_owner: claude
-- return_to: かぶモリ軽量G方式・30枠統括のちゃ（このチャット）
+- next_owner: none
+- return_to: none
 - completion_code: L10
-- recommended_model: Sonnet5（高）
+- recommended_model: none
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: Issue244 handoff; G10 pilot archived; previous F10 task archived
-- blocker: source-only Draft PR; no workflow/executor/CLI/CAS/live changes
-- slot_use: V3 automation readiness specification
+- blocker: G10 V3 cutover; do not assign F10
+- previous_archive: .agent_v2/archive/2026-10-18-F10-orchestration-f10-v3-automation-readiness-compat-source-20261018/
 
 ## J1
 - slot: J1
