@@ -11,7 +11,7 @@ import tempfile
 
 src_root = sys.argv[1]
 # the document tests of the contract also read these trees
-TREES = ['supabase/preflight', 'supabase/migrations', 'supabase/tests', 'supabase/functions', 'docs/common-account', 'docs/postona', '.agent', 'apps/social-mobile']
+TREES = ['supabase/preflight', 'supabase/migrations', 'supabase/tests', 'supabase/functions', 'docs/common-account', 'docs/postona', '.agent', 'apps/social-mobile', 'supabase/candidates/common_account_brand_owner_epoch']
 DIR = 'supabase/preflight/managed_disposable/'
 R = DIR + 'baseline_requirements.ts'
 I = DIR + 'inventory.ts'
