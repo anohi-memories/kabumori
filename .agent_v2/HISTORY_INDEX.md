@@ -826,3 +826,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - size: 15796 bytes; SHA256 `2d22de9b43d6cd01747f02555084e2dba4f299ab446ebacae9a18c22970d9a78`; original/archive Git blob `c8dffbda56cb181e13a748b3fac9885b1f024353`.
 - original commit `bb709d38ec81113706926117834354a05e289945` (blob at that commit equals the archive blob and bytes). MANIFEST.json and SHA256SUMS saved (SHA256SUMS check OK). Restore equality PASS; append-only.
 - L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR283 HEAD `b4b761c4dd43cc4c8c1ee1533413b46f088ba21f` Draft (base PR277 branch).
+
+## F6 cross-app AI gateway offline contract — archived 2026-10-19
+- task_id `common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019`, L6 done PASS_OFFLINE_CONTRACT / PRODUCTION_NO_GO. PR284 HEAD `9c8421344f7a363b5e4b8a892eb4e9ff4dc8e8f7` Draft.
+- original_path `.agent_v2/tasks/F6.md`; archive_path `.agent_v2/archive/2026-10-19-F6-common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019/files/.agent_v2/tasks/F6.md`.
+- original L6 commit `9a51a748054c42ff32a5d71fb646bb9e9ce03c6a` (created `a3134ec2abbd85643543159c2a6ded4e4c151d6a`), original/archive Git blob `22c90227890f0c2468bf58ac5a4110446e87e4c4`, 15229 bytes, SHA256 `7b3ce09670c1e7219d02ccaf5bb700707172820a7b5f45b6c8d664cbd2b938be`. MANIFEST.md/MANIFEST.json/SHA256SUMS saved. Restore bytes/blob PASS; append-only.

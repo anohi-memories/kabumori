@@ -1,0 +1,13 @@
+# F6 archive manifest — 2026-10-19
+- task_id: common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019
+- result: L6 done / PASS_OFFLINE_CONTRACT / PRODUCTION_NO_GO（Draft PR #284 HEAD 9c8421344f7a363b5e4b8a892eb4e9ff4dc8e8f7）
+- original_path: .agent_v2/tasks/F6.md（TASK と末尾の Report を 1 ファイルで保存）
+- archive_path: .agent_v2/archive/2026-10-19-F6-common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019/files/.agent_v2/tasks/F6.md
+- original_commit: 9a51a748054c42ff32a5d71fb646bb9e9ce03c6a（L6 で done / none にした commit。この内容のまま次の TASK 登録まで変わっていない）
+- original_creation_commit: a3134ec2abbd85643543159c2a6ded4e4c151d6a（TASK 登録）
+- original_blob: 22c90227890f0c2468bf58ac5a4110446e87e4c4
+- archive_blob: 22c90227890f0c2468bf58ac5a4110446e87e4c4
+- size_bytes: 15229
+- SHA256: 7b3ce09670c1e7219d02ccaf5bb700707172820a7b5f45b6c8d664cbd2b938be
+- restore: `git show 9a51a748:.agent_v2/tasks/F6.md` と archive のバイト一致・Git blob 一致、`shasum -a 256 -c SHA256SUMS` OK
+- append_only: true（このディレクトリは書き換えない）
