@@ -8,8 +8,11 @@ import {
   type OwnerQuery,
 } from "./x_posting_credential_source.ts";
 
-const TOKENS: Record<string, string> = { sa_aaaaaaaaaaaaaaaaaaaaaaaa: "fake-access-token-A-0123456789", sa_bbbbbbbbbbbbbbbbbbbbbbbb: "fake-access-token-B-0123456789" };
-const GENERATIONS: Record<string, string> = { sa_aaaaaaaaaaaaaaaaaaaaaaaa: "0123456789abcdef0123456789abcdef" };
+const A = "sa_aaaaaaaaaaaaaaaaaaaaaaaa";
+const B = "sa_bbbbbbbbbbbbbbbbbbbbbbbb";
+const C = "sa_cccccccccccccccccccccccc";
+const TOKENS: Record<string, string> = { [A]: "fake-access-token-A-0123456789", [B]: "fake-access-token-B-0123456789" };
+const GENERATIONS: Record<string, string> = { [A]: "a".repeat(64), [B]: "b".repeat(64) };
 
 function fakeDb(overrides: Partial<{ throws: unknown; rows: ReadonlyArray<Record<string, unknown>> }> = {}) {
   const calls: Array<{ sql: string; params: readonly unknown[] }> = [];
@@ -19,7 +22,7 @@ function fakeDb(overrides: Partial<{ throws: unknown; rows: ReadonlyArray<Record
     if (overrides.rows !== undefined) return Promise.resolve(overrides.rows);
     const id = String(params[0]);
     if (sql.includes("x_posting_access_token_for")) return Promise.resolve([{ token: TOKENS[id] ?? null }]);
-    return Promise.resolve([{ generation: GENERATIONS[id] ?? null }]);
+    return Promise.resolve(TOKENS[id] ? [{ token: TOKENS[id], generation: GENERATIONS[id] }] : []);
   };
   return { query, calls };
 }
@@ -29,46 +32,63 @@ Deno.test("shipped OFF: not available, answers null, never asks the database", a
   const db = fakeDb();
   const source = createXPostingCredentialSource({ query: db.query });
   assertEquals(source.available, false);
-  assertEquals(await source.accessTokenFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), null);
-  assertEquals(await source.credentialGenerationFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), null);
+  assertEquals(await source.accessTokenFor(A), null);
+  assertEquals(await source.credentialFor(A), null);
   assertEquals(db.calls.length, 0);
   assertEquals(createXPostingCredentialSource({ query: db.query, enabled: "true" as unknown as boolean }).available, false);
 });
 
-Deno.test("enabled: each account's own token through one parameterized call; unknown -> null (C1-C4 shape)", async () => {
+Deno.test("enabled: each account's own token; credentialFor is ONE query answering token + 64-hex generation together", async () => {
   const db = fakeDb();
   const source = createXPostingCredentialSource({ query: db.query, enabled: true });
   assertEquals(source.available, true);
-  assertEquals(await source.accessTokenFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), TOKENS.sa_aaaaaaaaaaaaaaaaaaaaaaaa);
-  assertEquals(await source.accessTokenFor("sa_bbbbbbbbbbbbbbbbbbbbbbbb"), TOKENS.sa_bbbbbbbbbbbbbbbbbbbbbbbb);
-  assertEquals(await source.accessTokenFor("sa_cccccccccccccccccccccccc"), null);
-  assertEquals(db.calls.map((c) => c.sql), Array(3).fill("select public.x_posting_access_token_for($1) as token"));
-  assertEquals(db.calls.map((c) => c.params), [["sa_aaaaaaaaaaaaaaaaaaaaaaaa"], ["sa_bbbbbbbbbbbbbbbbbbbbbbbb"], ["sa_cccccccccccccccccccccccc"]]);
-  assertEquals(await source.credentialGenerationFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), GENERATIONS.sa_aaaaaaaaaaaaaaaaaaaaaaaa);
-  assertEquals(await source.credentialGenerationFor("sa_bbbbbbbbbbbbbbbbbbbbbbbb"), null);
+  assertEquals(await source.accessTokenFor(A), TOKENS[A]);
+  assertEquals(await source.accessTokenFor(C), null);
+  assertEquals(await source.credentialFor(A), { token: TOKENS[A], generation: GENERATIONS[A] });
+  assertEquals(await source.credentialFor(B), { token: TOKENS[B], generation: GENERATIONS[B] });
+  assertEquals(await source.credentialFor(C), null);
+  assertEquals(db.calls.map((c) => c.sql), [
+    "select public.x_posting_access_token_for($1) as token",
+    "select public.x_posting_access_token_for($1) as token",
+    "select token, generation from public.x_posting_credential_for($1)",
+    "select token, generation from public.x_posting_credential_for($1)",
+    "select token, generation from public.x_posting_credential_for($1)",
+  ]);
+  assertEquals(db.calls.map((c) => c.params), [[A], [C], [A], [B], [C]]);
 });
 
-Deno.test("malformed ids are never sent; malformed answers are null, not a token", async () => {
+Deno.test("malformed ids are never sent; malformed or partial answers are null, never half a credential", async () => {
   const db = fakeDb();
   const source = createXPostingCredentialSource({ query: db.query, enabled: true });
   for (const id of ["", "SA_X", "sa x", "sa_a'; drop", "a".repeat(90), null, undefined, 42]) {
     assertEquals(await source.accessTokenFor(id as unknown as string), null, String(id));
+    assertEquals(await source.credentialFor(id as unknown as string), null, String(id));
   }
   assertEquals(db.calls.length, 0);
-  for (const rows of [[], [{ token: "short" }], [{ token: "has space in it 0123456789" }], [{ token: 123 }], [{}], [{ token: "a".repeat(20) }, { token: "b".repeat(20) }]]) {
+  const badTokens: ReadonlyArray<Record<string, unknown>>[] = [[], [{ token: "short" }], [{ token: "has space in it 0123456789" }],
+    [{ token: 123 }], [{}], [{ token: "a".repeat(20) }, { token: "b".repeat(20) }]];
+  for (const rows of badTokens) {
     const one = createXPostingCredentialSource({ query: fakeDb({ rows }).query, enabled: true });
-    assertEquals(await one.accessTokenFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), null, JSON.stringify(rows));
+    assertEquals(await one.accessTokenFor(A), null, JSON.stringify(rows));
   }
-  const badGeneration = createXPostingCredentialSource({ query: fakeDb({ rows: [{ generation: "not-a-generation" }] }).query, enabled: true });
-  assertEquals(await badGeneration.credentialGenerationFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), null);
+  const badCredentials: ReadonlyArray<Record<string, unknown>>[] = [[], [{ token: TOKENS[A] }], [{ generation: "a".repeat(64) }],
+    [{ token: TOKENS[A], generation: "a".repeat(32) }], [{ token: TOKENS[A], generation: "A".repeat(64) }],
+    [{ token: "short", generation: "a".repeat(64) }],
+    [{ token: TOKENS[A], generation: "a".repeat(64) }, { token: TOKENS[B], generation: "b".repeat(64) }]];
+  for (const rows of badCredentials) {
+    const one = createXPostingCredentialSource({ query: fakeDb({ rows }).query, enabled: true });
+    assertEquals(await one.credentialFor(A), null, JSON.stringify(rows));
+  }
 });
 
-Deno.test("a database failure is a fixed error that never carries the cause (C5)", async () => {
-  const secret = "fake-access-token-A-0123456789";
+Deno.test("a database failure is a fixed error that never carries the cause (C5 / G5)", async () => {
+  const secret = TOKENS[A];
   const source = createXPostingCredentialSource({ query: fakeDb({ throws: new Error(`driver said ${secret}`) }).query, enabled: true });
-  const error = await assertRejects(() => source.accessTokenFor("sa_aaaaaaaaaaaaaaaaaaaaaaaa"), XCredentialSourceUnavailable);
-  assertEquals(error.message, "X_CREDENTIAL_SOURCE_UNAVAILABLE");
-  assert(!JSON.stringify({ m: error.message, s: error.stack, c: (error as Error & { cause?: unknown }).cause }).includes(secret));
+  for (const call of [() => source.accessTokenFor(A), () => source.credentialFor(A)]) {
+    const error = await assertRejects(call, XCredentialSourceUnavailable);
+    assertEquals(error.message, "X_CREDENTIAL_SOURCE_UNAVAILABLE");
+    assert(!JSON.stringify({ m: error.message, s: error.stack, c: (error as Error & { cause?: unknown }).cause }).includes(secret));
+  }
 });
 
 Deno.test("the module reads no environment, does no network, logs nothing and imports nothing", async () => {
