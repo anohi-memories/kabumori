@@ -774,3 +774,6 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 
 ## 2026-10-18 かぶモリF2/J3ユーザー指示休止保存
 - archive: `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/` (3 original files + MANIFEST.json + SHA256SUMS); verified original Git blob/SHA256/restore in manifest; original commit not independently identified. F2 L2=USER_DEFERRED_SOURCE_ONLY (PR213 Draft/unmerged, R2(P1)/R3(P2) UNVERIFIED, NO security PASS); J3 V3=USER_CANCELLED_UNSTARTED (NOT_REVIEWED); F2/J3 done/none for slot release; restart requires fresh safety review.
+
+## 2026-10-18 F1 X手入力UI L1受入スナップショット
+- task_id: `postona-f1-x-manual-publish-ui-source-20261018` / L1 PASS_SOURCE_CANDIDATE, PRODUCTION_NO_GO. Original `.agent_v2/tasks/F1.md` → `.agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/F1.md` (19894 bytes, SHA256 `6ff5a42b1abe94e5c35bb7be52da195ad95742817c58cc878016bd5f8c736fa3`, original Git blob `d1422e0faa9bb9af79f385ca10422c989eec69ec`); byte-for-byte restore verified, MANIFEST.json/SHA256SUMS recorded. PR274 Draft, HEAD `007dc3d68bdb6c57e2cfb6831090f6544704a3c3`. Snapshot source ref main; per-file origin commit not separately established.
