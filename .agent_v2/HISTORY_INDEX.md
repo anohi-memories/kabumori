@@ -739,3 +739,10 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - exact original/archived content and blob read-back matched; MANIFEST.md and SHA256SUMS saved (added by F4 in `postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017`). L4 accepted, PR260 `8e1534f2fa1d39f8f1c321ed2cf69705fddf1421`, production and pilot NO_GO.
 
 - 2026-10-18 | F10 | `orchestration-v3-pr229-namespace-gate-f10-20261017` | L10 PASS_NAMESPACE_ALIGNED, PR229 merged `6b78b6360f5a32bc8be2d4e73f677e4818d1d9ae` | `.agent_v2/archive/2026-10-18-F10-orchestration-v3-pr229-namespace-gate-f10-20261017/` | SHA256 `9d1e4a3e9ec8a5e3169d74c521420e45657617c7a925332d92a39fd2d6b6a638`, 13,799 bytes, blob/restore verified.
+
+## J2 PR260 archive verification — 2026-10-18
+
+- task_id: `postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017`; original commit `1f4667cd0c819346b48a82f4f87f3e55db3986bf`; snapshot commit `929870ce6cd67832b1d5ef95321dd51d918c7328`.
+- `.agent_v2/tasks/J2.md` → `.agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/J2.md`: 1690 bytes, SHA256 `ca7e9fc5a7abcc0e54ab69523d2cd9484ddf45404c0fc30a3d6ab0e0e02d2c9f`.
+- `.agent_v2/reports/J2.md` → same folder `J2_REPORT.md`: 5040 bytes, SHA256 `4005ed119bec129ada86aa0fb2d847d2f856e7052e3726297d581b27e200953c`.
+- Both snapshots restore byte-for-byte and share the original Git blob IDs; added append-only MANIFEST.md, MANIFEST.json and SHA256SUMS. Existing snapshots unchanged.

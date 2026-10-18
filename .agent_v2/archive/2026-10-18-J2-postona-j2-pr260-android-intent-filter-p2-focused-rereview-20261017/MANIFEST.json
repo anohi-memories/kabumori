@@ -1,0 +1,23 @@
+{
+  "task_id": "postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017",
+  "original_commit": "1f4667cd0c819346b48a82f4f87f3e55db3986bf",
+  "snapshot_commit": "929870ce6cd67832b1d5ef95321dd51d918c7328",
+  "verified_at": "2026-10-18 JST",
+  "restore_check": "exact byte and Git blob equality; snapshots unchanged",
+  "files": [
+    {
+      "original_path": ".agent_v2/tasks/J2.md",
+      "archive_path": ".agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/J2.md",
+      "size": 1690,
+      "sha256": "ca7e9fc5a7abcc0e54ab69523d2cd9484ddf45404c0fc30a3d6ab0e0e02d2c9f",
+      "git_blob": "a3774b3f56276f147f03258f91391a24fc82f301"
+    },
+    {
+      "original_path": ".agent_v2/reports/J2.md",
+      "archive_path": ".agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/J2_REPORT.md",
+      "size": 5040,
+      "sha256": "4005ed119bec129ada86aa0fb2d847d2f856e7052e3726297d581b27e200953c",
+      "git_blob": "d05ea8dd31284aefb5ae494e901d379d8ce56cf0"
+    }
+  ]
+}
