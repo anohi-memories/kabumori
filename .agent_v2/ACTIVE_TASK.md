@@ -76,10 +76,10 @@
 
 ## F5
 - slot: F5
-- status: review_required
+- status: done
 - task_id: postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
@@ -91,6 +91,8 @@
 - review_required: conditional focused Sol（高） only if later shared security boundary authorized
 - slot_use: M2 source-only docs/offline synthetic deny tests and exact F5/G6 ACL gap proposal; no new Auth/RPC/RLS/Edge implementation, managed/prod/API/merge/deploy NO_GO
 - latest_result: 2026-10-18 JST M2_GAP_DOCUMENTED; Draft PR279 head 9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12 on PR275 ec0b3a6f; AI consult authorization: live social-mobile-consult never asks F5 (pinned absence); the person's own column-limited read of common_accounts/service_entitlements is an advisory pre-check only (session-blind G-2, blind to an uncommitted freeze G-3, service_role has no direct table access, x_autopost active is not an AI decision); 12 PG17 tests (provider mock 0 calls on every refusal) + 14/14 mutants; Option A no new API, Option B read-only RPC = proposal only, NOT created, needs sogo-shirei approval + Sol review; G6 handler integration stays HOLD; no managed/production access, no new RPC/grant/RLS; no Phase 13 gate opened; production NO_GO
+
+- l5_verdict: 2026-10-18 PASS_SOURCE_DESIGN / AI_AUTH_BOUNDARY_UNPROVEN / G6_HANDLER_CHANGE_HOLD / PRODUCTION_NO_GO. Draft PR279 HEAD 9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12; 12 PG17 simulated PASS, 14/14 mutations reported; no safe one-call AI auth. Option A advisory only, Option B new shared RPC proposal ONLY, needs command approval + limited Sol（高）. Archive before next task.
 
 ## F6
 - slot: F6
