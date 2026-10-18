@@ -1,0 +1,10 @@
+{
+  "task_id": "postona-f1-m2-restart-pending-uncertain-guard-20261018",
+  "original_path": ".agent_v2/tasks/F1.md",
+  "archive_path": ".agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/F1.md",
+  "size_bytes": 15796,
+  "sha256": "2d22de9b43d6cd01747f02555084e2dba4f299ab446ebacae9a18c22970d9a78",
+  "original_git_blob_sha": "c8dffbda56cb181e13a748b3fac9885b1f024353",
+  "original_commit": "bb709d38ec81113706926117834354a05e289945",
+  "restore_verified": true
+}
