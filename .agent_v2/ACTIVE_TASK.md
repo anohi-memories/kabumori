@@ -191,19 +191,19 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018
+- status: ready
+- task_id: postona-j2-pr276-x-oauth-credential-security-review-20261018
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: PR263 HEAD a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705 and F5 checked-owner contract ACK
-- blocker: PASS_FOCUSED_REVIEW / F5_ACK_PENDING; private-helper contract ACK and managed/H5 integration remain; production/pilot NO_GO
-- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/
-- slot_use: PR263 narrow review complete; PG17 behavior14/races13/13/mutations26/26/independent synchronized9 PASS; no source edits or new P2+ finding; V2 accepted by G4; retain F5 ACK gate
+- dependencies: Draft PR276 head 39ab57ab3648a4c727be8a31366e4a03b2fad9fc based on PR126 65f49f98; G3 PR272, F5 PR275 source contract
+- blocker: Security review NOT_STARTED; OAuth/Vault/Token/real X/managed/production/merge/deploy NO_GO
+- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018/
+- slot_use: independent narrowly scoped P0/P1/P2 security review of PR276 eleven-file OAuth credential source boundary
 
 ## J3
 - slot: J3
