@@ -784,3 +784,7 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `common-ai-f6-postona-openai-consult-offline-one-request-integration-20261018`, L6 PASS_OFFLINE_INTEGRATION / PRODUCTION_NO_GO; Draft PR273 HEAD `84ee0d6f7cf04b35f790d074435456b4e591a8d1`.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md`; archive commit `3ac0458f940ecf5748a9a696c059aa5900038c2c`.
 - source/archive Git blob `a92b67257fae6afcc01096ad6c376d7f6cc89150`, exact content read-back PASS; 9508 JS characters. Independent SHA256/MANIFEST NOT_VERIFIED. New handler TASK blocked on F5 AI-specific authorization contract and owner confirmation.
+
+## F4 archive verification — postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
+- archive_path: `.agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md`; original: `.agent_v2/tasks/F4.md` at `ea2c1d6c` (L4 acceptance), replaced in `97df19a4`
+- verified by F4 (`postona-f4-m1-x-identity-verified-credential-port-source-20261018`), 2026-10-18 JST: bytes 11147; SHA256 `e406e90f22850ffe07b980260ef0461eff1d11034431dcfcfa72b7a2c249b305` equals SHA256SUMS; git blob `80f70022404f2e585f49b14681817422ab48344c` = original = parent of the replacing commit. MANIFEST.md and SHA256SUMS were already present (added at L4) and were not changed; this entry completes the earlier "SHA256 manifest pending" line.
