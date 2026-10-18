@@ -34,6 +34,7 @@ test.after(() => {
 
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const REAL = { simulated: false, afterFreeze: false };
 const RESERVATION = '33333333-3333-4333-8333-333333333333';
 const TEXT = 'こんにちは、世界';
 
@@ -157,7 +158,7 @@ function world({ kv = fakeKV(), send, clock = { t: 5_000 } } = {}) {
   const deps = {
     port: {
       checkReadiness: async () => ({ kind: 'ready' }),
-      send: send ?? (async (target) => { calls.send.push(target); return { kind: 'published', targetId: target.targetId, providerPostId: '123' }; }),
+      send: send ?? (async (target) => { calls.send.push(target); return { kind: 'published', marks: REAL, targetId: target.targetId, providerPostId: '123' }; }),
     },
     now: () => clock.t,
     newRequestId: () => ID(1),
@@ -194,7 +195,7 @@ test('send: every unresolved answer leaves a durable record of its kind; every p
     await flow.runSend(w.deps, sendArgs());
     assert.equal(JSON.parse(w.kv.data.get(KEY())).kind, 'uncertain', 'a throw or nonsense may have posted');
   }
-  for (const answer of [{ kind: 'rejected', code: 'X_REJECTED_403' }, { kind: 'refused', code: 'X', retryable: false }, { kind: 'published', providerPostId: '9' }]) {
+  for (const answer of [{ kind: 'rejected', code: 'X_REJECTED_403' }, { kind: 'refused', code: 'X', retryable: false }, { kind: 'published', marks: REAL, providerPostId: '9' }]) {
     const w = world({ send: async (t) => ({ targetId: t.targetId, ...answer }) });
     await flow.runSend(w.deps, sendArgs());
     assert.equal(w.kv.data.size, 0, answer.kind);
@@ -243,7 +244,7 @@ test('send: if updating the record after the answer fails, the earlier in_flight
 });
 
 test('send: if removing the record after a proven end fails, the record stays and a restart shows it as unconfirmed (never the reverse)', async () => {
-  const w = world({ send: async (t) => { w.kv.fail.remove = true; return { kind: 'published', targetId: t.targetId, providerPostId: '9' }; } });
+  const w = world({ send: async (t) => { w.kv.fail.remove = true; return { kind: 'published', marks: REAL, targetId: t.targetId, providerPostId: '9' }; } });
   await flow.runSend(w.deps, sendArgs());
   assert.equal(w.memory.get('U1'), null);
   assert.equal(JSON.parse(w.kv.data.get(KEY())).kind, 'in_flight');
@@ -283,9 +284,9 @@ test('acknowledge: the record is removed first; if it cannot be removed nothing 
 
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.SECRET.signature';
 const ANSWER = {
-  sent: { status: 200, body: { ok: true, status: 'sent', reservationId: RESERVATION, xPostId: '1790000000000000001' } },
-  pending: { status: 200, body: { ok: true, status: 'pending', reservationId: RESERVATION, code: 'IN_PROGRESS' } },
-  uncertain: { status: 200, body: { ok: true, status: 'uncertain', reservationId: RESERVATION, code: 'X_TIMEOUT' } },
+  sent: { status: 200, body: { ok: true, status: 'sent', reservationId: RESERVATION, xPostId: '1790000000000000001', simulated: false } },
+  pending: { status: 200, body: { ok: true, status: 'pending', reservationId: RESERVATION, code: 'IN_PROGRESS', simulated: false } },
+  uncertain: { status: 200, body: { ok: true, status: 'uncertain', reservationId: RESERVATION, code: 'X_TIMEOUT', simulated: false } },
   lost: new Error('connection lost'),
 };
 const ACCOUNT = (id = 'sa_x_1', over = {}) => ({ id, brandId: 'A', platform: 'x', profile: { displayName: id, handle: `@${id}`, avatarColor: '#000000' }, connectionStatus: 'connected', postingState: 'active', ...over });

@@ -16,6 +16,10 @@
 //     the text is gone, so a restored attempt can only be re-asked by typing the SAME text again (its hash must
 //     match), with the SAME id. While the record is being read, or cannot be read, nothing can be sent.
 //     A local record is never proof that something was, or was not, posted.
+//  6. A result is shown as a real post only when the server marked it `simulated: false` (a missing mark is a
+//     test result). A simulated `published` is kept as UNRESOLVED (`uncertain`): it proves nothing about X, so no
+//     other text is offered until the user has looked at X. `afterFreeze` only adds a note: it never turns a
+//     pending / uncertain / failed result into a success.
 
 import { X_STANDARD_WEIGHTED_LIMIT, xWeightedLength } from '../../domain/schedule-planner.ts';
 import type { SocialAccount } from '../../domain/types.ts';
@@ -26,6 +30,7 @@ import {
   type ManualPublishOutcome,
   type ManualPublishTarget,
   type ReadinessRecord,
+  type ResultMarks,
 } from './manual-publish-port.ts';
 import { ACCOUNT_RE, CODE_RE, POST_ID_RE, UUID_RE } from './single-post-contract.ts';
 
@@ -81,12 +86,13 @@ export function resolveSelectedAccount(accounts: readonly SocialAccount[], accou
 
 /** What an attempt came to, in the vocabulary of the screen. */
 export type AttemptResult =
-  | Readonly<{ kind: 'sent'; requestId: string; providerPostId: string }>
-  | Readonly<{ kind: 'failed'; requestId: string; code: string }>
+  | Readonly<{ kind: 'sent'; requestId: string; providerPostId: string; marks: ResultMarks }>
+  | Readonly<{ kind: 'simulated'; requestId: string; marks: ResultMarks }>
+  | Readonly<{ kind: 'failed'; requestId: string; code: string; marks: ResultMarks | null }>
   | Readonly<{ kind: 'refused'; requestId: string; code: string; retryable: boolean }>
-  | Readonly<{ kind: 'pending'; requestId: string; code: string | null }>
+  | Readonly<{ kind: 'pending'; requestId: string; code: string | null; marks: ResultMarks | null }>
   | Readonly<{ kind: 'unconfirmed'; requestId: string; code: string | null }>
-  | Readonly<{ kind: 'uncertain'; requestId: string; code: string }>;
+  | Readonly<{ kind: 'uncertain'; requestId: string; code: string; marks: ResultMarks | null }>;
 
 export type UnresolvedKind = 'in_flight' | 'pending' | 'unconfirmed' | 'uncertain';
 
@@ -148,9 +154,12 @@ export function createInitialState(unresolved: UnresolvedAttempt | null = null, 
     // user left (or the app was closed) is `unconfirmed` (same id may be retried; the server never sends twice).
     const kind = unresolved.kind === 'in_flight' ? 'unconfirmed' : unresolved.kind;
     const code = unresolved.text === null ? UNRESOLVED_AFTER_RESTART : UNRESOLVED_FROM_EARLIER_VISIT;
+    // What the server said about the marks is not kept on the device (only the kind is), so a restored result has none.
     const result: AttemptResult = kind === 'uncertain'
-      ? { kind: 'uncertain', requestId: unresolved.requestId, code }
-      : { kind, requestId: unresolved.requestId, code };
+      ? { kind: 'uncertain', requestId: unresolved.requestId, code, marks: null }
+      : kind === 'pending'
+        ? { kind: 'pending', requestId: unresolved.requestId, code, marks: null }
+        : { kind: 'unconfirmed', requestId: unresolved.requestId, code };
     return {
       draft: unresolved.text ?? '',
       accountId: unresolved.accountId,
@@ -167,28 +176,40 @@ export function createInitialState(unresolved: UnresolvedAttempt | null = null, 
 }
 
 /**
+ * The marks of a port answer. Only an explicit `simulated: false` is "real" and only an explicit
+ * `afterFreeze: true` is "after the freeze": a missing, partial or malformed mark is the cautious reading.
+ */
+export function marksOf(outcome: ManualPublishOutcome): ResultMarks {
+  const marks = (outcome as { marks?: unknown }).marks;
+  const given = typeof marks === 'object' && marks !== null ? (marks as { simulated?: unknown; afterFreeze?: unknown }) : {};
+  return { simulated: given.simulated !== false, afterFreeze: given.afterFreeze === true };
+}
+
+/**
  * The only mapping from a port answer to something the user is shown. Anything that does not clearly prove what
  * it claims (wrong target id, a post id that is not a number) is `uncertain`, never `sent`.
  */
 export function resultOf(requestId: string, outcome: ManualPublishOutcome): AttemptResult {
-  if (outcome.targetId !== requestId) return { kind: 'uncertain', requestId, code: 'OUTCOME_TARGET_MISMATCH' };
+  if (outcome.targetId !== requestId) return { kind: 'uncertain', requestId, code: 'OUTCOME_TARGET_MISMATCH', marks: null };
   switch (outcome.kind) {
-    case 'published':
-      return typeof outcome.providerPostId === 'string' && POST_ID_RE.test(outcome.providerPostId)
-        ? { kind: 'sent', requestId, providerPostId: outcome.providerPostId }
-        : { kind: 'uncertain', requestId, code: 'OUTCOME_INVALID' };
+    case 'published': {
+      const marks = marksOf(outcome);
+      if (typeof outcome.providerPostId !== 'string' || !POST_ID_RE.test(outcome.providerPostId)) return { kind: 'uncertain', requestId, code: 'OUTCOME_INVALID', marks };
+      // A test result is not a post: it never reaches `sent`.
+      return marks.simulated ? { kind: 'simulated', requestId, marks } : { kind: 'sent', requestId, providerPostId: outcome.providerPostId, marks };
+    }
     case 'rejected':
-      return { kind: 'failed', requestId, code: safeCode(outcome.code, 'FAILED') };
+      return { kind: 'failed', requestId, code: safeCode(outcome.code, 'FAILED'), marks: marksOf(outcome) };
     case 'refused':
       return { kind: 'refused', requestId, code: safeCode(outcome.code, 'REFUSED'), retryable: outcome.retryable === true };
     case 'pending':
-      return { kind: 'pending', requestId, code: safeNullableCode(outcome.code) };
+      return { kind: 'pending', requestId, code: safeNullableCode(outcome.code), marks: marksOf(outcome) };
     case 'unavailable':
       return { kind: 'unconfirmed', requestId, code: safeNullableCode(outcome.code) };
     case 'uncertain':
-      return { kind: 'uncertain', requestId, code: safeCode(outcome.code, 'UNCERTAIN') };
+      return { kind: 'uncertain', requestId, code: safeCode(outcome.code, 'UNCERTAIN'), marks: marksOf(outcome) };
     default:
-      return { kind: 'uncertain', requestId, code: 'OUTCOME_UNKNOWN_KIND' };
+      return { kind: 'uncertain', requestId, code: 'OUTCOME_UNKNOWN_KIND', marks: null };
   }
 }
 
@@ -310,8 +331,12 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
     case 'send_settled': {
       if (state.phase !== 'sending' || state.requestId !== action.requestId || state.unresolved === null) return state;
       const result = resultOf(action.requestId, action.outcome);
+      // A simulated `published` proves nothing about X: it stays unresolved, as `uncertain` (never resent).
       const unresolvedKind: UnresolvedKind | null =
-        result.kind === 'pending' ? 'pending' : result.kind === 'unconfirmed' ? 'unconfirmed' : result.kind === 'uncertain' ? 'uncertain' : null;
+        result.kind === 'pending' ? 'pending'
+          : result.kind === 'unconfirmed' ? 'unconfirmed'
+            : result.kind === 'uncertain' || result.kind === 'simulated' ? 'uncertain'
+              : null;
       return {
         ...state,
         phase: 'result',
@@ -473,7 +498,7 @@ export function targetIsSendable(target: ManualPublishTarget): boolean {
 
 export type Surface =
   | 'not_connected' | 'unavailable' | 'record_unchecked' | 'ready_to_preview' | 'sending'
-  | 'sent' | 'pending' | 'failed' | 'refused' | 'unconfirmed' | 'uncertain';
+  | 'sent' | 'simulated' | 'pending' | 'failed' | 'refused' | 'unconfirmed' | 'uncertain';
 
 /**
  * One label for the situation. `sent` exists only after the port returned `published`; with the unconnected

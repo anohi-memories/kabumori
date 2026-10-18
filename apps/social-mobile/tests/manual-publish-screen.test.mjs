@@ -30,6 +30,7 @@ function fakeKV() {
 
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const REAL = { simulated: false, afterFreeze: false };
 const settle = async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -341,7 +342,7 @@ test('ready port: the send is enabled only after the server-side readiness, and 
 test('published is the only road to "sent"; the text then shows the provider post id and no invented reconciliation', async () => {
   const { ui, fp } = await readyConfirmation();
   await ui.press('Xに投稿する');
-  fp.pending[0].resolve({ kind: 'published', targetId: ID(1), providerPostId: '1234567890' });
+  fp.pending[0].resolve({ kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '1234567890' });
   await ui.flush();
   const t = ui.text();
   assert.ok(t.includes('Xが投稿を受け付けました'));
@@ -416,7 +417,7 @@ test('leaving the screen mid-send cannot make a second identical send look safe'
   assert.equal(second.state().unresolved.requestId, ID(1), 'the SAME attempt id is kept');
   assert.equal(second.button('Xに投稿する'), null);
   assert.equal(second.all('TextInput').length, 0, 'no input while an attempt is unresolved');
-  fp.pending[0].resolve({ kind: 'published', targetId: ID(1), providerPostId: '9' });
+  fp.pending[0].resolve({ kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '9' });
   await settle();
   assert.equal(memory.get('U1'), null, 'the flow itself clears the memory when the late answer proves it');
   assert.equal(fp.calls.send.length, 1);
@@ -598,7 +599,7 @@ test('pending: "not sent yet", never shown as posted or as uncertain; the retry 
   assert.equal(fp.calls.send.length, 2);
   assert.equal(fp.calls.send[1].targetId, fp.calls.send[0].targetId, 'the SAME attempt id');
   assert.deepEqual(fp.calls.send[1], fp.calls.send[0], 'the same target, consent included');
-  fp.pending[1].resolve({ kind: 'published', targetId: ID(1), providerPostId: '55' });
+  fp.pending[1].resolve({ kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '55' });
   await ui.flush();
   assert.ok(ui.text().includes('Xから返された投稿ID: 55'));
   assert.equal(ui.world.memory.get('U1'), null);
@@ -770,7 +771,7 @@ test('restart: the same text is asked for again; only a matching text, a fresh r
   assert.equal(fp.calls.send[0].targetId, ID(9), 'the SAME attempt id as before the restart');
   assert.equal(fp.calls.send[0].renderedText, 'earlier text');
   assert.deepEqual(fp.calls.send[0].consent, { confirmed: true, contentSha256: sha('earlier text') });
-  fp.pending[0].resolve({ kind: 'published', targetId: ID(9), providerPostId: '1234567890' });
+  fp.pending[0].resolve({ kind: 'published', marks: REAL, targetId: ID(9), providerPostId: '1234567890' });
   await ui.flush();
   assert.ok(ui.text().includes('Xが投稿を受け付けました'));
   assert.equal(ui.kv.data.size, 0, 'a proven end removes the record');
@@ -952,4 +953,126 @@ test('restart: a double tap on "I checked X" clears the record once', async () =
   await ui.flush();
   assert.equal(removes, 1);
   assert.equal(ui.state().phase, 'editing');
+});
+
+// ---- M3: the result marks of the F3 contract (simulated / afterFreeze) --------------------------------------------------------------
+
+const SIM_NOTE = 'サーバーはこの結果を模擬（テスト用）として返しました。実際のXへの投稿の証拠ではありません。';
+const FREEZE_NOTE = 'アカウントの停止または利用終了の手続きと重なって記録された結果です。';
+
+async function sendAndAnswer(outcome, over = {}) {
+  const { ui, fp } = await readyConfirmation(over);
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), ...outcome });
+  await ui.flush();
+  return { ui, fp };
+}
+
+test('simulated: an answer without marks, or marked simulated, is a TEST result -- never "Xが投稿を受け付けました", no post id, no resend', async () => {
+  for (const marks of [undefined, { simulated: true, afterFreeze: false }, {}, { simulated: 'false' }]) {
+    const { ui, fp } = await sendAndAnswer({ kind: 'published', providerPostId: '1234567890', ...(marks === undefined ? {} : { marks }) });
+    const t = ui.text();
+    assert.equal(ui.state().result.kind, 'simulated', JSON.stringify(marks));
+    assert.ok(t.includes('模擬（テスト）の結果です'));
+    assert.ok(t.includes('サーバーはこの結果を模擬として返しました。実際のXへの投稿としては扱いません。'));
+    assert.ok(t.includes('模擬の結果は、実際にXへ投稿された証拠でも、投稿されていない証拠でもありません。Xで確認するまで、同じ内容を再送信しないでください。'));
+    assert.ok(!t.includes('Xが投稿を受け付けました'));
+    assert.ok(!t.includes('Xから返された投稿ID'), 'a test result shows no post id');
+    assert.ok(!t.includes('1234567890'));
+    assertNoSentClaim(ui);
+    assert.equal(ui.button('Xに投稿する'), null, 'no send button on a result');
+    assert.equal(ui.button('同じ内容・同じ送信IDで確認し直す'), null, 'no resend of a test result');
+    assert.equal(ui.button('新しい投稿を作る'), null);
+    assert.equal(ui.all('TextInput').length, 0, 'no editor: another text is not offered');
+    assert.ok(ui.button('Xで確認しました（この下書きを破棄）'));
+    assert.equal(JSON.parse(ui.kv.data.get(realStore.storeKeyOf('U1'))).kind, 'uncertain', 'still blocking after a restart');
+    assert.equal(fp.calls.send.length, 1);
+  }
+});
+
+test('simulated: only the explicit acknowledgement unlocks, and the next attempt is a NEW attempt with a NEW id', async () => {
+  const { ui, fp } = await sendAndAnswer({ kind: 'published', providerPostId: '1' });
+  await ui.press('Xで確認しました（この下書きを破棄）');
+  assert.equal(ui.state().phase, 'editing');
+  assert.equal(ui.kv.data.size, 0);
+  await ui.typeText('こんにちは');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 2);
+  assert.equal(fp.calls.send[1].targetId, ID(2));
+});
+
+test('simulated: after an app restart the test result comes back as "uncertain" -- no retry, no editor, acknowledgement only', async () => {
+  const kv = fakeKV();
+  const first = await sendAndAnswer({ kind: 'published', providerPostId: '1' }, { kv });
+  first.ui.unmount();
+  const second = await mount({ kv, port: fakePort() });
+  assert.equal(second.state().result.kind, 'uncertain');
+  assert.ok(second.text().includes('Xに投稿された可能性があります'));
+  assert.equal(second.button('前回と同じ本文を入力して確認し直す'), null);
+  assert.equal(second.all('TextInput').length, 0);
+  assertNoSentClaim(second);
+});
+
+test('afterFreeze: a real post is shown as posted WITH the note; the post id is the one the server stored', async () => {
+  const { ui } = await sendAndAnswer({ kind: 'published', providerPostId: '1234567890', marks: { simulated: false, afterFreeze: true } });
+  const t = ui.text();
+  assert.equal(ui.state().result.kind, 'sent');
+  assert.ok(t.includes('Xが投稿を受け付けました'));
+  assert.ok(t.includes('Xから返された投稿ID: 1234567890'));
+  assert.ok(t.includes('この投稿は、アカウントの停止または利用終了の手続きと重なって記録されました。投稿そのものはXが受け付けています。'));
+  assert.equal(ui.kv.data.size, 0);
+  const plain = await sendAndAnswer({ kind: 'published', providerPostId: '1234567890', marks: REAL });
+  assert.ok(!plain.ui.text().includes('停止または利用終了'), 'no note without the mark');
+});
+
+test('afterFreeze: an unknown result is never a success -- uncertain and pending keep their rules and add the note', async () => {
+  const uncertain = await sendAndAnswer({ kind: 'uncertain', code: 'X_TIMEOUT', marks: { simulated: false, afterFreeze: true } });
+  const t = uncertain.ui.text();
+  assert.equal(uncertain.ui.state().result.kind, 'uncertain');
+  assert.ok(t.includes('Xに投稿された可能性があります'));
+  assert.ok(t.includes(FREEZE_NOTE));
+  assert.ok(!t.includes('Xが投稿を受け付けました'));
+  assertNoSentClaim(uncertain.ui);
+  assert.equal(uncertain.ui.button('同じ内容・同じ送信IDで確認し直す'), null, 'uncertain is never resent');
+  assert.equal(uncertain.fp.calls.send.length, 1);
+
+  const pending = await sendAndAnswer({ kind: 'pending', code: 'IN_PROGRESS', marks: { simulated: false, afterFreeze: true } });
+  assert.equal(pending.ui.state().result.kind, 'pending');
+  assert.ok(pending.ui.text().includes(FREEZE_NOTE));
+  assert.ok(pending.ui.button('同じ内容・同じ送信IDで確認し直す'), 'pending is still retried with the same id');
+  assertNoSentClaim(pending.ui);
+});
+
+test('marks on pending / failed / uncertain are explained, never acted on: a simulated one says so and keeps its class', async () => {
+  for (const [outcome, kind] of [
+    [{ kind: 'pending', code: null }, 'pending'],
+    [{ kind: 'rejected', code: 'X_REJECTED_403' }, 'failed'],
+    [{ kind: 'uncertain', code: 'X_TIMEOUT' }, 'uncertain'],
+  ]) {
+    const { ui } = await sendAndAnswer({ ...outcome, marks: { simulated: true, afterFreeze: false } });
+    assert.equal(ui.state().result.kind, kind);
+    assert.ok(ui.text().includes(SIM_NOTE), kind);
+    assertNoSentClaim(ui);
+  }
+  const unmarked = await sendAndAnswer({ kind: 'pending', code: null });
+  assert.ok(unmarked.ui.text().includes(SIM_NOTE), 'a missing mark is read as simulated');
+});
+
+test('marks: a restored (after restart) result states nothing about them', async () => {
+  const ui = await mount({ kv: deviceWith(RESTORED({ kind: 'uncertain' })) });
+  assert.ok(!ui.text().includes(SIM_NOTE));
+  assert.ok(!ui.text().includes(FREEZE_NOTE));
+});
+
+test('this build: the send stays unreachable -- the unconnected port refuses, nothing is simulated or shown as sent', async () => {
+  const ui = await mount({ port: { calls: { check: [], send: [] }, port: realPort.getManualPublishPort() } });
+  await ui.typeText('こんにちは');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  assert.equal(ui.state().phase, 'confirming');
+  assertNoSentClaim(ui);
 });

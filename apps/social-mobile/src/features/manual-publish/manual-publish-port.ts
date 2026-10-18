@@ -44,6 +44,16 @@ export type ManualPublishTarget = Readonly<{
 }>;
 
 /**
+ * How the server says a stored result came to be (F3 PR #278, M1-F1 / M1-F3). Missing marks are NOT "real":
+ *   simulated    only `false` means "the server recorded this from the real X transport". Anything else (true,
+ *                a missing mark, a malformed one) is a test result -- a simulated `published` is never shown as a
+ *                real post.
+ *   afterFreeze  only `true` means "recorded after the workspace / service was no longer active" (a post that was
+ *                already in flight when the person was frozen). It never turns an unknown result into a success.
+ */
+export type ResultMarks = Readonly<{ simulated: boolean; afterFreeze: boolean }>;
+
+/**
  * What the port tells the screen about one send. Mirrors the F3 answer kinds:
  *   published    the server stored X's post id and read it back          (F3 sent)
  *   pending      NOT sent yet (busy / in progress): retry the SAME id      (F3 pending)
@@ -53,11 +63,11 @@ export type ManualPublishTarget = Readonly<{
  *   unavailable  503 / transport / malformed: nothing known; retry the SAME id (F3 unavailable)
  */
 export type ManualPublishOutcome =
-  | Readonly<{ kind: 'published'; targetId: string; providerPostId: string }>
-  | Readonly<{ kind: 'pending'; targetId: string; code: string | null }>
-  | Readonly<{ kind: 'rejected'; targetId: string; code: string }>
+  | Readonly<{ kind: 'published'; targetId: string; providerPostId: string; marks?: ResultMarks }>
+  | Readonly<{ kind: 'pending'; targetId: string; code: string | null; marks?: ResultMarks }>
+  | Readonly<{ kind: 'rejected'; targetId: string; code: string; marks?: ResultMarks }>
   | Readonly<{ kind: 'refused'; targetId: string; code: string; retryable: boolean }>
-  | Readonly<{ kind: 'uncertain'; targetId: string; code: string }>
+  | Readonly<{ kind: 'uncertain'; targetId: string; code: string; marks?: ResultMarks }>
   | Readonly<{ kind: 'unavailable'; targetId: string; code: string | null }>;
 
 /** A readiness answer older than this is not trusted any more; the screen asks again before sending. */

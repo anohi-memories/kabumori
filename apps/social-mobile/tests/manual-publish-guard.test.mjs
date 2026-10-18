@@ -127,6 +127,28 @@ test('a "published" outcome is constructed in exactly one place: the mapping of 
   assert.ok(/case 'sent':\s*return \{ kind: 'published'/u.test(contract));
 });
 
+// ---- the result marks (F3 PR #278): a test result is never a post --------------------------------------------------------------------
+
+test('"sent" is constructed after the simulated check, and only the explicit `simulated: false` reaches it', async () => {
+  const model = await readFile(join(ROOT, `${FEATURE_DIR}/manual-publish-model.ts`), 'utf8');
+  const resultOf = /export function resultOf[\s\S]*?\n\}\n/u.exec(model)[0];
+  assert.ok(/return marks\.simulated \? \{ kind: 'simulated', requestId, marks \} : \{ kind: 'sent'/u.test(resultOf), 'a simulated published answer becomes `simulated`, never `sent`');
+  const marksOf = /export function marksOf[\s\S]*?\n\}\n/u.exec(model)[0];
+  assert.ok(marksOf.includes('simulated: given.simulated !== false'), 'only an explicit false is real');
+  assert.ok(marksOf.includes('afterFreeze: given.afterFreeze === true'), 'only an explicit true is after the freeze');
+  const contract = await readFile(join(ROOT, `${FEATURE_DIR}/single-post-contract.ts`), 'utf8');
+  assert.ok(contract.includes("simulated: data.simulated !== false, afterFreeze: data.afterFreeze === true"), "the contract copy reads the marks like F3's file");
+});
+
+test('the screen never writes a "sent" claim for a simulated result: the simulated block names a test result and offers no resend', async () => {
+  const route = await readFile(join(ROOT, ROUTE), 'utf8');
+  const block = /result\.kind === 'simulated' \? \([\s\S]*?\) : result\.kind === 'failed'/u.exec(route)[0];
+  assert.ok(block.includes('模擬（テスト）の結果です'));
+  assert.ok(!block.includes('Xが投稿を受け付けました'));
+  assert.ok(!block.includes('providerPostId'));
+  assert.ok(!block.includes('retry_requested'));
+});
+
 // ---- the home entry ----------------------------------------------------------------------------------------------------------
 
 test('home: the entry is <Link href="/manual-publish" asChild> with an ActionButton as its direct child', async () => {

@@ -39,6 +39,7 @@ function fakeKV() {
 
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const REAL = { simulated: false, afterFreeze: false };
 
 function harness(portOver = {}) {
   const calls = { check: [], send: [] };
@@ -47,7 +48,7 @@ function harness(portOver = {}) {
   const store = createAttemptStore(kv);
   const fakePort = {
     checkReadiness: async (accountId) => { calls.check.push(accountId); return { kind: 'ready' }; },
-    send: async (target) => { calls.send.push(target); return { kind: 'published', targetId: target.targetId, providerPostId: '1234567890' }; },
+    send: async (target) => { calls.send.push(target); return { kind: 'published', marks: REAL, targetId: target.targetId, providerPostId: '1234567890' }; },
     ...portOver,
   };
   let clock = 5_000;
@@ -106,13 +107,13 @@ test('readiness: the port of this build says not_connected and refuses a send wi
 test('send: the target carries the attempt id as its idempotency key, the text unchanged and the consent', async () => {
   const h = harness();
   const outcome = await flow.runSend(h.deps, args());
-  assert.deepEqual(outcome, { kind: 'published', targetId: ID(1), providerPostId: '1234567890' });
+  assert.deepEqual(outcome, { kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '1234567890' });
   assert.deepEqual(h.calls.send, [{ targetId: ID(1), provider: 'x', connectedAccountId: 'X_A', renderedText: 'hello', media: [], consent: { confirmed: true, contentSha256: sha('hello') } }]);
 });
 
 test('send: the attempt is remembered (id, exact text, hash) BEFORE the port is called, and forgotten only by a proven end', async () => {
   let during = null;
-  const h = harness({ send: async (target) => { during = h.memory.get('U1'); return { kind: 'published', targetId: target.targetId, providerPostId: '1' }; } });
+  const h = harness({ send: async (target) => { during = h.memory.get('U1'); return { kind: 'published', marks: REAL, targetId: target.targetId, providerPostId: '1' }; } });
   await flow.runSend(h.deps, args());
   assert.deepEqual(during, { ...ENTRY, kind: 'in_flight' }, 'marked while in flight');
   assert.equal(h.memory.get('U1'), null, 'published clears it');
@@ -142,7 +143,7 @@ test('send: a retry of the same attempt overwrites the same memory entry (same i
   const h = harness({ send: async (t) => ({ targetId: t.targetId, ...answer }) });
   await flow.runSend(h.deps, args());
   assert.equal(h.memory.get('U1').kind, 'pending');
-  answer = { kind: 'published', providerPostId: '77' };
+  answer = { kind: 'published', marks: REAL, providerPostId: '77' };
   await flow.runSend(h.deps, args());
   assert.equal(h.memory.get('U1'), null);
 });
@@ -165,9 +166,9 @@ test('send: an answer that proves nothing is "uncertain" and stays remembered', 
   }
   // "published" for another target, or without a numeric post id, is not a proof either.
   for (const answer of [
-    { kind: 'published', targetId: ID(9), providerPostId: '1' },
-    { kind: 'published', targetId: ID(1), providerPostId: '' },
-    { kind: 'published', targetId: ID(1), providerPostId: 'abc' },
+    { kind: 'published', marks: REAL, targetId: ID(9), providerPostId: '1' },
+    { kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '' },
+    { kind: 'published', marks: REAL, targetId: ID(1), providerPostId: 'abc' },
   ]) {
     const h = harness({ send: async () => answer });
     await flow.runSend(h.deps, args());

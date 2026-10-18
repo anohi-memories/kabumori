@@ -8,6 +8,7 @@ import { READINESS_MAX_AGE_MS } from '../src/features/manual-publish/manual-publ
 
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const REAL = { simulated: false, afterFreeze: false };
 const account = (id, over = {}) => ({
   id,
   brandId: 'A',
@@ -176,8 +177,8 @@ test('send_started twice is a no-op the second time', () => {
 test('send_settled: published is the only way to "sent"; the draft is then cleared and nothing stays unresolved', () => {
   const sending = start(consented('hello'));
   assert.deepEqual(sending.unresolved, { accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), text: 'hello', kind: 'in_flight' });
-  const sent = settle(sending, { kind: 'published', targetId: ID(1), providerPostId: '1790000000000000001' });
-  assert.deepEqual(sent.result, { kind: 'sent', requestId: ID(1), providerPostId: '1790000000000000001' });
+  const sent = settle(sending, { kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '1790000000000000001' });
+  assert.deepEqual(sent.result, { kind: 'sent', requestId: ID(1), providerPostId: '1790000000000000001', marks: REAL });
   assert.equal(sent.phase, 'result');
   assert.equal(sent.draft, '');
   assert.equal(sent.unresolved, null);
@@ -205,8 +206,8 @@ test('send_settled: a proven rejection (failed) and a refusal keep the draft; th
 });
 
 test('pending is NOT uncertain and NOT sent: not posted yet, possibly in flight, retried only with the SAME id', () => {
-  const pending = settle(start(consented('hello')), { kind: 'pending', targetId: ID(1), code: 'IN_PROGRESS' });
-  assert.deepEqual(pending.result, { kind: 'pending', requestId: ID(1), code: 'IN_PROGRESS' });
+  const pending = settle(start(consented('hello')), { kind: 'pending', targetId: ID(1), code: 'IN_PROGRESS', marks: REAL });
+  assert.deepEqual(pending.result, { kind: 'pending', requestId: ID(1), code: 'IN_PROGRESS', marks: REAL });
   assert.equal(pending.unresolved.kind, 'pending');
   assert.equal(m.surfaceOf({ dataStatus: 'ready', xAccountCount: 1, account: account('X_A'), state: pending }), 'pending');
   assert.equal(apply(pending, { type: 'result_dismissed' }), pending, 'cannot be walked away from');
@@ -278,20 +279,20 @@ test('defence in depth: even a hand-built state cannot retry an uncertain attemp
 
 test('send_settled: an answer for another request, or one that proves nothing, never shows "sent"', () => {
   const sending = start(consented('hello'));
-  assert.equal(apply(sending, { type: 'send_settled', requestId: ID(9), outcome: { kind: 'published', targetId: ID(9), providerPostId: '1' } }), sending);
-  const mismatched = settle(sending, { kind: 'published', targetId: ID(7), providerPostId: '1' });
+  assert.equal(apply(sending, { type: 'send_settled', requestId: ID(9), outcome: { kind: 'published', marks: REAL, targetId: ID(9), providerPostId: '1' } }), sending);
+  const mismatched = settle(sending, { kind: 'published', marks: REAL, targetId: ID(7), providerPostId: '1' });
   assert.equal(mismatched.result.kind, 'uncertain');
   assert.equal(mismatched.result.code, 'OUTCOME_TARGET_MISMATCH');
   for (const providerPostId of ['', '   ', 'abc', '12x', undefined, null, 5, '1'.repeat(31)]) {
-    assert.equal(m.resultOf(ID(1), { kind: 'published', targetId: ID(1), providerPostId }).kind, 'uncertain', String(providerPostId));
+    assert.equal(m.resultOf(ID(1), { kind: 'published', marks: REAL, targetId: ID(1), providerPostId }).kind, 'uncertain', String(providerPostId));
   }
   assert.equal(m.resultOf(ID(1), { kind: 'bogus', targetId: ID(1) }).kind, 'uncertain');
-  assert.equal(apply(consented(), { type: 'send_settled', requestId: ID(1), outcome: { kind: 'published', targetId: ID(1), providerPostId: '1' } }).phase, 'confirming', 'not while confirming');
+  assert.equal(apply(consented(), { type: 'send_settled', requestId: ID(1), outcome: { kind: 'published', marks: REAL, targetId: ID(1), providerPostId: '1' } }).phase, 'confirming', 'not while confirming');
 });
 
 test('resultOf: every port outcome lands in exactly one result class; codes are stable machine codes only', () => {
   const r = (outcome) => m.resultOf(ID(1), { targetId: ID(1), ...outcome });
-  assert.equal(r({ kind: 'published', providerPostId: '9' }).kind, 'sent');
+  assert.equal(r({ kind: 'published', marks: REAL, providerPostId: '9' }).kind, 'sent');
   assert.equal(r({ kind: 'pending', code: null }).kind, 'pending');
   assert.equal(r({ kind: 'rejected', code: 'X_REJECTED_400' }).kind, 'failed');
   assert.equal(r({ kind: 'refused', code: 'AUTH_REQUIRED', retryable: true }).kind, 'refused');
@@ -425,7 +426,7 @@ test('surface: one label for the situation; "sent" needs a published result', ()
   assert.equal(surface({ state: start(consented()) }), 'sending');
   for (const state of [init, confirming(), consented()]) assert.notEqual(surface({ state }), 'sent');
   const cases = [
-    [{ kind: 'published', providerPostId: '1' }, 'sent'],
+    [{ kind: 'published', marks: REAL, providerPostId: '1' }, 'sent'],
     [{ kind: 'pending', code: null }, 'pending'],
     [{ kind: 'rejected', code: 'X_REJECTED_400' }, 'failed'],
     [{ kind: 'refused', code: 'AUTH_REQUIRED', retryable: true }, 'refused'],
