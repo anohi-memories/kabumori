@@ -45,6 +45,7 @@
 - 新系統への移行は「次の新規TASK」から。例: 旧G1のTASK完了 → K1確認 → 次の新規TASKからF1へ。
 - 移行のタイミングはChatGPTが案件ごとに判断する。ユーザーが「次からFへ入れて」等と指定した場合は新系統を優先する。
 - 旧Gnと新Fn、旧Hnと新Jnは別slotとして扱う。両方が同時に動く場合も、同じファイル・DB・Auth・Edge・設定・production境界を同時に変更しない（旧ルールの競合防止をそのまま適用）。
+- V3（`.agent_v3_gh/`）の切り替え表（`PROJECT_RULES.md` の「V3（`.agent_v3_gh/`）の段階導入」）に載ったGn / Hnに対応するFn / Jnには、新しいTASKを置かない。v2側の索引の行は `idle` のまま、`slot_use` に「V3 Gn（またはHn）へ移行済み」と書く。v2で始めた `task_id` はv2で完結させ、途中でV3へ移さない。
 
 ## 開始条件
 
@@ -111,6 +112,7 @@ L / V の完了確認が済み、そのslotへ次のTASKを置く前に、次TAS
 3. `.agent_v2/ACTIVE_TASK.md`
 4. `.agent_v2/CURRENT_STATE.md`
 5. 各slotの最新メタデータ（旧15枠・新15枠のTASK先頭のヘッダーだけ）
+6. `scripts/agent_v3/cli.ts verify --root .agent_v2 --legacy-v2 --repo <checkout>` を読み取りで実行し、TASK正本と索引の食い違いを一覧に入れる（直すのは各担当）。V3の切り替え表に枠があれば、`verify --root .agent_v3_gh --naming GH` も実行する。旧 `.agent/` は凍結済みなので、`.agent` のtree SHAが凍結時と同じことを確かめれば、旧15枠のTASK全文は読まなくてよい。
 
 第二段階（必要なslotだけ）: 状態の食い違い、`review_required`、blocker、競合、production作業の可能性があるslotについて、個別のTASK / Reportを追加で読む。
 
@@ -139,6 +141,8 @@ L / V の完了確認が済み、そのslotへ次のTASKを置く前に、次TAS
 - 旧ファイルの短縮・削除は、保存とhash照合・復元確認が済むまで行わない（このPRでは行わない）。
 
 ## 完全移行
+
+V3（`.agent_v3_gh/`）への枠ごとの切り替えは、`PROJECT_RULES.md` の「V3（`.agent_v3_gh/`）の段階導入」に従う。この節の完全移行（呼び名の戻し、`.agent_v2/` の昇格）より、そちらを優先する。
 
 次がすべて満たされた時点で、ChatGPTが完全移行を判断する。
 

@@ -44,6 +44,7 @@ Claude Code（くろちゃん）10枠（ReportはすべてTASK内）:
 - 単独 `G` はG1〜G10の開始可能な枠が1つだけと明白な場合のみ、単独 `K` はG1〜G10の未評価のClaude完了対象が1枠だけと明白な場合のみ使用する。複数の場合は推測で選ばない。単独 `C` は使用しない。
 - `F` はH1〜H5のTASKと各Codex Report、G1〜G10のTASKと各TASK末尾の `## Report`、`.agent/ACTIVE_TASK.md`、`.agent/CURRENT_STATE.md` を確認する全15枠の統括コード。H5については、臨時実装中か・空いているか・レビュー用途で誤使用されていないかも確認する。完了コードではなく、別チャット担当のTASKを勝手に完了・再割当しない。移行期間中は、下の「新旧二重系統」に従い新F1〜F10・J1〜J5を加えた全30枠を対象とする。
 - 並行作業・完了コード・競合防止の詳細は `.agent/ORCHESTRATION.md` に従う。
+- 下の「V3（`.agent_v3_gh/`）の段階導入」の切り替え表に載った枠だけは、上表のパスではなく `.agent_v3_gh/tasks/<枠>.md`（CodexのReportは `.agent_v3_gh/reports/<枠>.md`）を正本とする。表に載っていない枠は上表のまま。
 
 ## 新旧二重系統（移行期間中・2026-10-12〜）
 
@@ -52,10 +53,51 @@ Claude Code（くろちゃん）10枠（ReportはすべてTASK内）:
 - 旧系統（現行正本）: Claude `G1`〜`G10`（完了確認 `K1`〜`K10`）、Codex `H1`〜`H5`（完了確認 `C1`〜`C5`）。TASK / Reportは `.agent/`。G / H / K / C の意味・開始条件・完了確認フロー・ルーティングは変更しない。
 - 新系統: Claude `F1`〜`F10`（完了確認 `L1`〜`L10`、F1→L1 … F10→L10）、Codex `J1`〜`J5`（完了確認 `V1`〜`V5`、J1→V1 … J5→V5）。TASKは `.agent_v2/tasks/`、J の最新Reportは `.agent_v2/reports/`。運用詳細は `.agent_v2/ORCHESTRATION.md`。
 - 新系統の用途: `Fn` は旧 `Gn` の後継枠（F1/F2=かぶモリアプリ、F3/F4=X自動投稿アプリ、F5〜F10=明示割当専用）。J1〜J4はレビュー・バグ修正・検証枠。J5はCodex臨時実装の優先枠で基本は空ける。ユーザーが明示指示した場合だけJ1〜J4も臨時実装に使える（ChatGPTが勝手に転用しない）。J1〜J5にも `return_to` / `completion_code` と推薦モデルを必ず記入する。
-- **単独 `F`**: 移行期間中は旧G1〜G10・旧H1〜H5・新F1〜F10・新J1〜J5の全30枠を統括する。`F`（数字なし）と `F1`〜`F10` は完全一致で区別する。第一段階は旧・新の ACTIVE_TASK と CURRENT_STATE（旧CURRENT_STATEは先頭の現在の記録だけ）と各slotの最新メタデータだけを読み、必要なslotだけ個別TASK / Reportを読む。過去Report全文は読まない。安全確認・競合確認は省略しない。
+- **単独 `F`**: 移行期間中は旧G1〜G10・旧H1〜H5・新F1〜F10・新J1〜J5の全30枠を統括する。`F`（数字なし）と `F1`〜`F10` は完全一致で区別する。第一段階は旧・新の ACTIVE_TASK と CURRENT_STATE（旧CURRENT_STATEは先頭の現在の記録だけ）と各slotの最新メタデータだけを読み、必要なslotだけ個別TASK / Reportを読む。過去Report全文は読まない。安全確認・競合確認は省略しない。V3に切り替えた枠は「V3（`.agent_v3_gh/`）の段階導入」に従って見る。
 - **移行の原則**: 旧G / Hで開始した `task_id` は完了まで旧系統で完結させ、途中で G→F / H→J へ移さない。新系統へは次の新規TASKから移す。タイミングはChatGPTが案件ごとに判断し、ユーザーが「次からFへ」等と指定した場合は新系統を優先する。1つの `task_id` の正本は新旧どちらか一方だけ。
-- 旧 `.agent/` の初回snapshotは `.agent_v2/archive/2026-10-12-initial-migration/`（append-only）。保存・hash照合・復元確認が済むまで旧ファイルを短縮・削除しない。
-- 完全移行（F→G、J→H、L→K、V→Cへの呼び名の戻し、`.agent_v2/` の正式 `.agent/` への昇格、単独Fを15枠統括へ戻す）は、旧系統の継続TASK・未処理K / Cが無いこと等の条件が揃った時点でChatGPTが判断し、別TASKで行う。
+- 旧 `.agent/` の初回snapshotは `.agent_v2/archive/2026-10-12-initial-migration/`（append-only）。保存・hash照合・復元確認が済むまで旧ファイルを短縮・削除しない。最終snapshotは `.agent_v2/archive/2026-10-17-legacy-agent-final-cae7aa4e/`（PR #252、33ファイル、復元確認済み）。
+- 完全移行（F→G、J→H、L→K、V→Cへの呼び名の戻し、`.agent_v2/` の正式 `.agent/` への昇格、単独Fを15枠統括へ戻す）は、旧系統の継続TASK・未処理K / Cが無いこと等の条件が揃った時点でChatGPTが判断し、別TASKで行う。V3（`.agent_v3_gh/`）への枠ごとの切り替えは、下の「V3（`.agent_v3_gh/`）の段階導入」に従う。
+
+## V3（`.agent_v3_gh/`）の段階導入（2026-10-18 案・切り替え表に載った枠だけ）
+
+旧 `.agent/` を保存したまま、新しい管理基盤V3（`.agent_v3_gh/`）へ、G / H の枠を1枠ずつ移す。この節は、この節を追加するPRのmerge後に有効になる。ただし、下の切り替え表に枠が載るまでは、どの開始・完了コードの扱いも変わらない。
+
+- **置き場所**: V3の正本は `.agent_v3_gh/`（`tasks/G1.md`〜`G10.md`、`tasks/H1.md`〜`H5.md`、`reports/H1.md`〜`H5.md`、`ACTIVE_TASK.md` は自動生成の索引）。ツールは `scripts/agent_v3/cli.ts`（`--naming GH`）。詳細は `.agent_v3/SPEC.md`・`.agent_v3/MIGRATION.md`・`.agent_v3/PILOT_RULES.md`。
+- **旧 `.agent/` は凍結**:
+  - 新しいTASKを置かない。上書き・改名・削除・短縮をしない。
+  - 凍結の目印は `.agent` のtree SHA `9a8d8e105c7e875d260e8f36db4271727379554d`（2026-10-14 22:41 以降変更なし）。最終snapshotはPR #252。
+  - 旧 `.agent/ORCHESTRATION.md`・`.agent/CHATGPT_HANDOFF.md` にある旧パスより、この節の切り替え表を優先する。
+- **切り替え表**（承認された枠だけを載せる。載せる・外すのは、ユーザーまたはChatGPTが承認した別TASKで行う）:
+
+| 枠 | 完了コード | 正本 | 対応するv2の枠 | 切り替えcommit | 状態 |
+| --- | --- | --- | --- | --- | --- |
+| （まだ無い。pilot候補はG10だが、ユーザーの明示割当まで載せない） | — | — | — | — | — |
+
+- **コード**: 表の枠は Gn→Kn、Hn→Cn の1対1。G / H / K / C の意味・開始条件（`ready` / `in_progress` だけ開始）・`return_to`・推薦モデル・H5（臨時実装専用）・G5〜G10（明示割当専用）・G7 / G8 / G9 の専属は変えない。
+- **二重割当の回避**:
+  - 用途の組（Gn と Fn、Hn と Jn）で、同時にTASKを持つのは一方だけ。
+  - 表に載せた枠に対応するFn / Jnには、新しいTASKを置かない。
+  - 旧・v2で始めた `task_id` は、途中でV3へ移さない。1つの `task_id` の正本は1つの系統だけ。新しい `task_id` は、旧・v2・V3のどこにも無いことを確かめる。
+  - 表に無い枠へ、V3のTASKを置かない。
+- **予備枠の保護**: G5〜G10は、ユーザーまたはChatGPTの明示割当がある時だけ表に載せる。G10のpilotは、ユーザーが用途・`return_to`・K10を確認してから行う。
+- **`return_to`**: 割当の時に、戻る部屋の名前と自枠の完了コードを確定する。分からなければ割り当てない。
+- **1件1commitと読み戻し**:
+  - 登録・開始・Report・完了確認・archiveは、それぞれ1commit。fast-forwardだけで、force pushは使わない。
+  - 「登録済み」と言えるのは、ツールの `REGISTERED_ON_MAIN`、またはmainから5項目（task_id / status / next_owner / return_to / completion_code）を読み戻して一致した時だけ。
+  - 答えが分からない時（GraphQLの一般エラー、時間切れ、応答なし）は成功扱いしない。mainの今の値を読んで判定する（fail-closed）。
+  - 1ファイルずつしか書けないAPI（Contents API）は使わない。安全や方針による拒否は、言い換え・分割・再送をせずに止めて報告する。
+- **archive**:
+  - 完了した枠は `done` → archive → `idle` の順（ツールで1commit）。archiveしていない `done` の枠には、新しい `task_id` を置けない。
+  - 既存のarchiveは書き換えない。
+- **K / C**: 受入の記録はTASKの中（`### Kn acceptance` / `### Cn acceptance`）に書く。Kの「会社員AIラボ開発日記の更新判定」も、そこに書く。
+- **単独 `F`**:
+  - 移行期間中も30枠を、組ごとに見る。
+  - 第一段階で、`verify --root .agent_v2 --legacy-v2` と、表に枠がある時は `verify --root .agent_v3_gh --naming GH` を読み取りで実行する。
+  - 旧 `.agent` は、tree SHAが凍結時と同じことだけを確かめ、大きなTASK / Reportの全文は読まない。
+- **普段の読み取り**:
+  - 登録・完了確認で読むのは、対象の枠のTASK（とReport）、索引、`tasks/` の一覧だけ。
+  - 全枠やarchiveを調べるのは、次の例外の時だけ: 索引の不一致、答えが分からない、競合、pilotの開始、単独 `F`。
+- **deployの副作用**: mainへのcommitのたびに、Vercelがadminプロジェクトの本番deployを行う（管理ファイルだけのcommitでも）。pilotの前に、許容するか、Vercel側で除外するかを決める（`.agent_v3/PILOT_RULES.md`）。
 
 ## 固定ルーティング（2026-09-24〜）
 
