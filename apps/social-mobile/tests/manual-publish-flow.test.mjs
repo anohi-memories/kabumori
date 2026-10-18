@@ -1,7 +1,8 @@
-// F1 manual X single post: the async steps (readiness check, the one send) and the memory of an attempt that
-// may have posted. Offline: every external thing is injected; the global network entry points are booby-trapped.
+// F1 manual X single post: the async steps (readiness check, the one send) and the memory of an unresolved attempt.
+// Offline: every external thing is injected; the global network entry points are booby-trapped.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import * as flow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as port from '../src/features/manual-publish/manual-publish-port.ts';
 
@@ -21,6 +22,9 @@ test.after(() => {
   }
 });
 
+const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
+const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
 function harness(portOver = {}) {
   const calls = { check: [], send: [] };
   const memory = flow.createAttemptMemory();
@@ -31,10 +35,18 @@ function harness(portOver = {}) {
   };
   let clock = 5_000;
   let n = 0;
-  const deps = { port: fakePort, now: () => clock, newRequestId: () => `req-${++n}`, memory };
+  const deps = { port: fakePort, now: () => clock, newRequestId: () => ID(++n), memory };
   return { calls, memory, deps, tick: (ms) => { clock += ms; } };
 }
-const args = (over = {}) => ({ userId: 'U1', accountId: 'X_A', text: 'hello', requestId: 'req-1', ...over });
+const args = (over = {}) => ({
+  userId: 'U1',
+  accountId: 'X_A',
+  text: 'hello',
+  requestId: ID(1),
+  consent: { confirmed: true, contentSha256: sha('hello') },
+  ...over,
+});
+const ENTRY = { accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), text: 'hello' };
 
 // ---- readiness ------------------------------------------------------------------------------------------------------
 
@@ -66,57 +78,78 @@ test('readiness: a port failure or a nonsense answer is never "ready"', async ()
 test('readiness: the port of this build says not_connected and refuses a send without posting anything', async () => {
   assert.equal(port.getManualPublishPort(), port.UNCONNECTED_MANUAL_PUBLISH_PORT);
   assert.deepEqual(await port.UNCONNECTED_MANUAL_PUBLISH_PORT.checkReadiness('X_A'), { kind: 'not_connected' });
-  const refused = await port.UNCONNECTED_MANUAL_PUBLISH_PORT.send({ targetId: 't', provider: 'x', connectedAccountId: 'X_A', renderedText: 'hi', media: [] });
-  assert.deepEqual(refused, { kind: 'rejected', targetId: 't', code: 'PORT_NOT_CONNECTED' });
+  const refused = await port.UNCONNECTED_MANUAL_PUBLISH_PORT.send({ targetId: ID(1), provider: 'x', connectedAccountId: 'X_A', renderedText: 'hi', media: [], consent: { confirmed: true, contentSha256: sha('hi') } });
+  assert.deepEqual(refused, { kind: 'refused', targetId: ID(1), code: 'PORT_NOT_CONNECTED', retryable: false });
   assert.ok(Object.isFrozen(port.UNCONNECTED_MANUAL_PUBLISH_PORT));
 });
 
 // ---- send ----------------------------------------------------------------------------------------------------------------
 
-test('send: the target carries the request id as its idempotency key and the text unchanged', async () => {
+test('send: the target carries the attempt id as its idempotency key, the text unchanged and the consent', async () => {
   const h = harness();
   const outcome = await flow.runSend(h.deps, args());
-  assert.deepEqual(outcome, { kind: 'published', targetId: 'req-1', providerPostId: '1234567890' });
-  assert.deepEqual(h.calls.send, [{ targetId: 'req-1', provider: 'x', connectedAccountId: 'X_A', renderedText: 'hello', media: [] }]);
+  assert.deepEqual(outcome, { kind: 'published', targetId: ID(1), providerPostId: '1234567890' });
+  assert.deepEqual(h.calls.send, [{ targetId: ID(1), provider: 'x', connectedAccountId: 'X_A', renderedText: 'hello', media: [], consent: { confirmed: true, contentSha256: sha('hello') } }]);
 });
 
-test('send: the attempt is remembered BEFORE the port is called, and forgotten only by a proven answer', async () => {
+test('send: the attempt is remembered (id, exact text, hash) BEFORE the port is called, and forgotten only by a proven end', async () => {
   let during = null;
   const h = harness({ send: async (target) => { during = h.memory.get('U1'); return { kind: 'published', targetId: target.targetId, providerPostId: '1' }; } });
   await flow.runSend(h.deps, args());
-  assert.deepEqual(during, { accountId: 'X_A', requestId: 'req-1' }, 'marked while in flight');
+  assert.deepEqual(during, { ...ENTRY, kind: 'in_flight' }, 'marked while in flight');
   assert.equal(h.memory.get('U1'), null, 'published clears it');
 
-  const rejected = harness({ send: async (t) => ({ kind: 'rejected', targetId: t.targetId, code: 'X_REJECTED_403' }) });
-  await flow.runSend(rejected.deps, args());
-  assert.equal(rejected.memory.get('U1'), null, 'a proven rejection clears it');
-
-  const unknown = harness({ send: async (t) => ({ kind: 'uncertain', targetId: t.targetId, code: 'X_TIMEOUT' }) });
-  const outcome = await flow.runSend(unknown.deps, args());
-  assert.equal(outcome.kind, 'uncertain');
-  assert.deepEqual(unknown.memory.get('U1'), { accountId: 'X_A', requestId: 'req-1' }, 'an unknown outcome stays remembered');
+  for (const [outcome, label] of [
+    [{ kind: 'rejected', code: 'X_REJECTED_403' }, 'rejected'],
+    [{ kind: 'refused', code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE', retryable: false }, 'refused'],
+  ]) {
+    const done = harness({ send: async (t) => ({ targetId: t.targetId, ...outcome }) });
+    await flow.runSend(done.deps, args());
+    assert.equal(done.memory.get('U1'), null, `${label} is a proven end`);
+  }
+  for (const [outcome, kind] of [
+    [{ kind: 'pending', code: 'IN_PROGRESS' }, 'pending'],
+    [{ kind: 'unavailable', code: 'TRANSPORT_FAILED' }, 'unconfirmed'],
+    [{ kind: 'uncertain', code: 'X_TIMEOUT' }, 'uncertain'],
+  ]) {
+    const open = harness({ send: async (t) => ({ targetId: t.targetId, ...outcome }) });
+    const got = await flow.runSend(open.deps, args());
+    assert.equal(got.kind, outcome.kind);
+    assert.deepEqual(open.memory.get('U1'), { ...ENTRY, kind }, `${outcome.kind} stays remembered as ${kind}`);
+  }
 });
 
-test('send: a throwing port is "uncertain" (it may have sent), never "rejected"', async () => {
+test('send: a retry of the same attempt overwrites the same memory entry (same id), never adds a second one', async () => {
+  let answer = { kind: 'pending', code: null };
+  const h = harness({ send: async (t) => ({ targetId: t.targetId, ...answer }) });
+  await flow.runSend(h.deps, args());
+  assert.equal(h.memory.get('U1').kind, 'pending');
+  answer = { kind: 'published', providerPostId: '77' };
+  await flow.runSend(h.deps, args());
+  assert.equal(h.memory.get('U1'), null);
+});
+
+test('send: a throwing port is "uncertain" (it may have sent), never "rejected"; it stays remembered as uncertain', async () => {
   for (const send of [async () => { throw new Error('boom'); }, () => Promise.reject(new Error('boom')), () => { throw new Error('sync boom'); }]) {
     const h = harness({ send });
     const outcome = await flow.runSend(h.deps, args());
-    assert.deepEqual(outcome, { kind: 'uncertain', targetId: 'req-1', code: 'SEND_THREW' });
-    assert.notEqual(h.memory.get('U1'), null, 'still remembered');
+    assert.deepEqual(outcome, { kind: 'uncertain', targetId: ID(1), code: 'SEND_THREW' });
+    assert.deepEqual(h.memory.get('U1'), { ...ENTRY, kind: 'uncertain' });
   }
 });
 
 test('send: an answer that proves nothing is "uncertain" and stays remembered', async () => {
-  for (const answer of [null, undefined, 'published', { kind: 'PUBLISHED' }, {}, 42]) {
+  for (const answer of [null, undefined, 'published', { kind: 'PUBLISHED' }, {}, 42, { kind: 'sent', targetId: ID(1) }]) {
     const h = harness({ send: async () => answer });
     const outcome = await flow.runSend(h.deps, args());
-    assert.deepEqual(outcome, { kind: 'uncertain', targetId: 'req-1', code: 'OUTCOME_INVALID' }, String(answer));
-    assert.notEqual(h.memory.get('U1'), null);
+    assert.deepEqual(outcome, { kind: 'uncertain', targetId: ID(1), code: 'OUTCOME_INVALID' }, String(answer));
+    assert.equal(h.memory.get('U1').kind, 'uncertain');
   }
-  // "published" for another target, or without a post id, is not a proof either.
+  // "published" for another target, or without a numeric post id, is not a proof either.
   for (const answer of [
-    { kind: 'published', targetId: 'req-OTHER', providerPostId: '1' },
-    { kind: 'published', targetId: 'req-1', providerPostId: '' },
+    { kind: 'published', targetId: ID(9), providerPostId: '1' },
+    { kind: 'published', targetId: ID(1), providerPostId: '' },
+    { kind: 'published', targetId: ID(1), providerPostId: 'abc' },
   ]) {
     const h = harness({ send: async () => answer });
     await flow.runSend(h.deps, args());
@@ -124,18 +157,27 @@ test('send: an answer that proves nothing is "uncertain" and stays remembered', 
   }
 });
 
-test('send: a target the provider cannot take is refused before the port is called', async () => {
-  const h = harness();
-  const outcome = await flow.runSend(h.deps, args({ text: '   ' }));
-  assert.deepEqual(outcome, { kind: 'rejected', targetId: 'req-1', code: 'TARGET_NOT_SENDABLE' });
-  assert.equal(h.calls.send.length, 0);
-  assert.equal(h.memory.get('U1'), null);
+test('send: a target the provider cannot take, or a consent that does not match the exact text, is refused before the port', async () => {
+  for (const [over, code] of [
+    [{ text: '   ', consent: { confirmed: true, contentSha256: sha('   ') } }, 'LOCAL_TARGET_INVALID'],
+    [{ requestId: 'req-1' }, 'LOCAL_ATTEMPT_ID_INVALID'],
+    [{ text: 'hello ' }, 'LOCAL_CONSENT_MISMATCH'],
+    [{ consent: { confirmed: true, contentSha256: sha('another') } }, 'LOCAL_CONSENT_MISMATCH'],
+    [{ consent: { confirmed: false, contentSha256: sha('hello') } }, 'LOCAL_TARGET_INVALID'],
+  ]) {
+    const h = harness();
+    const outcome = await flow.runSend(h.deps, args(over));
+    assert.equal(outcome.kind, 'refused', code);
+    assert.equal(outcome.code, code);
+    assert.equal(h.calls.send.length, 0, code);
+    assert.equal(h.memory.get('U1'), null, `${code}: nothing was started`);
+  }
 });
 
 test('memory: one entry per signed-in user; another user never sees it', () => {
   const memory = flow.createAttemptMemory();
-  memory.mark('U1', { accountId: 'X_A', requestId: 'r' });
-  assert.deepEqual(memory.get('U1'), { accountId: 'X_A', requestId: 'r' });
+  memory.mark('U1', { ...ENTRY, kind: 'pending' });
+  assert.deepEqual(memory.get('U1'), { ...ENTRY, kind: 'pending' });
   assert.equal(memory.get('U2'), null);
   assert.equal(memory.get(null), null);
   memory.clear('U1');

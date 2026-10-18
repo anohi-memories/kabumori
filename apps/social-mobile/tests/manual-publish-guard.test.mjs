@@ -34,8 +34,10 @@ const ALLOWED_IMPORTS = new Set([
   '../../domain/schedule-planner.ts',
   '../../domain/types.ts',
   './manual-publish-flow.ts',
+  './manual-publish-hash.ts',
   './manual-publish-model.ts',
   './manual-publish-port.ts',
+  './single-post-contract.ts',
 ]);
 
 test('the feature has exactly the expected files', async () => {
@@ -45,8 +47,11 @@ test('the feature has exactly the expected files', async () => {
       'src/app/manual-publish.tsx',
       'src/features/manual-publish/manual-post-preview.tsx',
       'src/features/manual-publish/manual-publish-flow.ts',
+      'src/features/manual-publish/manual-publish-hash.ts',
       'src/features/manual-publish/manual-publish-model.ts',
       'src/features/manual-publish/manual-publish-port.ts',
+      'src/features/manual-publish/single-post-contract.ts',
+      'src/features/manual-publish/single-post-port.ts',
     ],
   );
 });
@@ -69,7 +74,12 @@ test('the compiled code (comments removed) names no network, credential or stora
   for (const rel of await sources()) {
     const text = await readFile(join(ROOT, rel), 'utf8');
     const js = ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX, removeComments: true } }).outputText;
-    for (const pattern of forbidden) assert.ok(!pattern.test(js), `${rel} contains ${pattern}`);
+    for (const pattern of forbidden) {
+      // The adapter alone handles the signed-in person's OWN session token, and only to hand it to the injected
+      // transport (its tests prove it never reaches an outcome). No other file may name an access token at all.
+      if (pattern.source.startsWith('access_') && rel.endsWith('single-post-port.ts')) continue;
+      assert.ok(!pattern.test(js), `${rel} contains ${pattern}`);
+    }
   }
 });
 
@@ -79,16 +89,28 @@ test('the guarded app copy of the provider model is still imported by no app sou
   }
 });
 
-test('no source of the feature can produce "sent" except from a published outcome', async () => {
+test('no source of the feature can produce a "sent" result except from a published outcome', async () => {
   const text = await readFile(join(ROOT, `${FEATURE_DIR}/manual-publish-model.ts`), 'utf8');
   const producers = [...text.matchAll(/kind: 'sent'/gu)];
   assert.equal(producers.length, 2, "one type member and one construction (in resultOf's published branch)");
   const resultOf = /export function resultOf[\s\S]*?\n\}\n/u.exec(text)[0];
   assert.ok(/case 'published':[\s\S]*?kind: 'sent'/u.test(resultOf));
   for (const rel of await sources()) {
-    if (rel.endsWith('manual-publish-model.ts')) continue;
+    // single-post-contract.ts names the F3 answer kind `sent`; it is mapped to `published` there and nowhere else.
+    if (rel.endsWith('manual-publish-model.ts') || rel.endsWith('single-post-contract.ts')) continue;
     assert.ok(!/kind: 'sent'/u.test(await readFile(join(ROOT, rel), 'utf8')), `${rel} must not construct a sent result`);
   }
+});
+
+test('a "published" outcome is constructed in exactly one place: the mapping of F3 `sent` (stored and read back)', async () => {
+  const builders = [];
+  for (const rel of await sources()) {
+    const code = await readFile(join(ROOT, rel), 'utf8');
+    if (/\{ kind: 'published',/u.test(code)) builders.push(rel);
+  }
+  assert.deepEqual(builders, [`${FEATURE_DIR}/single-post-contract.ts`]);
+  const contract = await readFile(join(ROOT, `${FEATURE_DIR}/single-post-contract.ts`), 'utf8');
+  assert.ok(/case 'sent':\s*return \{ kind: 'published'/u.test(contract));
 });
 
 // ---- the home entry ----------------------------------------------------------------------------------------------------------

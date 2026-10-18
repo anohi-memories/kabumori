@@ -7,11 +7,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 import ts from 'typescript';
 import * as model from '../src/features/manual-publish/manual-publish-model.ts';
 import * as realFlow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as realPort from '../src/features/manual-publish/manual-publish-port.ts';
 
+const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
+const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const settle = async () => { for (let i = 0; i < 6; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -100,7 +103,7 @@ async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A
   let ids = 0;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
   const nowFn = () => clock.t;
-  const idFn = () => `req-${++ids}`;
+  const idFn = () => ID(++ids);
   const props = () => ({ userId: world.userId, now: nowFn, newRequestId: idFn });
   const render = () => { rt.setCursor(0); return rt.mod.exports.ManualPublishScreen(props()); };
   const flush = async () => {
@@ -148,6 +151,16 @@ async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A
     },
     /** Call the handler even though the button is disabled: the handler must still refuse. */
     async pressIgnoringDisabled(label) { api.button(label).props.onPress(); await flush(); },
+    /** Tick (or untick) the explicit consent checkbox of the confirmation. */
+    async tick() {
+      const box = api.all('Pressable').find((n) => n.props.accessibilityRole === 'checkbox');
+      assert.ok(box, 'the consent checkbox exists');
+      if (box.props.accessibilityState.disabled) return false;
+      box.props.onPress();
+      await flush();
+      return true;
+    },
+    checkbox: () => api.all('Pressable').find((n) => n.props.accessibilityRole === 'checkbox') ?? null,
     async typeText(value) { api.all('TextInput')[0].props.onChangeText(value); await flush(); },
     state: () => rt.slots[0].v,
   };
@@ -226,14 +239,17 @@ test('this build: the confirmation shows the content, the readiness is not_conne
   assert.ok(t.includes('name-X_A'));
   assert.ok(t.includes('こんにちは'));
   assert.ok(t.includes('送信するとXに公開されます。この画面から取り消すことはできません。'));
-  assert.ok(t.includes(model.SEND_BLOCK_MESSAGES.port_not_connected));
+  assert.ok(t.includes(model.SEND_BLOCK_MESSAGES.consent_missing), 'the explicit consent comes first');
+  assert.equal(ui.checkbox().props.accessibilityState.checked, false);
+  await ui.tick();
+  assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.port_not_connected));
   assert.equal(ui.button('Xに投稿する').props.disabled, true);
   assert.equal(await ui.press('Xに投稿する'), false);
   await ui.pressIgnoringDisabled('Xに投稿する'); // even a forced press must not send or change anything
   assert.equal(ui.state().phase, 'confirming');
   assertNoSentClaim(ui);
-  // Going back works and a new confirmation asks again.
-  await ui.press('編集に戻る');
+  // Going back works and a new confirmation asks again (and drops the consent).
+  await ui.press('戻る');
   assert.equal(ui.state().phase, 'editing');
   assert.equal(ui.state().draft, 'こんにちは');
 });
@@ -243,6 +259,7 @@ test('a cached "connected" account is not enough: with readiness not_connected t
   const ui = await mount({ port: fp, accounts: [account('X_A', { connectionStatus: 'connected' })] });
   await ui.typeText('hi');
   await ui.press('内容を確認する');
+  await ui.tick();
   await ui.pressIgnoringDisabled('Xに投稿する');
   assert.deepEqual(fp.calls.check, ['X_A']);
   assert.equal(fp.calls.send.length, 0);
@@ -253,6 +270,7 @@ test('demo (mock_preview) data gets the same gate: no readiness, no send', async
   const ui = await mount({ status: 'mock_preview', port: fp });
   await ui.typeText('hi');
   await ui.press('内容を確認する');
+  await ui.tick();
   assert.equal(ui.button('Xに投稿する').props.disabled, true);
   assert.equal(fp.calls.send.length, 0);
 });
@@ -262,6 +280,7 @@ test('signed out: the send is blocked even with a ready port', async () => {
   const ui = await mount({ port: fp, userId: null });
   await ui.typeText('hi');
   await ui.press('内容を確認する');
+  await ui.tick();
   assert.equal(ui.button('Xに投稿する').props.disabled, true);
   assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.not_signed_in));
   await ui.pressIgnoringDisabled('Xに投稿する');
@@ -275,6 +294,7 @@ async function readyConfirmation(over = {}) {
   const ui = await mount({ port: fp, ...over });
   await ui.typeText('こんにちは');
   await ui.press('内容を確認する');
+  await ui.tick();
   return { ui, fp };
 }
 
@@ -288,12 +308,14 @@ test('ready port: the send is enabled only after the server-side readiness, and 
   b.props.onPress(); // a second tap in the same frame
   await ui.flush();
   assert.equal(fp.calls.send.length, 1, 'exactly one send');
-  assert.equal(fp.calls.send[0].targetId, 'req-1');
+  assert.equal(fp.calls.send[0].targetId, ID(1));
   assert.equal(fp.calls.send[0].connectedAccountId, 'X_A');
   assert.equal(fp.calls.send[0].renderedText, 'こんにちは');
+  assert.deepEqual(fp.calls.send[0].consent, { confirmed: true, contentSha256: sha('こんにちは') }, 'the consent is bound to the exact text');
   assert.equal(ui.state().phase, 'sending');
   assert.equal(ui.button('送信中…').props.disabled, true);
-  assert.equal(ui.button('編集に戻る').props.disabled, true);
+  assert.equal(ui.button('戻る').props.disabled, true);
+  assert.equal(ui.checkbox().props.accessibilityState.disabled, true, 'the consent cannot be changed while sending');
   assertNoSentClaim(ui);
   await ui.pressIgnoringDisabled('送信中…');
   assert.equal(fp.calls.send.length, 1, 'still one');
@@ -302,7 +324,7 @@ test('ready port: the send is enabled only after the server-side readiness, and 
 test('published is the only road to "sent"; the text then shows the provider post id and no invented reconciliation', async () => {
   const { ui, fp } = await readyConfirmation();
   await ui.press('Xに投稿する');
-  fp.pending[0].resolve({ kind: 'published', targetId: 'req-1', providerPostId: '1234567890' });
+  fp.pending[0].resolve({ kind: 'published', targetId: ID(1), providerPostId: '1234567890' });
   await ui.flush();
   const t = ui.text();
   assert.ok(t.includes('Xが投稿を受け付けました'));
@@ -317,7 +339,7 @@ test('published is the only road to "sent"; the text then shows the provider pos
 test('rejected: "not posted", the text is kept, editing is possible and a new attempt gets a new id', async () => {
   const { ui, fp } = await readyConfirmation();
   await ui.press('Xに投稿する');
-  fp.pending[0].resolve({ kind: 'rejected', targetId: 'req-1', code: 'X_REJECTED_403' });
+  fp.pending[0].resolve({ kind: 'rejected', targetId: ID(1), code: 'X_REJECTED_403' });
   await ui.flush();
   const t = ui.text();
   assert.ok(t.includes('投稿されませんでした'));
@@ -326,15 +348,16 @@ test('rejected: "not posted", the text is kept, editing is possible and a new at
   await ui.press('編集に戻る');
   assert.equal(ui.state().draft, 'こんにちは');
   await ui.press('内容を確認する');
+  await ui.tick();
   await ui.press('Xに投稿する');
   assert.equal(fp.calls.send.length, 2);
-  assert.equal(fp.calls.send[1].targetId, 'req-2');
+  assert.equal(fp.calls.send[1].targetId, ID(2));
 });
 
 test('uncertain: warned, no resend, no send button, and only an explicit acknowledgement unlocks the screen', async () => {
   const { ui, fp } = await readyConfirmation();
   await ui.press('Xに投稿する');
-  fp.pending[0].resolve({ kind: 'uncertain', targetId: 'req-1', code: 'X_TIMEOUT' });
+  fp.pending[0].resolve({ kind: 'uncertain', targetId: ID(1), code: 'X_TIMEOUT' });
   await ui.flush();
   const t = ui.text();
   assert.ok(t.includes('投稿されたか確認できません'));
@@ -366,14 +389,17 @@ test('leaving the screen mid-send cannot make a second identical send look safe'
   const first = await mount({ port: fp, memory });
   await first.typeText('こんにちは');
   await first.press('内容を確認する');
+  await first.tick();
   await first.press('Xに投稿する');
   first.unmount(); // the user navigates away while the send is pending
   const second = await mount({ port: fp, memory });
   assert.equal(second.state().phase, 'result', 'the new visit opens on the unresolved attempt');
   assert.equal(second.state().result.code, model.UNRESOLVED_FROM_EARLIER_VISIT);
+  assert.equal(second.state().result.kind, 'unconfirmed', 'still in flight when left: not "not posted"');
+  assert.equal(second.state().unresolved.requestId, ID(1), 'the SAME attempt id is kept');
   assert.equal(second.button('Xに投稿する'), null);
   assert.equal(second.all('TextInput').length, 0, 'no input while an attempt is unresolved');
-  fp.pending[0].resolve({ kind: 'published', targetId: 'req-1', providerPostId: '9' });
+  fp.pending[0].resolve({ kind: 'published', targetId: ID(1), providerPostId: '9' });
   await settle();
   assert.equal(memory.get('U1'), null, 'the flow itself clears the memory when the late answer proves it');
   assert.equal(fp.calls.send.length, 1);
@@ -398,6 +424,7 @@ test('a readiness failure of the port keeps the send disabled', async () => {
   const ui = await mount({ port: fp });
   await ui.typeText('hi');
   await ui.press('内容を確認する');
+  await ui.tick();
   assert.equal(ui.button('Xに投稿する').props.disabled, true);
   assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.port_unavailable));
   assert.ok(ui.button('送信できる状態を再確認する'));
@@ -437,7 +464,7 @@ test('the route re-creates the screen for a different user (and signed out), so 
 
 test('another signed-in user never inherits an unresolved attempt', async () => {
   const memory = realFlow.createAttemptMemory();
-  memory.mark('U1', { accountId: 'X_A', requestId: 'r9' });
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(9), contentSha256: sha('earlier'), text: 'earlier', kind: 'pending' });
   const other = await mount({ userId: 'U2', memory });
   assert.equal(other.state().phase, 'editing');
   const same = await mount({ userId: 'U1', memory });
@@ -469,4 +496,179 @@ test('a forced press is refused by the handler itself when the gate no longer ho
   await ui.pressIgnoringDisabled('Xに投稿する');
   assert.equal(fp.calls.send.length, 0, 'account needs attention');
   assert.equal(ui.state().phase, 'confirming');
+});
+
+// ---- explicit consent bound to the exact text -------------------------------------------------------------------------------
+
+async function readyUnticked() {
+  const fp = fakePort();
+  const ui = await mount({ port: fp });
+  await ui.typeText('こんにちは');
+  await ui.press('内容を確認する');
+  return { ui, fp };
+}
+
+test('consent: without the explicit tick the send is disabled even with a ready port, and a forced press sends nothing', async () => {
+  const { ui, fp } = await readyUnticked();
+  assert.deepEqual(fp.calls.check, ['X_A'], 'the server-side readiness is fine');
+  assert.equal(ui.checkbox().props.accessibilityState.checked, false);
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.consent_missing));
+  assert.ok(ui.text().includes('同意するまで送信できません。'));
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0);
+  assert.equal(ui.state().phase, 'confirming');
+});
+
+test('consent: ticking enables the send and names the exact text by its hash; unticking disables it again', async () => {
+  const { ui, fp } = await readyUnticked();
+  await ui.tick();
+  assert.equal(ui.checkbox().props.accessibilityState.checked, true);
+  assert.equal(ui.button('Xに投稿する').props.disabled, false);
+  assert.ok(ui.text().includes(`照合コード ${sha('こんにちは').slice(0, 12)}`));
+  assert.equal(fp.calls.send.length, 0, 'ticking sends nothing');
+  await ui.tick();
+  assert.equal(ui.checkbox().props.accessibilityState.checked, false);
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+});
+
+test('consent: it does not survive leaving the confirmation -- reopening asks again', async () => {
+  const { ui } = await readyUnticked();
+  await ui.tick();
+  await ui.press('戻る');
+  await ui.press('内容を確認する');
+  assert.equal(ui.checkbox().props.accessibilityState.checked, false);
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+});
+
+test('the request leaves with the consent hash of the EXACT confirmed text (CRLF and padding normalised before, never after)', async () => {
+  const fp = fakePort();
+  const ui = await mount({ port: fp });
+  await ui.typeText('  一行目\r\n二行目  ');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send[0].renderedText, '一行目\n二行目');
+  assert.deepEqual(fp.calls.send[0].consent, { confirmed: true, contentSha256: sha('一行目\n二行目') });
+});
+
+// ---- pending / unconfirmed / refused: not posted-for-sure, not uncertain, retried with the same id ----------------------------
+
+test('pending: "not sent yet", never shown as posted or as uncertain; the retry reuses the SAME attempt id and body', async () => {
+  const { ui, fp } = await readyConfirmation();
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ kind: 'pending', targetId: ID(1), code: 'IN_PROGRESS' });
+  await ui.flush();
+  let t = ui.text();
+  assert.ok(t.includes('まだ送信されていません'));
+  assert.ok(t.includes('コード: IN_PROGRESS'));
+  assert.ok(!t.includes('投稿されたか確認できません'), 'pending is not uncertain');
+  assertNoSentClaim(ui);
+  assert.equal(ui.state().result.kind, 'pending');
+  assert.equal(ui.button('Xに投稿する'), null, 'no send from the result');
+  assert.equal(ui.all('TextInput').length, 0, 'the text is locked');
+  assert.equal(ui.world.memory.get('U1').kind, 'pending');
+
+  await ui.press('同じ内容・同じ送信IDで確認し直す');
+  t = ui.text();
+  assert.equal(ui.state().phase, 'confirming');
+  assert.ok(t.includes('前回と同じ内容・同じ送信IDで確認します。'));
+  assert.equal(ui.button('Xに投稿する').props.disabled, true, 'a retry needs a fresh explicit consent');
+  assert.ok(t.includes(model.SEND_BLOCK_MESSAGES.consent_missing));
+  await ui.tick();
+  assert.equal(ui.button('Xに投稿する').props.disabled, false);
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 2);
+  assert.equal(fp.calls.send[1].targetId, fp.calls.send[0].targetId, 'the SAME attempt id');
+  assert.deepEqual(fp.calls.send[1], fp.calls.send[0], 'the same target, consent included');
+  fp.pending[1].resolve({ kind: 'published', targetId: ID(1), providerPostId: '55' });
+  await ui.flush();
+  assert.ok(ui.text().includes('Xから返された投稿ID: 55'));
+  assert.equal(ui.world.memory.get('U1'), null);
+});
+
+test('pending: leaving the retry returns to the unresolved result and never to the editor', async () => {
+  const { ui, fp } = await readyConfirmation();
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ kind: 'pending', targetId: ID(1), code: null });
+  await ui.flush();
+  await ui.press('同じ内容・同じ送信IDで確認し直す');
+  await ui.press('戻る');
+  assert.equal(ui.state().phase, 'result');
+  assert.equal(ui.state().result.kind, 'pending');
+  assert.equal(ui.all('TextInput').length, 0);
+});
+
+test('unconfirmed (nothing known: transport / 503 / unreadable): retry with the same id or acknowledge; never "failed", never "sent"', async () => {
+  const { ui, fp } = await readyConfirmation();
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ kind: 'unavailable', targetId: ID(1), code: 'TRANSPORT_FAILED' });
+  await ui.flush();
+  const t = ui.text();
+  assert.ok(t.includes('結果を確認できません'));
+  assert.ok(t.includes('同じ送信IDで行います（サーバーは2回送りません）'));
+  assert.ok(!t.includes('投稿されませんでした'), 'unknown is not "not posted"');
+  assertNoSentClaim(ui);
+  assert.equal(ui.state().result.kind, 'unconfirmed');
+  assert.ok(ui.button('同じ内容・同じ送信IDで確認し直す'));
+  assert.ok(ui.button('Xで確認しました（この下書きを破棄）'));
+  assert.equal(ui.button('編集に戻る'), null, 'no way back to the editor');
+  await ui.press('Xで確認しました（この下書きを破棄）');
+  assert.equal(ui.state().phase, 'editing');
+  assert.equal(ui.world.memory.get('U1'), null);
+});
+
+test('refused (4xx, nothing written): the text is kept and the next attempt gets a NEW id', async () => {
+  const { ui, fp } = await readyConfirmation();
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ kind: 'refused', targetId: ID(1), code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE', retryable: false });
+  await ui.flush();
+  const t = ui.text();
+  assert.ok(t.includes('送信は受け付けられませんでした'));
+  assert.ok(t.includes('サーバーは何も記録していません。'));
+  assert.ok(t.includes('コード: POSTONA_RESV_SERVICE_NOT_ACTIVE'));
+  assertNoSentClaim(ui);
+  assert.equal(ui.world.memory.get('U1'), null);
+  await ui.press('編集に戻る');
+  assert.equal(ui.state().draft, 'こんにちは');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send[1].targetId, ID(2));
+});
+
+test('uncertain keeps no retry button at all (a retry would be a resend)', async () => {
+  const { ui, fp } = await readyConfirmation();
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ kind: 'uncertain', targetId: ID(1), code: 'X_TIMEOUT' });
+  await ui.flush();
+  assert.equal(ui.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assert.ok(ui.button('Xで確認しました（この下書きを破棄）'));
+});
+
+test('an attempt that was still pending when the screen was left is picked up again with its own id, text and account', async () => {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(9), contentSha256: sha('earlier text'), text: 'earlier text', kind: 'pending' });
+  const fp = fakePort();
+  const ui = await mount({ port: fp, memory });
+  assert.equal(ui.state().result.kind, 'pending');
+  assert.equal(ui.state().draft, 'earlier text');
+  await ui.press('同じ内容・同じ送信IDで確認し直す');
+  await ui.tick();
+  assert.equal(ui.button('Xに投稿する').props.disabled, false);
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send[0].targetId, ID(9), 'the SAME attempt id as before');
+  assert.equal(fp.calls.send[0].renderedText, 'earlier text');
+  assert.deepEqual(fp.calls.send[0].consent, { confirmed: true, contentSha256: sha('earlier text') });
+});
+
+test('an uncertain attempt from an earlier visit cannot be retried, only acknowledged', async () => {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(9), contentSha256: sha('earlier'), text: 'earlier', kind: 'uncertain' });
+  const ui = await mount({ memory });
+  assert.equal(ui.state().result.kind, 'uncertain');
+  assert.equal(ui.button('同じ内容・同じ送信IDで確認し直す'), null);
+  await ui.press('Xで確認しました（この下書きを破棄）');
+  assert.equal(ui.state().phase, 'editing');
+  assert.equal(memory.get('U1'), null);
 });

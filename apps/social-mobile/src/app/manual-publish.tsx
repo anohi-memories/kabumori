@@ -1,9 +1,10 @@
 // Manual X single post (F1, source-only, 2026-10-18): choose an X account, type the text, see the preview,
-// confirm, and (when a future owner connects the send port) send and see the result.
+// confirm with an explicit consent, and (when a future owner connects the send port) send and see the result.
 //
 // Nothing here calls the network. The send goes through `getManualPublishPort()`; in this build that is the
 // unconnected port, so the send button stays disabled with the reason shown, and no "sent" is ever displayed
-// unless a port returned `published`. See features/manual-publish/manual-publish-port.ts for the hand-off.
+// unless a port returned `published`. See features/manual-publish/manual-publish-port.ts for the hand-off and
+// single-post-port.ts for the F3 contract adapter (prepared, not connected).
 import { Link, Stack } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
@@ -16,11 +17,13 @@ import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
   checkDraft,
+  consentForSend,
   createInitialState,
   manualPublishReducer,
   normalizeDraft,
   resolveSelectedAccount,
   sendGate,
+  shortHash,
   surfaceOf,
   xAccountsOf,
   type Surface,
@@ -36,12 +39,16 @@ const SURFACE_PILL: Readonly<Record<Surface, { tone: 'neutral' | 'success' | 'wa
   ready_to_preview: { tone: 'neutral', label: '入力・プレビュー・確認ができます' },
   sending: { tone: 'neutral', label: '送信中' },
   sent: { tone: 'success', label: 'Xが投稿を受け付けました' },
+  pending: { tone: 'warning', label: 'まだ送信されていません（処理中の可能性）' },
   failed: { tone: 'danger', label: '投稿されませんでした' },
+  refused: { tone: 'danger', label: '送信は受け付けられませんでした' },
+  unconfirmed: { tone: 'warning', label: '結果を確認できません' },
   uncertain: { tone: 'warning', label: '投稿されたか確認できません' },
 };
 
+/** One attempt id per attempt: a lowercase UUID, which is what the F3 server accepts as `clientRequestId`. */
 function defaultRequestId() {
-  return `manual-${Crypto.randomUUID()}`;
+  return Crypto.randomUUID();
 }
 
 type ScreenProps = Readonly<{ userId: string | null; now?: () => number; newRequestId?: () => string }>;
@@ -92,6 +99,7 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
   const gate = sendGate({ now: now(), signedIn: userId !== null, dataStatus, account, state });
   const surface = surfaceOf({ dataStatus, xAccountCount: xAccounts.length, account, state });
   const pill = SURFACE_PILL[surface];
+  const consent = consentForSend(state);
   const previewText = draft.kind === 'ok' ? draft.text : draft.kind === 'too_long' ? normalizeDraft(state.draft) : '';
   const canConfirm = state.phase === 'editing' && account !== null && draft.kind === 'ok' && state.unresolved === null;
   const confirmHint =
@@ -107,22 +115,26 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
     const at = now();
     if (!sendGate({ now: at, signedIn: true, dataStatus, account, state }).allowed) return;
     const checked = checkDraft(state.draft);
-    if (checked.kind !== 'ok') return;
-    const requestId = newRequestId();
+    const given = consentForSend(state);
+    if (checked.kind !== 'ok' || given === null) return;
+    // A retry of an unresolved attempt reuses ITS id (the server never sends twice for one id); a new attempt gets a new one.
+    const requestId = state.unresolved !== null ? state.unresolved.requestId : newRequestId();
     const start = { type: 'send_started', requestId, now: at } as const;
     if (manualPublishReducer(state, start).phase !== 'sending') return;
     sendingRef.current = true;
     dispatch(start);
-    void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId }).then((outcome) => {
+    void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId, consent: given }).then((outcome) => {
       sendingRef.current = false;
       if (mountedRef.current) dispatch({ type: 'send_settled', requestId, outcome });
     });
   };
 
-  const acknowledgeUncertain = () => {
+  const acknowledge = () => {
     if (userId !== null) attemptMemory.clear(userId);
-    dispatch({ type: 'uncertain_acknowledged' });
+    dispatch({ type: 'unresolved_acknowledged' });
   };
+
+  const result = state.phase === 'result' ? state.result : null;
 
   return (
     <Screen>
@@ -221,8 +233,26 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
               <Text accessibilityLabel="送信する本文" style={{ color: colors.ink, fontSize: 15, lineHeight: 22 }}>{draft.kind === 'ok' ? draft.text : ''}</Text>
               <Text style={styles.muted}>{draft.kind === 'ok' ? `${draft.used} / ${draft.limit}` : ''}</Text>
               <Text style={{ color: colors.warning, fontWeight: '700' }}>送信するとXに公開されます。この画面から取り消すことはできません。</Text>
+              {state.unresolved !== null ? (
+                <Text style={styles.muted}>前回と同じ内容・同じ送信IDで確認します。同じ送信IDは、サーバーが2回送ることはありません。</Text>
+              ) : null}
             </Card>
             <ManualPostPreview account={account} text={draft.kind === 'ok' ? draft.text : ''} />
+            <Card>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: consent !== null, disabled: state.phase === 'sending' }}
+                disabled={state.phase === 'sending'}
+                onPress={() => dispatch({ type: 'consent_changed', checked: consent === null })}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}
+              >
+                <View style={{ width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: colors.primary, backgroundColor: consent !== null ? colors.primary : colors.surface }} />
+                <Text style={{ flex: 1, color: colors.ink, fontWeight: '700' }}>この内容を、いま、Xに投稿することに同意します</Text>
+              </Pressable>
+              <Text style={styles.muted}>
+                {consent !== null ? `同意は、この本文（照合コード ${shortHash(consent.contentSha256)}）だけに有効です。` : '同意するまで送信できません。'}
+              </Text>
+            </Card>
             <Card>
               <Text style={{ color: gate.allowed ? colors.success : colors.muted, fontWeight: '700' }}>
                 {gate.allowed ? 'サーバーで送信できる状態を確認できました。' : SEND_BLOCK_MESSAGES[gate.reason]}
@@ -232,32 +262,55 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
               ) : null}
             </Card>
             <ActionButton label={state.phase === 'sending' ? '送信中…' : 'Xに投稿する'} disabled={!gate.allowed} onPress={send} />
-            <ActionButton label="編集に戻る" disabled={state.phase === 'sending'} onPress={() => dispatch({ type: 'confirm_closed' })} />
+            <ActionButton label="戻る" disabled={state.phase === 'sending'} onPress={() => dispatch({ type: 'confirm_closed' })} />
           </>
         ) : null}
 
-        {state.phase === 'result' && state.result ? (
+        {result ? (
           <Card>
-            {state.result.kind === 'sent' ? (
+            {result.kind === 'sent' ? (
               <>
                 <SectionTitle>Xが投稿を受け付けました</SectionTitle>
-                <Text style={{ color: colors.ink }}>Xから返された投稿ID: {state.result.providerPostId}</Text>
+                <Text style={{ color: colors.ink }}>Xから返された投稿ID: {result.providerPostId}</Text>
                 <Text style={styles.muted}>アプリ内の履歴との照合は、この画面ではまだ行っていません。</Text>
                 <ActionButton label="新しい投稿を作る" onPress={() => dispatch({ type: 'result_dismissed' })} />
               </>
-            ) : state.result.kind === 'failed' ? (
+            ) : result.kind === 'failed' ? (
               <>
                 <SectionTitle>投稿されませんでした</SectionTitle>
                 <Text style={{ color: colors.ink }}>Xに投稿される前に止まりました。本文は残してあります。</Text>
-                <Text style={styles.muted}>コード: {state.result.code}</Text>
+                <Text style={styles.muted}>コード: {result.code}</Text>
                 <ActionButton label="編集に戻る" onPress={() => dispatch({ type: 'result_dismissed' })} />
+              </>
+            ) : result.kind === 'refused' ? (
+              <>
+                <SectionTitle>送信は受け付けられませんでした</SectionTitle>
+                <Text style={{ color: colors.ink }}>サーバーは何も記録していません。本文は残してあります。</Text>
+                <Text style={styles.muted}>コード: {result.code}</Text>
+                <ActionButton label="編集に戻る" onPress={() => dispatch({ type: 'result_dismissed' })} />
+              </>
+            ) : result.kind === 'pending' ? (
+              <>
+                <SectionTitle>まだ送信されていません</SectionTitle>
+                <Text style={{ color: colors.warning, fontWeight: '700' }}>混み合っているか、処理中の可能性があります。投稿済みとは扱いません。別の内容を送る前に、同じ内容で結果を確認してください。</Text>
+                {result.code ? <Text style={styles.muted}>コード: {result.code}</Text> : null}
+                <ActionButton label="同じ内容・同じ送信IDで確認し直す" onPress={() => dispatch({ type: 'retry_requested' })} />
+                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledge} />
+              </>
+            ) : result.kind === 'unconfirmed' ? (
+              <>
+                <SectionTitle>結果を確認できません</SectionTitle>
+                <Text style={{ color: colors.warning, fontWeight: '700' }}>通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。</Text>
+                {result.code ? <Text style={styles.muted}>コード: {result.code}</Text> : null}
+                <ActionButton label="同じ内容・同じ送信IDで確認し直す" onPress={() => dispatch({ type: 'retry_requested' })} />
+                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledge} />
               </>
             ) : (
               <>
                 <SectionTitle>投稿されたか確認できません</SectionTitle>
                 <Text style={{ color: colors.warning, fontWeight: '700' }}>Xに投稿された可能性があります。Xで確認するまで、同じ内容を再送信しないでください。</Text>
-                <Text style={styles.muted}>コード: {state.result.code}</Text>
-                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledgeUncertain} />
+                <Text style={styles.muted}>コード: {result.code}</Text>
+                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledge} />
               </>
             )}
           </Card>

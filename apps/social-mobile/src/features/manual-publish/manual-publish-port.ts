@@ -5,13 +5,10 @@
 // show the input, the preview and the pre-send confirmation but never offers a working send button, and no
 // network, Supabase, Edge or SNS call exists anywhere in this feature.
 //
-// Hand-off to the F3 / G4 / F5 owners (read-only pointers, not implemented here; all are unmerged Drafts):
-//   F3  single-post server path        task postona-f3-m1-single-text-post-offline-end-to-end-20261018
-//       X publisher (one POST per target) supabase/functions/_shared/postona_reservations/x_publisher.ts  (PR #224)
-//         its result kinds map 1:1 onto ManualPublishOutcome below:
-//           published             -> { kind: 'published', providerPostId }
-//           rejected_before_send  -> { kind: 'rejected', code }     (provably NOT posted)
-//           unknown               -> { kind: 'uncertain', code }    (may have posted; never re-sent blindly)
+// The shape of the real send is the F3 contract (Draft PR #272, supabase/functions/_shared/postona_reservations/
+// single_post_contract.ts and docs/postona/x-single-post-m1-20261018.md section 2). `single-post-contract.ts`
+// restates it for the app, and `single-post-port.ts` is an adapter that turns it into this port with an INJECTED
+// transport (no network client lives in this feature). Other unmerged owners:
 //   G4  X credential / verified identity  supabase/functions/_shared/postona_reservations/x_credential_contract.ts
 //       (PR #257, `XPostingCredentialSource`; Issue #131 is deferred by the owner, so `available` is false today)
 //   F5  active POSTONA entitlement + T13 + publish-enabled guard
@@ -23,14 +20,19 @@
 //   - `checkReadiness` is answered by the SERVER chain (JWT -> POSTONA entitlement active -> account owner ->
 //     T13 -> publish enabled), for exactly the account asked about. The screen never derives readiness from
 //     `SocialAccount.connectionStatus`, which is a cached display value.
-//   - `send` carries `target.targetId` as the idempotency key, so a lost response can be reconciled
-//     server-side. It never throws for a provider answer; a thrown error is treated as `uncertain`.
+//   - `send` carries `target.targetId` as the idempotency key (the server's `clientRequestId`): a retry of the
+//     SAME attempt resends the SAME id, so the server never sends twice. It also carries the user's explicit,
+//     per-action consent bound to the exact text (`consent.contentSha256`). It never throws for a provider
+//     answer; a thrown error is treated as `uncertain`.
 //   - Nothing here, and nothing a port returns, may contain a token or other credential.
 
+/** The user's explicit consent for THIS text, now: set only by the confirmation checkbox, bound to the text's hash. */
+export type ManualPublishConsent = Readonly<{ confirmed: true; contentSha256: string }>;
+
 /**
- * Structurally identical to the provider domain's PublicationTarget / PublishOutcome (the app copy of that model
- * is deliberately imported by no app source yet -- a guard test enforces it -- so the shapes are restated here).
- * `targetId` is the idempotency key of one attempt.
+ * Structurally the provider domain's publication target plus the per-action consent (the app copy of that
+ * model is deliberately imported by no app source yet -- a guard test enforces it -- so the shapes are
+ * restated here). `targetId` is the idempotency key of one attempt and must be a lowercase UUID.
  */
 export type ManualPublishTarget = Readonly<{
   targetId: string;
@@ -38,16 +40,25 @@ export type ManualPublishTarget = Readonly<{
   connectedAccountId: string;
   renderedText: string;
   media: readonly never[];
+  consent: ManualPublishConsent;
 }>;
 
 /**
- * published: the provider created the post. rejected: it provably did not. uncertain: it may have (lost
- * response, timeout, ambiguous answer) -- needs reconciliation, never a resend.
+ * What the port tells the screen about one send. Mirrors the F3 answer kinds:
+ *   published    the server stored X's post id and read it back          (F3 sent)
+ *   pending      NOT sent yet (busy / in progress): retry the SAME id      (F3 pending)
+ *   rejected     provably not posted                                       (F3 failed)
+ *   refused      a 4xx: nothing was written                                (F3 refused)
+ *   uncertain    X may have posted: never resend automatically             (F3 uncertain)
+ *   unavailable  503 / transport / malformed: nothing known; retry the SAME id (F3 unavailable)
  */
 export type ManualPublishOutcome =
   | Readonly<{ kind: 'published'; targetId: string; providerPostId: string }>
+  | Readonly<{ kind: 'pending'; targetId: string; code: string | null }>
   | Readonly<{ kind: 'rejected'; targetId: string; code: string }>
-  | Readonly<{ kind: 'uncertain'; targetId: string; code: string }>;
+  | Readonly<{ kind: 'refused'; targetId: string; code: string; retryable: boolean }>
+  | Readonly<{ kind: 'uncertain'; targetId: string; code: string }>
+  | Readonly<{ kind: 'unavailable'; targetId: string; code: string | null }>;
 
 /** A readiness answer older than this is not trusted any more; the screen asks again before sending. */
 export const READINESS_MAX_AGE_MS = 60_000;
@@ -67,12 +78,12 @@ export interface ManualPublishPort {
 
 /**
  * The port of this build. `send` is never reachable through the screen (the gate refuses first); if it were
- * called anyway it answers "rejected before send" -- true, because nothing is sent -- and never `published`.
+ * called anyway it answers "refused, nothing written" -- true, because nothing is sent -- and never `published`.
  */
 export const UNCONNECTED_MANUAL_PUBLISH_PORT: ManualPublishPort = Object.freeze({
   checkReadiness: (): Promise<PortReadiness> => Promise.resolve({ kind: 'not_connected' }),
   send: (target: ManualPublishTarget): Promise<ManualPublishOutcome> =>
-    Promise.resolve({ kind: 'rejected', targetId: target.targetId, code: 'PORT_NOT_CONNECTED' }),
+    Promise.resolve({ kind: 'refused', targetId: target.targetId, code: 'PORT_NOT_CONNECTED', retryable: false }),
 });
 
 /** The single seam an owner replaces when the real path exists. */

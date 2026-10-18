@@ -1,15 +1,29 @@
-// Pure model of the manual X single post screen (F1, source-only): the draft, the account choice, the state
-// machine and the send gate. No React, network, storage or clock of its own (time is passed in).
+// Pure model of the manual X single post screen (F1, source-only): the draft, the account choice, the explicit
+// consent, the state machine and the send gate. No React, network, storage or clock of its own (time is passed in).
 //
-// Two rules shape everything here:
-//  1. The screen may OFFER a send only when a fresh, account-bound answer from the send port says `ready`.
-//     Cached display values (SocialAccount.connectionStatus, a previous screen, the session alone) can only
-//     BLOCK a send, never allow one. The server decides again at send time.
-//  2. Nothing is shown as sent unless the port returned `published`. An unknown outcome is never sent again.
+// The rules that shape everything here:
+//  1. The screen may OFFER a send only when (a) a fresh, account-bound answer from the send port says `ready`
+//     and (b) the user ticked the explicit consent for THIS exact text. Cached display values
+//     (SocialAccount.connectionStatus, a previous screen, the session alone) can only BLOCK a send.
+//  2. Nothing is shown as sent unless the port returned `published`.
+//  3. The attempt id (the server's idempotency key) belongs to ONE attempt: the same account + the same exact
+//     text. A retry of an unresolved attempt reuses it; a new attempt gets a new one; it is never shared.
+//  4. Unknown is never "not posted": `pending` and `unconfirmed` (F3 `unavailable`) may still be in flight on
+//     the server and `uncertain` may have posted, so none of them lets a DIFFERENT attempt be sent. `pending`
+//     and `unconfirmed` may only be retried with the SAME id (the server never sends twice for one id);
+//     `uncertain` is never resent.
 
 import { X_STANDARD_WEIGHTED_LIMIT, xWeightedLength } from '../../domain/schedule-planner.ts';
 import type { SocialAccount } from '../../domain/types.ts';
-import { READINESS_MAX_AGE_MS, type ManualPublishOutcome, type ManualPublishTarget, type ReadinessRecord } from './manual-publish-port.ts';
+import { sha256Hex } from './manual-publish-hash.ts';
+import {
+  READINESS_MAX_AGE_MS,
+  type ManualPublishConsent,
+  type ManualPublishOutcome,
+  type ManualPublishTarget,
+  type ReadinessRecord,
+} from './manual-publish-port.ts';
+import { ACCOUNT_RE, CODE_RE, POST_ID_RE, UUID_RE } from './single-post-contract.ts';
 
 export const MANUAL_PUBLISH_TEXT_LIMIT = X_STANDARD_WEIGHTED_LIMIT;
 
@@ -21,7 +35,10 @@ export type DraftCheck =
   | Readonly<{ kind: 'too_long'; used: number; limit: number }>
   | Readonly<{ kind: 'ok'; text: string; used: number; limit: number }>;
 
-/** What would actually be sent: line endings unified, surrounding whitespace removed, nothing else changed. */
+/**
+ * What would actually be sent: line endings unified and surrounding whitespace removed -- ONCE, before the
+ * confirmation. From then on the confirmation, the consent hash and the request carry this exact string.
+ */
 export function normalizeDraft(raw: string): string {
   return raw.replace(/\r\n?/gu, '\n').trim();
 }
@@ -58,13 +75,25 @@ export function resolveSelectedAccount(accounts: readonly SocialAccount[], accou
 
 // ---- state ---------------------------------------------------------------------------------------------------
 
+/** What an attempt came to, in the vocabulary of the screen. */
 export type AttemptResult =
   | Readonly<{ kind: 'sent'; requestId: string; providerPostId: string }>
   | Readonly<{ kind: 'failed'; requestId: string; code: string }>
+  | Readonly<{ kind: 'refused'; requestId: string; code: string; retryable: boolean }>
+  | Readonly<{ kind: 'pending'; requestId: string; code: string | null }>
+  | Readonly<{ kind: 'unconfirmed'; requestId: string; code: string | null }>
   | Readonly<{ kind: 'uncertain'; requestId: string; code: string }>;
 
-/** An attempt whose outcome the user has not acknowledged and that may have posted (or is still in flight). */
-export type UnresolvedAttempt = Readonly<{ accountId: string; requestId: string }>;
+export type UnresolvedKind = 'in_flight' | 'pending' | 'unconfirmed' | 'uncertain';
+
+/**
+ * An attempt whose outcome is not known to be "not posted". It carries everything needed to retry the SAME
+ * attempt (id, account, the exact text and its hash) and survives leaving the screen (process-local memory).
+ */
+export type UnresolvedAttempt = Readonly<{ accountId: string; requestId: string; contentSha256: string; text: string; kind: UnresolvedKind }>;
+
+/** The explicit consent the user gave for THIS text and account. It carries no authority beyond the hash it names. */
+export type ConsentRecord = Readonly<{ accountId: string; contentSha256: string }>;
 
 export type ManualPublishPhase = 'editing' | 'confirming' | 'sending' | 'result';
 
@@ -73,6 +102,7 @@ export type ManualPublishState = Readonly<{
   accountId: string | null;
   phase: ManualPublishPhase;
   readiness: ReadinessRecord | null;
+  consent: ConsentRecord | null;
   requestId: string | null;
   result: AttemptResult | null;
   unresolved: UnresolvedAttempt | null;
@@ -80,36 +110,61 @@ export type ManualPublishState = Readonly<{
 
 export const UNRESOLVED_FROM_EARLIER_VISIT = 'UNRESOLVED_FROM_EARLIER_VISIT';
 
+export function isRequestId(value: unknown): value is string {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
+/** A code from a port is shown only if it is a stable machine code; anything else becomes a fixed one. */
+function safeCode(value: unknown, fallback: string): string {
+  return typeof value === 'string' && CODE_RE.test(value) ? value : fallback;
+}
+function safeNullableCode(value: unknown): string | null {
+  return typeof value === 'string' && CODE_RE.test(value) ? value : null;
+}
+
 export function createInitialState(unresolved: UnresolvedAttempt | null = null): ManualPublishState {
   if (unresolved) {
+    // A visit that begins with an unresolved attempt shows what is known: a send that was still in flight when the
+    // user left is `unconfirmed` (same id may be retried; the server never sends twice).
+    const kind = unresolved.kind === 'in_flight' ? 'unconfirmed' : unresolved.kind;
+    const result: AttemptResult = kind === 'uncertain'
+      ? { kind: 'uncertain', requestId: unresolved.requestId, code: UNRESOLVED_FROM_EARLIER_VISIT }
+      : { kind, requestId: unresolved.requestId, code: UNRESOLVED_FROM_EARLIER_VISIT };
     return {
-      draft: '',
+      draft: unresolved.text,
       accountId: unresolved.accountId,
       phase: 'result',
       readiness: null,
+      consent: null,
       requestId: unresolved.requestId,
-      result: { kind: 'uncertain', requestId: unresolved.requestId, code: UNRESOLVED_FROM_EARLIER_VISIT },
-      unresolved,
+      result,
+      unresolved: { ...unresolved, kind },
     };
   }
-  return { draft: '', accountId: null, phase: 'editing', readiness: null, requestId: null, result: null, unresolved: null };
+  return { draft: '', accountId: null, phase: 'editing', readiness: null, consent: null, requestId: null, result: null, unresolved: null };
 }
 
 /**
- * The only mapping from a port answer to something the user is shown. Anything that does not clearly prove a
- * publish (wrong target id, empty provider post id) is `uncertain`, never `sent`.
+ * The only mapping from a port answer to something the user is shown. Anything that does not clearly prove what
+ * it claims (wrong target id, a post id that is not a number) is `uncertain`, never `sent`.
  */
 export function resultOf(requestId: string, outcome: ManualPublishOutcome): AttemptResult {
   if (outcome.targetId !== requestId) return { kind: 'uncertain', requestId, code: 'OUTCOME_TARGET_MISMATCH' };
   switch (outcome.kind) {
     case 'published':
-      return typeof outcome.providerPostId === 'string' && outcome.providerPostId.trim() !== ''
+      return typeof outcome.providerPostId === 'string' && POST_ID_RE.test(outcome.providerPostId)
         ? { kind: 'sent', requestId, providerPostId: outcome.providerPostId }
         : { kind: 'uncertain', requestId, code: 'OUTCOME_INVALID' };
     case 'rejected':
-      return { kind: 'failed', requestId, code: outcome.code };
+      return { kind: 'failed', requestId, code: safeCode(outcome.code, 'FAILED') };
+    case 'refused':
+      return { kind: 'refused', requestId, code: safeCode(outcome.code, 'REFUSED'), retryable: outcome.retryable === true };
+    case 'pending':
+      return { kind: 'pending', requestId, code: safeNullableCode(outcome.code) };
+    case 'unavailable':
+      return { kind: 'unconfirmed', requestId, code: safeNullableCode(outcome.code) };
     case 'uncertain':
-      return { kind: 'uncertain', requestId, code: outcome.code };
+      return { kind: 'uncertain', requestId, code: safeCode(outcome.code, 'UNCERTAIN') };
     default:
       return { kind: 'uncertain', requestId, code: 'OUTCOME_UNKNOWN_KIND' };
   }
@@ -121,11 +176,13 @@ export type ManualPublishAction =
   | Readonly<{ type: 'accounts_changed'; accountIds: readonly string[] }>
   | Readonly<{ type: 'confirm_opened' }>
   | Readonly<{ type: 'confirm_closed' }>
+  | Readonly<{ type: 'consent_changed'; checked: boolean }>
   | Readonly<{ type: 'readiness_received'; record: ReadinessRecord }>
   | Readonly<{ type: 'send_started'; requestId: string; now: number }>
   | Readonly<{ type: 'send_settled'; requestId: string; outcome: ManualPublishOutcome }>
+  | Readonly<{ type: 'retry_requested' }>
   | Readonly<{ type: 'result_dismissed' }>
-  | Readonly<{ type: 'uncertain_acknowledged' }>
+  | Readonly<{ type: 'unresolved_acknowledged' }>
   | Readonly<{ type: 'reset' }>;
 
 /** Is this readiness record trustworthy for `accountId` at `now`? (`ready`, same account, fresh, not from the future.) */
@@ -140,59 +197,112 @@ export function readinessIsFresh(record: ReadinessRecord | null, accountId: stri
   );
 }
 
+/** Pending and unconfirmed attempts may be retried -- with the SAME id. Uncertain ones never. */
+export function mayRetrySameId(kind: UnresolvedKind): boolean {
+  return kind === 'pending' || kind === 'unconfirmed';
+}
+
+/**
+ * The consent as the port wants it, or null. Valid only for the exact current text of the chosen account: the
+ * hash is recomputed from the draft here, so a stale or forged record can never be passed on.
+ */
+export function consentForSend(state: ManualPublishState): ManualPublishConsent | null {
+  const draft = checkDraft(state.draft);
+  if (draft.kind !== 'ok' || state.consent === null || state.accountId === null) return null;
+  if (state.consent.accountId !== state.accountId) return null;
+  const sha = sha256Hex(draft.text);
+  return state.consent.contentSha256 === sha ? { confirmed: true, contentSha256: sha } : null;
+}
+
+/** In a retry the attempt is the unresolved one: same account, same exact text. */
+function isRetryContext(state: ManualPublishState): boolean {
+  const unresolved = state.unresolved;
+  if (unresolved === null || state.phase !== 'confirming' || !mayRetrySameId(unresolved.kind)) return false;
+  const draft = checkDraft(state.draft);
+  return draft.kind === 'ok' && unresolved.accountId === state.accountId && unresolved.contentSha256 === sha256Hex(draft.text);
+}
+
 export function manualPublishReducer(state: ManualPublishState, action: ManualPublishAction): ManualPublishState {
   switch (action.type) {
     case 'draft_changed':
       return state.phase === 'editing' ? { ...state, draft: action.text } : state;
     case 'account_selected':
       if (state.phase !== 'editing' || action.accountId === '' || action.accountId === state.accountId) return state;
-      return { ...state, accountId: action.accountId, readiness: null };
+      return { ...state, accountId: action.accountId, readiness: null, consent: null };
     case 'accounts_changed': {
       if (state.accountId === null || action.accountIds.includes(state.accountId)) return state;
       // The chosen account is no longer in the list (switch / disconnect / other workspace). Never keep it.
       if (state.phase === 'sending' || state.phase === 'result') return state;
-      return { ...state, accountId: null, readiness: null, phase: 'editing' };
+      if (state.unresolved !== null) return state; // a retry of an unresolved attempt stays bound to its account
+      return { ...state, accountId: null, readiness: null, consent: null, phase: 'editing' };
     }
     case 'confirm_opened':
       if (state.phase !== 'editing' || state.accountId === null || state.unresolved !== null) return state;
       if (checkDraft(state.draft).kind !== 'ok') return state;
-      return { ...state, phase: 'confirming', readiness: null };
+      return { ...state, phase: 'confirming', readiness: null, consent: null };
     case 'confirm_closed':
-      return state.phase === 'confirming' ? { ...state, phase: 'editing', readiness: null } : state;
+      if (state.phase !== 'confirming') return state;
+      // Leaving the confirmation of a retry returns to the unresolved result; it never opens the editor.
+      return { ...state, phase: state.unresolved !== null ? 'result' : 'editing', readiness: null, consent: null };
+    case 'consent_changed': {
+      if (state.phase !== 'confirming') return state;
+      if (!action.checked) return { ...state, consent: null };
+      const draft = checkDraft(state.draft);
+      if (draft.kind !== 'ok' || state.accountId === null) return state;
+      return { ...state, consent: { accountId: state.accountId, contentSha256: sha256Hex(draft.text) } };
+    }
     case 'readiness_received':
       if (state.phase !== 'confirming' || action.record.accountId !== state.accountId) return state;
       return { ...state, readiness: action.record };
     case 'send_started': {
-      if (state.phase !== 'confirming' || action.requestId === '' || state.unresolved !== null) return state;
-      if (checkDraft(state.draft).kind !== 'ok') return state;
+      if (state.phase !== 'confirming' || !isRequestId(action.requestId) || state.accountId === null) return state;
+      if (!ACCOUNT_RE.test(state.accountId)) return state;
+      const draft = checkDraft(state.draft);
+      if (draft.kind !== 'ok') return state;
+      const consent = consentForSend(state);
+      if (consent === null) return state;
       if (!readinessIsFresh(state.readiness, state.accountId, action.now)) return state;
+      if (state.unresolved !== null) {
+        // Only a retry of the SAME attempt may start, and only with the SAME id.
+        if (!isRetryContext(state) || action.requestId !== state.unresolved.requestId) return state;
+      }
       return {
         ...state,
         phase: 'sending',
         requestId: action.requestId,
         result: null,
-        unresolved: state.accountId === null ? null : { accountId: state.accountId, requestId: action.requestId },
+        unresolved: { accountId: state.accountId, requestId: action.requestId, contentSha256: consent.contentSha256, text: draft.text, kind: 'in_flight' },
       };
     }
     case 'send_settled': {
-      if (state.phase !== 'sending' || state.requestId !== action.requestId) return state;
+      if (state.phase !== 'sending' || state.requestId !== action.requestId || state.unresolved === null) return state;
       const result = resultOf(action.requestId, action.outcome);
+      const unresolvedKind: UnresolvedKind | null =
+        result.kind === 'pending' ? 'pending' : result.kind === 'unconfirmed' ? 'unconfirmed' : result.kind === 'uncertain' ? 'uncertain' : null;
       return {
         ...state,
         phase: 'result',
         result,
         readiness: null,
+        consent: null,
         draft: result.kind === 'sent' ? '' : state.draft,
-        unresolved: result.kind === 'uncertain' ? state.unresolved : null,
+        unresolved: unresolvedKind === null ? null : { ...state.unresolved, kind: unresolvedKind },
       };
     }
+    case 'retry_requested': {
+      const kind = state.unresolved?.kind;
+      if (state.phase !== 'result' || state.result === null || kind === undefined || !mayRetrySameId(kind)) return state;
+      if (state.result.kind !== 'pending' && state.result.kind !== 'unconfirmed') return state;
+      // Back to the confirmation of the SAME attempt: a fresh readiness and a fresh explicit consent are needed.
+      return { ...state, phase: 'confirming', readiness: null, consent: null };
+    }
     case 'result_dismissed':
-      // An uncertain result can only be left through `uncertain_acknowledged`.
-      if (state.phase !== 'result' || state.result === null || state.result.kind === 'uncertain') return state;
-      return { ...state, phase: 'editing', result: null, requestId: null, readiness: null };
-    case 'uncertain_acknowledged':
-      if (state.phase !== 'result' || state.result?.kind !== 'uncertain') return state;
-      return { ...state, draft: '', phase: 'editing', result: null, requestId: null, readiness: null, unresolved: null };
+      // Only a proven end (sent / failed / refused) can be left this way.
+      if (state.phase !== 'result' || state.result === null || state.unresolved !== null) return state;
+      return { ...state, phase: 'editing', result: null, requestId: null, readiness: null, consent: null };
+    case 'unresolved_acknowledged':
+      if (state.phase !== 'result' || state.unresolved === null) return state;
+      return { ...state, draft: '', phase: 'editing', result: null, requestId: null, readiness: null, consent: null, unresolved: null };
     case 'reset':
       return createInitialState();
     default:
@@ -208,6 +318,7 @@ export type SendBlockReason =
   | 'not_signed_in'
   | 'data_not_ready'
   | 'no_account'
+  | 'account_id_invalid'
   | 'sending'
   | 'unresolved_attempt'
   | 'account_needs_attention'
@@ -215,6 +326,7 @@ export type SendBlockReason =
   | 'draft_empty'
   | 'draft_invalid'
   | 'draft_too_long'
+  | 'consent_missing'
   | 'readiness_unchecked'
   | 'port_not_connected'
   | 'port_unavailable'
@@ -227,13 +339,15 @@ export const SEND_BLOCK_MESSAGES: Readonly<Record<SendBlockReason, string>> = Ob
   not_signed_in: 'ログインを確認できないため、送信できません。',
   data_not_ready: 'アカウント情報を確認できないため、送信できません。',
   no_account: '投稿先のXアカウントを選んでください。',
+  account_id_invalid: 'このアカウントのIDを送信できる形式で確認できないため、送信できません。',
   sending: '送信中です。結果が出るまでお待ちください。',
-  unresolved_attempt: '前回の送信結果が確認できていません。Xで確認し、結果を確認済みにするまで新しい送信はできません。',
+  unresolved_attempt: '前回の送信結果が確認できていません。結果を確認するまで、別の内容は送信できません。',
   account_needs_attention: 'このアカウントはXとの接続の確認が必要です。再接続してから送信してください。',
   account_not_connected: 'このアカウントはXに接続されていません。',
   draft_empty: '本文を入力してください。',
   draft_invalid: '使えない文字が含まれているため、送信できません。',
   draft_too_long: '本文がXの文字数の上限を超えています。',
+  consent_missing: '「この内容を、いま、Xに投稿することに同意します」にチェックを入れると送信できます。',
   readiness_unchecked: '送信できる状態かを確認しています。',
   port_not_connected: '送信機能は接続されていません。このビルドでは、入力・プレビュー・送信前の確認のみ行えます。',
   port_unavailable: '送信できる状態を確認できませんでした。時間をおいてもう一度お試しください。',
@@ -260,14 +374,16 @@ export function sendGate(input: SendGateInput): SendGate {
   if (!input.signedIn) return block('not_signed_in');
   if (input.dataStatus !== 'ready' && input.dataStatus !== 'mock_preview') return block('data_not_ready');
   if (input.account === null || input.account.platform !== 'x' || state.accountId !== input.account.id) return block('no_account');
+  if (!ACCOUNT_RE.test(input.account.id)) return block('account_id_invalid');
   if (state.phase === 'sending') return block('sending');
-  if (state.unresolved !== null) return block('unresolved_attempt');
+  if (state.unresolved !== null && !isRetryContext(state)) return block('unresolved_attempt');
   if (input.account.connectionStatus === 'needs_attention') return block('account_needs_attention');
   if (input.account.connectionStatus === 'not_connected') return block('account_not_connected');
   const draft = checkDraft(state.draft);
   if (draft.kind === 'empty') return block('draft_empty');
   if (draft.kind === 'invalid_characters') return block('draft_invalid');
   if (draft.kind === 'too_long') return block('draft_too_long');
+  if (consentForSend(state) === null) return block('consent_missing');
   const record = state.readiness;
   if (record === null) return block('readiness_unchecked');
   if (record.accountId !== state.accountId) return block('readiness_other_account');
@@ -280,18 +396,27 @@ export function sendGate(input: SendGateInput): SendGate {
 // ---- target --------------------------------------------------------------------------------------------------
 
 /** The provider-neutral target handed to the port. `targetId` is the idempotency key of this attempt. */
-export function buildTarget(requestId: string, accountId: string, text: string): ManualPublishTarget {
-  return { targetId: requestId, provider: 'x', connectedAccountId: accountId, renderedText: text, media: [] };
+export function buildTarget(requestId: string, accountId: string, text: string, consent: ManualPublishConsent): ManualPublishTarget {
+  return { targetId: requestId, provider: 'x', connectedAccountId: accountId, renderedText: text, media: [], consent };
 }
 
-/** A text-only X post: the provider is X, there is text, and no media (this feature has none). */
+/** A text-only X post: the provider is X, there is text, no media, a UUID attempt id, and a consent for exactly this text. */
 export function targetIsSendable(target: ManualPublishTarget): boolean {
-  return target.provider === 'x' && target.renderedText.trim() !== '' && target.media.length === 0;
+  return (
+    target.provider === 'x' &&
+    isRequestId(target.targetId) &&
+    target.renderedText.trim() !== '' &&
+    target.media.length === 0 &&
+    target.consent.confirmed === true &&
+    target.consent.contentSha256 === sha256Hex(target.renderedText)
+  );
 }
 
 // ---- what the screen shows -----------------------------------------------------------------------------------
 
-export type Surface = 'not_connected' | 'unavailable' | 'ready_to_preview' | 'sending' | 'sent' | 'failed' | 'uncertain';
+export type Surface =
+  | 'not_connected' | 'unavailable' | 'ready_to_preview' | 'sending'
+  | 'sent' | 'pending' | 'failed' | 'refused' | 'unconfirmed' | 'uncertain';
 
 /**
  * One label for the situation. `sent` exists only after the port returned `published`; with the unconnected
@@ -300,10 +425,15 @@ export type Surface = 'not_connected' | 'unavailable' | 'ready_to_preview' | 'se
 export function surfaceOf(input: Readonly<{ dataStatus: DataStatus; xAccountCount: number; account: SocialAccount | null; state: ManualPublishState }>): Surface {
   const { state } = input;
   if (state.phase === 'sending') return 'sending';
-  if (state.phase === 'result' && state.result) return state.result.kind === 'sent' ? 'sent' : state.result.kind === 'failed' ? 'failed' : 'uncertain';
+  if (state.phase === 'result' && state.result) return state.result.kind;
   if (input.dataStatus !== 'ready' && input.dataStatus !== 'mock_preview') return 'unavailable';
   if (input.xAccountCount === 0) return 'not_connected';
   if (input.account && input.account.connectionStatus === 'not_connected') return 'not_connected';
   if (input.account && input.account.connectionStatus === 'needs_attention') return 'unavailable';
   return 'ready_to_preview';
+}
+
+/** First 12 hex digits of the consent hash, to show the user which exact text the consent is bound to. */
+export function shortHash(contentSha256: string): string {
+  return contentSha256.slice(0, 12);
 }
