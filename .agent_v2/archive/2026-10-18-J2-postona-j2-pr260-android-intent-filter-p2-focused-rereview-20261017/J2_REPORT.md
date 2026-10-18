@@ -1,0 +1,58 @@
+# J2 Report — PR260 Android OAuth P2 narrow rereview
+- task_id: postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017
+- slot: J2
+- status: review_required
+- next_owner: chatgpt
+- return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
+- completion_code: V2
+- recommended_model: Luna（高）
+- target_pr: https://github.com/anohi-memories/kabumori/pull/260
+- target_head: 8e1534f2fa1d39f8f1c321ed2cf69705fddf1421
+- base_head: 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc
+- main_start: 93e319faf49d55447e69adccc94b6643cce2c622
+- verdict: PASS_FOCUSED_REVIEW / PRODUCTION_AND_PILOT_NO_GO
+- findings: none in the assigned PR260 correction
+- changed_files: PR260 review scope is the two paths listed below; product source edits by J2: 0. This task updates only its TASK/Report/ACTIVE metadata plus prior-task archive verification files and HISTORY_INDEX.
+- commit_hash: none (review-only; no product-source commit)
+- report_commit: fe548824d13b0226e51478ba58f0d08b98cb47bd
+- push: SUCCESS; report/task/archive metadata commit fe548824d13b0226e51478ba58f0d08b98cb47bd was verified on origin/main. A later fresh-check found origin/main at 6b78b6360f5a32bc8be2d4e73f677e4818d1d9ae, with only unrelated .agent_v3 additions; no path overlap. The push-receipt update commit a56a6b763984bdd1dd48b63e62f54a836aeee5fc was also pushed and verified on origin/main.
+- deploy: not performed
+
+## Scope and review
+
+PR260 is OPEN, Draft, unmerged, and has the exact assigned head/base. Its only two changed files are:
+
+- `apps/social-mobile/src/domain/threads-connect.ts`
+- `apps/social-mobile/tests/threads-connect-ios-return.test.mjs`
+
+The change is limited to Android callback-delivery validation and its tests. It does not overlap F4 PR258's credential-claim SQL paths. iOS callback selection and X auth-session code are unchanged.
+
+The runtime now requires both short Expo category values `DEFAULT` and `BROWSABLE`; Expo's local config-plugin renderer prefixes these values with `android.intent.category.` and emits supplied data fields, including `port`, rather than adding missing categories. Any defined data `port` is rejected for this portless callback. The existing HTTPS scheme, host, and exact/path-prefix coverage checks remain. Invalid filters yield `CALLBACK_NOT_CONFIGURED`; the runtime adapter exposes no callback, and the starter refuses before session/function invocation or opening the browser. One valid matching filter remains sufficient when another configured filter is malformed.
+
+Negative coverage includes missing/malformed/partial categories, explicit and empty ports (including 443), and filters with no matching valid entry. Positive coverage includes both category orders, extra categories, exact path, covering prefix, and a valid portless data entry. A direct runtime assertion also confirmed that a callback URL with explicit `:443` is refused. No new P2 was found.
+
+## Tests
+
+- `node --test tests/threads-connect-ios-return.test.mjs`: **9/9 PASS**.
+- `node --test tests/threads-connect.test.mjs tests/threads-connect-ios-return.test.mjs`: **27/27 PASS**.
+- `git diff --check 3163928d5fa3b8e6984f6350ce5a8faf31d23ffc...HEAD`: **PASS**.
+- A wider combined run including `x-connect-auth-session.test.mjs` had 39/41 pass; two checks could not read Expo package source files because `expo-web-browser` is not installed in the isolated worktree. The PR-focused X non-change assertion passed in the 27-test run.
+- `git diff --check` for the metadata/archive update: **PASS**.
+
+## Limits and safety
+
+- Managed/real Android App Links verification was not authorized or performed; that operational validation remains outstanding.
+- No source edits were made. No merge, deploy, EAS build, managed or production DB, Meta OAuth, secret/token access, SNS/API call, or real account action occurred. Production and pilot remain **NO_GO**.
+- Task metadata and archive integrity records only were updated in this publication.
+- implementation_commit: none (review-only)
+- report_commit: fe548824d13b0226e51478ba58f0d08b98cb47bd
+- push: SUCCESS; final read-back verified task_id, status, next_owner, and archive integrity records on origin/main at fe548824d13b0226e51478ba58f0d08b98cb47bd. Follow-up fresh-check: origin/main 6b78b6360f5a32bc8be2d4e73f677e4818d1d9ae adds only unrelated .agent_v3 paths; the separate report push-receipt commit a56a6b763984bdd1dd48b63e62f54a836aeee5fc was subsequently pushed and verified.
+- safety_checks: PR260 exact HEAD/base verified; only two assigned PR paths; no overlap with F4 PR258 SQL; clean isolated review worktree; no product-source edit, production mutation, OAuth/API, deploy, or real account action.
+
+## Remaining issues
+
+No issue found in the assigned Android P2 correction. Real Android OS/App Links verification remains a separate, currently unauthorized gate; PR260 remains Draft/unmerged.
+
+## Next recommendation
+
+Return V2 to the POSTONA G4 coordinator. Keep production/pilot NO_GO; any device-level validation or PR merge requires its own coordination/approval.
