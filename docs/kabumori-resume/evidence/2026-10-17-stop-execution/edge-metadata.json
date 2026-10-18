@@ -1,0 +1,13 @@
+{
+  "id": "1c12d1f4-bad8-4939-b161-972a9e293015",
+  "slug": "x-test-post",
+  "name": "x-test-post",
+  "status": "ACTIVE",
+  "version": 145,
+  "created_at": 1787903459481,
+  "updated_at": 1791411094142,
+  "verify_jwt": false,
+  "import_map": false,
+  "entrypoint_path": "/tmp/user_fn_wsmznyzcvmuitkglfeuj_1c12d1f4-bad8-4939-b161-972a9e293015_141/source/functions/x-test-post/index.ts",
+  "ezbr_sha256": "804467c5f9b3887a7937001da70c74d0dc1bf2153dc806a5362eb450d1c29895"
+}

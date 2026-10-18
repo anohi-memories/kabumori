@@ -1,0 +1,142 @@
+{
+  "returning": [
+    {
+      "rows": [
+        {
+          "id": "0b7ff5ce-9107-4a35-8016-0f0310562ca0",
+          "slot_no": 1,
+          "brand_id": "kabumori",
+          "end_time": "07:00:00",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "post_type": "morning_greeting",
+          "created_at": "2026-09-05T00:20:18.224794+00:00",
+          "start_time": "06:30:00",
+          "daily_probability": 1
+        },
+        {
+          "id": "37897c37-795f-4114-afb8-63293945a51b",
+          "slot_no": 2,
+          "brand_id": "kabumori",
+          "end_time": "13:30:00",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "post_type": "tip",
+          "created_at": "2026-08-28T10:03:34.273557+00:00",
+          "start_time": "12:15:00",
+          "daily_probability": 1
+        },
+        {
+          "id": "4cbf0fd2-2a14-48fc-aa5a-234ba16cda15",
+          "slot_no": 2,
+          "brand_id": "kabumori",
+          "end_time": "22:00:00",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "post_type": "interaction",
+          "created_at": "2026-08-28T13:00:44.34644+00:00",
+          "start_time": "20:00:00",
+          "daily_probability": 1
+        },
+        {
+          "id": "c5748286-317f-40cf-855a-2f5e92b3def8",
+          "slot_no": 1,
+          "brand_id": "kabumori",
+          "end_time": "11:45:00",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "post_type": "tip",
+          "created_at": "2026-08-28T10:03:34.273557+00:00",
+          "start_time": "10:30:00",
+          "daily_probability": 1
+        },
+        {
+          "id": "e5cc2e25-7128-48f7-898a-f3fc2703f87a",
+          "slot_no": 1,
+          "brand_id": "kabumori",
+          "end_time": "16:30:00",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "post_type": "interaction",
+          "created_at": "2026-08-28T13:00:44.34644+00:00",
+          "start_time": "14:00:00",
+          "daily_probability": 0.65
+        },
+        {
+          "id": "f5e9754c-b654-4e1b-a636-8228fca58263",
+          "slot_no": 3,
+          "brand_id": "kabumori",
+          "end_time": "19:00:00",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "post_type": "tip",
+          "created_at": "2026-08-28T10:03:34.273557+00:00",
+          "start_time": "17:00:00",
+          "daily_probability": 1
+        }
+      ],
+      "count": 6,
+      "table": "posting_windows"
+    },
+    {
+      "rows": [
+        {
+          "id": true,
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "updated_at": "2026-08-29T23:40:15.745204+00:00",
+          "window_a_end": "12:10:00",
+          "window_b_end": "19:40:00",
+          "cooldown_days": 150,
+          "posts_per_week": 7,
+          "window_a_start": "11:50:00",
+          "window_b_start": "19:10:00",
+          "collision_minutes": 20
+        }
+      ],
+      "count": 1,
+      "table": "useful_tip_schedule_settings"
+    },
+    {
+      "rows": [
+        {
+          "id": true,
+          "brand_id": "kabumori",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "updated_at": "2026-09-03T15:03:09.117027+00:00",
+          "window_end": "08:22:00",
+          "center_time": "08:20:00",
+          "window_start": "08:18:00",
+          "holiday_edition_enabled": false
+        }
+      ],
+      "count": 1,
+      "table": "morning_report_settings"
+    },
+    {
+      "rows": [
+        {
+          "id": true,
+          "brand_id": "kabumori",
+          "timezone": "Asia/Tokyo",
+          "is_active": false,
+          "updated_at": "2026-09-11T09:54:37.309905+00:00",
+          "window_end": "17:02:00",
+          "center_time": "17:00:00",
+          "window_start": "16:58:00",
+          "futures_target_time": "15:45:00",
+          "holiday_edition_enabled": false
+        }
+      ],
+      "count": 1,
+      "table": "close_report_settings"
+    }
+  ],
+  "started_at": "2026-10-17T10:50:29.172939+00:00",
+  "changed_count": 9,
+  "transaction_id": 1198597,
+  "updated_at_unchanged": true,
+  "verified_before_commit_at": "2026-10-17T10:50:29.277323+00:00",
+  "all_static_baselines_match": true
+}
