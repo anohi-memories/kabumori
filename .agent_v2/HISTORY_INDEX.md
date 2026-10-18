@@ -764,3 +764,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 ## F6 to F5 AI deletion contract archive — 2026-10-18
 - task_id: `common-ai-f6-f5-account-deletion-ai-cleanup-contract-20261017`; L6 PASS_CONTRACT / PRODUCTION_NO_GO; PR264 Draft head `c558264218badd1ebbdb9063e70f8e7cce9ac23d` at previous verification.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-18-f6-f5-account-deletion-cleanup-contract.md`; archive commit `c9dc5d5cad885105881597e99cd47a60daaf22d8`, original/archive Git blob `42614c8bbdd1a258e39f938d115795407beaa4f5`, 9410 characters, exact UTF-8 readback comparison PASS. Independent SHA256/MANIFEST NOT_VERIFIED (follow-up required before declaring full archival compliance).
+
+## F10 V3 pilot rules accepted — 2026-10-18
+- task_id `orchestration-v3-gh-pilot-rule-integration-f10-20261018`; L10 PASS_PILOT_RULES / production NO_GO; PR #268 merge `283ab3eaeb4cf04458936834f4ad0da3dcde3a67`.
+- original_path `.agent_v2/tasks/F10.md`; archive_path `.agent_v2/archive/2026-10-18-F10-orchestration-v3-gh-pilot-rule-integration-f10-20261018/files/.agent_v2/tasks/F10.md`.
+- original bytes 14407; SHA256 `e24d2407cdd6c1379296726aea3f44bcc50cf6298c78c4c685aeb906138328c1`; original Git blob `183b1b6a5516677bcbcf99dd0c059f8e1be078da`; read-back restore required before G10 activation.
