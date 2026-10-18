@@ -21,6 +21,16 @@ test('the request is exactly the server\'s shape: no user id, consent bound to t
 
 const MATRIX = [
   [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001' }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: false }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: true }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: 'false' }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: 0 }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: null }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: false, afterFreeze: true }],
+  [200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: false, afterFreeze: 'true' }],
+  [200, { ok: true, status: 'uncertain', reservationId: RID, code: 'X_TIMEOUT', simulated: false, afterFreeze: true }],
+  [200, { ok: true, status: 'pending', reservationId: RID, simulated: true, afterFreeze: true }],
+  [200, { ok: true, status: 'failed', reservationId: RID, code: 'X_REJECTED_403', simulated: false, afterFreeze: true }],
   [200, { ok: true, status: 'sent', reservationId: RID }],
   [200, { ok: true, status: 'sent', reservationId: RID, xPostId: 'abc' }],
   [200, { ok: true, status: 'sent', reservationId: 'x', xPostId: '1' }],
@@ -49,13 +59,15 @@ const MATRIX = [
 ];
 
 test('results: sent only with a stored X post id; pending / failed / uncertain are typed; refusals; anything else is unavailable', () => {
-  assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001' }), { kind: 'sent', reservationId: RID, xPostId: '1790000000000000001' });
+  const UNMARKED = { simulated: true, afterFreeze: false };
+  assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001' }), { kind: 'sent', reservationId: RID, xPostId: '1790000000000000001', ...UNMARKED }, 'no mark: a test result');
+  assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: false }), { kind: 'sent', reservationId: RID, xPostId: '1790000000000000001', simulated: false, afterFreeze: false });
   assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'sent', reservationId: RID }), { kind: 'unavailable', code: null }, 'sent without an id is never sent');
   assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'sent', reservationId: RID, xPostId: 'abc' }), { kind: 'unavailable', code: null });
   for (const status of ['pending', 'failed', 'uncertain']) {
-    assert.deepEqual(c.singlePostResultOf(200, { ok: true, status, reservationId: RID, code: 'X_TIMEOUT' }), { kind: status, reservationId: RID, code: 'X_TIMEOUT' });
+    assert.deepEqual(c.singlePostResultOf(200, { ok: true, status, reservationId: RID, code: 'X_TIMEOUT' }), { kind: status, reservationId: RID, code: 'X_TIMEOUT', ...UNMARKED });
   }
-  assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'pending', reservationId: RID }), { kind: 'pending', reservationId: RID, code: null });
+  assert.deepEqual(c.singlePostResultOf(200, { ok: true, status: 'pending', reservationId: RID }), { kind: 'pending', reservationId: RID, code: null, ...UNMARKED });
   assert.deepEqual(c.singlePostResultOf(403, { ok: false, code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE' }), { kind: 'refused', code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE', retryable: false });
   assert.deepEqual(c.singlePostResultOf(401, { ok: false, code: 'AUTH_REQUIRED' }), { kind: 'refused', code: 'AUTH_REQUIRED', retryable: true });
   for (const [status, body] of [[503, { ok: false, code: 'X_NOT_AVAILABLE' }], [200, { ok: true, status: 'posted', reservationId: RID }], [200, { ok: true, status: 'sent', reservationId: 'x', xPostId: '1' }], [500, null], [200, 'ok']]) {
@@ -75,26 +87,31 @@ test('pending, uncertain, failed, refused and unavailable are five DIFFERENT scr
   assert.equal(attempt(200, { ok: true, status: 'failed', reservationId: RID }), 'failed');
   assert.equal(attempt(422, { ok: false, code: 'POSTONA_RESV_TEXT_INVALID' }), 'refused');
   assert.equal(attempt(503, { ok: false, code: 'NOT_AVAILABLE' }), 'unconfirmed');
-  assert.equal(attempt(200, { ok: true, status: 'sent', reservationId: RID, xPostId: '9' }), 'sent');
-  // Nothing but a stored X post id may be "sent"; nothing unknown may be "failed" (provably not posted).
+  assert.equal(attempt(200, { ok: true, status: 'sent', reservationId: RID, xPostId: '9', simulated: false }), 'sent');
+  assert.equal(attempt(200, { ok: true, status: 'sent', reservationId: RID, xPostId: '9' }), 'simulated', 'an unmarked sent is a test result, never a post');
+  // Nothing but a stored X post id MARKED REAL may be "sent"; nothing unknown may be "failed" (provably not posted).
   const classes = new Set();
   for (const [status, body] of MATRIX) {
     const kind = attempt(status, body);
     classes.add(kind);
     const sentBody = body !== null && typeof body === 'object' && !Array.isArray(body) && body.status === 'sent' && /^[0-9]{1,30}$/u.test(String(body.xPostId)) && /^[0-9a-f-]{36}$/u.test(String(body.reservationId));
-    if (kind === 'sent') assert.ok(sentBody, JSON.stringify(body));
+    if (kind === 'sent') assert.ok(sentBody && body.simulated === false, JSON.stringify(body));
+    if (kind === 'simulated') assert.ok(sentBody && body.simulated !== false, JSON.stringify(body));
     if (kind === 'failed') assert.equal(status === 200 && body.status === 'failed', true, JSON.stringify(body));
     if (kind === 'refused') assert.ok(status >= 400 && status < 500, `${status}`);
   }
-  assert.deepEqual([...classes].sort(), ['failed', 'pending', 'refused', 'sent', 'uncertain', 'unconfirmed']);
+  assert.deepEqual([...classes].sort(), ['failed', 'pending', 'refused', 'sent', 'simulated', 'uncertain', 'unconfirmed']);
 });
 
 test('outcomeOfSinglePost: the attempt id is carried through unchanged, and the vocabulary maps one to one', () => {
   const o = (result) => c.outcomeOfSinglePost(ATTEMPT, result);
-  assert.deepEqual(o({ kind: 'sent', reservationId: RID, xPostId: '9' }), { kind: 'published', targetId: ATTEMPT, providerPostId: '9' });
-  assert.deepEqual(o({ kind: 'pending', reservationId: RID, code: null }), { kind: 'pending', targetId: ATTEMPT, code: null });
-  assert.deepEqual(o({ kind: 'failed', reservationId: RID, code: null }), { kind: 'rejected', targetId: ATTEMPT, code: 'FAILED' });
-  assert.deepEqual(o({ kind: 'uncertain', reservationId: RID, code: null }), { kind: 'uncertain', targetId: ATTEMPT, code: 'UNCERTAIN' });
+  const real = { simulated: false, afterFreeze: false };
+  assert.deepEqual(o({ kind: 'sent', reservationId: RID, xPostId: '9', ...real }), { kind: 'published', targetId: ATTEMPT, providerPostId: '9', marks: real });
+  assert.deepEqual(o({ kind: 'pending', reservationId: RID, code: null, ...real }), { kind: 'pending', targetId: ATTEMPT, code: null, marks: real });
+  assert.deepEqual(o({ kind: 'failed', reservationId: RID, code: null, ...real }), { kind: 'rejected', targetId: ATTEMPT, code: 'FAILED', marks: real });
+  assert.deepEqual(o({ kind: 'uncertain', reservationId: RID, code: null, ...real }), { kind: 'uncertain', targetId: ATTEMPT, code: 'UNCERTAIN', marks: real });
+  // The marks travel with every answer that has them; nothing else is added or dropped.
+  assert.deepEqual(o({ kind: 'sent', reservationId: RID, xPostId: '9', simulated: true, afterFreeze: true }).marks, { simulated: true, afterFreeze: true });
   assert.deepEqual(o({ kind: 'refused', code: 'AUTH_REQUIRED', retryable: true }), { kind: 'refused', targetId: ATTEMPT, code: 'AUTH_REQUIRED', retryable: true });
   assert.deepEqual(o({ kind: 'unavailable', code: 'NOT_AVAILABLE' }), { kind: 'unavailable', targetId: ATTEMPT, code: 'NOT_AVAILABLE' });
 });

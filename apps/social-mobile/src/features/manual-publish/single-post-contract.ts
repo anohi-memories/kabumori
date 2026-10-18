@@ -1,6 +1,7 @@
 // The app's copy of the F3 single-post contract (F1, source-only, 2026-10-18). NOTHING here calls the network.
 //
-// Source of truth (F3, Draft PR #272, head 559b3e54f04a89ffe23ebbf54d71857ad064b1e7, unmerged):
+// Source of truth (F3, Draft PR #272 head 559b3e54f04a89ffe23ebbf54d71857ad064b1e7 plus the result marks of
+// Draft PR #278 head bf76a7c7b54ff8aa1155aace2045235e9408c18a, both unmerged):
 //   supabase/functions/_shared/postona_reservations/single_post_contract.ts   (singlePostRequest / singlePostResultOf)
 //   supabase/functions/_shared/postona_reservations/single_post.ts            (the server flow and its rules)
 //   docs/postona/x-single-post-m1-20261018.md section 2                       (the contract for this screen)
@@ -22,9 +23,13 @@
 //   uncertain        uncertain    X may have posted: NEVER resend automatically
 //   refused{code}    refused      4xx: nothing was written
 //   unavailable      unavailable  503 / transport / malformed: nothing is known; retry with the SAME id
+// Every sent / pending / failed / uncertain answer also carries two marks (PR #278):
+//   simulated    FALSE only when the server says the stored result came from the real X transport; a missing mark is
+//                TRUE. A simulated `sent` is a test result and is never shown as a real post.
+//   afterFreeze  TRUE when the result was recorded after the workspace / service stopped being active.
 // A mock or local answer is never evidence of a real X post.
 
-import type { ManualPublishOutcome } from './manual-publish-port.ts';
+import type { ManualPublishOutcome, ResultMarks } from './manual-publish-port.ts';
 
 export const SINGLE_POST_FUNCTION = 'postona-x-single-post';
 
@@ -39,9 +44,10 @@ export function singlePostRequest(input: { socialAccountId: string; clientReques
   return { socialAccountId: input.socialAccountId, clientRequestId: input.clientRequestId, text: input.text, consent: { confirmed: true, contentSha256: input.contentSha256 } };
 }
 
+export type SinglePostMarks = Readonly<{ simulated: boolean; afterFreeze: boolean }>;
 export type SinglePostResult =
-  | Readonly<{ kind: 'sent'; reservationId: string; xPostId: string }>
-  | Readonly<{ kind: 'pending' | 'failed' | 'uncertain'; reservationId: string; code: string | null }>
+  | Readonly<{ kind: 'sent'; reservationId: string; xPostId: string } & SinglePostMarks>
+  | Readonly<{ kind: 'pending' | 'failed' | 'uncertain'; reservationId: string; code: string | null } & SinglePostMarks>
   | Readonly<{ kind: 'refused'; code: string; retryable: boolean }>
   | Readonly<{ kind: 'unavailable'; code: string | null }>;
 
@@ -58,16 +64,21 @@ export function singlePostResultOf(status: number, body: unknown): SinglePostRes
   const data = typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
   const code = typeof data.code === 'string' && CODE_RE.test(data.code) ? data.code : null;
   if (status === 200 && data.ok === true && typeof data.reservationId === 'string' && UUID_RE.test(data.reservationId)) {
+    const marks: SinglePostMarks = { simulated: data.simulated !== false, afterFreeze: data.afterFreeze === true };
     if (data.status === 'sent') {
       return typeof data.xPostId === 'string' && POST_ID_RE.test(data.xPostId)
-        ? { kind: 'sent', reservationId: data.reservationId, xPostId: data.xPostId }
+        ? { kind: 'sent', reservationId: data.reservationId, xPostId: data.xPostId, ...marks }
         : { kind: 'unavailable', code: null };
     }
-    if (data.status === 'pending' || data.status === 'failed' || data.status === 'uncertain') return { kind: data.status, reservationId: data.reservationId, code };
+    if (data.status === 'pending' || data.status === 'failed' || data.status === 'uncertain') return { kind: data.status, reservationId: data.reservationId, code, ...marks };
     return { kind: 'unavailable', code: null };
   }
   if (status >= 400 && status < 500 && data.ok === false && code) return { kind: 'refused', code, retryable: RETRYABLE.has(code) };
   return { kind: 'unavailable', code: data.ok === false ? code : null };
+}
+
+function marksOfResult(result: SinglePostMarks): ResultMarks {
+  return { simulated: result.simulated, afterFreeze: result.afterFreeze };
 }
 
 /**
@@ -78,13 +89,13 @@ export function singlePostResultOf(status: number, body: unknown): SinglePostRes
 export function outcomeOfSinglePost(targetId: string, result: SinglePostResult): ManualPublishOutcome {
   switch (result.kind) {
     case 'sent':
-      return { kind: 'published', targetId, providerPostId: result.xPostId };
+      return { kind: 'published', targetId, providerPostId: result.xPostId, marks: marksOfResult(result) };
     case 'pending':
-      return { kind: 'pending', targetId, code: result.code };
+      return { kind: 'pending', targetId, code: result.code, marks: marksOfResult(result) };
     case 'failed':
-      return { kind: 'rejected', targetId, code: result.code ?? 'FAILED' };
+      return { kind: 'rejected', targetId, code: result.code ?? 'FAILED', marks: marksOfResult(result) };
     case 'uncertain':
-      return { kind: 'uncertain', targetId, code: result.code ?? 'UNCERTAIN' };
+      return { kind: 'uncertain', targetId, code: result.code ?? 'UNCERTAIN', marks: marksOfResult(result) };
     case 'refused':
       return { kind: 'refused', targetId, code: result.code, retryable: result.retryable };
     default:

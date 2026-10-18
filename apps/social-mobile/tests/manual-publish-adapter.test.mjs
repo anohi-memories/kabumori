@@ -42,6 +42,7 @@ function fakeKV() {
 
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const REAL = { simulated: false, afterFreeze: false };
 const RESERVATION = '33333333-3333-4333-8333-333333333333';
 const TOKEN = 'eyJhbGciOiJIUzI1NiJ9.SECRET-ACCESS-TOKEN-OF-THE-PERSON.signature';
 
@@ -69,10 +70,10 @@ function transportOf(...answers) {
   return { transport, calls };
 }
 const ANSWER = {
-  sent: (id = '1790000000000000001') => ({ status: 200, body: { ok: true, status: 'sent', reservationId: RESERVATION, xPostId: id } }),
-  pending: { status: 200, body: { ok: true, status: 'pending', reservationId: RESERVATION, code: 'IN_PROGRESS' } },
-  failed: { status: 200, body: { ok: true, status: 'failed', reservationId: RESERVATION, code: 'X_REJECTED_403' } },
-  uncertain: { status: 200, body: { ok: true, status: 'uncertain', reservationId: RESERVATION, code: 'X_TIMEOUT' } },
+  sent: (id = '1790000000000000001', marks = { simulated: false }) => ({ status: 200, body: { ok: true, status: 'sent', reservationId: RESERVATION, xPostId: id, ...marks } }),
+  pending: { status: 200, body: { ok: true, status: 'pending', reservationId: RESERVATION, code: 'IN_PROGRESS', simulated: false } },
+  failed: { status: 200, body: { ok: true, status: 'failed', reservationId: RESERVATION, code: 'X_REJECTED_403', simulated: false } },
+  uncertain: { status: 200, body: { ok: true, status: 'uncertain', reservationId: RESERVATION, code: 'X_TIMEOUT', simulated: false } },
   refused: { status: 403, body: { ok: false, code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE' } },
   gateOff: { status: 503, body: { ok: false, code: 'NOT_AVAILABLE' } },
 };
@@ -83,7 +84,7 @@ const make = (transport, over = {}) => adapter.createSinglePostPort({ transport,
 test('the request carries exactly the F3 body: the attempt id as clientRequestId, the exact text and its hash as consent', async () => {
   const t = transportOf(ANSWER.sent());
   const outcome = await make(t.transport).send(target());
-  assert.deepEqual(outcome, { kind: 'published', targetId: ID(1), providerPostId: '1790000000000000001' });
+  assert.deepEqual(outcome, { kind: 'published', targetId: ID(1), providerPostId: '1790000000000000001', marks: REAL });
   assert.equal(t.calls.length, 1);
   assert.deepEqual(t.calls[0], {
     functionName: 'postona-x-single-post',
@@ -103,9 +104,9 @@ test('the access token goes to the transport only: it is in no outcome, code or 
 
 test('F3 answers map one to one; pending is never uncertain, unavailable is never failed, nothing but a stored id is published', async () => {
   const send = async (answer) => make(transportOf(answer).transport).send(target());
-  assert.deepEqual(await send(ANSWER.pending), { kind: 'pending', targetId: ID(1), code: 'IN_PROGRESS' });
-  assert.deepEqual(await send(ANSWER.failed), { kind: 'rejected', targetId: ID(1), code: 'X_REJECTED_403' });
-  assert.deepEqual(await send(ANSWER.uncertain), { kind: 'uncertain', targetId: ID(1), code: 'X_TIMEOUT' });
+  assert.deepEqual(await send(ANSWER.pending), { kind: 'pending', targetId: ID(1), code: 'IN_PROGRESS', marks: REAL });
+  assert.deepEqual(await send(ANSWER.failed), { kind: 'rejected', targetId: ID(1), code: 'X_REJECTED_403', marks: REAL });
+  assert.deepEqual(await send(ANSWER.uncertain), { kind: 'uncertain', targetId: ID(1), code: 'X_TIMEOUT', marks: REAL });
   assert.deepEqual(await send(ANSWER.refused), { kind: 'refused', targetId: ID(1), code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE', retryable: false });
   assert.deepEqual(await send({ status: 401, body: { ok: false, code: 'AUTH_REQUIRED' } }), { kind: 'refused', targetId: ID(1), code: 'AUTH_REQUIRED', retryable: true });
   assert.deepEqual(await send(ANSWER.gateOff), { kind: 'unavailable', targetId: ID(1), code: 'NOT_AVAILABLE' });

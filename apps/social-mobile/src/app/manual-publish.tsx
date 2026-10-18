@@ -28,7 +28,7 @@ import {
   xAccountsOf,
   type Surface,
 } from '@/features/manual-publish/manual-publish-model';
-import { getManualPublishPort } from '@/features/manual-publish/manual-publish-port';
+import { getManualPublishPort, type ResultMarks } from '@/features/manual-publish/manual-publish-port';
 import { attemptStore } from '@/features/manual-publish/manual-publish-storage';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -41,12 +41,22 @@ const SURFACE_PILL: Readonly<Record<Surface, { tone: 'neutral' | 'success' | 'wa
   ready_to_preview: { tone: 'neutral', label: '入力・プレビュー・確認ができます' },
   sending: { tone: 'neutral', label: '送信中' },
   sent: { tone: 'success', label: 'Xが投稿を受け付けました' },
+  simulated: { tone: 'warning', label: '模擬（テスト）の結果です' },
   pending: { tone: 'warning', label: 'まだ送信されていません（処理中の可能性）' },
   failed: { tone: 'danger', label: '投稿されませんでした' },
   refused: { tone: 'danger', label: '送信は受け付けられませんでした' },
   unconfirmed: { tone: 'warning', label: '結果を確認できません' },
   uncertain: { tone: 'warning', label: '投稿されたか確認できません' },
 };
+
+const SIMULATED_NOTE = 'サーバーはこの結果を模擬（テスト用）として返しました。実際のXへの投稿の証拠ではありません。';
+const AFTER_FREEZE_NOTE = 'アカウントの停止または利用終了の手続きと重なって記録された結果です。';
+
+/** Notes the server's marks call for. They explain a result; they never change what kind of result it is. */
+function markNotes(marks: ResultMarks | null): string[] {
+  if (marks === null) return [];
+  return [...(marks.simulated ? [SIMULATED_NOTE] : []), ...(marks.afterFreeze ? [AFTER_FREEZE_NOTE] : [])];
+}
 
 /** One attempt id per attempt: a lowercase UUID, which is what the F3 server accepts as `clientRequestId`. */
 function defaultRequestId() {
@@ -347,14 +357,26 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
               <>
                 <SectionTitle>Xが投稿を受け付けました</SectionTitle>
                 <Text style={{ color: colors.ink }}>Xから返された投稿ID: {result.providerPostId}</Text>
+                {result.marks.afterFreeze ? (
+                  <Text style={{ color: colors.warning, fontWeight: '700' }}>この投稿は、アカウントの停止または利用終了の手続きと重なって記録されました。投稿そのものはXが受け付けています。</Text>
+                ) : null}
                 <Text style={styles.muted}>アプリ内の履歴との照合は、この画面ではまだ行っていません。</Text>
                 <ActionButton label="新しい投稿を作る" onPress={() => dispatch({ type: 'result_dismissed' })} />
+              </>
+            ) : result.kind === 'simulated' ? (
+              <>
+                <SectionTitle>模擬（テスト）の結果です</SectionTitle>
+                <Text style={{ color: colors.warning, fontWeight: '700' }}>サーバーはこの結果を模擬として返しました。実際のXへの投稿としては扱いません。</Text>
+                <Text style={styles.muted}>模擬の結果は、実際にXへ投稿された証拠でも、投稿されていない証拠でもありません。Xで確認するまで、同じ内容を再送信しないでください。</Text>
+                {markNotes({ simulated: false, afterFreeze: result.marks.afterFreeze }).map((line) => <Text key={line} style={styles.muted}>{line}</Text>)}
+                <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
               </>
             ) : result.kind === 'failed' ? (
               <>
                 <SectionTitle>投稿されませんでした</SectionTitle>
                 <Text style={{ color: colors.ink }}>Xに投稿される前に止まりました。本文は残してあります。</Text>
                 <Text style={styles.muted}>コード: {result.code}</Text>
+                {markNotes(result.marks).map((line) => <Text key={line} style={styles.muted}>{line}</Text>)}
                 <ActionButton label="編集に戻る" onPress={() => dispatch({ type: 'result_dismissed' })} />
               </>
             ) : result.kind === 'refused' ? (
@@ -369,6 +391,7 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
                 <SectionTitle>まだ送信されていません</SectionTitle>
                 <Text style={{ color: colors.warning, fontWeight: '700' }}>混み合っているか、処理中の可能性があります。投稿済みとは扱いません。別の内容を送る前に、同じ内容で結果を確認してください。</Text>
                 {result.code ? <Text style={styles.muted}>コード: {result.code}</Text> : null}
+                {markNotes(result.marks).map((line) => <Text key={line} style={styles.muted}>{line}</Text>)}
                 <ActionButton label={retryLabel} onPress={() => dispatch({ type: 'retry_requested' })} />
                 <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
               </>
@@ -385,6 +408,7 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
                 <SectionTitle>投稿されたか確認できません</SectionTitle>
                 <Text style={{ color: colors.warning, fontWeight: '700' }}>Xに投稿された可能性があります。Xで確認するまで、同じ内容を再送信しないでください。</Text>
                 <Text style={styles.muted}>コード: {result.code}</Text>
+                {markNotes(result.marks).map((line) => <Text key={line} style={styles.muted}>{line}</Text>)}
                 <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
               </>
             )}

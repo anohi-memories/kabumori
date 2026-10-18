@@ -171,7 +171,8 @@ export async function runSend(
     await deps.store.clear(userId);
     deps.memory.clear(userId);
   } else {
-    await keep(result.kind);
+    // A simulated answer proves nothing about X: it is kept like an uncertain one (never resent).
+    await keep(result.kind === 'simulated' ? 'uncertain' : result.kind);
   }
   return outcome;
 }
