@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "kind": "m1-contract-provenance",
+  "note": "Every external source the M1 contract cites, pinned by commit and git blob id, with the raw contract names that must appear in it. F3 / G4 / F4 files are read, never changed.",
+  "sources": [
+    {
+      "id": "F3-OAUTH-T13",
+      "pr": "PR257",
+      "commit": "005d7eccb0d71068abc4c746214a83f1b3f6f847",
+      "path": "supabase/candidates/postona_x_oauth_t13_guard/001_x_oauth_t13_guard.sql",
+      "blob": "a83d813dcf887ab3ede1ad891484f9c83b68dc69",
+      "present": [
+        "perform private.account_lifecycle_assert_active_service_write(auth.uid(), 'x_autopost')",
+        "SOCIAL_MOBILE_OAUTH_SERVICE_BUSY"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F3-PUBLISH-ENABLED-T13",
+      "pr": "PR262",
+      "commit": "dc00f923da522442eed53f50718bf2229b1cff5d",
+      "path": "supabase/candidates/postona_x_publish_enabled_t13_guard/001_publish_enabled_t13_guard.sql",
+      "blob": "c26493bc7517516327276dd883999ddd5cd98a4c",
+      "present": [
+        "perform private.account_lifecycle_assert_active_service_write(v_user, 'x_autopost')",
+        "postona_x_resv.g4_x_account_verified(v_user, p_social_account_id) is not true",
+        "CONNECTION_NOT_VERIFIED"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F3-PUBLISH-ENTITLEMENT",
+      "pr": "PR182",
+      "commit": "1af5047eb70327c252194220df51e94e8a17ff7e",
+      "path": "supabase/candidates/postona_x_publish_entitlement/001_x_publish_entitlement_guard.sql",
+      "blob": "9c0729c7dc2571e53e21a55b800e602e3eaa4d81",
+      "present": [
+        "public.common_account_brand_service_state(p_brand_id, 'x_autopost')",
+        "VAULT_PUBLISH_SERVICE_NOT_ACTIVE",
+        "private.account_lifecycle_assert_brand_service_active"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F3-RESERVATION-G5-BINDING",
+      "pr": "PR224",
+      "commit": "2a9d6473eb15d1356e3b13e24e5f9ed1f6afaa08",
+      "path": "supabase/candidates/postona_x_reservations/003_postona_x_resv_g5_binding.sql",
+      "blob": "dd848a0747bf8bddef204e141aeb306e2a40c214",
+      "present": [
+        "private.account_lifecycle_service_state_refusal(p_user_id, 'x_autopost')"
+      ],
+      "absent": []
+    },
+    {
+      "id": "G4-VERIFIED-PREDICATE-STUB",
+      "pr": "PR224",
+      "commit": "2a9d6473eb15d1356e3b13e24e5f9ed1f6afaa08",
+      "path": "supabase/candidates/postona_x_reservations/001_postona_x_reservations.sql",
+      "blob": "d3f40d18fbfe233d75d74dcbe79cf0c2f42778c6",
+      "present": [
+        "create function postona_x_resv.g4_x_account_verified(p_user_id uuid, p_social_account_id text) returns boolean"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F4-THREADS-ROTATION",
+      "pr": "PR263",
+      "commit": "a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705",
+      "path": "supabase/candidates/postona_threads_publish/threads_credential_rotation_candidate.sql",
+      "blob": "7366b660e7ada82cdd390c2755ac18af6c7fafb9",
+      "present": [
+        "private.account_lifecycle_brand_owner(",
+        "private.account_lifecycle_service_state_refusal(p_user_id, 'x_autopost')",
+        "OWNER_CHANGED"
+      ],
+      "absent": []
+    },
+    {
+      "id": "LIVE-SEND-TIME-PERMISSION",
+      "pr": "main",
+      "commit": "65f723a2169f113bba9053526a2d36a49807ac59",
+      "path": "supabase/migrations/20261003090000_social_mobile_publish_permission_boundary.sql",
+      "blob": "d12b7daacc4824c705bf9bdd762f9a3a1c1ac22a",
+      "present": [
+        "create function public.assert_x_publish_permission_for_legacy_post(",
+        "SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS",
+        "X_ACCOUNT_NOT_VERIFIED",
+        "X_ACCOUNT_PUBLISH_DISABLED"
+      ],
+      "absentInFunction": {
+        "function": "public.assert_x_publish_permission_for_legacy_post",
+        "needles": [
+          "service_entitlements",
+          "account_lifecycle",
+          "common_account"
+        ]
+      }
+    },
+    {
+      "id": "SHARED-CONTRACT-X_AUTOPOST-IS-POSTONA",
+      "pr": "main",
+      "commit": "65f723a2169f113bba9053526a2d36a49807ac59",
+      "path": "docs/postona/threads-g5-t9-t10-t13-shared-contract-20261010.md",
+      "blob": "b22d3a976e9eecc27c450403d0730ed2f4500fdd",
+      "present": [
+        "service_key='x_autopost'",
+        "Threads/将来Instagramを含むPOSTONA全体の利用権"
+      ],
+      "absent": []
+    },
+    {
+      "id": "G4-CREDENTIAL-SOURCE-PORT",
+      "pr": "PR224",
+      "commit": "2a9d6473eb15d1356e3b13e24e5f9ed1f6afaa08",
+      "path": "supabase/functions/_shared/postona_reservations/x_publisher.ts",
+      "blob": "5310900329f306f3fb8a305423077918934a09c1",
+      "present": [
+        "accessTokenFor",
+        "XPostingCredentialSource"
+      ],
+      "absent": []
+    },
+    {
+      "id": "G4-CREDENTIAL-SOURCE-CONTRACT",
+      "pr": "PR257",
+      "commit": "005d7eccb0d71068abc4c746214a83f1b3f6f847",
+      "path": "supabase/functions/_shared/postona_reservations/x_credential_contract.ts",
+      "blob": "87d933737beea6849cd5507ea91035b1356f0e0e",
+      "present": [
+        "source.accessTokenFor(account)",
+        "F3 does NOT",
+        "C3 "
+      ],
+      "absent": []
+    }
+  ]
+}
