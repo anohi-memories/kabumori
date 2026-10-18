@@ -788,3 +788,7 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 ## F4 archive verification — postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
 - archive_path: `.agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md`; original: `.agent_v2/tasks/F4.md` at `ea2c1d6c` (L4 acceptance), replaced in `97df19a4`
 - verified by F4 (`postona-f4-m1-x-identity-verified-credential-port-source-20261018`), 2026-10-18 JST: bytes 11147; SHA256 `e406e90f22850ffe07b980260ef0461eff1d11034431dcfcfa72b7a2c249b305` equals SHA256SUMS; git blob `80f70022404f2e585f49b14681817422ab48344c` = original = parent of the replacing commit. MANIFEST.md and SHA256SUMS were already present (added at L4) and were not changed; this entry completes the earlier "SHA256 manifest pending" line.
+
+## F6 archive 2026-10-18 checksum audit
+- Archive `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md` original/blob read-back exact PASS; UTF-8 bytes 15014; SHA256 `cd3f98dd01f7ae8b8feb0ead74043a4529e9188dc2d08140160fe351f424ae4a` (known-vector tested JS SHA256).
+- Provenance audit `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.audit/MANIFEST.md`; checksum file sibling `SHA256SUMS`; both GitHub read-back exact PASS. Source last recorded L6 commit `6a63f96f0dd4af76898c4bbb0e2d8feca78a9f58`, original creation commit NOT_VERIFIED. Archive append-only, original content unchanged.
