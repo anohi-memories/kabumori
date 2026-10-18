@@ -769,3 +769,5 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id `orchestration-v3-gh-pilot-rule-integration-f10-20261018`; L10 PASS_PILOT_RULES / production NO_GO; PR #268 merge `283ab3eaeb4cf04458936834f4ad0da3dcde3a67`.
 - original_path `.agent_v2/tasks/F10.md`; archive_path `.agent_v2/archive/2026-10-18-F10-orchestration-v3-gh-pilot-rule-integration-f10-20261018/files/.agent_v2/tasks/F10.md`.
 - original bytes 14407; SHA256 `e24d2407cdd6c1379296726aea3f44bcc50cf6298c78c4c685aeb906138328c1`; original Git blob `183b1b6a5516677bcbcf99dd0c059f8e1be078da`; read-back restore required before G10 activation.
+
+- 2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017: `.agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md` (verified exact Git blob; SHA256 manifest pending)
