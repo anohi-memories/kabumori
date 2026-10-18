@@ -796,3 +796,9 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - 2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018: `.agent_v2/archive/2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018/` TASK+Report exact blob restore PASS; MANIFEST.md and SHA256SUMS recorded; prior V2 accepted.
 
 - 2026-10-18 | F3 | `postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018` | L3 source accepted / production NO_GO; PR278 `bf76a7c7` | `.agent_v2/archive/2026-10-18-F3-postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018` | bytes=25007 SHA256 `44eda7b2d975d979daaf6f24251d029b7e5e3096b850aa3a6c559e2a9a66e72c`; restore verified; ACTIVE status update blocked.
+
+## F5 M1 manual X Auth/T13 source contract — 2026-10-18
+- task_id: `postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018`; status done / L5 PASS_SOURCE_CONTRACT / PRODUCTION_NO_GO.
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/files/.agent_v2/tasks/F5.md`.
+- size: 28694 bytes; SHA256 `58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54`; source/archive Git blob `0def34270d24a39510b21a78b803e9ba0905f160`. Restore equality PASS. Original commit `c34070ccea65498bc1bfa10109cb6e5adf63c416`; append-only MANIFEST.md and SHA256SUMS.
+- PR275 HEAD `ec0b3a6f4432c1d01ba3671f57d8a508c06d8777` Draft; followups Issue267 G5 ACK `6246624018` and Issue266 AI ACK `6247539818`.
