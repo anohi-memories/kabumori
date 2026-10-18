@@ -1,0 +1,9 @@
+# F10 archived TASK
+
+- original_path: .agent_v2/tasks/F10.md
+- archive_path: .agent_v2/archive/2026-10-18-F10-orchestration-v3-pr229-namespace-gate-f10-20261017/files/.agent_v2/tasks/F10.md
+- size_bytes: 13799
+- SHA256: 9d1e4a3e9ec8a5e3169d74c521420e45657617c7a925332d92a39fd2d6b6a638
+- git_blob_sha: c2fdf8f79304016c338da4ed6be9edf3c114a7fb
+- original_commit: 93e319faf49d55447e69adccc94b6643cce2c622
+- restore: PASS (Git blob and bytes)
