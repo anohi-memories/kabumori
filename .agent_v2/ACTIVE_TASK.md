@@ -189,19 +189,19 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr276-x-oauth-credential-security-review-20261018
+- status: ready
+- task_id: postona-j2-pr282-r1-r2-atomic-credential-focused-rereview-20261018
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: Draft PR276 head 39ab57ab3648a4c727be8a31366e4a03b2fad9fc based on PR126 65f49f98; G3 PR272, F5 PR275 source contract
-- blocker: CHANGES_REQUIRED P2x2 and G3 PR278 atomic-generation mismatch. STOP F4 source changes; command-center exception decision required. Real OAuth/X/Vault/managed/prod NO_GO
-- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018/
-- slot_use: PR276 focused review complete, supplied5/5+14/14+typed13/13 PASS but independent2 safety counterexamples; no source edits; return V2 to G4
+- dependencies: PR282 HEAD39b9064dc79ad52b430ba820006cd3310bf3140f on PR276 HEAD39ab57ab; prior J2 V2 P2x2; G3 PR278 and F5 owner epoch missing
+- blocker: Focused security rereview NOT_STARTED; F5 owner epoch unavailable in real source and G3 atomic ACK pending; no real OAuth/Vault/X/managed/production/merge/deploy
+- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr276-x-oauth-credential-security-review-20261018/
+- slot_use: independent restricted source-only security retest P2x2 + atomic token generation, no product edits
 
 ## J3
 - slot: J3
