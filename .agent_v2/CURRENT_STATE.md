@@ -1,3 +1,8 @@
+## 2026-10-18 POSTONA F1 M1 UI→単発投稿API契約整合の新規TASK
+- F1 task_id `postona-f1-m1-manual-ui-single-post-contract-adapter-20261018`, ready/claude, Sonnet5（高）, F1→L1 / return_to かぶモリアプリG1のちゃ（新F1担当）。前F1 L1タスクは `.agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/` にSHA256/restore記録を保存。HISTORY_INDEX更新済み。
+- F3 PR #272 HEAD `559b3e54f04a89ffe23ebbf54d71857ad064b1e7`：single_post_contract.ts / docs §2。F1 PR #274 HEAD `007dc3d68bdb6c57e2cfb6831090f6544704a3c3`：UI。両者の変更ファイル重複0。clientRequestId/targetId、consent SHA256、sent/pending/failed/uncertain/refused/unavailable、durable readbackのオフライン一致を担当。実送信ボタンdisabled維持。
+- F3/F4/F5のAuth・credential・API・DBは変更しない。実SNS・managed・本番・merge/deploy/EAS/課金はNO_GO。個別成果はG1 L1確認後Issue269総合指令室へ報告し次TASK待機。
+
 ## 2026-10-18 かぶモリ休止・F2/J3作業凍結（ユーザー指示）
 - POSTONA開発へ集中するため、F2 `kabumori-f2-pause-delivery-runtime-candidate-20261015` は `done/none`（L2=SOURCE_ONLY_FREEZE、セキュリティPASSではない）。J3 `kabumori-j3-f2-pr213-p1p2-focused-rereview-20261018` は `done/none`（V3=USER_CANCELLED_UNSTARTED、レビュー未実施）。
 - PR #213はDraft・未マージ・未deploy。R2(P1) 無認証AI入口／R3(P2) planner復旧所有者検証は未検証。かぶモリの全経路完全停止PASSは主張しない。
