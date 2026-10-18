@@ -1,3 +1,8 @@
+## 2026-10-18 かぶモリ休止・F2/J3作業凍結（ユーザー指示）
+- POSTONA開発へ集中するため、F2 `kabumori-f2-pause-delivery-runtime-candidate-20261015` は `done/none`（L2=SOURCE_ONLY_FREEZE、セキュリティPASSではない）。J3 `kabumori-j3-f2-pr213-p1p2-focused-rereview-20261018` は `done/none`（V3=USER_CANCELLED_UNSTARTED、レビュー未実施）。
+- PR #213はDraft・未マージ・未deploy。R2(P1) 無認証AI入口／R3(P2) planner復旧所有者検証は未検証。かぶモリの全経路完全停止PASSは主張しない。
+- archive: `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/`（原本3件、MANIFEST/SHA256SUMS、Git blob・復元確認）。F1のPOSTONA現行TASKは継続。F2/J3の新規割当は総合指令室判断待ち。本番変更なし。
+
 ## F5 — POSTONA初回X手入力投稿 M1 Auth/entitlement/T13 source-only（2026-10-18）
 - 総合指令室 Issue #269 comment 6245437308 のオーナー管理GOを受け、F5新TASK `postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018` ready/claude、Opus5.5（高）、F5→L5、返却先 `共通アカウントG5のちゃ（新F5担当）`。JWT/session→POSTONA entitlement active→user/brand owner→G4 verified X/token owner→publish enabled/T13→送信直前再確認→模擬X結果とreadbackの契約/合成PG検証。G3/G4所有コードと共有migration/本番Auth改変禁止。Issue267はF5内部関数/Threads service keyの証拠付き契約確認を同TASKの読み取り枝で実施。Issue266 AI削除は初回手入力X投稿の先行条件にしない。
 - 旧F5 D3 done TASK+Report は `.agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/` に原本blob一致、20888 bytes SHA256 `8eeba0f79434dcd58e6d15cf078f77e2dd2fabb4113d12edf55e76124a26c4d2`、MANIFEST/SHA256SUMS/HISTORY_INDEX保存。旧G5はdone維持。PR233限定重点レビューとPR265 PG1-PG7は未承認、全production/managed/SNS/merge/deploy NO_GO。開始時にfresh main・独立worktree・新旧30枠変更対象競合を担当Claudeが再確認。
