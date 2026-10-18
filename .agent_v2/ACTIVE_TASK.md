@@ -93,10 +93,10 @@
 
 ## F6
 - slot: F6
-- status: ready
+- status: review_required
 - task_id: common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - blocker: implementation start requires isolated clean F6 worktree and fresh full 30-slot PR/path check; G5 AI auth source-only unavailable, POSTONA handler ownership/HOLD, managed/production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
