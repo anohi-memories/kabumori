@@ -12,7 +12,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
-import { attemptMemory, runReadinessCheck, runSend, type FlowDeps } from '@/features/manual-publish/manual-publish-flow';
+import { attemptMemory, loadPersistedAttempt, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, type FlowDeps } from '@/features/manual-publish/manual-publish-flow';
 import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
@@ -29,6 +29,7 @@ import {
   type Surface,
 } from '@/features/manual-publish/manual-publish-model';
 import { getManualPublishPort } from '@/features/manual-publish/manual-publish-port';
+import { attemptStore } from '@/features/manual-publish/manual-publish-storage';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -36,6 +37,7 @@ import { useDataStatus } from '@/providers/data-provider';
 const SURFACE_PILL: Readonly<Record<Surface, { tone: 'neutral' | 'success' | 'warning' | 'danger'; label: string }>> = {
   not_connected: { tone: 'warning', label: 'Xアカウント未接続' },
   unavailable: { tone: 'warning', label: '状態を確認できません' },
+  record_unchecked: { tone: 'warning', label: '前回の送信記録を確認できていません' },
   ready_to_preview: { tone: 'neutral', label: '入力・プレビュー・確認ができます' },
   sending: { tone: 'neutral', label: '送信中' },
   sent: { tone: 'success', label: 'Xが投稿を受け付けました' },
@@ -57,9 +59,16 @@ type ScreenProps = Readonly<{ userId: string | null; now?: () => number; newRequ
 export function ManualPublishScreen({ userId, now = Date.now, newRequestId = defaultRequestId }: ScreenProps) {
   const { status: dataStatus } = useDataStatus();
   const { accounts, activeAccount } = useActiveAccount();
-  const [state, dispatch] = useReducer(manualPublishReducer, null, () => createInitialState(attemptMemory.get(userId)));
+  // The process remembers an unresolved attempt with its text; after an app restart only the hash-only record on
+  // the device is left, and until it has been read (or if it cannot be read) nothing can be typed or sent.
+  const [state, dispatch] = useReducer(manualPublishReducer, null, () => {
+    const remembered = attemptMemory.get(userId);
+    return createInitialState(remembered, remembered === null && userId !== null ? { kind: 'loading' } : undefined);
+  });
   const [recheck, setRecheck] = useState(0);
+  const [clearFailed, setClearFailed] = useState(false);
   const sendingRef = useRef(false);
+  const clearingRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -67,7 +76,20 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
   }, []);
 
   const port = useMemo(() => getManualPublishPort(), []);
-  const deps: FlowDeps = useMemo(() => ({ port, now, newRequestId, memory: attemptMemory }), [port, now, newRequestId]);
+  const deps: FlowDeps = useMemo(() => ({ port, now, newRequestId, memory: attemptMemory, store: attemptStore }), [port, now, newRequestId]);
+
+  const storeKind = state.store.kind;
+  useEffect(() => {
+    if (storeKind !== 'loading' || userId === null) return undefined;
+    let cancelled = false;
+    void loadPersistedAttempt(deps, userId).then((read) => {
+      if (cancelled || !mountedRef.current) return;
+      if (read.kind === 'none') dispatch({ type: 'store_loaded', unresolved: null });
+      else if (read.kind === 'found') dispatch({ type: 'store_loaded', unresolved: restoredAttemptOf(read.attempt) });
+      else dispatch({ type: 'store_unreadable', reason: read.reason });
+    });
+    return () => { cancelled = true; };
+  }, [storeKind, userId, deps]);
 
   const xAccounts = useMemo(() => xAccountsOf(accounts), [accounts]);
   const xIdsKey = xAccounts.map((account) => account.id).join('|');
@@ -82,7 +104,7 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
     if (state.phase === 'editing' && state.accountId === null && suggestedId !== null && xIdsKey.split('|').includes(suggestedId)) {
       dispatch({ type: 'account_selected', accountId: suggestedId });
     }
-  }, [state.phase, state.accountId, suggestedId, xIdsKey]);
+  }, [state.phase, state.accountId, state.store.kind, suggestedId, xIdsKey]);
 
   // Opening the confirmation asks the send port -- never the cached connection value -- whether THIS account can send now.
   useEffect(() => {
@@ -123,18 +145,28 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
     if (manualPublishReducer(state, start).phase !== 'sending') return;
     sendingRef.current = true;
     dispatch(start);
-    void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId, consent: given }).then((outcome) => {
+    void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId, consent: given, retry: state.unresolved !== null }).then((outcome) => {
       sendingRef.current = false;
       if (mountedRef.current) dispatch({ type: 'send_settled', requestId, outcome });
     });
   };
 
-  const acknowledge = () => {
-    if (userId !== null) attemptMemory.clear(userId);
-    dispatch({ type: 'unresolved_acknowledged' });
+  // The user's explicit "I checked X". The record on the device is removed FIRST; if that fails nothing is unlocked.
+  const acknowledge = (then: 'unresolved_acknowledged' | 'store_unreadable_acknowledged') => {
+    if (userId === null || clearingRef.current) return;
+    clearingRef.current = true;
+    void runAcknowledge(deps, userId).then((cleared) => {
+      clearingRef.current = false;
+      if (!mountedRef.current) return;
+      setClearFailed(!cleared);
+      if (cleared) dispatch({ type: then });
+    });
   };
 
   const result = state.phase === 'result' ? state.result : null;
+  const restored = state.unresolved !== null && state.unresolved.text === null;
+  const retryLabel = restored ? '前回と同じ本文を入力して確認し直す' : '同じ内容・同じ送信IDで確認し直す';
+  const discardLabel = restored ? 'Xで確認しました（この記録を破棄）' : 'Xで確認しました（この下書きを破棄）';
 
   return (
     <Screen>
@@ -146,6 +178,34 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
             送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。
           </Text>
         </Card>
+
+        {state.store.kind !== 'ready' ? (
+          <Card>
+            <SectionTitle>{state.store.kind === 'loading' ? '前回の送信記録を確認しています' : '前回の送信記録を読み込めません'}</SectionTitle>
+            <Text style={{ color: colors.warning, fontWeight: '700' }}>
+              {state.store.kind === 'loading' ? SEND_BLOCK_MESSAGES.store_loading : SEND_BLOCK_MESSAGES.store_unreadable}
+            </Text>
+            {state.store.kind === 'unreadable' ? (
+              <>
+                <Text style={styles.muted}>
+                  {state.store.reason === 'io'
+                    ? '端末の保存領域を読めませんでした。読み込めるまで、送信はできません。'
+                    : state.store.reason === 'version'
+                      ? '新しい版のアプリが残した記録のため、この版では読めません。'
+                      : '記録が壊れているため、読めません。'}
+                </Text>
+                <ActionButton label="もう一度読み込む" onPress={() => dispatch({ type: 'store_reload_requested' })} />
+                {state.store.reason !== 'io' ? (
+                  <>
+                    <Text style={styles.muted}>Xで最近の投稿を確認してから押してください。押すと、この記録は消え、送信できるようになります。</Text>
+                    <ActionButton label="Xで確認しました（記録を消去して続ける）" onPress={() => acknowledge('store_unreadable_acknowledged')} />
+                  </>
+                ) : null}
+                {clearFailed ? <Text style={{ color: colors.danger, fontWeight: '700' }}>記録を消去できませんでした。送信は引き続きできません。</Text> : null}
+              </>
+            ) : null}
+          </Card>
+        ) : null}
 
         {surface === 'not_connected' || surface === 'unavailable' ? (
           <Card>
@@ -165,7 +225,7 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
           </Card>
         ) : null}
 
-        {state.phase === 'editing' ? (
+        {state.phase === 'editing' && state.store.kind === 'ready' ? (
           <>
             <Card>
               <SectionTitle detail="投稿先は、この画面で選んだXアカウントだけです">投稿先のXアカウント</SectionTitle>
@@ -237,6 +297,21 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
                 <Text style={styles.muted}>前回と同じ内容・同じ送信IDで確認します。同じ送信IDは、サーバーが2回送ることはありません。</Text>
               ) : null}
             </Card>
+            {state.phase === 'confirming' && state.unresolved !== null && state.unresolved.text === null ? (
+              <Card>
+                <SectionTitle detail={`前回の本文の照合コード ${shortHash(state.unresolved.contentSha256)}`}>前回と同じ本文を入力</SectionTitle>
+                <Text style={styles.muted}>アプリを再起動したため、前回の本文は端末に残っていません。入力した本文が前回と同じときだけ、同じ送信IDで確認し直せます。</Text>
+                <TextInput
+                  accessibilityLabel="前回と同じ本文の入力"
+                  multiline
+                  onChangeText={(text) => dispatch({ type: 'draft_changed', text })}
+                  placeholder="前回と同じ本文を入力してください"
+                  placeholderTextColor={colors.muted}
+                  style={{ minHeight: 100, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: spacing.sm, color: colors.ink, fontSize: 15, textAlignVertical: 'top' }}
+                  value={state.draft}
+                />
+              </Card>
+            ) : null}
             <ManualPostPreview account={account} text={draft.kind === 'ok' ? draft.text : ''} />
             <Card>
               <Pressable
@@ -294,25 +369,32 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
                 <SectionTitle>まだ送信されていません</SectionTitle>
                 <Text style={{ color: colors.warning, fontWeight: '700' }}>混み合っているか、処理中の可能性があります。投稿済みとは扱いません。別の内容を送る前に、同じ内容で結果を確認してください。</Text>
                 {result.code ? <Text style={styles.muted}>コード: {result.code}</Text> : null}
-                <ActionButton label="同じ内容・同じ送信IDで確認し直す" onPress={() => dispatch({ type: 'retry_requested' })} />
-                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledge} />
+                <ActionButton label={retryLabel} onPress={() => dispatch({ type: 'retry_requested' })} />
+                <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
               </>
             ) : result.kind === 'unconfirmed' ? (
               <>
                 <SectionTitle>結果を確認できません</SectionTitle>
                 <Text style={{ color: colors.warning, fontWeight: '700' }}>通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。</Text>
                 {result.code ? <Text style={styles.muted}>コード: {result.code}</Text> : null}
-                <ActionButton label="同じ内容・同じ送信IDで確認し直す" onPress={() => dispatch({ type: 'retry_requested' })} />
-                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledge} />
+                <ActionButton label={retryLabel} onPress={() => dispatch({ type: 'retry_requested' })} />
+                <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
               </>
             ) : (
               <>
                 <SectionTitle>投稿されたか確認できません</SectionTitle>
                 <Text style={{ color: colors.warning, fontWeight: '700' }}>Xに投稿された可能性があります。Xで確認するまで、同じ内容を再送信しないでください。</Text>
                 <Text style={styles.muted}>コード: {result.code}</Text>
-                <ActionButton label="Xで確認しました（この下書きを破棄）" onPress={acknowledge} />
+                <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
               </>
             )}
+            {state.unresolved !== null ? (
+              <>
+                {restored ? <Text style={styles.muted}>アプリが再起動されたため、本文は端末に残っていません。Xのプロフィールで、最近の投稿を確認してください。</Text> : null}
+                <Text style={styles.muted}>「Xで確認しました」を押すと、この記録は消え、同じ内容も新しい投稿として送れるようになります。Xで確認してから押してください。</Text>
+                {clearFailed ? <Text style={{ color: colors.danger, fontWeight: '700' }}>記録を消去できませんでした。送信は引き続きできません。</Text> : null}
+              </>
+            ) : null}
           </Card>
         ) : null}
       </ScrollView>

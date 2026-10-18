@@ -25,6 +25,21 @@ test.after(() => {
   }
 });
 
+import { createAttemptStore } from '../src/features/manual-publish/manual-publish-store.ts';
+
+/** A device storage that can fail in every way: a thrown read / write / remove, or a write that silently stores nothing. */
+function fakeKV() {
+  const data = new Map();
+  const fail = { get: false, set: false, remove: false, drop: false };
+  return {
+    data,
+    fail,
+    getItem: async (key) => { if (fail.get) throw new Error('read failed'); return data.has(key) ? data.get(key) : null; },
+    setItem: async (key, value) => { if (fail.set) throw new Error('write failed'); if (!fail.drop) data.set(key, value); },
+    removeItem: async (key) => { if (fail.remove) throw new Error('remove failed'); data.delete(key); },
+  };
+}
+
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const RESERVATION = '33333333-3333-4333-8333-333333333333';
@@ -175,10 +190,11 @@ test('this build still uses the unconnected port: the adapter is prepared, not w
 /** Drives reducer + flow + adapter like the screen does, with a scripted transport and a ready port. */
 function cycle(transport, { text = 'こんにちは', accountId = 'sa_x_1' } = {}) {
   const memory = flow.createAttemptMemory();
+  const store = createAttemptStore(fakeKV());
   let clock = 10_000;
   let n = 0;
   const sendPort = make(transport, { checkReadiness: async () => ({ kind: 'ready' }) });
-  const deps = { port: sendPort, now: () => clock, newRequestId: () => ID(++n), memory };
+  const deps = { port: sendPort, now: () => clock, newRequestId: () => ID(++n), memory, store };
   let state = m.createInitialState();
   const act = (a) => { state = m.manualPublishReducer(state, a); return state; };
   const api = {
@@ -195,9 +211,10 @@ function cycle(transport, { text = 'こんにちは', accountId = 'sa_x_1' } = {
     },
     async send() {
       const requestId = state.unresolved ? state.unresolved.requestId : deps.newRequestId();
+      const retry = state.unresolved !== null;
       const start = act({ type: 'send_started', requestId, now: clock });
       if (start.phase !== 'sending') return null;
-      const outcome = await flow.runSend(deps, { userId: 'U1', accountId, text: m.checkDraft(state.draft).text, requestId, consent: m.consentForSend(state) });
+      const outcome = await flow.runSend(deps, { userId: 'U1', accountId, text: m.checkDraft(state.draft).text, requestId, consent: m.consentForSend(state), retry });
       act({ type: 'send_settled', requestId, outcome });
       return { requestId, outcome };
     },
@@ -292,8 +309,8 @@ test('a tampered consent never reaches the transport: a hash for other text is r
   const t = transportOf(ANSWER.sent());
   const sendPort = make(t.transport);
   const memory = flow.createAttemptMemory();
-  const deps = { port: sendPort, now: () => 1, newRequestId: () => ID(1), memory };
-  const outcome = await flow.runSend(deps, { userId: 'U1', accountId: 'sa_x_1', text: 'こんにちは', requestId: ID(1), consent: { confirmed: true, contentSha256: sha('別の本文') } });
+  const deps = { port: sendPort, now: () => 1, newRequestId: () => ID(1), memory, store: createAttemptStore(fakeKV()) };
+  const outcome = await flow.runSend(deps, { userId: 'U1', accountId: 'sa_x_1', text: 'こんにちは', requestId: ID(1), consent: { confirmed: true, contentSha256: sha('別の本文') }, retry: false });
   assert.deepEqual(outcome, { kind: 'refused', targetId: ID(1), code: 'LOCAL_CONSENT_MISMATCH', retryable: false });
   assert.equal(t.calls.length, 0);
   assert.equal(memory.get('U1'), null, 'nothing was started, nothing is remembered');
