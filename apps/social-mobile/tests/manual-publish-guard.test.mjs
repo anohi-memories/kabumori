@@ -28,6 +28,7 @@ const ALLOWED_IMPORTS = new Set([
   '@/features/manual-publish/manual-publish-flow',
   '@/features/manual-publish/manual-publish-model',
   '@/features/manual-publish/manual-publish-port',
+  '@/features/manual-publish/manual-publish-storage',
   '@/providers/active-account-provider',
   '@/providers/auth-provider',
   '@/providers/data-provider',
@@ -37,8 +38,14 @@ const ALLOWED_IMPORTS = new Set([
   './manual-publish-hash.ts',
   './manual-publish-model.ts',
   './manual-publish-port.ts',
+  './manual-publish-store.ts',
   './single-post-contract.ts',
 ]);
+
+// The device storage is touched by ONE file, which holds no logic; every other file reaches it only through the
+// injected store (manual-publish-store.ts), so its failures can be simulated and proven offline.
+const STORAGE_FILE = `${FEATURE_DIR}/manual-publish-storage.ts`;
+const STORAGE_ONLY_IMPORTS = new Set(['@react-native-async-storage/async-storage']);
 
 test('the feature has exactly the expected files', async () => {
   assert.deepEqual(
@@ -50,6 +57,8 @@ test('the feature has exactly the expected files', async () => {
       'src/features/manual-publish/manual-publish-hash.ts',
       'src/features/manual-publish/manual-publish-model.ts',
       'src/features/manual-publish/manual-publish-port.ts',
+      'src/features/manual-publish/manual-publish-storage.ts',
+      'src/features/manual-publish/manual-publish-store.ts',
       'src/features/manual-publish/single-post-contract.ts',
       'src/features/manual-publish/single-post-port.ts',
     ],
@@ -61,7 +70,10 @@ test('every import is on the allow-list: no Supabase, data layer, OAuth, storage
     const sf = ts.createSourceFile(rel, await readFile(join(ROOT, rel), 'utf8'), ts.ScriptTarget.Latest, true, rel.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     const imports = [];
     sf.forEachChild((node) => { if (ts.isImportDeclaration(node)) imports.push(node.moduleSpecifier.text); });
-    for (const spec of imports) assert.ok(ALLOWED_IMPORTS.has(spec), `${rel} imports "${spec}", which is not allowed`);
+    for (const spec of imports) {
+      const storageOnly = rel === STORAGE_FILE && STORAGE_ONLY_IMPORTS.has(spec);
+      assert.ok(ALLOWED_IMPORTS.has(spec) || storageOnly, `${rel} imports "${spec}", which is not allowed`);
+    }
   }
 });
 
@@ -78,6 +90,8 @@ test('the compiled code (comments removed) names no network, credential or stora
       // The adapter alone handles the signed-in person's OWN session token, and only to hand it to the injected
       // transport (its tests prove it never reaches an outcome). No other file may name an access token at all.
       if (pattern.source.startsWith('access_') && rel.endsWith('single-post-port.ts')) continue;
+      // ...and the one-line device storage file is the only place that names AsyncStorage.
+      if (pattern.source === '\\bAsyncStorage\\b' && rel === STORAGE_FILE) continue;
       assert.ok(!pattern.test(js), `${rel} contains ${pattern}`);
     }
   }
@@ -150,4 +164,28 @@ test('existing screens that other owners edit are not part of this feature', asy
       assert.ok(!text.includes(protectedPath), `${rel} mentions ${protectedPath}`);
     }
   }
+});
+
+// ---- restart safety: what the device may keep ---------------------------------------------------------------------------------
+
+test('the durable record is hash-only: no post text, no token, no consent flag can be written to the device', async () => {
+  const text = await readFile(join(ROOT, `${FEATURE_DIR}/manual-publish-store.ts`), 'utf8');
+  const serialize = /function serialize[\s\S]*?\n\}\n/u.exec(text)[0];
+  const fields = [...serialize.matchAll(/(\w+): (?:STORE_VERSION|attempt\.\w+)/gu)].map((match) => match[1]).sort();
+  assert.deepEqual(fields, ['accountId', 'contentSha256', 'kind', 'requestId', 'savedAt', 'v']);
+  for (const forbiddenField of [/\btext\b/u, /renderedText/u, /\bdraft\b/u, /token/iu, /consent/iu, /session/iu, /providerPostId/u]) {
+    assert.ok(!forbiddenField.test(serialize), `serialize() must not mention ${forbiddenField}`);
+  }
+  const type = /export type PersistedAttempt = [\s\S]*?\}>;/u.exec(text)[0];
+  assert.ok(!/\btext\b/u.test(type), 'the persisted type has no text field');
+});
+
+test('only the storage file imports the device storage, and the screen reaches it through that file alone', async () => {
+  for (const rel of await sources()) {
+    const code = await readFile(join(ROOT, rel), 'utf8');
+    const importsAsyncStorage = /from '@react-native-async-storage\/async-storage'/u.test(code);
+    assert.equal(importsAsyncStorage, rel === STORAGE_FILE, rel);
+  }
+  const route = await readFile(join(ROOT, ROUTE), 'utf8');
+  assert.ok(route.includes("from '@/features/manual-publish/manual-publish-storage'"));
 });

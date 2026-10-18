@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import * as flow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as port from '../src/features/manual-publish/manual-publish-port.ts';
+import { createAttemptStore } from '../src/features/manual-publish/manual-publish-store.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const saved = new Map();
@@ -22,12 +23,28 @@ test.after(() => {
   }
 });
 
+
+/** A device storage that can fail in every way: a thrown read / write / remove, or a write that silently stores nothing. */
+function fakeKV() {
+  const data = new Map();
+  const fail = { get: false, set: false, remove: false, drop: false };
+  return {
+    data,
+    fail,
+    getItem: async (key) => { if (fail.get) throw new Error('read failed'); return data.has(key) ? data.get(key) : null; },
+    setItem: async (key, value) => { if (fail.set) throw new Error('write failed'); if (!fail.drop) data.set(key, value); },
+    removeItem: async (key) => { if (fail.remove) throw new Error('remove failed'); data.delete(key); },
+  };
+}
+
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 function harness(portOver = {}) {
   const calls = { check: [], send: [] };
   const memory = flow.createAttemptMemory();
+  const kv = fakeKV();
+  const store = createAttemptStore(kv);
   const fakePort = {
     checkReadiness: async (accountId) => { calls.check.push(accountId); return { kind: 'ready' }; },
     send: async (target) => { calls.send.push(target); return { kind: 'published', targetId: target.targetId, providerPostId: '1234567890' }; },
@@ -35,8 +52,8 @@ function harness(portOver = {}) {
   };
   let clock = 5_000;
   let n = 0;
-  const deps = { port: fakePort, now: () => clock, newRequestId: () => ID(++n), memory };
-  return { calls, memory, deps, tick: (ms) => { clock += ms; } };
+  const deps = { port: fakePort, now: () => clock, newRequestId: () => ID(++n), memory, store };
+  return { calls, memory, kv, store, deps, tick: (ms) => { clock += ms; } };
 }
 const args = (over = {}) => ({
   userId: 'U1',
@@ -44,6 +61,7 @@ const args = (over = {}) => ({
   text: 'hello',
   requestId: ID(1),
   consent: { confirmed: true, contentSha256: sha('hello') },
+  retry: false,
   ...over,
 });
 const ENTRY = { accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), text: 'hello' };

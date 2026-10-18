@@ -356,7 +356,7 @@ test('gate: the first failing condition names the reason (in a fixed order)', ()
   assert.equal(gateOf(ready, { account: account('X_A', { connectionStatus: 'not_connected' }) }).reason, 'account_not_connected');
   assert.equal(gateOf(start(ready)).reason, 'sending');
   for (const reason of Object.keys(m.SEND_BLOCK_MESSAGES)) assert.ok(m.SEND_BLOCK_MESSAGES[reason].length > 0, reason);
-  assert.equal(Object.keys(m.SEND_BLOCK_MESSAGES).length, 17);
+  assert.equal(Object.keys(m.SEND_BLOCK_MESSAGES).length, 20);
 });
 
 test('gate: draft problems block the send even with a ready port and a consent', () => {

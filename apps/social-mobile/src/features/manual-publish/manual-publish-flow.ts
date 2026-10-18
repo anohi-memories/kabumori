@@ -1,10 +1,11 @@
 // Async steps of the manual X single post, kept out of the screen so they can be proven without React:
 // the readiness check and the one send. Everything external (the port, the clock, ids, the memory of an
-// unresolved attempt) is injected; this file imports no network client.
+// unresolved attempt, the durable record of it) is injected; this file imports no network client.
 
 import { sha256Hex } from './manual-publish-hash.ts';
 import { buildTarget, isRequestId, resultOf, targetIsSendable, type UnresolvedAttempt } from './manual-publish-model.ts';
 import type { ManualPublishConsent, ManualPublishOutcome, ManualPublishPort, PortReadiness, ReadinessRecord } from './manual-publish-port.ts';
+import type { AttemptStore, PersistedAttempt, StoreRead } from './manual-publish-store.ts';
 
 // ---- memory of an attempt that may have posted -----------------------------------------------------------------
 
@@ -13,7 +14,8 @@ import type { ManualPublishConsent, ManualPublishOutcome, ManualPublishPort, Por
  * be "not posted" -- with the exact text, its hash and the attempt id, so the SAME attempt can be retried
  * after the screen was left. It is written BEFORE the send starts and cleared only by a proven end (`published`,
  * `rejected`, `refused`) or by the user's acknowledgement. Leaving the screen mid-send therefore cannot make a
- * second, identical send look safe. (It does not survive an app restart; the server-side idempotency key does.)
+ * second, identical send look safe. It does not survive an app restart: the hash-only record in the AttemptStore
+ * does (see manual-publish-store.ts), and the server-side idempotency key makes a same-id retry safe.
  */
 export interface AttemptMemory {
   get(userId: string | null): UnresolvedAttempt | null;
@@ -40,6 +42,8 @@ export type FlowDeps = Readonly<{
   now: () => number;
   newRequestId: () => string;
   memory: AttemptMemory;
+  /** The durable, hash-only record of an unresolved attempt (survives an app restart). */
+  store: AttemptStore;
 }>;
 
 function sanitizeReadiness(value: unknown): PortReadiness {
@@ -65,6 +69,45 @@ export async function runReadinessCheck(deps: FlowDeps, accountId: string): Prom
   return { accountId, checkedAt: deps.now(), result };
 }
 
+// ---- restart: the durable record --------------------------------------------------------------------------------------
+
+/** What the device remembers of an attempt after a restart: everything but the text (never stored). */
+export function restoredAttemptOf(attempt: PersistedAttempt): UnresolvedAttempt {
+  return { accountId: attempt.accountId, requestId: attempt.requestId, contentSha256: attempt.contentSha256, text: null, kind: attempt.kind };
+}
+
+/**
+ * Read the durable record of this user's unresolved attempt (the first thing a visit does when the process has no
+ * memory of one). A record that is found is also put into the process memory, so every later visit of this
+ * process sees it without reading again. Never throws.
+ */
+export async function loadPersistedAttempt(deps: FlowDeps, userId: string): Promise<StoreRead> {
+  let read: StoreRead;
+  try {
+    read = await deps.store.read(userId);
+  } catch {
+    read = { kind: 'unreadable', reason: 'io' };
+  }
+  if (read.kind === 'found') deps.memory.mark(userId, restoredAttemptOf(read.attempt));
+  return read;
+}
+
+/**
+ * The user's explicit "I checked X": forget the unresolved attempt. Only when the durable record is really gone is
+ * the process memory cleared too; a record that cannot be removed keeps blocking (fail closed) and `false` is returned.
+ */
+export async function runAcknowledge(deps: FlowDeps, userId: string): Promise<boolean> {
+  let cleared: boolean;
+  try {
+    cleared = await deps.store.clear(userId);
+  } catch {
+    cleared = false;
+  }
+  if (!cleared) return false;
+  deps.memory.clear(userId);
+  return true;
+}
+
 // ---- send -----------------------------------------------------------------------------------------------------------
 
 /**
@@ -72,36 +115,63 @@ export async function runReadinessCheck(deps: FlowDeps, accountId: string): Prom
  * gate allowed it. Never throws and always returns an outcome for `requestId`:
  *   - a target the provider cannot take, or a consent that does not match the exact text, is refused here,
  *     before the port (nothing sent, nothing remembered);
+ *   - the attempt is first written to the DURABLE store and read back; if that fails nothing is sent at all
+ *     (a send that could not be remembered across a restart is never started). For a fresh attempt that is a
+ *     plain refusal; for a retry of an unresolved attempt it is `unavailable`, which keeps the attempt unresolved
+ *     (a failed local write proves nothing about the earlier send);
  *   - a port that throws or answers nonsense is `uncertain` (it may have sent), never `rejected`.
- * The attempt is remembered (with its exact text and hash) before the port is called and updated by what it
- * answers: forgotten only for a proven end, kept as pending / unconfirmed / uncertain otherwise.
+ * The attempt is remembered (in memory with its exact text, durably as id + account + hash) before the port is
+ * called and updated by what it answers: forgotten only for a proven end, kept as pending / unconfirmed /
+ * uncertain otherwise. If an update of the durable record fails after the send, the earlier `in_flight` record
+ * stays, which a restart shows as "unconfirmed" -- still blocked, still retryable only with the same id.
  */
 export async function runSend(
   deps: FlowDeps,
-  args: Readonly<{ userId: string; accountId: string; text: string; requestId: string; consent: ManualPublishConsent }>,
+  args: Readonly<{ userId: string; accountId: string; text: string; requestId: string; consent: ManualPublishConsent; retry: boolean }>,
 ): Promise<ManualPublishOutcome> {
-  const { userId, accountId, text, requestId, consent } = args;
+  const { userId, accountId, text, requestId, consent, retry } = args;
   const refuse = (code: string): ManualPublishOutcome => ({ kind: 'refused', targetId: requestId, code, retryable: false });
   if (!isRequestId(requestId)) return refuse('LOCAL_ATTEMPT_ID_INVALID');
   const target = buildTarget(requestId, accountId, text, consent);
   if (!targetIsSendable(target)) return refuse(consent.contentSha256 === sha256Hex(text) ? 'LOCAL_TARGET_INVALID' : 'LOCAL_CONSENT_MISMATCH');
   const entry: UnresolvedAttempt = { accountId, requestId, contentSha256: consent.contentSha256, text, kind: 'in_flight' };
+  const record = (kind: PersistedAttempt['kind']): PersistedAttempt => ({ accountId, requestId, contentSha256: consent.contentSha256, kind, savedAt: deps.now() });
+  if (!(await deps.store.write(userId, record('in_flight')))) {
+    if (retry) {
+      deps.memory.mark(userId, { ...entry, kind: 'unconfirmed' });
+      return { kind: 'unavailable', targetId: requestId, code: 'LOCAL_STORE_UNAVAILABLE' };
+    }
+    // A fresh attempt that could not be recorded was never sent. A half-written record would only block the next
+    // visit, so it is removed if it can be (there was no earlier record for this user to lose).
+    await deps.store.clear(userId);
+    return refuse('LOCAL_STORE_UNAVAILABLE');
+  }
   deps.memory.mark(userId, entry);
+  const keep = async (kind: Exclude<PersistedAttempt['kind'], 'in_flight'>) => {
+    deps.memory.mark(userId, { ...entry, kind });
+    await deps.store.write(userId, record(kind)); // best effort: the in_flight record already blocks
+  };
   let outcome: ManualPublishOutcome;
   try {
     outcome = await deps.port.send(target);
   } catch {
-    deps.memory.mark(userId, { ...entry, kind: 'uncertain' });
+    await keep('uncertain');
     return { kind: 'uncertain', targetId: requestId, code: 'SEND_THREW' };
   }
   const kind = (outcome as { kind?: unknown } | null)?.kind;
   const known = ['published', 'pending', 'rejected', 'refused', 'uncertain', 'unavailable'];
   if (typeof kind !== 'string' || !known.includes(kind)) {
-    deps.memory.mark(userId, { ...entry, kind: 'uncertain' });
+    await keep('uncertain');
     return { kind: 'uncertain', targetId: requestId, code: 'OUTCOME_INVALID' };
   }
   const result = resultOf(requestId, outcome);
-  if (result.kind === 'sent' || result.kind === 'failed' || result.kind === 'refused') deps.memory.clear(userId);
-  else deps.memory.mark(userId, { ...entry, kind: result.kind });
+  if (result.kind === 'sent' || result.kind === 'failed' || result.kind === 'refused') {
+    // A proven end. If the durable record cannot be removed it stays, and a restart shows it as "unconfirmed":
+    // retrying the same id then gets the stored answer. Never the other way round.
+    await deps.store.clear(userId);
+    deps.memory.clear(userId);
+  } else {
+    await keep(result.kind);
+  }
   return outcome;
 }

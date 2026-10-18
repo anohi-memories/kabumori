@@ -12,6 +12,21 @@ import ts from 'typescript';
 import * as model from '../src/features/manual-publish/manual-publish-model.ts';
 import * as realFlow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as realPort from '../src/features/manual-publish/manual-publish-port.ts';
+import * as realStore from '../src/features/manual-publish/manual-publish-store.ts';
+
+
+/** A device storage that can fail in every way: a thrown read / write / remove, or a write that silently stores nothing. */
+function fakeKV() {
+  const data = new Map();
+  const fail = { get: false, set: false, remove: false, drop: false };
+  return {
+    data,
+    fail,
+    getItem: async (key) => { if (fail.get) throw new Error('read failed'); return data.has(key) ? data.get(key) : null; },
+    setItem: async (key, value) => { if (fail.set) throw new Error('write failed'); if (!fail.drop) data.set(key, value); },
+    removeItem: async (key) => { if (fail.remove) throw new Error('remove failed'); data.delete(key); },
+  };
+}
 
 const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const ID = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -86,6 +101,7 @@ async function loadRoute(world) {
     '@/features/manual-publish/manual-publish-flow': { ...realFlow, attemptMemory: world.memory },
     '@/features/manual-publish/manual-publish-model': model,
     '@/features/manual-publish/manual-publish-port': { ...realPort, getManualPublishPort: () => world.port },
+    '@/features/manual-publish/manual-publish-storage': { attemptStore: world.store },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts, activeAccount: world.accounts.find((a) => a.id === world.active) ?? null }) },
     '@/providers/auth-provider': { useAuth: () => ({ session: world.userId === null ? null : { user: { id: world.userId } } }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reason: null, snapshot: null }) },
@@ -97,8 +113,9 @@ async function loadRoute(world) {
   return { mod, slots, getCursor: () => cursor, setCursor: (v) => { cursor = v; }, pendingEffects };
 }
 
-async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), clock = { t: 100_000 } } = {}) {
-  const world = { status, userId, accounts, active, port: port.port, memory };
+async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), clock = { t: 100_000 } } = {}) {
+  const store = realStore.createAttemptStore(kv);
+  const world = { status, userId, accounts, active, port: port.port, memory, store };
   const rt = await loadRoute(world);
   let ids = 0;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
@@ -122,7 +139,7 @@ async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A
   };
   const unmount = () => { rt.slots.forEach((s) => s?.cleanup?.()); };
   const api = {
-    world, port, clock, rt, flush, unmount,
+    world, port, clock, rt, flush, unmount, kv, store, memory,
     tree: () => render(),
     all: (type) => { const out = []; walk(render(), (n) => { if (n.type === type) out.push(n); }); return out; },
     text: () => {
@@ -654,6 +671,8 @@ test('an attempt that was still pending when the screen was left is picked up ag
   assert.equal(ui.state().result.kind, 'pending');
   assert.equal(ui.state().draft, 'earlier text');
   await ui.press('同じ内容・同じ送信IDで確認し直す');
+  assert.equal(ui.all('TextInput').length, 0, 'the text is still known in this process: nothing to type again');
+  assert.ok(!ui.text().includes('前回と同じ本文を入力'));
   await ui.tick();
   assert.equal(ui.button('Xに投稿する').props.disabled, false);
   await ui.press('Xに投稿する');
@@ -671,4 +690,266 @@ test('an uncertain attempt from an earlier visit cannot be retried, only acknowl
   await ui.press('Xで確認しました（この下書きを破棄）');
   assert.equal(ui.state().phase, 'editing');
   assert.equal(memory.get('U1'), null);
+});
+
+// ---- an app restart: only the hash-only record on the device is left -----------------------------------------------------------------
+
+const RESTORED = (over = {}) => ({ v: 1, accountId: 'X_A', requestId: ID(9), contentSha256: sha('earlier text'), kind: 'pending', savedAt: 1_000, ...over });
+const deviceWith = (record) => { const kv = fakeKV(); kv.data.set(store.storeKeyOf('U1'), JSON.stringify(record)); return kv; };
+const store = { storeKeyOf: realStore.storeKeyOf };
+const RESTART_NOTE = 'アプリが再起動されたため、本文は端末に残っていません。Xのプロフィールで、最近の投稿を確認してください。';
+
+test('restart: while the record is being read nothing can be typed or confirmed, and the screen says it is checking', async () => {
+  const kv = fakeKV();
+  let release;
+  kv.getItem = () => new Promise((resolve) => { release = () => resolve(null); });
+  const ui = await mount({ kv });
+  assert.equal(ui.state().store.kind, 'loading');
+  const t = ui.text();
+  assert.ok(t.includes('前回の送信記録を確認しています'));
+  assert.ok(t.includes('前回の送信記録を確認できていません'), 'the pill');
+  assert.equal(ui.all('TextInput').length, 0, 'no editor');
+  assert.equal(ui.button('内容を確認する'), null);
+  assert.equal(ui.button('Xに投稿する'), null);
+  assertNoSentClaim(ui);
+  release();
+  await ui.flush();
+  assert.equal(ui.state().store.kind, 'ready');
+  assert.equal(ui.all('TextInput')[0].props.editable, true, 'the editor appears once the record is known to be empty');
+  assert.equal(ui.state().accountId, 'X_A');
+});
+
+test('restart: a pending attempt comes back as "not sent yet", without text, and the editor and the send stay out of reach', async () => {
+  const fp = fakePort();
+  const ui = await mount({ port: fp, kv: deviceWith(RESTORED()) });
+  assert.equal(ui.state().result.kind, 'pending');
+  assert.equal(ui.state().result.code, model.UNRESOLVED_AFTER_RESTART);
+  assert.equal(ui.state().draft, '');
+  assert.equal(ui.state().unresolved.text, null);
+  const t = ui.text();
+  assert.ok(t.includes('まだ送信されていません'));
+  assert.ok(t.includes(RESTART_NOTE));
+  assert.ok(t.includes('押すと、この記録は消え、同じ内容も新しい投稿として送れるようになります'));
+  assert.equal(ui.all('TextInput').length, 0, 'no editor: the earlier text is not on the device and a new text is not a retry');
+  assert.equal(ui.button('内容を確認する'), null);
+  assert.equal(ui.button('Xに投稿する'), null);
+  assert.ok(ui.button('前回と同じ本文を入力して確認し直す'));
+  assert.equal(ui.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assertNoSentClaim(ui);
+  assert.equal(fp.calls.send.length + fp.calls.check.length, 0, 'reading the record asks and sends nothing');
+  assert.notEqual(ui.memory.get('U1'), null, 'the process now remembers it too');
+});
+
+test('restart: the same text is asked for again; only a matching text, a fresh readiness and a fresh consent re-ask it -- with the stored id', async () => {
+  const fp = fakePort();
+  const ui = await mount({ port: fp, kv: deviceWith(RESTORED()) });
+  await ui.press('前回と同じ本文を入力して確認し直す');
+  assert.equal(ui.state().phase, 'confirming');
+  assert.ok(ui.text().includes('前回と同じ本文を入力'));
+  assert.ok(ui.all('SectionTitle').some((node) => node.props.detail === `前回の本文の照合コード ${model.shortHash(sha('earlier text'))}`), 'the code of the earlier text is shown, never the text');
+  assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.restored_text_mismatch));
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+
+  await ui.typeText('another text');
+  assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.restored_text_mismatch), 'a different text is a different post');
+  await ui.tick();
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0, 'a forced press with the wrong text sends nothing');
+
+  await ui.typeText('earlier text');
+  assert.equal(ui.checkbox().props.accessibilityState.checked, false, 'typing the text again asks for the consent again');
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  await ui.tick();
+  assert.equal(ui.button('Xに投稿する').props.disabled, false);
+  const b = ui.button('Xに投稿する');
+  b.props.onPress();
+  b.props.onPress(); // a double tap
+  await ui.flush();
+  assert.equal(fp.calls.send.length, 1, 'exactly one send');
+  assert.equal(fp.calls.send[0].targetId, ID(9), 'the SAME attempt id as before the restart');
+  assert.equal(fp.calls.send[0].renderedText, 'earlier text');
+  assert.deepEqual(fp.calls.send[0].consent, { confirmed: true, contentSha256: sha('earlier text') });
+  fp.pending[0].resolve({ kind: 'published', targetId: ID(9), providerPostId: '1234567890' });
+  await ui.flush();
+  assert.ok(ui.text().includes('Xが投稿を受け付けました'));
+  assert.equal(ui.kv.data.size, 0, 'a proven end removes the record');
+  assert.equal(ui.memory.get('U1'), null);
+});
+
+test('restart: leaving the re-entry returns to the unresolved result and never to an editor', async () => {
+  const ui = await mount({ kv: deviceWith(RESTORED({ kind: 'in_flight' })) });
+  assert.equal(ui.state().result.kind, 'unconfirmed', 'a send that was in flight when the app closed is unconfirmed');
+  await ui.press('前回と同じ本文を入力して確認し直す');
+  await ui.typeText('earlier text');
+  await ui.press('戻る');
+  assert.equal(ui.state().phase, 'result');
+  assert.equal(ui.state().result.kind, 'unconfirmed');
+  assert.ok(ui.state().unresolved !== null);
+  assert.equal(ui.all('TextInput').length, 0);
+});
+
+test('restart: an uncertain attempt cannot be retried -- only acknowledged, and only after the record is really removed', async () => {
+  const kv = deviceWith(RESTORED({ kind: 'uncertain' }));
+  const fp = fakePort();
+  const ui = await mount({ port: fp, kv });
+  assert.equal(ui.state().result.kind, 'uncertain');
+  assert.ok(ui.text().includes('Xに投稿された可能性があります'));
+  assert.equal(ui.button('前回と同じ本文を入力して確認し直す'), null);
+  assert.equal(ui.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assert.equal(ui.all('TextInput').length, 0);
+  kv.fail.remove = true;
+  await ui.press('Xで確認しました（この記録を破棄）');
+  assert.ok(ui.text().includes('記録を消去できませんでした。送信は引き続きできません。'));
+  assert.equal(ui.state().phase, 'result', 'nothing is unlocked when the record cannot be removed');
+  assert.notEqual(ui.memory.get('U1'), null);
+  assert.equal(kv.data.size, 1);
+  kv.fail.remove = false;
+  await ui.press('Xで確認しました（この記録を破棄）');
+  assert.equal(ui.state().phase, 'editing');
+  assert.equal(kv.data.size, 0);
+  assert.equal(ui.memory.get('U1'), null);
+  assert.ok(!ui.text().includes('記録を消去できませんでした'));
+  assert.equal(fp.calls.send.length, 0);
+});
+
+test('restart: a record of another user does not appear, and a sign-out leaves it where it is', async () => {
+  const kv = deviceWith(RESTORED());
+  const other = await mount({ kv, userId: 'U2' });
+  assert.equal(other.state().unresolved, null);
+  assert.equal(other.state().store.kind, 'ready');
+  assert.equal(other.all('TextInput')[0].props.editable, true);
+  const out = await mount({ kv, userId: null });
+  assert.equal(out.state().unresolved, null, 'signed out: the record is not read');
+  assert.equal(out.state().store.kind, 'ready');
+  assert.equal(kv.data.size, 1, "neither visit touched U1's record");
+  const back = await mount({ kv, userId: 'U1' });
+  assert.equal(back.state().result.kind, 'pending', 'U1 signing in again meets it again');
+});
+
+test('restart: an account that is gone cannot re-ask the attempt, and the screen does not switch it to another account', async () => {
+  const ui = await mount({ kv: deviceWith(RESTORED()), accounts: [account('X_B')], active: 'X_B' });
+  assert.equal(ui.state().accountId, 'X_A', 'still bound to the account of the attempt');
+  await ui.press('前回と同じ本文を入力して確認し直す');
+  await ui.typeText('earlier text');
+  await ui.tick();
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  assert.equal(ui.port.calls.send.length, 0);
+  assert.equal(ui.state().accountId, 'X_A');
+});
+
+test('restart: a record that cannot be read blocks everything and can only be read again', async () => {
+  const kv = fakeKV();
+  kv.fail.get = true;
+  const fp = fakePort();
+  const ui = await mount({ kv, port: fp });
+  assert.deepEqual(ui.state().store, { kind: 'unreadable', reason: 'io' });
+  const t = ui.text();
+  assert.ok(t.includes('前回の送信記録を読み込めません'));
+  assert.ok(t.includes(model.SEND_BLOCK_MESSAGES.store_unreadable));
+  assert.equal(ui.all('TextInput').length, 0);
+  assert.equal(ui.button('内容を確認する'), null);
+  assert.equal(ui.button('Xで確認しました（記録を消去して続ける）'), null, 'an I/O failure is never acknowledged away');
+  await ui.press('もう一度読み込む');
+  assert.equal(ui.state().store.kind, 'unreadable', 'still unreadable');
+  kv.fail.get = false;
+  await ui.press('もう一度読み込む');
+  assert.equal(ui.state().store.kind, 'ready');
+  assert.equal(ui.all('TextInput')[0].props.editable, true);
+  assert.equal(fp.calls.send.length, 0);
+});
+
+test('restart: a corrupt or newer-version record needs the explicit acknowledgement, which removes it first', async () => {
+  for (const [raw, line] of [['{broken', '記録が壊れているため、読めません。'], [JSON.stringify({ ...RESTORED(), v: 7 }), '新しい版のアプリが残した記録のため、この版では読めません。']]) {
+    const kv = fakeKV();
+    kv.data.set(store.storeKeyOf('U1'), raw);
+    const ui = await mount({ kv });
+    assert.ok(ui.text().includes(line), line);
+    assert.equal(ui.all('TextInput').length, 0);
+    assert.equal(ui.button('内容を確認する'), null);
+    kv.fail.remove = true;
+    await ui.press('Xで確認しました（記録を消去して続ける）');
+    assert.equal(ui.state().store.kind, 'unreadable', 'not unlocked when the record cannot be removed');
+    assert.ok(ui.text().includes('記録を消去できませんでした。送信は引き続きできません。'));
+    kv.fail.remove = false;
+    await ui.press('Xで確認しました（記録を消去して続ける）');
+    assert.equal(ui.state().store.kind, 'ready');
+    assert.equal(kv.data.size, 0);
+    assert.equal(ui.all('TextInput')[0].props.editable, true);
+  }
+});
+
+test('send: the record is written before the port is called -- and when it cannot be, nothing is sent and the screen says so', async () => {
+  for (const mode of ['set', 'drop']) {
+    const kv = fakeKV();
+    const fp = fakePort();
+    const ui = await mount({ kv, port: fp });
+    await ui.typeText('こんにちは');
+    await ui.press('内容を確認する');
+    await ui.tick();
+    kv.fail[mode] = true;
+    await ui.press('Xに投稿する');
+    assert.equal(fp.calls.send.length, 0, `${mode}: the port was never called`);
+    assert.equal(ui.state().result.kind, 'refused');
+    assert.equal(ui.state().result.code, 'LOCAL_STORE_UNAVAILABLE');
+    assert.equal(ui.state().unresolved, null, 'nothing was sent, so nothing is unresolved');
+    assertNoSentClaim(ui);
+    assert.equal(ui.memory.get('U1'), null);
+  }
+});
+
+test('send: a pending answer leaves a record, and a restart then shows exactly that attempt (id, account, hash) without the text', async () => {
+  const kv = fakeKV();
+  const fp = fakePort();
+  const first = await mount({ kv, port: fp });
+  await first.typeText('こんにちは');
+  await first.press('内容を確認する');
+  await first.tick();
+  await first.press('Xに投稿する');
+  assert.equal(JSON.parse(kv.data.get(store.storeKeyOf('U1'))).kind, 'in_flight', 'written before the answer');
+  fp.pending[0].resolve({ kind: 'pending', targetId: ID(1), code: 'IN_PROGRESS' });
+  await first.flush();
+  assert.deepEqual(JSON.parse(kv.data.get(store.storeKeyOf('U1'))), { v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('こんにちは'), kind: 'pending', savedAt: 100_000 });
+  assert.ok(!kv.data.get(store.storeKeyOf('U1')).includes('こんにちは'));
+  first.unmount();
+
+  const second = await mount({ kv, port: fakePort() }); // the app restarted: a new process memory, the same device
+  assert.equal(second.state().result.kind, 'pending');
+  assert.equal(second.state().unresolved.requestId, ID(1));
+  assert.equal(second.state().unresolved.accountId, 'X_A');
+  assert.equal(second.state().unresolved.contentSha256, sha('こんにちは'));
+  assert.equal(second.state().unresolved.text, null);
+  assert.equal(second.state().draft, '');
+});
+
+test('send: a retry whose record cannot be written stays unresolved (never "refused") and sends nothing', async () => {
+  const kv = deviceWith(RESTORED());
+  const fp = fakePort();
+  const ui = await mount({ kv, port: fp });
+  await ui.press('前回と同じ本文を入力して確認し直す');
+  await ui.typeText('earlier text');
+  await ui.tick();
+  kv.fail.drop = true;
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0);
+  assert.equal(ui.state().result.kind, 'unconfirmed');
+  assert.equal(ui.state().result.code, 'LOCAL_STORE_UNAVAILABLE');
+  assert.equal(ui.state().unresolved.requestId, ID(9), 'still the same attempt');
+  assert.equal(ui.button('Xに投稿する'), null);
+  assert.equal(ui.all('TextInput').length, 0, 'and still no editor');
+});
+
+test('restart: a double tap on "I checked X" clears the record once', async () => {
+  const kv = deviceWith(RESTORED({ kind: 'uncertain' }));
+  let removes = 0;
+  const remove = kv.removeItem;
+  kv.removeItem = async (key) => { removes += 1; return remove(key); };
+  const ui = await mount({ kv });
+  const b = ui.button('Xで確認しました（この記録を破棄）');
+  b.props.onPress();
+  b.props.onPress();
+  await ui.flush();
+  assert.equal(removes, 1);
+  assert.equal(ui.state().phase, 'editing');
 });
