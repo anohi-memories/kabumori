@@ -8,10 +8,10 @@
 
 ## F1
 - slot: F1
-- status: review_required
+- status: done
 - task_id: postona-f1-m3-simulated-afterfreeze-ui-contract-20261019
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
@@ -21,6 +21,8 @@
 - dependencies: PR #274 UI → PR #277 adapter → PR #283 restart guard, F3 PR #278 simulated/afterFreeze contract, F3 PR #272
 - blocker: real send not connected (F3 publish switch OFF, F4 credential source / F5 entitlement not live); send disabled; independent clean worktree and fresh origin/main required
 - slot_use: G1 TASK 2026-10-19: apply F3 PR278 simulated/afterFreeze result marks to the manual X post screen and adapter, source-only, no API/DB/Auth/production operations
+
+- L1_acceptance: PR288 c41e20ce508530328570d22c4a0cbc0a43fb2a2e PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; 3 approved F1 milestones complete, next scope requires command.
 
 ## F2
 - slot: F2
