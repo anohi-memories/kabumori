@@ -41,19 +41,19 @@
 
 ## F3
 - slot: F3
-- status: done
-- task_id: postona-f3-publish-enabled-t13-active-service-write-guard-20261017
+- status: ready
+- task_id: postona-f3-m1-single-text-post-offline-end-to-end-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: PR76 set_social_account_publish_enabled, F3 PR257/224/182, F5 T13/Phase13 D-2, G4 verified X PR126 Issue131
-- blocker: G4 X verification/token port, managed F5 T13 integration, R2', production NO_GO
-- slot_use: L3 ACCEPTED PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO. Draft PR262 exact HEAD dc00f923 7 new files; developer PG17 all pass/13 mutants/PR257+224 regression reported; G4 verified token, managed F5 T13/app integration pending. Archive before reuse.
-- previous_archive: .agent_v2/archive/2026-10-17-F3-postona-f3-x-oauth-t13-reservation-owner-guard-20261017/
+- dependencies: Issue269 M1, F1 hand-input UI, F4/G4 PR126 X identity/token, F5 entitlement/T13, F3 PR224→257→262 and PR182
+- blocker: real X identity/credential and managed Auth not integrated; source-only; real X/prod NO_GO
+- slot_use: M1 synthetic Auth/PG17/mock X single-text send with send-before guard, receipt durable readback; G1 UI, G4 token, G5 Auth protected
+- previous_archive: .agent_v2/archive/2026-10-18-F3-postona-f3-publish-enabled-t13-active-service-write-guard-20261017/
 
 ## F4
 - slot: F4
