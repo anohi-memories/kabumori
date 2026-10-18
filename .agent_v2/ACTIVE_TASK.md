@@ -8,10 +8,10 @@
 
 ## F1
 - slot: F1
-- status: ready
+- status: review_required
 - task_id: postona-f1-m3-simulated-afterfreeze-ui-contract-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
