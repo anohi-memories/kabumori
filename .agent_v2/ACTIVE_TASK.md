@@ -8,10 +8,10 @@
 
 ## F1
 - slot: F1
-- status: review_required
+- status: done
 - task_id: postona-f1-x-manual-publish-ui-source-20261018
 - owner: claude
-- next_owner: chatgpt
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
@@ -21,6 +21,8 @@
 - dependencies: POSTONA総合指令室 Issue269; F3 X manual publish/PR182/224/257/262; F4 G4 Issue131 X verified/token interface; F5 T13 service active; PR238 Auth UI protected
 - blocker: API real publish/actual verified credential/managed Auth remain unconnected; offline UI only. Must check independent clean F1 worktree and 30-slot conflicts before start; production/SNS/merge/deploy NO_GO.
 - slot_use: Implement POSTONA source-only X manual publish form/preview/safe disabled send and initial home navigation; no edits to schedule.tsx or F4/F5 Auth screens. Archive SHA256 7b601b2c01d982dc99aed3a45616bdd48349b6a02b10b30835898088b10ea1fc and restore verified before reassignment.
+
+- latest_L1: PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR274 HEAD 007dc3d68bdb6c57e2cfb6831090f6544704a3c3 Draft unmerged, GitHub mergeable=false; offline tests Claude-reported, visual/live NOT_VERIFIED.
 
 ## F2
 - slot: F2
