@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "kind": "owner-epoch-provenance",
+  "note": "Every source the owner-epoch candidate's findings cite, pinned by commit and git blob id, with the raw names that must appear in it and, where a finding is an ABSENCE, the names that must not.",
+  "sources": [
+    {
+      "id": "WRITER-X-ONBOARDING-V1",
+      "pr": "main",
+      "commit": "9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12",
+      "path": "supabase/migrations/20260919120000_social_mobile_x_oauth_onboarding.sql",
+      "blob": "4a5792f33cdce571ec04f6b27742ff952445096f",
+      "present": [
+        "insert into public.brand_memberships (brand_id, user_id, role)"
+      ],
+      "absent": []
+    },
+    {
+      "id": "WRITER-X-ONBOARDING-RECONNECT",
+      "pr": "main",
+      "commit": "9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12",
+      "path": "supabase/migrations/20260922003101_social_mobile_x_oauth_reconnect_preserve_verified.sql",
+      "blob": "cda599d9b98bf1e44b449a3e294e2f2d27f4d9e3",
+      "present": [
+        "insert into public.brand_memberships (brand_id, user_id, role)"
+      ],
+      "absent": []
+    },
+    {
+      "id": "WRITER-DELETION-SAGA-BRAND-DELETE",
+      "pr": "main",
+      "commit": "9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12",
+      "path": "supabase/migrations/20260928160000_social_mobile_account_deletion_candidate.sql",
+      "blob": "88a92989c12cc738efc12a548f1276536ec07833",
+      "present": [
+        "delete from public.brands where id = v_workspace;",
+        "-- Cascades brand_memberships and daily_content_plans",
+        "create trigger social_mobile_deletion_guard before insert or update on public.brand_memberships"
+      ],
+      "absent": []
+    },
+    {
+      "id": "MEMBERSHIPS-TABLE-GRANTS",
+      "pr": "main",
+      "commit": "9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12",
+      "path": "supabase/migrations/20260918120000_social_mobile_brand_memberships.sql",
+      "blob": "bdb262579e9d68599c9736d669891b17ffe45e85",
+      "present": [
+        "revoke insert, update, delete on table public.brand_memberships from anon, authenticated;",
+        "create policy social_mobile_membership_self_select"
+      ],
+      "absent": [
+        "revoke truncate",
+        "revoke all on table public.brand_memberships from authenticated"
+      ]
+    },
+    {
+      "id": "WRITER-F4-THREADS-WORKSPACE-PROVISIONER",
+      "pr": "PR263",
+      "commit": "a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705",
+      "path": "supabase/candidates/postona_threads_oauth_workspace_candidate.sql",
+      "blob": "7e7fce8b17dda37cf58bc3d64c6c69f2aec9173b",
+      "present": [
+        "insert into public.brand_memberships"
+      ],
+      "absent": []
+    },
+    {
+      "id": "G4-OWNER-EPOCH-STAND-IN",
+      "pr": "PR282",
+      "commit": "39b9064dc79ad52b430ba820006cd3310bf3140f",
+      "path": "supabase/tests/postona_x_owner_epoch_f5_stand_in.sql",
+      "blob": "a33b4d654fa90bd90ea3f422e49c9b5ed98738a6",
+      "present": [
+        "TEST-ONLY F5 STAND-IN",
+        "create function private.account_lifecycle_brand_owner_epoch(p_brand_id text) returns bigint"
+      ],
+      "absent": []
+    },
+    {
+      "id": "G4-OWNER-EPOCH-USE",
+      "pr": "PR282",
+      "commit": "39b9064dc79ad52b430ba820006cd3310bf3140f",
+      "path": "supabase/candidates/postona_x_identity_credential/001_x_identity_credential_candidate.sql",
+      "blob": "93dc2fc9c9ad34cb3e02d480b3b6cf80ae232246",
+      "present": [
+        "private.account_lifecycle_brand_owner_epoch(sa.brand_id) = a.owner_epoch",
+        "private.account_lifecycle_brand_owner_epoch(v_sa.brand_id) is distinct from v_a.owner_epoch"
+      ],
+      "absent": []
+    },
+    {
+      "id": "G4-OWNER-EPOCH-REQUEST",
+      "pr": "PR282",
+      "commit": "39b9064dc79ad52b430ba820006cd3310bf3140f",
+      "path": "docs/postona/x-identity-credential-m1-20261018.md",
+      "blob": "e4a4e5fa3a5d9db8610ed218dccc72f3259ee565",
+      "present": [
+        "private.account_lifecycle_brand_owner_epoch(p_brand_id text) returns bigint",
+        "R2（所有者 A→B→A）"
+      ],
+      "absent": []
+    },
+    {
+      "id": "F5-M2-CONTRACT",
+      "pr": "PR279",
+      "commit": "9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12",
+      "path": "docs/common-account/m2-ai-consult-authorization-gap.md",
+      "blob": "04427a5715b950aa5907d7963d70d956d287329d",
+      "present": [
+        "G-5",
+        "Option B"
+      ],
+      "absent": []
+    }
+  ]
+}
