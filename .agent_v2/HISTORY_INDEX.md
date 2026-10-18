@@ -813,3 +813,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - 2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018: `.agent_v2/archive/2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018/` F4 TASK with embedded Report; SHA256 1c605186278a1c9d4e39da22b94f37ef6b3eb0a14f614aee3213db4e46555efb; original blob 34ea870613fad189225171671f2828e53d69da0d; original L4 acceptance commit fd8981fc5e68fe4feeac9fbdfc50f6d7d2af744a; restore PASS.
 
 - 2026-10-18-J2-postona-j2-pr276-x-oauth-credential-security-review-20261018: .agent_v2/archive/2026-10-18-J2-postona-j2-pr276-x-oauth-credential-security-review-20261018/ J2 TASK+Report V2 CHANGES_REQUIRED P2x2; MANIFEST/SHA256SUMS, git blob restore PASS; source commit 98ca0599e8de6557a8e57b071dbf665535e79db9.
+
+## F5 M2 AI consult authorization gap — archived 2026-10-19
+- task_id `postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018`, L5 done PASS_SOURCE_DESIGN / G6_HANDLER_CHANGE_HOLD / PRODUCTION_NO_GO. PR279 HEAD `9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12` Draft.
+- original_path `.agent_v2/tasks/F5.md`; archive_path `.agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/files/.agent_v2/tasks/F5.md`.
+- original L5 commit `57f4cf9d2bac7a67998d7d768a9a9f1f72e296cd`, original/archive Git blob `3490b3dfe8d1a539cd3f6956e40045738f3a6a7b`, 24155 bytes, SHA256 `89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908`. MANIFEST.md/SHA256SUMS saved. Restore original/blob and bytes PASS; append-only.
