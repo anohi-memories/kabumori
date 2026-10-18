@@ -9,5 +9,7 @@
   "source_git_blob_sha1": "1c81af35929be00d36d2e2ce52a33bd4d6cf616f",
   "original_main_commit_snapshot": "aa3f5a5235f62d76add4a7a304b64e33fd3953b8",
   "embedded_report": true,
-  "restore_verified": false
+  "restore_verified": true,
+  "verified_at": "2026-10-18",
+  "verification": "full readback of UTF-8 text, Git blob equality, SHA256 checksum manifest syntax and stored 15569-byte source digest"
 }
