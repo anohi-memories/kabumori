@@ -157,18 +157,18 @@
 
 ## F10
 - slot: F10
-- status: done
-- task_id: orchestration-v3-pr229-namespace-gate-f10-20261017
+- status: ready
+- task_id: orchestration-v3-gh-pilot-rule-integration-f10-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリ30枠統括のちゃ（このチャット）
 - completion_code: L10
-- recommended_model: Sonnet5（高）
+- recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: Issue #244; PR229; PR248; PR253; PR252 final archive merged; previous F10 archive check
-- blocker: L10 PASS_NAMESPACE_ALIGNED; PR229 merge awaits explicit approval and Vercel effects acknowledgement; rollout/pilot NO_GO
-- slot_use: completed V3 namespace alignment and pre-merge gate
+- dependencies: PR229 merged; PR252 merged; Issue244; Draft PR248/253; prior F10 task archived
+- blocker: pilot G/H activation, main rule merge and slot assignment not authorized
+- slot_use: V3 pilot rules integration candidate and protected 30-slot routing
 
 ## J1
 - slot: J1
