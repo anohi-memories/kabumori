@@ -5,7 +5,7 @@
 This file is derived. The canonical state of each slot is the header of its TASK file. If this index
 disagrees with a TASK header, the TASK header wins and this index is stale.
 
-- source_digest: 1dbb1a29baab513be0c7b29d1f3ccc98881b35707640edd80646e6397766f453
+- source_digest: fefbb099ccfe47da2fba0b6859b4fe5054e51440b3f2ac2ac55b5bb0da94b1d2
 
 ## G1
 - task_id: none
@@ -117,13 +117,13 @@ disagrees with a TASK header, the TASK header wins and this index is stale.
 
 ## G10
 - task_id: orchestration-v3-gh-g10-pilot-lifecycle-verification-20261018
-- status: in_progress
-- next_owner: claude
+- status: review_required
+- next_owner: chatgpt
 - return_to: かぶモリ軽量G方式・30枠統括のちゃ（このチャット）
 - completion_code: K10
 - owner: claude
 - recommended_model: Sonnet5（高）
-- task_blob: 81cc048d67e76b8a9457457944e5e81fe7791653
+- task_blob: c0584c33cc9abfebd9b52b63ef1ce5ad7c18182b
 - task_path: .agent_v3_gh/tasks/G10.md
 - report_path: .agent_v3_gh/tasks/G10.md#report
 
