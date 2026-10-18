@@ -45,7 +45,7 @@
 
 ## F3
 - slot: F3
-- status: ready
+- status: in_progress
 - task_id: postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018
 - owner: claude
 - next_owner: claude
