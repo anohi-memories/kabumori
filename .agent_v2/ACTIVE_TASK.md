@@ -75,23 +75,20 @@
 - l4_verdict_20261018: PASS_SOURCE_FIX / F5_ACK_PENDING / LIMITED_SQL_R1_RECHECK_RECOMMENDED / PRODUCTION_AND_PILOT_NO_GO; PR263 HEAD a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705 Draft.
 ## F5
 - slot: F5
-- status: done
-- task_id: common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017
+- status: ready
+- task_id: postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: Phase13 PR259/254/250, Phase12 PR233, F4 #243; F3 R2'/T13 unresolved
-- blocker: hosted project, production schema catalog, migration/deploy, OAuth and actual managed validations NOT approved; PRODUCTION_NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F5-common-account-f5-phase13-d2-x-saga-inert-standin-harness-20261017/
-- review_required: Phase12 #233 independent focused P2x4 pre-apply gate, no broad review
-- slot_use: source-only hosted disposable Supabase preflight/cost/go-no-go readiness; no real Supabase action
-- latest_result: 2026-10-18 JST D-3_SPEC_COMPLETE; Draft PR 265 head 65f723a2169f113bba9053526a2d36a49807ac59 on PR259 422c101a; hosted disposable preflight package (gates PG1-PG7 with separate en/ja consent phrases, read-back sheet verifier, sourced+dated cost envelopes E0=USD0/E1=USD25, PG2a/PG2b split); findings: pg_dump --schema-only needs SELECT (CONNECT-only login cannot), CONNECT-only login creation is a production write, D-2 stand-in is not deployable so hosted M12 excluded, F4 preflight refuses an auth-callback-only list; 165 harness + 14 package tests, 43/43 new mutants, F4 refusal and dump-privilege scripts PASS; no managed/production access, no project, no login, no spend; no gate open; production NO_GO
-
-- l5_verdict: PASS_SOURCE_SPEC / D3_SPEC_COMPLETE / PRODUCTION_NO_GO (2026-10-18). PR265 HEAD 65f723a2169f113bba9053526a2d36a49807ac59 Draft; 11 files; reported 165 harness and 143 account-delete tests, 43/43 mutants; PG1-PG7 require separate approvals; hosted M12 BLOCKED; F3 R2' and T13 remain; archive before next TASK.
+- dependencies: POSTONA総合指令室 Issue269 comment6245437308; F3 PR224/257/262 and G4 token/verified owner; Issue267 ACK pending; PR233 pre-managed restricted recheck
+- blocker: real Auth/managed Supabase/production/migration/SNS unapproved; G4 credential owner and F3 sender contract still source-only
+- review_required: conditional only for new security boundary, Codex Sol（高）
+- previous_archive: .agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/
+- slot_use: initial manual X Auth→POSTONA entitlement→owner→T13→publish-enabled→pre-send recheck source-only local synthetic integration and Issue267 read-only ACK; no actual X or DB
 
 ## F6
 - slot: F6
