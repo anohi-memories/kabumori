@@ -60,19 +60,19 @@
 
 ## F4
 - slot: F4
-- status: done
-- task_id: postona-f4-m1-x-identity-verified-credential-port-source-20261018
+- status: ready
+- task_id: postona-f4-pr276-j2-p2x2-provenance-owner-epoch-atomic-credential-fix-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: L4
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: Issue269 comment 6246316888 SOURCE_ONLY_GO; PR126 head 65f49f98; F3 PR257/262/224 and F5 T13; Issue131 limited source exception
-- blocker: PR276 source candidate accepted L4; independent Sol(high) OAuth/token security review required, G3/F5 interface ACK and managed integration pending; production NO_GO
-- previous_archive: .agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/
-- slot_use: G4-owned X verified OAuth provider identity and server-only credential source, no G3/G5 source modification
+- dependencies: Issue269 comment6248764751 SOURCE_ONLY_SECURITY_FIX_GO; J2 PR276 V2 P2x2; PR276 head 39ab57ab; PR126 65f49f98; G3 PR278 atomic credentialFor 64hex; F5 owner lifecycle ACK
+- blocker: R1 same-transaction v1 attestation revival, R2 owner A-B-A generation ABA and G3 atomic credential format mismatch; STOP if new F5 schema/legacy writer owner/real SQL grant required
+- previous_archive: .agent_v2/archive/2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018/
+- slot_use: G4-owned source-only P2x2 repair + atomic provider contract, isolated PG17/mock no production
 
 ## F5
 - slot: F5
