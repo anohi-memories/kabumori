@@ -746,3 +746,10 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - `.agent_v2/tasks/J2.md` → `.agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/J2.md`: 1690 bytes, SHA256 `ca7e9fc5a7abcc0e54ab69523d2cd9484ddf45404c0fc30a3d6ab0e0e02d2c9f`.
 - `.agent_v2/reports/J2.md` → same folder `J2_REPORT.md`: 5040 bytes, SHA256 `4005ed119bec129ada86aa0fb2d847d2f856e7052e3726297d581b27e200953c`.
 - Both snapshots restore byte-for-byte and share the original Git blob IDs; added append-only MANIFEST.md, MANIFEST.json and SHA256SUMS. Existing snapshots unchanged.
+
+## F1 AIに聞くB0最終TASKの転用前archive検証 — 2026-10-18
+
+- task_id: `kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014`; completion: F1 `done` / L1 accepted, POSTONA次TASKへ転用前の保存。旧G1は未着手中止で正本保持。
+- original_path: `.agent_v2/tasks/F1.md`; original commit snapshot: `aa3f5a5235f62d76add4a7a304b64e33fd3953b8`; source Git blob: `1c81af35929be00d36d2e2ce52a33bd4d6cf616f`.
+- archive_path: `.agent_v2/archive/2026-10-18-F1-kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014/files/.agent_v2/tasks/F1.md`.
+- original/archive 15,569 UTF-8 bytes; SHA256 `7b601b2c01d982dc99aed3a45616bdd48349b6a02b10b30835898088b10ea1fc`; full byte equality and Git blob equality PASS; restore verified by read-back. `MANIFEST.json`, `MANIFEST.md`, `SHA256SUMS` saved. Historical PR #194 remains protected Draft; no security or production approval.
