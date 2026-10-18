@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-18",
+  "purpose": "USER_DEFERRED/FROZEN; no review pass; never merge/deploy PR213 automatically",
+  "records": [
+    {
+      "original_path": ".agent_v2/tasks/F2.md",
+      "archive_path": ".agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.md",
+      "bytes": 7047,
+      "sha256": "529cad9f9d031aaaafcb8d7de1d3dc1e321bbfab3a4797859f20ae2ac1edd9c0",
+      "original_git_blob": "bd017b48dbf153d1200f9c72eee8149305923e91",
+      "archive_git_blob": "bd017b48dbf153d1200f9c72eee8149305923e91",
+      "restore_verified": true,
+      "original_commit": "pre-pause original Git blob pinned; original parent commit not individually resolved",
+      "postclosure_git_blob": "c4fa1a28c98863fbf27d78c64518ff2daa7ab213"
+    },
+    {
+      "original_path": ".agent_v2/tasks/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__J3.md",
+      "bytes": 4639,
+      "sha256": "ec92c9b2d40bb2ad97ddfcd03de7a9e662342a06339b19bfe01f9fded56eda9f",
+      "original_git_blob": "a8b7a3ad72712499c4bc5aaba90c5043fddd08eb",
+      "archive_git_blob": "a8b7a3ad72712499c4bc5aaba90c5043fddd08eb",
+      "restore_verified": true,
+      "original_commit": "pre-pause original Git blob pinned; original parent commit not individually resolved",
+      "postclosure_git_blob": "07866429c7bb56ab47da07c133820c58728f8545"
+    },
+    {
+      "original_path": ".agent_v2/reports/J3.md",
+      "archive_path": ".agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__reports__J3.md",
+      "bytes": 1297,
+      "sha256": "f030a369775e71b7d6caef342bd74ba68712a14059e11ae47f52c30682aec62e",
+      "original_git_blob": "e3abc73161aeafe82f8c49625950c8eda1795e60",
+      "archive_git_blob": "e3abc73161aeafe82f8c49625950c8eda1795e60",
+      "restore_verified": true,
+      "original_commit": "pre-pause original Git blob pinned; original parent commit not individually resolved",
+      "postclosure_git_blob": "6e8cbd205d32ba71a80036f9962e9d0d9645d3de"
+    }
+  ]
+}
