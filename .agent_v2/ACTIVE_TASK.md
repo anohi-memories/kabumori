@@ -8,22 +8,19 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: postona-f1-m1-manual-ui-single-post-contract-adapter-20261018
+- status: ready
+- task_id: postona-f1-m2-restart-pending-uncertain-guard-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- previous_archive: .agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/
-- dependencies: F3 PR272 single_post_contract.ts; F1 PR274 UI; F4 G4 verified credential Issue131; F5 T13; G2 visual QA
-- blocker: PR272/PR274 Draft unmerged, credential and managed T13 not connected; production NO_GO. Fresh worktree/30-slot conflicts must be checked
-- slot_use: offline mock/result adapter alignment only; send disabled, no real SNS/Auth/DB/API change
-- prior_L1: source UI PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; archive SHA256 6ff5a42b1abe94e5c35bb7be52da195ad95742817c58cc878016bd5f8c736fa3
-
-- L1_acceptance: PR277 HEAD abd18fc34b5c61b0178187a455a5ade8fc105dc0 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO. Milestone2 durable attempt risk pending.
+- previous_archive: .agent_v2/archive/2026-10-18-F1-postona-m1-single-post-contract-adapter-L1/
+- dependencies: PR #274 UI → PR #277 adapter, F3 PR #272 durable readback, G2 visual QA, F4 credential, F5 entitlement
+- blocker: server-side durable restart safety not verified; read-only/offline F1-only scope; send disabled; independent clean worktree and fresh origin/main required
+- slot_use: Issue269 approved milestone 2: restart/pending/uncertain guard and duplicate-send avoidance, no API/DB/Auth/production operations
 
 ## F2
 - slot: F2
