@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-publish-enabled-t13-active-service-write-guard-20261017",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-18-F3-postona-f3-publish-enabled-t13-active-service-write-guard-20261017/files/.agent_v2/tasks/F3.md",
+  "size": 19478,
+  "sha256": "f1abe5cbee686d64bc8b39095e60955fe8871c34bd6797afd92d175022a09d70",
+  "original_git_blob": "b2456a934a5c8b2ea65f419802704b30c6e695c6",
+  "original_commit": "36eac845790c25fd18b9305fac908c98014bcf39",
+  "archive_commit": "8209f2b58bb444eb7cf8d4a07ccaea6e0198a3ee",
+  "restoration": "Git blob identical and exact UTF8 content verified"
+}
