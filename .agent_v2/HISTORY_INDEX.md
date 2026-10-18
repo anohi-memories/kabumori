@@ -771,3 +771,6 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - original bytes 14407; SHA256 `e24d2407cdd6c1379296726aea3f44bcc50cf6298c78c4c685aeb906138328c1`; original Git blob `183b1b6a5516677bcbcf99dd0c059f8e1be078da`; read-back restore required before G10 activation.
 
 - 2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017: `.agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md` (verified exact Git blob; SHA256 manifest pending)
+
+## 2026-10-18 かぶモリF2/J3ユーザー指示休止保存
+- archive: `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/` (3 original files + MANIFEST.json + SHA256SUMS); verified original Git blob/SHA256/restore in manifest; original commit not independently identified. F2 L2=USER_DEFERRED_SOURCE_ONLY (PR213 Draft/unmerged, R2(P1)/R3(P2) UNVERIFIED, NO security PASS); J3 V3=USER_CANCELLED_UNSTARTED (NOT_REVIEWED); F2/J3 done/none for slot release; restart requires fresh safety review.
