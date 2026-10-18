@@ -8,18 +8,19 @@
 
 ## F1
 - slot: F1
-- status: done
-- task_id: kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014
+- status: ready
+- task_id: postona-f1-x-manual-publish-ui-source-20261018
 - owner: claude
-- next_owner: none
+- next_owner: claude
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- dependencies: J4 R3-P2 (terminal finish AUTH); PR186 v3; PR177/171/166 protected
-- blocker: B1 and production NO_GO until independent focused re-review
-- slot_use: AIに聞く B0 終端finish再返却の認可修正（J4残件1件）
+- previous_archive: .agent_v2/archive/2026-10-18-F1-kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014/
+- dependencies: POSTONA総合指令室 Issue269; F3 X manual publish/PR182/224/257/262; F4 G4 Issue131 X verified/token interface; F5 T13 service active; PR238 Auth UI protected
+- blocker: API real publish/actual verified credential/managed Auth remain unconnected; offline UI only. Must check independent clean F1 worktree and 30-slot conflicts before start; production/SNS/merge/deploy NO_GO.
+- slot_use: Implement POSTONA source-only X manual publish form/preview/safe disabled send and initial home navigation; no edits to schedule.tsx or F4/F5 Auth screens. Archive SHA256 7b601b2c01d982dc99aed3a45616bdd48349b6a02b10b30835898088b10ea1fc and restore verified before reassignment.
 
 ## F2
 - slot: F2
