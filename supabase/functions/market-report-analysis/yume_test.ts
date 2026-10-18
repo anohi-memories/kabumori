@@ -168,7 +168,9 @@ test("morning: the prompt and the schema ask for ゆめちゃん's call; the sto
 
   // X: her call is the closing paragraph; one disclaimer; postable.
   const post = formatSharedXPost(packet);
-  assert.ok(post.includes(`💬 今日のひとこと\n🔮ゆめちゃんの予想：きょうの日経平均は「上昇」とみています。${YUME_MORNING_FIXTURE.headline_ja}`), post);
+  // Phase 2: her lines carry their own 🔮 and close the post without the 💬 title.
+  assert.ok(post.includes(`\n\n🔮ゆめちゃんの予想：きょうの日経平均は「上昇」。${YUME_MORNING_FIXTURE.headline_ja}`), post);
+  assert.ok(!post.includes("💬 今日のひとこと"), post);
   assert.equal(post.split(REPORT_DISCLAIMER_JA).length, 2);
   assert.deepEqual(sharedXPostIssues(packet, post), []);
   // App: her own section, with the rule and the counter-arguments.
@@ -204,7 +206,7 @@ test("close: the morning call is judged in code and given to the model as a fixe
     ["next_session", null, "hit", MORNING_ID, review],
   );
   const post = formatSharedXPost(packet);
-  assert.ok(post.includes("💬 今日のひとこと\n🔮朝の予想は「上昇」→ 結果は「当たり」（日経平均 前日比+1.94%）\nゆめちゃんの次の見立ては「横ばい」。"), post);
+  assert.ok(post.includes("\n\n🔮朝の予想は「上昇」→ 結果は「当たり」（日経平均 前日比+1.94%）\nゆめちゃんの次の見立ては「横ばい」。"), post);
   assert.deepEqual(sharedXPostIssues(packet, post), []);
   const check = buildAppMarketStory(packet).sections.find((item) => item.key === "morning_check")!;
   assert.deepEqual(check.lines_ja.slice(0, 2), ["ゆめちゃんの予想の答え合わせ：朝の予想は「上昇」→ 結果は「当たり」（日経平均 前日比+1.94%）", review]);
@@ -238,7 +240,7 @@ test("close without a morning call: 「判定できません」 in the app, noth
   assert.equal(packet.yume?.review?.text_ja, YUME_CLOSE_FIXTURE.review_ja, "her words say it cannot be judged");
   const post = formatSharedXPost(packet);
   assert.ok(!post.includes("結果は「"), "no verdict on X");
-  assert.ok(post.includes("💬 今日のひとこと\n🔮ゆめちゃんの次の見立ては「横ばい」。"), post);
+  assert.ok(post.includes("\n\n🔮ゆめちゃんの次の見立ては「横ばい」。"), post);
   const check = buildAppMarketStory(packet).sections.find((item) => item.key === "morning_check")!;
   assert.equal(check.lines_ja[0], "ゆめちゃんの予想の答え合わせ：朝の予想との答え合わせはできません（この日の朝刊が見つかりません）");
 });
@@ -377,7 +379,7 @@ test("handler E2E: the close run reads the morning record, stores the code's ver
       if (path.startsWith("market_report_generation_traces")) return new Response(null, { status: 201 });
       throw new Error(`UNEXPECTED_PATH:${path}`);
     };
-    const env: Record<string, string> = { SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-NOT-REAL" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-NOT-REAL" };
+    const env: Record<string, string> = { SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-NOT-REAL" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", KABUMORI_MARKET_REPORT_JAPAN_METRICS: "legacy_1306", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-NOT-REAL" };
     const now = mode === "close" ? "2026-09-30T07:20:00Z" : "2026-09-30T22:55:20Z";
     const deps: Deps = { env: (name) => env[name], fetch: fetchMock, now: () => new Date(now), sleep: () => Promise.resolve() };
     const res = await handleRequest(new Request("https://functions.local/market-report-analysis", {
