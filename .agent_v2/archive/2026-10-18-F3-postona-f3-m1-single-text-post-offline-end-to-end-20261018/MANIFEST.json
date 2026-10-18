@@ -1,0 +1,11 @@
+{
+  "task_id": "postona-f3-m1-single-text-post-offline-end-to-end-20261018",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-18-F3-postona-f3-m1-single-text-post-offline-end-to-end-20261018/files/.agent_v2/tasks/F3.md",
+  "size": 22352,
+  "sha256": "e3c36e29f29374bfe4501f6dada3df4ca138e56275ff1dedc5abf15f62a4ab6b",
+  "original_git_blob": "f3d9eaad84303ff1a5d08cf1a847174e37bd80e9",
+  "source_commit": "4faf8f907717be30dee866c93643a16aab4666d2",
+  "archive_commit": "4150bbd48a8e1294b8d44b5eb06f7f4038118ccb",
+  "restore": "full UTF8 content and blob identical"
+}
