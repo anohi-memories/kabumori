@@ -8,6 +8,13 @@
 --   public.begin_social_mobile_x_oauth_connection_v2(text,text,timestamptz)
 --   public.consume_social_mobile_x_oauth_state_v2(text)                read-only, before the code exchange
 --   public.complete_social_mobile_x_oauth_connection_v2(uuid,text,text,text,text,text)
+--   TABLE public.x_account_identity_attestations   (F4 M1, postona-f4-m1-x-identity-verified-credential-port-source-
+--       20261018) one row per X account: the attested connection complete_v2 made -- the person, the workspace,
+--       the X user id, the two Vault references and the verified_at it wrote, in the same transaction. Nothing
+--       else writes it. G4's verified predicate and server-only credential handoff
+--       (candidates/postona_x_identity_credential/) accept an account only while its row still equals this record,
+--       so a live (v1) complete -- which takes the X id and tokens as given and always rewrites verified_at --
+--       leaves the account unverified until the next attested connect.
 -- The upgrade (grant these to authenticated, deploy the Edge that attests, then revoke the old three) is
 -- a separate reviewed, user-authorized rollout: docs/postona/x-oauth-hardening-candidate-20261010.md.
 --
@@ -59,6 +66,9 @@ begin
   if pg_catalog.to_regprocedure('public.begin_social_mobile_x_oauth_connection_v2(text,text,timestamptz)') is not null
      or pg_catalog.to_regprocedure('public.consume_social_mobile_x_oauth_state_v2(text)') is not null
      or pg_catalog.to_regprocedure('public.complete_social_mobile_x_oauth_connection_v2(uuid,text,text,text,text,text)') is not null then
+    raise exception 'POSTONA_X_OAUTH_PRECONDITION_ALREADY_APPLIED';
+  end if;
+  if pg_catalog.to_regclass('public.x_account_identity_attestations') is not null then
     raise exception 'POSTONA_X_OAUTH_PRECONDITION_ALREADY_APPLIED';
   end if;
 
@@ -114,6 +124,7 @@ begin
                           = 'CREATE UNIQUE INDEX ON public.social_accounts USING btree (brand_id, platform)')
      or pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace(uuid)') is null
      or pg_catalog.to_regprocedure('public.social_mobile_account_deletion_workspace_lock(text)') is null
+     or pg_catalog.to_regprocedure('public.social_mobile_account_deletion_guard()') is null
      or pg_catalog.to_regprocedure('vault.create_secret(text,text,text,uuid)') is null
      or pg_catalog.to_regprocedure('vault.update_secret(uuid,text,text,text,uuid)') is null
      or pg_catalog.to_regprocedure('extensions.hmac(bytea,bytea,text)') is null
@@ -125,6 +136,25 @@ begin
     raise exception 'POSTONA_X_OAUTH_PRECONDITION_SHAPE';
   end if;
 end $$;
+
+-- F4 M1: the attested connection of an X account (written by complete_v2 only; see the header).
+create table public.x_account_identity_attestations (
+  social_account_id text primary key references public.social_accounts (id) on delete cascade,
+  attestation_id uuid not null unique,
+  user_id uuid not null,
+  brand_id text not null references public.brands (id) on delete cascade,
+  platform_user_id text not null check (platform_user_id ~ '^[1-9][0-9]{0,19}$'),
+  oauth_state_id uuid not null,
+  vault_access_token_secret_id uuid not null,
+  vault_refresh_token_secret_id uuid not null,
+  verified_at timestamptz not null,
+  attested_at timestamptz not null,
+  check (vault_access_token_secret_id <> vault_refresh_token_secret_id)
+);
+alter table public.x_account_identity_attestations enable row level security;
+revoke all on table public.x_account_identity_attestations from public, anon, authenticated, service_role;
+create trigger social_mobile_deletion_guard before insert or update on public.x_account_identity_attestations
+  for each row execute function public.social_mobile_account_deletion_guard();
 
 create function public.begin_social_mobile_x_oauth_connection_v2(p_state_hash text, p_redirect_uri text, p_expires_at timestamptz)
 returns table (brand_id text, social_account_id text)
@@ -309,6 +339,17 @@ begin
     -- The whole call fails: no secret, no consumed state, no status change.
     raise exception 'X_ACCOUNT_ALREADY_CONNECTED' using errcode = 'P0001';
   end;
+  -- F4 M1: what was attested, bound to this person and workspace, in this same transaction.
+  insert into public.x_account_identity_attestations
+    (social_account_id, attestation_id, user_id, brand_id, platform_user_id, oauth_state_id,
+     vault_access_token_secret_id, vault_refresh_token_secret_id, verified_at, attested_at)
+  values (v_account.id, gen_random_uuid(), v_user, v_workspace, p_platform_user_id, v_state_id, v_access, v_refresh, now(), now())
+  on conflict (social_account_id) do update
+    set attestation_id = excluded.attestation_id, user_id = excluded.user_id, brand_id = excluded.brand_id,
+        platform_user_id = excluded.platform_user_id, oauth_state_id = excluded.oauth_state_id,
+        vault_access_token_secret_id = excluded.vault_access_token_secret_id,
+        vault_refresh_token_secret_id = excluded.vault_refresh_token_secret_id,
+        verified_at = excluded.verified_at, attested_at = excluded.attested_at;
 end;
 $$;
 
@@ -347,6 +388,15 @@ begin
   end loop;
   if v_seen <> 3 then
     raise exception 'POSTONA_X_OAUTH_POSTCONDITION_FUNCTIONS';
+  end if;
+  -- F4 M1: the attestation record is the owner's alone.
+  if (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.x_account_identity_attestations'::pg_catalog.regclass) is distinct from v_owner
+     or not (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = 'public.x_account_identity_attestations'::pg_catalog.regclass)
+     or exists (select 1 from pg_catalog.pg_roles r,
+                              (values ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'), ('REFERENCES'), ('TRIGGER')) p(priv)
+                where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                  and pg_catalog.has_table_privilege(r.oid, 'public.x_account_identity_attestations', p.priv)) then
+    raise exception 'POSTONA_X_OAUTH_POSTCONDITION_ATTESTATIONS';
   end if;
 end $$;
 
