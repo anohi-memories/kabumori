@@ -779,3 +779,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id: `postona-f1-x-manual-publish-ui-source-20261018` / L1 PASS_SOURCE_CANDIDATE, PRODUCTION_NO_GO. Original `.agent_v2/tasks/F1.md` → `.agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/F1.md` (19894 bytes, SHA256 `6ff5a42b1abe94e5c35bb7be52da195ad95742817c58cc878016bd5f8c736fa3`, original Git blob `d1422e0faa9bb9af79f385ca10422c989eec69ec`); byte-for-byte restore verified, MANIFEST.json/SHA256SUMS recorded. PR274 Draft, HEAD `007dc3d68bdb6c57e2cfb6831090f6544704a3c3`. Snapshot source ref main; per-file origin commit not separately established.
 
 - 2026-10-18 | F3 | `postona-f3-m1-single-text-post-offline-end-to-end-20261018` | L3 PASS_SOURCE_CANDIDATE / production NO_GO; PR272 HEAD 559b3e54 | `.agent_v2/archive/2026-10-18-F3-postona-f3-m1-single-text-post-offline-end-to-end-20261018` | 22352 bytes; SHA256 `e3c36e29f29374bfe4501f6dada3df4ca138e56275ff1dedc5abf15f62a4ab6b`; original blob `f3d9eaad`; exact restore checked.
+
+## F6 POSTONA OpenAI consult offline seam archive — 2026-10-18
+- task_id: `common-ai-f6-postona-openai-consult-offline-one-request-integration-20261018`, L6 PASS_OFFLINE_INTEGRATION / PRODUCTION_NO_GO; Draft PR273 HEAD `84ee0d6f7cf04b35f790d074435456b4e591a8d1`.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md`; archive commit `3ac0458f940ecf5748a9a696c059aa5900038c2c`.
+- source/archive Git blob `a92b67257fae6afcc01096ad6c376d7f6cc89150`, exact content read-back PASS; 9508 JS characters. Independent SHA256/MANIFEST NOT_VERIFIED. New handler TASK blocked on F5 AI-specific authorization contract and owner confirmation.
