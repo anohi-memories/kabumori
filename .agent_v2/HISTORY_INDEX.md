@@ -818,3 +818,11 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id `postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018`, L5 done PASS_SOURCE_DESIGN / G6_HANDLER_CHANGE_HOLD / PRODUCTION_NO_GO. PR279 HEAD `9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12` Draft.
 - original_path `.agent_v2/tasks/F5.md`; archive_path `.agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/files/.agent_v2/tasks/F5.md`.
 - original L5 commit `57f4cf9d2bac7a67998d7d768a9a9f1f72e296cd`, original/archive Git blob `3490b3dfe8d1a539cd3f6956e40045738f3a6a7b`, 24155 bytes, SHA256 `89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908`. MANIFEST.md/SHA256SUMS saved. Restore original/blob and bytes PASS; append-only.
+
+## F1 M2 archive 2026-10-19
+- task_id: postona-f1-m2-restart-pending-uncertain-guard-20261018
+- original_path: .agent_v2/tasks/F1.md
+- archive_path: .agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/F1.md
+- size: 15796 bytes; SHA256 `2d22de9b43d6cd01747f02555084e2dba4f299ab446ebacae9a18c22970d9a78`; original/archive Git blob `c8dffbda56cb181e13a748b3fac9885b1f024353`.
+- original commit `bb709d38ec81113706926117834354a05e289945` (blob at that commit equals the archive blob and bytes). MANIFEST.json and SHA256SUMS saved (SHA256SUMS check OK). Restore equality PASS; append-only.
+- L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR283 HEAD `b4b761c4dd43cc4c8c1ee1533413b46f088ba21f` Draft (base PR277 branch).
