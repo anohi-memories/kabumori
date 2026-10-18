@@ -1,3 +1,8 @@
+## F5 M2 — POSTONA AI相談認可の不足API・ACL source-only 設計（2026-10-18）
+- 指令室 Issue269 #6247635293/#6247652574 の限定自走第2工程。F5 `postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018` = ready/claude、Opus5.5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。Issue266 #6247539818 のAI相談認可ACK_WITH_CONDITIONSに基づく。F5 M1 X投稿契約と別。F6/G6がAI handler・provider・ledgerを所有。
+- 前F5 M1 done TASK+Report archive `.agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/`; 28694 bytes、SHA256 `58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54`、原本/復元Git blob一致、MANIFEST/SHA256SUMS/HISTORY_INDEX記録済。新TASKは別のAuth/RPC/SECURITY DEFINER/GRANT実装を許可しない。独立worktree/fresh main/30枠競合はClaude着手時の必須STOPゲート。
+- ブロッカー: 統合AI認可の安全な呼出し口未証明；G6 handler接続HOLD、managed/prod/有料AI/実SNS/merge/deploy NO_GO。必要な新共有セキュリティ境界が見つかればsource設計までで停止し指令室に例外報告。PR233/265の別ゲート維持。
+
 ## 2026-10-18 POSTONA F1 M1 UI→単発投稿API契約整合の新規TASK
 - F1 task_id `postona-f1-m1-manual-ui-single-post-contract-adapter-20261018`, ready/claude, Sonnet5（高）, F1→L1 / return_to かぶモリアプリG1のちゃ（新F1担当）。前F1 L1タスクは `.agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/` にSHA256/restore記録を保存。HISTORY_INDEX更新済み。
 - F3 PR #272 HEAD `559b3e54f04a89ffe23ebbf54d71857ad064b1e7`：single_post_contract.ts / docs §2。F1 PR #274 HEAD `007dc3d68bdb6c57e2cfb6831090f6544704a3c3`：UI。両者の変更ファイル重複0。clientRequestId/targetId、consent SHA256、sent/pending/failed/uncertain/refused/unavailable、durable readbackのオフライン一致を担当。実送信ボタンdisabled維持。
