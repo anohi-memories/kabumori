@@ -1,0 +1,88 @@
+// PROPOSED (G6-05, not applied): supabase/functions/_shared/ai_gateway/isolation_test.ts, the G6-owned isolation test that
+// would sit next to the placed gateway. The shared provider's isolation test decides WHO may reach the provider and with
+// which names; this one decides what the gateway files themselves may do.
+import assert from "node:assert/strict";
+
+const HERE = new URL("./", import.meta.url);
+const FUNCTIONS = new URL("../../", import.meta.url);
+const REPO = new URL("../../../../", import.meta.url);
+
+/** Exactly these runtime files (plus this test). A new file needs this list AND the provider allowlist to change. */
+const FILES = [
+  "ai_calls_store.ts",
+  "app_policies.ts",
+  "authority_port.ts",
+  "g5_rpc_transport.ts",
+  "gateway.ts",
+  "policy_registry.ts",
+  "postona_consult_adapter.ts",
+  "runtime.ts",
+];
+/** Imports any gateway file may use: its siblings and four named provider files. */
+const SHARED_IMPORTS = new Set([
+  ...FILES.map((f) => `./${f}`),
+  "../ai_provider/mod.ts",
+  "../ai_provider/adapter.ts",
+  "../ai_provider/redact.ts",
+  "../ai_provider/secrets.ts",
+]);
+/** Only the consult adapter may read the (unchanged) consult handler module and its settings types. */
+const CONSULT_ONLY = new Set(["../../social-mobile-consult/logic.ts", "../brand/social_mobile_content_settings.ts"]);
+
+const read = (name: string) => Deno.readTextFile(new URL(name, HERE));
+
+Deno.test("the gateway is exactly its runtime files (and this test)", async () => {
+  const names: string[] = [];
+  for await (const e of Deno.readDir(HERE)) {
+    assert.ok(e.isFile && !e.isSymlink, `only plain files: ${e.name}`);
+    names.push(e.name);
+  }
+  assert.deepEqual(names.sort(), [...FILES, "isolation_test.ts"].sort());
+});
+
+Deno.test("gateway files use no runtime-specific API, no logs, no environment, no dynamic import, no node: module", async () => {
+  for (const f of FILES) {
+    const text = await read(f);
+    assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\s+["']node:|\bimport\s*\(/u, f);
+  }
+});
+
+Deno.test("gateway files import only their siblings and the four named provider files (the consult adapter also the handler module)", async () => {
+  for (const f of FILES) {
+    const text = await read(f);
+    const specifiers = [...text.matchAll(/(?:import|export)[^;]*?from\s+["']([^"']+)["']|import\s+["']([^"']+)["']/gu)].map((m) => m[1] ?? m[2]);
+    for (const s of specifiers) {
+      assert.ok(SHARED_IMPORTS.has(s) || (f === "postona_consult_adapter.ts" && CONSULT_ONLY.has(s)), `${f}: ${s}`);
+    }
+    assert.doesNotMatch(text, /ai_consumer_bridge/u, `${f}: the Claude-only consumer bridge is not part of the gateway`);
+  }
+});
+
+Deno.test("gateway files name no key and contain no key-shaped literal", async () => {
+  for (const f of FILES) {
+    const text = await read(f);
+    assert.doesNotMatch(text, /\b(?:ANTHROPIC|OPENAI)_[A-Z_]+|SUPABASE_SERVICE_ROLE_KEY|sk-ant-|sk-proj-|sb_secret_[A-Za-z0-9]{8}|eyJ[A-Za-z0-9_-]{10}/u, f);
+  }
+});
+
+Deno.test("no other function or app file imports the gateway (an Edge entry needs its own approval and allowlist change)", async () => {
+  const found: string[] = [];
+  async function walk(dir: URL, label: string) {
+    for await (const e of Deno.readDir(dir)) {
+      if (e.name === "node_modules" || e.name.startsWith(".")) continue;
+      const u = new URL(encodeURIComponent(e.name) + (e.isDirectory ? "/" : ""), dir);
+      if (u.href.startsWith(HERE.href)) continue;
+      if (e.isDirectory) await walk(u, `${label}${e.name}/`);
+      else if (/\.(ts|tsx|js|mjs|json)$/u.test(e.name) && !e.name.endsWith("_test.ts") && /ai_gateway/u.test(await Deno.readTextFile(u))) found.push(`${label}${e.name}`);
+    }
+  }
+  await walk(FUNCTIONS, "functions/");
+  for (const dir of ["src/", "apps/"]) {
+    try {
+      await walk(new URL(dir, REPO), dir);
+    } catch (e) {
+      if (!(e instanceof Deno.errors.NotFound)) throw e;
+    }
+  }
+  assert.deepEqual(found, []);
+});
