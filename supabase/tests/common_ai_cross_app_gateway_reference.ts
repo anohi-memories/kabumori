@@ -8,6 +8,10 @@
 //   request shape -> authority verdict (G5's, an INPUT here) -> app feature policy -> cost bound -> call key and
 //   claim (idempotency) -> [per attempt] ledger reserve -> authority RECHECK -> ledger mark sent -> ONE provider
 //   request -> ledger settle | unknown -> app output check -> record the outcome -> answer.
+//
+// 2026-10-19 (PR289 GAP-1..3): a revocation before ANY attempt is AUTH_REVOKED_BEFORE_SEND (not a quota); a ledger
+// that is unreachable or does not confirm the send is LEDGER_UNAVAILABLE (not a quota); the stored outcome uses the
+// call store's audit (ai_calls / H5 bridge Audit, nine keys), mapped here and checked again on replay.
 import { type AiRequest, type AiSubject, type BudgetGuard, executeAiRequest, type ExecuteDeps, findModelSpec, type JsonSchema, upperBoundAttemptCostUsd } from "../functions/_shared/ai_provider/mod.ts";
 
 export type AppId = "kabumori" | "postona" | "miseiro";
@@ -41,6 +45,8 @@ export type AuthorityPort = Readonly<{
 export type FeaturePolicy = Readonly<{
   app: AppId;
   feature: string;
+  /** The policy's version; stored as the audit's policyVersion and part of the operation's fingerprint. */
+  revision: string;
   /** The ledger feature (budget_policies.scope_feature) the calls are counted under. */
   ledgerFeature: string;
   logicalRole: string;
@@ -87,6 +93,7 @@ export type GatewayCode =
   | "POLICY_SUBJECT_DENIED"
   | "COST_DENIED"
   | "QUOTA_EXCEEDED"
+  | "LEDGER_UNAVAILABLE"
   | "STORE_UNAVAILABLE"
   | "IN_PROGRESS"
   | "OPERATION_REUSED"
@@ -99,19 +106,39 @@ export type GatewayResult =
   | Readonly<{ ok: true; data: unknown; audit: GatewayAudit }>
   | Readonly<{ ok: false; code: GatewayCode; audit: GatewayAudit | null }>;
 
-/** The stored outcome codes are the call store's (ai_calls accepts exactly these failure codes). */
+/** The stored outcome codes are the call store's (ai_calls accepts these and MODEL_UNAVAILABLE, never produced here). */
 type StoredCode = "POLICY_DENIED" | "COST_DENIED" | "BUDGET_DENIED" | "OUTPUT_REJECTED" | "PROVIDER_FAILED" | "UNKNOWN";
+const STORED_CODES: readonly string[] = ["POLICY_DENIED", "COST_DENIED", "BUDGET_DENIED", "OUTPUT_REJECTED", "PROVIDER_FAILED", "UNKNOWN"];
+/**
+ * The call store's audit: exactly the nine keys ai_calls.audit_ok (and the H5 bridge Audit) accept. `feature` is the
+ * store feature `app:feature` (equal to the claimed row's feature), `role` the policy's logicalRole, `policyVersion`
+ * the policy's revision. The app-facing GatewayAudit is rebuilt from it on replay, after checking every field.
+ */
+export type StoreAudit = Readonly<{
+  callId: string;
+  tenantTag: string;
+  feature: string;
+  role: string;
+  model: string;
+  policyVersion: string;
+  attempts: number;
+  estimatedCostUsd: number;
+  costBasis: GatewayAudit["costBasis"];
+}>;
+const STORE_AUDIT_KEYS = "attempts,callId,costBasis,estimatedCostUsd,feature,model,policyVersion,role,tenantTag";
 export type StoredOutcome =
-  | Readonly<{ ok: true; data: unknown; audit: GatewayAudit }>
-  | Readonly<{ ok: false; code: StoredCode; audit: GatewayAudit }>;
+  | Readonly<{ ok: true; data: unknown; audit: StoreAudit }>
+  | Readonly<{ ok: false; code: StoredCode; audit: StoreAudit }>;
 export type CallIdentity = Readonly<{ key: string; tenantTag: string; fingerprint: string }>;
 export type CallClaim =
   | Readonly<{ kind: "acquired"; owner: string }>
   | Readonly<{ kind: "busy" | "conflict" }>
   | Readonly<{ kind: "complete"; fingerprint: string; outcome: StoredOutcome }>;
 /** The durable call store (ai_calls in production design; unapplied). Bound to the verdict's subject per call. */
+/** `storeFeature` is the row's feature (`app:feature`); the stored audit's feature must be the same value. */
+export type ClaimContext = Readonly<{ app: AppId; feature: string; storeFeature: string; subject: GatewaySubject }>;
 export interface CallStore {
-  claim(identity: CallIdentity, context: Readonly<{ app: AppId; feature: string; subject: GatewaySubject }>): Promise<CallClaim>;
+  claim(identity: CallIdentity, context: ClaimContext): Promise<CallClaim>;
   complete(identity: CallIdentity, owner: string, outcome: StoredOutcome): Promise<void>;
 }
 
@@ -131,6 +158,10 @@ const FEATURE = /^[a-z][a-z0-9_.]{1,63}$/;
 const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SLUG = /^[a-z][a-z0-9_]{1,40}$/;
 const REQUEST_KEYS = ["app", "brand", "feature", "input", "operationId"];
+const STORE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$/;
+const REVISION = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
+/** Ledger refusals that are a budget decision; every other refusal means the ledger did not confirm (fail closed). */
+const QUOTA_REASONS: readonly string[] = ["CALL_LIMIT", "COST_LIMIT", "PER_CALL_LIMIT", "NO_MATCHING_LIMIT"];
 
 async function sha256(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
@@ -159,6 +190,42 @@ function verdictProblem(v: unknown, app: AppId, now: number): GatewayCode | null
   if (!validSubject(v.subject, app)) return "AUTH_SCOPE_MISMATCH";
   return null;
 }
+/** GatewayAudit -> the call store's nine-key audit. */
+export function toStoreAudit(a: GatewayAudit, policy: FeaturePolicy): StoreAudit {
+  return {
+    callId: a.callKey,
+    tenantTag: a.tenantTag,
+    feature: policyKey(a.app, a.feature),
+    role: policy.logicalRole,
+    model: a.model,
+    policyVersion: policy.revision,
+    attempts: a.attempts,
+    estimatedCostUsd: a.estimatedCostUsd,
+    costBasis: a.costBasis,
+  };
+}
+
+/** A stored audit back to the GatewayAudit, only if every field is the one this call and policy would write. */
+export function fromStoreAudit(s: unknown, expect: Readonly<{ callKey: string; tenantTag: string; app: AppId; feature: string; policy: FeaturePolicy }>): GatewayAudit | null {
+  if (!isRecord(s) || Object.keys(s).sort().join(",") !== STORE_AUDIT_KEYS) return null;
+  if (s.callId !== expect.callKey || s.tenantTag !== expect.tenantTag || s.feature !== policyKey(expect.app, expect.feature) ||
+    s.role !== expect.policy.logicalRole || s.model !== expect.policy.model || s.policyVersion !== expect.policy.revision) return null;
+  if (typeof s.attempts !== "number" || !Number.isInteger(s.attempts) || s.attempts < 0 || s.attempts > expect.policy.maxAttempts) return null;
+  if (typeof s.estimatedCostUsd !== "number" || !Number.isFinite(s.estimatedCostUsd) || s.estimatedCostUsd < 0) return null;
+  if (s.costBasis !== "measured" && s.costBasis !== "includes_upper_bound" && s.costBasis !== "no_request") return null;
+  if ((s.attempts === 0) !== (s.costBasis === "no_request")) return null;
+  return {
+    callKey: expect.callKey,
+    tenantTag: expect.tenantTag,
+    app: expect.app,
+    feature: expect.feature,
+    model: expect.policy.model,
+    attempts: s.attempts,
+    estimatedCostUsd: s.estimatedCostUsd,
+    costBasis: s.costBasis,
+  };
+}
+
 /** What the ledger records: the person (no brand slug: the ledger's brand_id is a uuid), or system. */
 function ledgerSubject(s: GatewaySubject): AiSubject {
   return s.kind === "system" ? { kind: "system" } : { kind: "user", userId: s.userId, brandId: null };
@@ -189,7 +256,9 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
 
   // 3. The app's feature policy: missing = refused (fail closed).
   const policy = deps.policies.get(policyKey(req.app, req.feature));
-  if (!policy || policy.app !== req.app || policy.feature !== req.feature || typeof policy.validate !== "function") return fail("POLICY_MISSING");
+  if (!policy || policy.app !== req.app || policy.feature !== req.feature || typeof policy.validate !== "function" ||
+    typeof policy.revision !== "string" || !REVISION.test(policy.revision) || typeof policy.logicalRole !== "string" ||
+    !STORE_IDENTIFIER.test(policy.logicalRole) || !STORE_IDENTIFIER.test(policyKey(req.app, req.feature))) return fail("POLICY_MISSING");
   if (!policy.subjectKinds.includes(verdict.subject.kind)) return fail("POLICY_SUBJECT_DENIED");
   if (policy.brandRequired && req.brand === null) return fail("POLICY_SUBJECT_DENIED");
   if (new TextEncoder().encode(req.input).length > policy.maxInputBytes) return fail("REQUEST_INVALID");
@@ -220,22 +289,27 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   if (!Number.isFinite(upper) || upper > policy.maxCostUsdPerOperation) return fail("COST_DENIED", noRequest);
 
   // 6. Idempotency: one claim per (tenant, feature, operation); the same content replays; other content is refused.
-  const fingerprint = await sha256(JSON.stringify([policy.app, policy.feature, policy.provider, policy.model, policy.reasoningEffort,
-    policy.maxOutputTokens, policy.maxAttempts, policy.schema, policy.systemInstructions, req.input]));
+  const fingerprint = await sha256(JSON.stringify([policy.app, policy.feature, policy.revision, policy.logicalRole, policy.provider, policy.model,
+    policy.reasoningEffort, policy.maxOutputTokens, policy.maxAttempts, policy.schema, policy.systemInstructions, req.input]));
   const identity: CallIdentity = Object.freeze({ key: callKey, tenantTag, fingerprint });
   let claim: CallClaim;
   try {
-    claim = await deps.store.claim(identity, { app: req.app, feature: req.feature, subject: verdict.subject });
+    claim = await deps.store.claim(identity, { app: req.app, feature: req.feature, storeFeature: policyKey(req.app, req.feature), subject: verdict.subject });
   } catch {
     return fail("STORE_UNAVAILABLE");
   }
   if (claim.kind === "conflict") return fail("OPERATION_REUSED");
   if (claim.kind === "busy") return fail("IN_PROGRESS");
   if (claim.kind === "complete") {
-    const o = claim.outcome;
-    if (claim.fingerprint !== fingerprint || !isRecord(o) || !isRecord(o.audit) || o.audit.callKey !== callKey || o.audit.tenantTag !== tenantTag ||
-      o.audit.app !== req.app || o.audit.feature !== req.feature) return fail("UNKNOWN");
-    return o.ok ? { ok: true, data: o.data, audit: o.audit } : fail(publicCode(o.code), o.audit);
+    const o: unknown = claim.outcome;
+    if (claim.fingerprint !== fingerprint || !isRecord(o)) return fail("UNKNOWN");
+    const audit = fromStoreAudit(o.audit, { callKey, tenantTag, app: req.app, feature: req.feature, policy });
+    if (!audit) return fail("UNKNOWN");
+    if (o.ok === true && Object.keys(o).sort().join(",") === "audit,data,ok") return { ok: true, data: o.data, audit };
+    if (o.ok === false && Object.keys(o).sort().join(",") === "audit,code,ok" && STORED_CODES.includes(o.code as string)) {
+      return fail(publicCode(o.code as StoredCode), audit);
+    }
+    return fail("UNKNOWN");
   }
   if (claim.kind !== "acquired") return fail("UNKNOWN");
 
@@ -272,7 +346,12 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
     callKey, tenantTag, app: req.app, feature: req.feature, model: policy.model,
     attempts: result.transportAttempts, estimatedCostUsd: result.estimatedCostUsd, costBasis: result.costBasis,
   };
-  let outcome: StoredOutcome;
+  // Why the call stopped without (another) send, decided in this order: a possibly billed attempt is UNKNOWN whatever
+  // else happened; then a revocation (GAP-1: also after an earlier refused attempt); then the ledger: a budget limit
+  // is a quota, any other refusal or failure is LEDGER_UNAVAILABLE (GAP-2). Both stop reasons are stored as
+  // POLICY_DENIED (nothing more was sent; the store has no other code for it) and replay as NOT_SENT.
+  let stop: "revoked" | "ledger" | null = null;
+  let outcome: Readonly<{ ok: true; data: unknown } | { ok: false; code: StoredCode }>;
   if (result.ok) {
     let valid = false;
     try {
@@ -280,21 +359,29 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
     } catch {
       valid = false;
     }
-    outcome = valid ? { ok: true, data: result.parsedPayload, audit } : { ok: false, code: "OUTPUT_REJECTED", audit };
-  } else if (result.costBasis === "includes_upper_bound") outcome = { ok: false, code: "UNKNOWN", audit };
-  else if (revoked && result.costBasis === "no_request") outcome = { ok: false, code: "POLICY_DENIED", audit };
-  else if (result.errorCode === "BUDGET_DENIED") outcome = { ok: false, code: "BUDGET_DENIED", audit };
-  else if (result.errorCode === "INVALID_JSON" || result.errorCode === "SCHEMA_VIOLATION") outcome = { ok: false, code: "OUTPUT_REJECTED", audit };
-  else if (result.costBasis === "no_request") outcome = { ok: false, code: "POLICY_DENIED", audit };
-  else outcome = { ok: false, code: "PROVIDER_FAILED", audit };
+    outcome = valid ? { ok: true, data: result.parsedPayload } : { ok: false, code: "OUTPUT_REJECTED" };
+  } else if (result.costBasis === "includes_upper_bound") outcome = { ok: false, code: "UNKNOWN" };
+  else if (revoked) {
+    stop = "revoked";
+    outcome = { ok: false, code: "POLICY_DENIED" };
+  } else if (result.errorCode === "BUDGET_DENIED" && QUOTA_REASONS.includes(String(result.detail))) outcome = { ok: false, code: "BUDGET_DENIED" };
+  else if (result.errorCode === "BUDGET_DENIED") {
+    stop = "ledger";
+    outcome = { ok: false, code: "POLICY_DENIED" };
+  } else if (result.errorCode === "INVALID_JSON" || result.errorCode === "SCHEMA_VIOLATION") outcome = { ok: false, code: "OUTPUT_REJECTED" };
+  else if (result.costBasis === "no_request") outcome = { ok: false, code: "POLICY_DENIED" };
+  else outcome = { ok: false, code: "PROVIDER_FAILED" };
+  const stored: StoredOutcome = { ...outcome, audit: toStoreAudit(audit, policy) } as StoredOutcome;
   try {
-    await deps.store.complete(identity, claim.owner, outcome);
+    await deps.store.complete(identity, claim.owner, stored);
   } catch {
     return fail("UNKNOWN", audit); // not recorded: the operation stays IN_PROGRESS until recovery; never resent
   }
-  if (outcome.ok) return outcome;
-  // The first answer says why nothing was sent; a replay of the stored POLICY_DENIED only knows that nothing was sent.
-  return fail(revoked && outcome.code === "POLICY_DENIED" ? "AUTH_REVOKED_BEFORE_SEND" : publicCode(outcome.code), audit);
+  if (outcome.ok) return { ok: true, data: outcome.data, audit };
+  // The first answer says why nothing (more) was sent; a replay of the stored POLICY_DENIED only knows that.
+  if (stop === "revoked") return fail("AUTH_REVOKED_BEFORE_SEND", audit);
+  if (stop === "ledger") return fail("LEDGER_UNAVAILABLE", audit);
+  return fail(publicCode(outcome.code), audit);
 }
 
 function publicCode(code: StoredCode): GatewayCode {
