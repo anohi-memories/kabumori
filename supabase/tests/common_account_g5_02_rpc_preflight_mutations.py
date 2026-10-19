@@ -17,6 +17,7 @@ M = [
     # ---- R1-3 the subject
     ('the JSON claims win over the per-claim settings', R, "if (c.legacy && c.legacy.sub) {", "if (c.legacy && c.legacy.sub && !c.claimsJson) {"),
     ('an anonymous login is a subject', R, "if (role !== 'authenticated' || anonymous !== false) return", "if (role !== 'authenticated') return"),
+    ('a per-claim anonymous login is a subject', R, "anonymous = c.legacy.isAnonymous === undefined || c.legacy.isAnonymous === null || c.legacy.isAnonymous === '' || c.legacy.isAnonymous === 'false' ? false : c.legacy.isAnonymous;", 'anonymous = false;'),
     ('any role is a subject', R, "if (role !== 'authenticated' || anonymous !== false) return", "if (anonymous !== false) return"),
     ('the subject need not equal auth.uid()', R, "if (c.authUid !== sub) return { refused: 'AUTH_REQUIRED' };", ''),
     ('a session id is not required', R, "|| typeof session !== 'string' || !UUID.test(session)) return { refused: 'AUTH_REQUIRED' };", ") return { refused: 'AUTH_REQUIRED' };"),

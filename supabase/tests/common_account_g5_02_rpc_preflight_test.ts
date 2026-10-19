@@ -52,7 +52,10 @@ test('R1-3 the subject comes only from the JWT claims and auth.uid(): a body use
     claimsOf(A, { session_id: undefined }), claimsOf(A, { session_id: 'abc' }), claimsOf('not-a-uuid'), { legacy: null, claimsJson: '{not json', authUid: A },
     { legacy: null, claimsJson: '[1]', authUid: A }, { legacy: null, claimsJson: null, authUid: A },
     { legacy: { sub: A, role: 'anon', sessionId: S1 }, claimsJson: null, authUid: A },
+    { legacy: { sub: A, role: 'authenticated', sessionId: S1, isAnonymous: 'true' }, claimsJson: null, authUid: A },
   ];
+  assert.deepEqual(principalFromClaims({ legacy: { sub: A, role: 'authenticated', sessionId: S1, isAnonymous: 'false' }, claimsJson: null, authUid: A }),
+    { userId: A, role: 'authenticated', sessionId: S1 }, 'a per-claim is_anonymous of false is a person');
   for (const c of refused) assert.deepEqual(principalFromClaims(c as ClaimSources), { refused: 'AUTH_REQUIRED' }, JSON.stringify(c));
   // a p_user_id in the call is not a parameter: the answer's subject is the JWT's
   const c = counter((p) => factsFor(p.userId));
