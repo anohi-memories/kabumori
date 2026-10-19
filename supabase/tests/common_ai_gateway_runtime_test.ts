@@ -388,16 +388,23 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
     "../functions/_shared/ai_provider/adapter.ts",
     "../functions/_shared/ai_provider/redact.ts",
     "../functions/_shared/ai_provider/secrets.ts",
+    "./app_policies.ts",
+    "./authority_port.ts",
+    "./runtime.ts",
   ]);
+  const consultOnly = new Set(["../functions/social-mobile-consult/logic.ts", "../functions/_shared/brand/social_mobile_content_settings.ts"]);
   const dir = new URL("../ai_gateway/", import.meta.url);
   const files: string[] = [];
   for await (const e of Deno.readDir(dir)) files.push(e.name);
   // G6-02 adds the app policy catalog and the G5 authority port (same rules: no runtime API, named imports only).
-  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "gateway.ts", "policy_registry.ts", "runtime.ts"]);
+  // G6-03 adds the POSTONA consult adapter, the only file that may import the (unchanged) consult handler module.
+  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "runtime.ts"]);
   for (const name of files) {
     const text = await Deno.readTextFile(new URL(name, dir));
     assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\(/u, name);
     assert.doesNotMatch(text, /sk-ant-|sk-proj-|sb_secret_[A-Za-z0-9]{8}/u, `${name}: no key-shaped literal`);
-    for (const m of text.matchAll(/(?:import|export)[^;]*?from\s+["']([^"']+)["']/gu)) assert.ok(allowed.has(m[1]), `${name}: ${m[1]}`);
+    for (const m of text.matchAll(/(?:import|export)[^;]*?from\s+["']([^"']+)["']/gu)) {
+      assert.ok(allowed.has(m[1]) || (name === "postona_consult_adapter.ts" && consultOnly.has(m[1])), `${name}: ${m[1]}`);
+    }
   }
 });
