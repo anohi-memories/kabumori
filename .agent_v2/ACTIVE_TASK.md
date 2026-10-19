@@ -26,17 +26,17 @@
 
 ## F2
 - slot: F2
-- status: ready
+- status: review_required
 - task_id: postona-f2-manual-x-ui-iphone-simulator-offline-qa-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: chatgpt
 - return_to: かぶモリアプリG2のちゃ（POSTONA QA担当）
 - completion_code: L2
 - recommended_model: Sonnet5（中）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
 - dependencies: F1 Draft PR #274/#277/#283/#288 (stack head c41e20ce508530328570d22c4a0cbc0a43fb2a2e); Issue #269 6251801894 / 6260001714
-- blocker: none for offline QA; real send / OAuth / managed out of scope
+- blocker: L2 review; Simulator QA done — keyboard avoidance FAIL(P2), dark status bar FAIL(P3) for F1 owner; real device NOT_VERIFIED
 - production_mutation_window: FORBIDDEN
 - previous_archive: .agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md
 - slot_use: POSTONA manual X post UI iPhone Simulator offline/mock QA (no F1/F3/F4/F5 source edits)
