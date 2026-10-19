@@ -34,6 +34,17 @@
       "restore_verified": true,
       "original_commit": "pre-pause original Git blob pinned; original parent commit not individually resolved",
       "postclosure_git_blob": "6e8cbd205d32ba71a80036f9962e9d0d9645d3de"
+    },
+    {
+      "original_path": ".agent_v2/tasks/F2.md",
+      "archive_path": ".agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md",
+      "bytes": 7960,
+      "sha256": "2a1a59341e25f97b7bdf99020088bb8ff7e91c01adfd05a2f09788c9975e47c1",
+      "original_git_blob": "c4fa1a28c98863fbf27d78c64518ff2daa7ab213",
+      "archive_git_blob": "c4fa1a28c98863fbf27d78c64518ff2daa7ab213",
+      "restore_verified": true,
+      "original_commit": "61c34f63a1e1bafafa60249b136b81530b22f2c1",
+      "appended": "2026-10-19 final F2 close record (done/none, USER_DEFERRED_FOR_KABUMORI_PAUSE, SOURCE_ONLY_FREEZE, no security PASS) before F2 reuse for POSTONA QA"
     }
   ]
 }

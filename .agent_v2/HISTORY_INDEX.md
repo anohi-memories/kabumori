@@ -831,3 +831,8 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 - task_id `common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019`, L6 done PASS_OFFLINE_CONTRACT / PRODUCTION_NO_GO. PR284 HEAD `9c8421344f7a363b5e4b8a892eb4e9ff4dc8e8f7` Draft.
 - original_path `.agent_v2/tasks/F6.md`; archive_path `.agent_v2/archive/2026-10-19-F6-common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019/files/.agent_v2/tasks/F6.md`.
 - original L6 commit `9a51a748054c42ff32a5d71fb646bb9e9ce03c6a` (created `a3134ec2abbd85643543159c2a6ded4e4c151d6a`), original/archive Git blob `22c90227890f0c2468bf58ac5a4110446e87e4c4`, 15229 bytes, SHA256 `7b3ce09670c1e7219d02ccaf5bb700707172820a7b5f45b6c8d664cbd2b938be`. MANIFEST.md/MANIFEST.json/SHA256SUMS saved. Restore bytes/blob PASS; append-only.
+
+## F2 kabumori pause final close record — archived 2026-10-19 (append to 2026-10-18 pause archive)
+- task_id `kabumori-f2-pause-delivery-runtime-candidate-20261015`, final status done/none, USER_DEFERRED_FOR_KABUMORI_PAUSE / SOURCE_ONLY_FREEZE / NOT a security PASS. PR213 Draft/unmerged/un-deployed.
+- original_path `.agent_v2/tasks/F2.md`; archive_path `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md`.
+- original commit `61c34f63a1e1bafafa60249b136b81530b22f2c1`, original/archive Git blob `c4fa1a28c98863fbf27d78c64518ff2daa7ab213`, 7960 bytes, SHA256 `2a1a59341e25f97b7bdf99020088bb8ff7e91c01adfd05a2f09788c9975e47c1`. MANIFEST.json record appended, SHA256SUMS line appended (shasum -c 4/4 OK). Restore bytes/blob PASS; append-only. F2 reused for `postona-f2-manual-x-ui-iphone-simulator-offline-qa-20261019`.

@@ -26,23 +26,20 @@
 
 ## F2
 - slot: F2
-- status: done
-- task_id: kabumori-f2-pause-delivery-runtime-candidate-20261015
+- status: ready
+- task_id: postona-f2-manual-x-ui-iphone-simulator-offline-qa-20261019
 - owner: claude
-- next_owner: none
-- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
+- next_owner: claude
+- return_to: かぶモリアプリG2のちゃ（POSTONA QA担当）
 - completion_code: L2
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（中）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: F2 design PR #210 merged; F8 news gate runtime; shared POSTONA/AI protected
-- blocker: L2 PASS_SOURCE_FIX / SECURITY_FOCUSED_REREVIEW_REQUIRED; Draft #213 head c10f1da593ba3dc365cf340e9569ae1caa9789b1; J2 R2(P1)/R3(P2) corrected in source candidate; production NO_GO; managed preflight pending
+- dependencies: F1 Draft PR #274/#277/#283/#288 (stack head c41e20ce508530328570d22c4a0cbc0a43fb2a2e); Issue #269 6251801894 / 6260001714
+- blocker: none for offline QA; real send / OAuth / managed out of scope
 - production_mutation_window: FORBIDDEN
-- previous_archive: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md
-- slot_use: kabumori X gate/planner/queue/Push source-only candidate after L2 design archived
-
-- pause_closure: USER_DEFERRED_FOR_KABUMORI_PAUSE / L2 administrative source-only freeze; no security PASS
-- pause_archive: .agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/
+- previous_archive: .agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md
+- slot_use: POSTONA manual X post UI iPhone Simulator offline/mock QA (no F1/F3/F4/F5 source edits)
 
 ## F3
 - slot: F3
