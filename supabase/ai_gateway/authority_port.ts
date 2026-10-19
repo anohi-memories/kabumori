@@ -13,22 +13,36 @@
 //     owner_epoch: string|null,                (required when scope.brand_slug is set; opaque, e.g. F5's bigint epoch)
 //     entitlements: string[],                  ("<app>:<service>", active ones only)
 //     issued_at_ms: number, expires_at_ms: number }
+//
+// G6-04 (2026-10-19): aligned with G5's adopted v1 (PR #340 `supabase/candidates/common_account_postona_authz/verdict.ts`,
+// head 80b90bd9): the credential is kept (in memory only) for the recheck because G5 takes the subject from the JWT alone;
+// an allow lives at most 60 s; a brand-scoped owner_epoch is `g5oe:<owner epoch>:<lifecycle_version>`; the generation is
+// G5's (user, session ref, owner epoch, every entitlement); G5 never answers for system work, so a system subject is
+// refused unless a non-G5 job transport is configured explicitly. Matrix: docs/ai-provider/G6_G5_VERDICT_COMPAT.md.
 import type { AppId, AuthorityPort, AuthVerdict, BrandRef, GatewaySubject } from "./gateway.ts";
 
 export type VerdictScope = Readonly<{ app: AppId; feature: string; brand: BrandRef | null }>;
 export type G5Transport = Readonly<{
   /** G5's verdict for this credential and scope (the wire object above). Throws when G5 cannot be reached. */
   fetchVerdict(credential: unknown, scope: VerdictScope): Promise<unknown>;
-  /** G5's fresh verdict for the same subject and scope, asked right before each provider attempt. */
-  fetchRecheck(scope: VerdictScope, subject: Readonly<{ kind: "user"; userId: string } | { kind: "system" }>): Promise<unknown>;
+  /**
+   * G5's fresh verdict for the same scope, asked right before each provider attempt, with the SAME credential (G5 derives
+   * the subject from it); `subject` is what the first verdict named, for transports that need it.
+   */
+  fetchRecheck(credential: unknown, scope: VerdictScope, subject: Readonly<{ kind: "user"; userId: string } | { kind: "system" }>): Promise<unknown>;
 }>;
 export type G5AuthorityOptions = Readonly<{
   transport: G5Transport;
   /** app:feature -> the entitlements that open it for a person (AppPolicySet.planAllowlist). */
   planAllowlist: ReadonlyMap<string, readonly string[]>;
   nowMs?: () => number;
-  /** Longest verdict lifetime accepted (default 300 000 ms, at most 900 000). */
+  /** Longest verdict lifetime accepted (default and maximum: G5's 60 000 ms allow lifetime). */
   maxTtlMs?: number;
+  /**
+   * Accept `subject: {kind: "system"}` allows. G5 never issues them (system work has its own job authority), so this is
+   * false for a G5 transport and may be true only for a non-G5 server-side job transport.
+   */
+  acceptSystemSubject?: boolean;
   /** Clock skew tolerated on issued_at_ms (default 30 000 ms). */
   skewMs?: number;
   /** Per G5 call (default 3 000 ms); a slower answer counts as unreachable. */
@@ -39,6 +53,10 @@ const WIRE_KEYS = "decision,entitlements,expires_at_ms,issued_at_ms,owner_epoch,
 const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/u;
 const ENTITLEMENT = /^[a-z][a-z0-9_]{0,31}:[a-z][a-z0-9_]{0,63}$/u;
+/** G5's owner_epoch token for a brand-scoped verdict (verdict.ts ownerEpochToken / acceptAllow). */
+const OWNER_EPOCH = /^g5oe:[1-9][0-9]{0,18}:[1-9][0-9]{0,18}$/u;
+/** G5's ALLOW_TTL_MS. */
+export const G5_ALLOW_TTL_MS = 60_000;
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const keysAre = (v: Record<string, unknown>, keys: string) => Object.keys(v).sort().join(",") === keys;
 const finiteInt = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v);
@@ -59,13 +77,15 @@ type Parsed = Readonly<{ verdict: AuthVerdict; subjectRef: Readonly<{ kind: "use
 /** The G5 port. verdict() and recheck() never return "allow" unless every rule below holds. */
 export function createG5AuthorityPort(options: G5AuthorityOptions): AuthorityPort {
   const now = options.nowMs ?? (() => Date.now());
-  const maxTtl = options.maxTtlMs ?? 300_000;
-  if (!Number.isInteger(maxTtl) || maxTtl < 1_000 || maxTtl > 900_000) throw new Error("G5_PORT_MAX_TTL_INVALID");
+  const maxTtl = options.maxTtlMs ?? G5_ALLOW_TTL_MS;
+  if (!Number.isInteger(maxTtl) || maxTtl < 1_000 || maxTtl > G5_ALLOW_TTL_MS) throw new Error("G5_PORT_MAX_TTL_INVALID");
+  const acceptSystem = options.acceptSystemSubject === true;
   const skew = options.skewMs ?? 30_000;
   if (!Number.isInteger(skew) || skew < 0 || skew > 120_000) throw new Error("G5_PORT_SKEW_INVALID");
   const timeoutMs = options.timeoutMs ?? 3_000;
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30_000) throw new Error("G5_PORT_TIMEOUT_INVALID");
-  const scopes = new WeakMap<AuthVerdict, Readonly<{ scope: VerdictScope; subjectRef: Parsed["subjectRef"] }>>();
+  // What a recheck needs: the scope, the subject and the caller's credential (kept only here, never logged or sent elsewhere).
+  const scopes = new WeakMap<AuthVerdict, Readonly<{ scope: VerdictScope; subjectRef: Parsed["subjectRef"]; credential: unknown }>>();
 
   /** An answer that is not "allow": the subject is the requested scope's, so the gateway's checks stay meaningful. */
   const refuse = (scope: VerdictScope, decision: "deny" | "unknown" | "pending", reason: string): AuthVerdict => ({
@@ -82,6 +102,8 @@ export function createG5AuthorityPort(options: G5AuthorityOptions): AuthorityPor
     if (decision !== "allow" && decision !== "deny" && decision !== "unknown" && decision !== "pending") return refuse(scope, "unknown", "WIRE_DECISION");
     if (!(reason === null || (typeof reason === "string" && TOKEN.test(reason)))) return refuse(scope, "unknown", "WIRE_REASON");
     if (decision !== "allow") return refuse(scope, decision, typeof reason === "string" ? reason : `G5_${String(decision).toUpperCase()}`);
+    // G5's acceptAllow: an allow carries no reason. One that does is not a G5 allow (G6-04 cross-check finding).
+    if (reason !== null) return refuse(scope, "unknown", "WIRE_REASON");
     // The scope G5 answered for must be exactly the one asked (app, feature, brand).
     if (!isRecord(s) || !keysAre(s, "app,brand_slug,feature") || s.app !== scope.app || s.feature !== scope.feature ||
       s.brand_slug !== (scope.brand ? scope.brand.slug : null)) return refuse(scope, "unknown", "SCOPE_MISMATCH");
@@ -100,6 +122,7 @@ export function createG5AuthorityPort(options: G5AuthorityOptions): AuthorityPor
     let subjectRef: Parsed["subjectRef"];
     let sessionRef = "-";
     if (isRecord(subject) && subject.kind === "system" && keysAre(subject, "kind")) {
+      if (!acceptSystem) return refuse(scope, "unknown", "SYSTEM_SUBJECT_NOT_FROM_G5");
       if (session !== null || owner_epoch !== null || scope.brand !== null) return refuse(scope, "unknown", "SYSTEM_SHAPE");
       gatewaySubject = { kind: "system", app: scope.app };
       subjectRef = { kind: "system" };
@@ -107,6 +130,7 @@ export function createG5AuthorityPort(options: G5AuthorityOptions): AuthorityPor
       if (!isRecord(session) || !keysAre(session, "ref,state") || typeof session.ref !== "string" || !TOKEN.test(session.ref)) return refuse(scope, "unknown", "SESSION_SHAPE");
       if (session.state !== "active") return refuse(scope, "deny", `SESSION_${String(session.state).toUpperCase().slice(0, 16)}`);
       if (scope.brand && !(typeof owner_epoch === "string" && TOKEN.test(owner_epoch))) return refuse(scope, "unknown", "OWNER_EPOCH_MISSING");
+      if (scope.brand && !OWNER_EPOCH.test(owner_epoch as string)) return refuse(scope, "unknown", "OWNER_EPOCH_SHAPE");
       if (!scope.brand && owner_epoch !== null) return refuse(scope, "unknown", "OWNER_EPOCH_WITHOUT_BRAND");
       // The AI plan rule (G6): at least one entitlement G5 says is active must open this feature.
       if (!entitlements.some((e) => plan.includes(e as string))) return refuse(scope, "deny", "PLAN_NOT_ALLOWED");
@@ -115,10 +139,10 @@ export function createG5AuthorityPort(options: G5AuthorityOptions): AuthorityPor
       sessionRef = session.ref;
     } else return refuse(scope, "unknown", "SUBJECT_SHAPE");
 
-    // The generation changes when the owner epoch, the session or the plan-relevant entitlements change, so the
-    // gateway's recheck stops the send on any of them.
-    const planEntitlements = (entitlements as string[]).filter((e) => plan.includes(e)).sort();
-    const generation = "g5v1:" + await sha256(JSON.stringify([owner_epoch, sessionRef, planEntitlements]));
+    // G5's generation (verdict.ts acceptAllow): the person, the session, the owner epoch and EVERY entitlement. Any change
+    // of one of them between the verdict and the recheck stops the send.
+    const userRef = subjectRef.kind === "user" ? subjectRef.userId : "system";
+    const generation = "g5v1:" + await sha256(JSON.stringify([userRef, sessionRef, owner_epoch, [...(entitlements as string[])].sort()]));
     return { verdict: { decision: "allow", subject: gatewaySubject, generation, expiresAtMs: expires_at_ms }, subjectRef };
   }
 
@@ -129,13 +153,13 @@ export function createG5AuthorityPort(options: G5AuthorityOptions): AuthorityPor
       const wire = await withTimeout(options.transport.fetchVerdict(credential, scope), timeoutMs); // throws -> AUTH_UNAVAILABLE
       const parsed = await parse(wire, scope);
       if (!("subjectRef" in parsed)) return parsed;
-      scopes.set(parsed.verdict, { scope, subjectRef: parsed.subjectRef });
+      scopes.set(parsed.verdict, { scope, subjectRef: parsed.subjectRef, credential });
       return parsed.verdict;
     },
     async recheck(prior: AuthVerdict): Promise<AuthVerdict> {
       const known = scopes.get(prior);
       if (!known) return refuse({ app: prior.subject.app, feature: "-", brand: null }, "unknown", "RECHECK_UNKNOWN_VERDICT");
-      const wire = await withTimeout(options.transport.fetchRecheck(known.scope, known.subjectRef), timeoutMs);
+      const wire = await withTimeout(options.transport.fetchRecheck(known.credential, known.scope, known.subjectRef), timeoutMs);
       const parsed = await parse(wire, known.scope);
       return "subjectRef" in parsed ? parsed.verdict : parsed;
     },
