@@ -2,6 +2,14 @@
 
 ## 2026-10-19 G枠Issue移行・V3 G10廃止（最新優先）
 
+### 全G担当ちゃ共通指令（次の新規TASKからIssue方式）
+
+ユーザーが全G担当ちゃ向けに明示承認した共通指令は [Issue #299 コメント6262613710](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6262613710) に記録・読み戻し済み。**G1〜G10の担当ちゃは、次の新規TASKを対応G番号の固定Issueへ登録することを優先**する。各G部屋はこの指令を個別に適用し、登録可能なら「登録しますか」と聞き返さず、担当ちゃ自身が登録・read-backまで実施する。G1=#316、G2=#317、G3=#318、G4=#319、G5=#320、G6=#321、G7=#322、G8=#304（pilot後整理要）、G9=#298（pilot中、正式世代へ切替時に整理要）、G10=#323。開始コードGn、完了コードKnは維持する。
+
+**現行TASKの途中移管は禁止**。旧F/V3の未完了TASKは元系統でL/K完了確認を終え、Report/最終archive、SHA256と復元、PR/HEAD、競合を確認する。idle Issueは指示登録まで開始不可。Issue本文のwriterは担当ちゃのみ。ClaudeはReport、担当ちゃは全文HISTORY→ACCEPT→次TASK更新をread-backする。移行が難しい枠だけ理由と解除条件を示し、他枠の安全な開発は止めない。G10旧V3 K10は廃止判定済み、旧Reportは未受入のまま保護。
+
+
+
 この節は下の旧.agent／.agent_v2／V3説明より優先する。ユーザーはG1〜G10の固定Issue管理への移行およびこの管理更新に伴うmain更新・Vercelデプロイを明示承認した。管理正本の実切替は対象枠の既存TASKが完了・受入・履歴保護され、新規TASKをIssueへ登録・読み戻した時点からとする。idle/task_id:none のIssueは開始不可。Issue本文は担当ちゃのみ更新、ClaudeはREPORTのみ、担当ちゃはHISTORY・ACCEPTを保存し読み戻す。1世代50件。推薦モデル・return_to・完了コードは毎TASK必須。
 
 | 枠 | 管理Issue | 切替条件・現状 |
