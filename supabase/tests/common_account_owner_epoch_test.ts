@@ -3,7 +3,10 @@
 // What is asserted: the number moves on EVERY committed write that touches an owner membership row (insert, update, delete, cascade, truncate) and never goes back, so
 // an owner A -> B -> A, owner -> admin -> owner or a delete + insert can never look like "nothing changed"; a rolled-back or failed write moves nothing; two concurrent owner
 // changes serialize; zero / two owners, a disabled trigger and a write that got past the trigger make the getter answer NULL (refuse); the helpers are owner-only; the real X
-// onboarding RPC keeps working; and a stale attestation sends nothing. A PASS is not a managed Supabase result, not G4's / F3's code and not an approval to apply.
+// onboarding RPC keeps working; and a stale attestation sends nothing. J1 V1 R1-R3: a rollback + re-install moves EVERY number (an A -> B -> A or a re-created workspace
+// made while uninstalled never re-validates an earlier attestation); a same-named trigger that is not exactly the candidate's does not count; and an API role that can
+// reach the owner, a superuser, SET session_replication_role, TRIGGER, or (anon / authenticated) a write / TRUNCATE / REFERENCES -- through any membership, NOINHERIT and
+// SET-only included -- breaks the coverage and stops the install. A PASS is not a managed Supabase result, not G4's / F3's code and not an approval to apply.
 // Needs CAL_E2E=1 and PGHOST / PGPORT / PGUSER / PGDATABASE / PGSUPER / OE_CANDIDATE / OE_ROLLBACK (common_account_owner_epoch_run.sh sets them).
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -35,6 +38,15 @@ const spawnHolder = (statement: string) => new Deno.Command('psql', {
   args: ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', statement], env: baseEnv(owner), clearEnv: true, stdout: 'piped', stderr: 'piped',
 }).spawn();
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// waits until a spawned holder is inside its pg_sleep (so its locks are held), instead of guessing a start-up delay
+async function untilSleeping(marker: string) {
+  for (let i = 0; i < 100; i += 1) {
+    const n = await run(owner, ['-c', `select count(*) from pg_stat_activity where wait_event = 'PgSleep' and position(${q(marker)} in query) > 0`]);
+    if (n.ok && n.out === '1') return;
+    await sleep(50);
+  }
+  throw new Error(`the holder ${marker} never reached its sleep`);
+}
 
 // ---- the model world -------------------------------------------------------------------------------------------------------------------------------
 async function user(): Promise<string> {
@@ -63,9 +75,35 @@ const setRole = (brand: string, u: string, role: string) => sql(`update public.b
 const dropMember = (brand: string, u: string) => sql(`delete from public.brand_memberships where brand_id = ${q(brand)} and user_id = '${u}'::uuid`);
 const test_ = enabled ? test : test.skip;
 const denied = (r: Psql) => !r.ok && /permission denied|must be owner|does not exist/u.test(r.error);
+const covered = () => sql(`select private.account_lifecycle_brand_owner_epoch_covered()::text`);
+const exposure = () => sql(`select coalesce(private.account_lifecycle_owner_epoch_exposure(), 'NONE')`);
+const candidateFile = () => Deno.env.get('OE_CANDIDATE') ?? '';
+const rollbackFile = () => Deno.env.get('OE_ROLLBACK') ?? '';
+const fenceTriggers = () => sql(`select count(*) from pg_trigger where tgname like 'account_lifecycle_owner_epoch%' and tgrelid = 'public.brand_memberships'::regclass`);
+const tag = () => `oe_t_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+// the exact triggers of the candidate, re-created after a test replaced them
+async function restoreTriggers() {
+  await sql(`drop trigger if exists account_lifecycle_owner_epoch_row on public.brand_memberships; drop trigger if exists account_lifecycle_owner_epoch_truncate on public.brand_memberships; `
+    + `create trigger account_lifecycle_owner_epoch_row after insert or update or delete on public.brand_memberships for each row execute function private.account_lifecycle_owner_epoch_record(); `
+    + `create trigger account_lifecycle_owner_epoch_truncate after truncate on public.brand_memberships for each statement execute function private.account_lifecycle_owner_epoch_truncated()`);
+}
+// a stale-attestation send gate (a model of G4 / F3 that uses only the getter) with a mock transport that counts what it sends
+function sendGate(brand: string) {
+  const state = { sends: 0 };
+  const attest = async () => ({ owner: await ownerOf(brand), epoch: await num(brand) });
+  const send = async (att: { owner: string; epoch: number }): Promise<string> => {
+    const current = await epoch(brand);
+    if (current === 'NULL') return 'refused:unknown';
+    if ((await ownerOf(brand)) !== att.owner) return 'refused:owner';
+    if (Number(current) !== att.epoch) return 'refused:stale';
+    state.sends += 1;
+    return 'sent (SIMULATED)';
+  };
+  return { state, attest, send };
+}
 
 // =============================================================================================================================================
-test_('install: a first install gives an owner workspace 1; a RE-install reconciles what happened while the triggers were gone and keeps every retained number', async () => {
+test_('install: a first install gives an owner workspace 1; the rollback and a RE-install each move EVERY retained number (no number survives a re-install)', async () => {
   const a = await user();
   const one = await workspace([a]);
   assert.equal(await epoch(one), '1', 'a single owner inserted after the install starts at 1');
@@ -79,21 +117,23 @@ test_('install: a first install gives an owner workspace 1; a RE-install reconci
   // uninstall (the rollback file), write while no trigger exists, install again
   const before = await workspace([await user()]);
   const beforeEpoch = await num(before);
-  const rollback = Deno.env.get('OE_ROLLBACK') ?? '';
-  const candidate = Deno.env.get('OE_CANDIDATE') ?? '';
+  const rollback = rollbackFile();
+  const candidate = candidateFile();
+  const oneEpoch = await num(one);
   assert.ok((await run(owner, ['-f', rollback])).ok, 'the rollback file runs');
   assert.ok(!(await psql(`select private.account_lifecycle_brand_owner_epoch(${q(before)})`)).ok, 'after the rollback the getter does not exist: a caller that needs it refuses');
-  assert.equal(await stored(before), String(beforeEpoch), 'the retained history is still there');
+  assert.equal(await stored(before), String(beforeEpoch + 1), 'the retained history is still there, moved on by the rollback');
+  assert.equal(await stored(one), String(oneEpoch + 1), 'every recorded workspace moved on, changed or not');
   const later = await workspace([await user()]);              // an owner the triggers never saw
   await sql(`delete from public.brand_memberships where brand_id = ${q(before)}`);   // an owner change while uninstalled ...
   await member(before, await user(), 'owner');
   assert.equal(await stored(later), 'NONE');
-  assert.equal(await stored(before), String(beforeEpoch), 'nothing was recorded while uninstalled');
+  assert.equal(await stored(before), String(beforeEpoch + 1), 'nothing was recorded while uninstalled');
   assert.ok((await run(owner, ['-f', candidate])).ok, 'the candidate installs again');
   assert.equal(await epoch(later), '1', 'an owner the triggers never saw gets 1');
-  assert.equal(await num(before), beforeEpoch + 1, 'the change made while uninstalled is reconciled as one change, continuing the retained number');
-  assert.equal(await epoch(one), '1', 'an unchanged recorded workspace keeps its number');
-  assert.equal(await sql(`select private.account_lifecycle_brand_owner_epoch_covered()::text`), 'true');
+  assert.equal(await num(before), beforeEpoch + 2, 'the re-install moved it again, above the rollback number');
+  assert.equal(await num(one), oneEpoch + 2, 'an UNCHANGED recorded workspace moves too: no number issued before the rollback is valid after the re-install');
+  assert.equal(await covered(), 'true');
   // a second install on top is refused
   assert.ok(/OWNER_EPOCH_ALREADY_APPLIED/u.test((await run(owner, ['-f', candidate])).error));
   // an end-user role that could write memberships is a writer this file does not cover: the install refuses, and nothing is half-installed
@@ -101,17 +141,18 @@ test_('install: a first install gives an owner workspace 1; a RE-install reconci
   await sql(`grant insert on public.brand_memberships to authenticated`);
   const refused = await run(owner, ['-f', candidate]);
   assert.ok(!refused.ok && /OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_WRITE_MEMBERSHIPS/u.test(refused.error), 'the install refuses');
-  assert.equal(await sql(`select count(*) from pg_trigger where tgname like 'account_lifecycle_owner_epoch%' and tgrelid = 'public.brand_memberships'::regclass`), '0', 'no trigger was left behind');
+  assert.equal(await fenceTriggers(), '0', 'no trigger was left behind');
+  assert.equal(await sql(`select (to_regprocedure('private.account_lifecycle_owner_epoch_exposure()') is null)::text`), 'true', 'no function was left behind');
   await sql(`revoke insert on public.brand_memberships from authenticated`);
   assert.ok((await run(owner, ['-f', candidate])).ok, 'the install works again once the grant is gone');
-  assert.equal(await sql(`select private.account_lifecycle_brand_owner_epoch_covered()::text`), 'true');
+  assert.equal(await covered(), 'true');
 });
 
 test_('who may call what: the getter, the resync and every helper are owner-only; the table has no grant; no API role reaches them through a membership', async () => {
   const a = await user();
   const brand = await workspace([a]);
   const fns = [`private.account_lifecycle_brand_owner_epoch(${q(brand)})`, `private.account_lifecycle_brand_owner_epoch_covered()`, `private.account_lifecycle_brand_owner_epoch_resync(${q(brand)})`,
-    `private.account_lifecycle_owner_epoch_bump(${q(brand)})`];
+    `private.account_lifecycle_owner_epoch_bump(${q(brand)})`, `private.account_lifecycle_owner_epoch_exposure()`];
   for (const role of ['anon', 'authenticated', 'service_role']) {
     for (const fn of fns) {
       const r = await psql(`begin; set local role ${role}; select ${fn}; commit`);
@@ -125,6 +166,10 @@ test_('who may call what: the getter, the resync and every helper are owner-only
   assert.equal(await sql(`select relrowsecurity::text from pg_class where oid = 'private.account_lifecycle_brand_owner_epochs'::regclass`), 'true');
   const b = await user();
   assert.ok(denied(await psql(`begin; set local role authenticated; insert into public.brand_memberships (brand_id, user_id, role) values (${q(brand)}, '${b}'::uuid, 'owner'); commit`)), 'an end user cannot write memberships (the premise of the install check)');
+  for (const [role, privilege] of [['anon', 'TRIGGER'], ['authenticated', 'TRIGGER'], ['service_role', 'TRIGGER'], ['anon', 'TRUNCATE'], ['authenticated', 'TRUNCATE'], ['authenticated', 'REFERENCES']]) {
+    assert.equal(await sql(`select has_table_privilege(${q(role)}, 'public.brand_memberships', ${q(privilege)})::text`), 'false', `${role} has no ${privilege} (the dependency the runner stands in for)`);
+  }
+  assert.equal(await exposure(), 'NONE');
   assert.equal(await epoch(brand), '1');
 });
 
@@ -238,8 +283,8 @@ test_('concurrency: an owner change that has not committed is invisible; a secon
   await member(brand, b, 'admin');
   await member(brand, c, 'admin');
   const base = await num(brand);
-  const t1 = spawnHolder(`begin; update public.brand_memberships set role = 'admin' where brand_id = ${q(brand)} and user_id = '${a}'::uuid; update public.brand_memberships set role = 'owner' where brand_id = ${q(brand)} and user_id = '${b}'::uuid; select pg_sleep(3); commit;`);
-  await sleep(900);
+  const t1 = spawnHolder(`begin; update public.brand_memberships set role = 'admin' where brand_id = ${q(brand)} and user_id = '${a}'::uuid; update public.brand_memberships set role = 'owner' where brand_id = ${q(brand)} and user_id = '${b}'::uuid; select pg_sleep(3) /* oe-hold-t1 */; commit;`);
+  await untilSleeping('oe-hold-t1');
   assert.equal(await num(brand), base, 'the uncommitted change is invisible to a reader');
   const started = Date.now();
   const second = await psql(`begin; update public.brand_memberships set role = 'admin' where brand_id = ${q(brand)} and user_id = '${b}'::uuid; update public.brand_memberships set role = 'owner' where brand_id = ${q(brand)} and user_id = '${c}'::uuid; commit`);
@@ -248,8 +293,8 @@ test_('concurrency: an owner change that has not committed is invisible; a secon
   await t1.output();
   assert.equal(await ownerOf(brand), c, 'the last committed owner is c');
   assert.equal(await num(brand), base + 4, 'four owner-row changes, none lost, none repeated');
-  const holder = spawnHolder(`begin; update public.brand_memberships set role = 'admin' where brand_id = ${q(brand)} and user_id = '${c}'::uuid; select pg_sleep(2); rollback;`);
-  await sleep(600);
+  const holder = spawnHolder(`begin; update public.brand_memberships set role = 'admin' where brand_id = ${q(brand)} and user_id = '${c}'::uuid; select pg_sleep(2) /* oe-hold-abort */; rollback;`);
+  await untilSleeping('oe-hold-abort');
   assert.equal(await num(brand), base + 4, 'while the holder is open nothing changed');
   await holder.output();
   assert.equal(await num(brand), base + 4, 'the aborted transaction moved nothing');
@@ -344,6 +389,212 @@ test_('the real X onboarding RPC keeps working: it creates the workspace and its
   assert.equal(await epoch(brand), '1', 'the owner the RPC wrote is epoch 1');
 });
 
+test_('J1 V1 R1: rollback + re-install is a re-start fence -- an A -> B -> A made while uninstalled, a workspace re-created with the same id, and an untouched workspace all refuse every earlier attestation; nothing is sent', async () => {
+  const a = await user();
+  const b = await user();
+  const c = await user();
+  const aba = await workspace([a]);
+  const recreated = await workspace([c]);
+  const quiet = await workspace([await user()]);
+  const gates = [sendGate(aba), sendGate(recreated), sendGate(quiet)];
+  const atts = [];
+  for (const g of gates) atts.push(await g.attest());
+  for (let i = 0; i < gates.length; i += 1) assert.equal(await gates[i].send(atts[i]), 'sent (SIMULATED)', 'fresh before the rollback');
+  const was = [await stored(aba), await stored(recreated), await stored(quiet)].map(Number);
+  assert.ok((await run(owner, ['-f', rollbackFile()])).ok, 'the rollback runs');
+  // while uninstalled: A -> B -> A through delete + insert; the second workspace is deleted (cascade) and re-created under the same id with the same owner
+  await dropMember(aba, a);
+  await member(aba, b, 'owner');
+  await dropMember(aba, b);
+  await member(aba, a, 'owner');
+  await sql(`delete from public.brands where id = ${q(recreated)}`);
+  await sql(`insert into public.brands (id) values (${q(recreated)})`);
+  await member(recreated, c, 'owner');
+  assert.equal(await stored(aba), String(was[0] + 1), 'the rollback moved the recorded number once; the writes while uninstalled moved nothing');
+  assert.ok((await run(owner, ['-f', candidateFile()])).ok, 'the re-install');
+  assert.equal(await ownerOf(aba), a, 'the owner is A again, exactly as recorded before the rollback');
+  assert.equal(await num(aba), was[0] + 2, 'A -> B -> A while uninstalled: a new number');
+  assert.equal(await num(recreated), was[1] + 2, 'the re-created workspace: a new number');
+  assert.equal(await num(quiet), was[2] + 2, 'the untouched workspace: a new number as well');
+  for (let i = 0; i < gates.length; i += 1) {
+    assert.equal(await gates[i].send(atts[i]), 'refused:stale', 'an attestation from before the rollback is stale after the re-install');
+    assert.equal(gates[i].state.sends, 1, 'the mock transport was not called again');
+  }
+  // a second cycle keeps moving: the generation is durable, not a one-off
+  const second = await num(aba);
+  assert.ok((await run(owner, ['-f', rollbackFile()])).ok);
+  assert.ok((await run(owner, ['-f', rollbackFile()])).ok, 'a rollback without an install is harmless');
+  assert.ok((await run(owner, ['-f', candidateFile()])).ok);
+  assert.equal(await num(aba), second + 3, 'two rollbacks and one install: three moves, never back');
+  assert.equal(await covered(), 'true');
+});
+
+test_('J1 V1 R2: a same-named trigger that is not exactly the candidate\'s (another function, a WHEN clause, a column list, other events / timing / level, a constraint trigger, arguments, replica-only) does not count', async () => {
+  const a = await user();
+  const brand = await workspace([a]);
+  const e = await num(brand);
+  const decoy = `private.${tag()}_decoy`;
+  // the decoy has everything but the identity: same owner, definer, empty search path
+  await sql(`create function ${decoy}() returns trigger language plpgsql security definer set search_path = '' as $f$ begin return null; end $f$`);
+  const R = 'account_lifecycle_owner_epoch_row';
+  const T = 'account_lifecycle_owner_epoch_truncate';
+  const bm = 'public.brand_memberships';
+  const rec = 'private.account_lifecycle_owner_epoch_record()';
+  const fakes: [string, string][] = [
+    ['another function', `create or replace trigger ${R} after insert or update or delete on ${bm} for each row execute function ${decoy}()`],
+    ['a WHEN clause', `create or replace trigger ${R} after insert or update or delete on ${bm} for each row when (current_setting('application_name') <> 'skip') execute function ${rec}`],
+    ['a column list', `create or replace trigger ${R} after insert or update of role or delete on ${bm} for each row execute function ${rec}`],
+    ['no UPDATE event', `create or replace trigger ${R} after insert or delete on ${bm} for each row execute function ${rec}`],
+    ['BEFORE timing', `create or replace trigger ${R} before insert or update or delete on ${bm} for each row execute function ${rec}`],
+    ['statement level', `create or replace trigger ${R} after insert or update or delete on ${bm} for each statement execute function ${rec}`],
+    ['a constraint trigger', `drop trigger ${R} on ${bm}; create constraint trigger ${R} after insert or update or delete on ${bm} deferrable initially deferred for each row execute function ${rec}`],
+    ['trigger arguments', `create or replace trigger ${R} after insert or update or delete on ${bm} for each row execute function private.account_lifecycle_owner_epoch_record('x')`],
+    ['replica-only firing', `alter table ${bm} enable replica trigger ${R}`],
+    ['a truncate trigger with another function', `create or replace trigger ${T} after truncate on ${bm} for each statement execute function ${decoy}()`],
+    ['a BEFORE truncate trigger', `create or replace trigger ${T} before truncate on ${bm} for each statement execute function private.account_lifecycle_owner_epoch_truncated()`],
+  ];
+  try {
+    for (const [label, ddl] of fakes) {
+      await sql(ddl);
+      assert.equal(await sql(`select count(*) from pg_trigger where tgrelid = '${bm}'::regclass and tgname in ('${R}', '${T}')`), '2', `${label}: both names are still there`);
+      assert.equal(await covered(), 'false', `${label}: not covered`);
+      assert.equal(await epoch(brand), 'NULL', `${label}: the getter refuses`);
+      assert.ok(!(await psql(`select private.account_lifecycle_brand_owner_epoch_resync(${q(brand)})`)).ok, `${label}: the resync refuses`);
+      await restoreTriggers();
+      assert.equal(await covered(), 'true', `${label}: the exact triggers count again`);
+    }
+  } finally {
+    await restoreTriggers();
+    await sql(`drop function if exists ${decoy}()`);
+  }
+  assert.equal(await num(brand), e, 'nothing was written meanwhile');
+});
+
+test_('J1 V1 R2: effective privileges -- an API role with TRIGGER can really replace the fence, so TRIGGER (direct or through a NOINHERIT role), TRUNCATE, REFERENCES and SET session_replication_role break the coverage and stop the install', async () => {
+  const a = await user();
+  const brand = await workspace([a]);
+  const e = await num(brand);
+  const mid = tag();
+  await psqlSuper(`create role ${mid} nologin noinherit`);
+  try {
+    // why it matters: with TRIGGER alone, an end user replaces the fence trigger by name (inside a rolled-back transaction here)
+    await sql(`grant trigger on public.brand_memberships to authenticated`);
+    const replaced = await psql(`begin; set local role authenticated; create or replace trigger account_lifecycle_owner_epoch_row before update on public.brand_memberships for each row execute function suppress_redundant_updates_trigger(); `
+      + `select tgfoid::regprocedure::text from pg_trigger where tgname = 'account_lifecycle_owner_epoch_row'; rollback`);
+    assert.ok(replaced.ok && replaced.out.endsWith('suppress_redundant_updates_trigger()'), `TRIGGER alone replaces the fence trigger: ${replaced.error}`);
+    assert.equal(await exposure(), 'API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS');
+    assert.equal(await epoch(brand), 'NULL', 'the getter refuses while an end user holds TRIGGER');
+    assert.ok((await run(owner, ['-f', rollbackFile()])).ok);
+    const refused = await run(owner, ['-f', candidateFile()]);
+    assert.ok(!refused.ok && /OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS/u.test(refused.error), `the install refuses: ${refused.error}`);
+    assert.equal(await fenceTriggers(), '0', 'nothing half-installed');
+    await sql(`revoke trigger on public.brand_memberships from authenticated`);
+    assert.ok((await run(owner, ['-f', candidateFile()])).ok, 'the install works once the grant is gone');
+    const fresh = await num(brand);
+    assert.ok(fresh > e, 'the re-install moved the number');
+    const cases: [string, string, string, string][] = [
+      ['TRIGGER through a NOINHERIT role (anon cannot use it without SET ROLE)', `grant trigger on public.brand_memberships to ${mid}; grant ${mid} to anon with inherit false, set true`,
+        `revoke ${mid} from anon; revoke trigger on public.brand_memberships from ${mid}`, 'API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS'],
+      ['TRIGGER for the service key', `grant trigger on public.brand_memberships to service_role`, `revoke trigger on public.brand_memberships from service_role`, 'API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS'],
+      ['TRUNCATE for anon', `grant truncate on public.brand_memberships to anon`, `revoke truncate on public.brand_memberships from anon`, 'API_ROLE_CAN_WRITE_MEMBERSHIPS'],
+      ['REFERENCES for authenticated', `grant references on public.brand_memberships to authenticated`, `revoke references on public.brand_memberships from authenticated`, 'API_ROLE_CAN_WRITE_MEMBERSHIPS'],
+      ['DELETE through a NOINHERIT role', `grant delete on public.brand_memberships to ${mid}; grant ${mid} to authenticated with inherit false, set true`,
+        `revoke ${mid} from authenticated; revoke delete on public.brand_memberships from ${mid}`, 'API_ROLE_CAN_WRITE_MEMBERSHIPS'],
+    ];
+    for (const [label, grant, revoke, code] of cases) {
+      const g = await psqlSuper(grant);
+      assert.ok(g.ok, g.error);
+      if (label.includes('NOINHERIT')) {
+        const api = label.startsWith('TRIGGER') ? 'anon' : 'authenticated';
+        const priv = label.startsWith('TRIGGER') ? 'TRIGGER' : 'DELETE';
+        assert.equal(await sql(`select has_table_privilege(${q(api)}, 'public.brand_memberships', ${q(priv)})::text`), 'false', `${label}: a direct privilege check misses it`);
+      }
+      assert.equal(await exposure(), code, label);
+      assert.equal(await epoch(brand), 'NULL', `${label}: the getter refuses`);
+      assert.ok((await psqlSuper(revoke)).ok);
+      assert.equal(await num(brand), fresh, `${label}: covered again once it is gone`);
+    }
+    // a role that may SET session_replication_role silences both triggers for its own session
+    assert.ok((await psqlSuper(`grant set on parameter session_replication_role to ${mid}; grant ${mid} to authenticated with inherit false, set true`)).ok);
+    assert.equal(await sql(`select has_parameter_privilege('authenticated', 'session_replication_role', 'SET')::text`), 'false', 'a direct parameter check misses it');
+    assert.equal(await exposure(), 'API_ROLE_CAN_SKIP_TRIGGERS');
+    assert.equal(await epoch(brand), 'NULL');
+    assert.ok((await psqlSuper(`revoke ${mid} from authenticated; revoke set on parameter session_replication_role from ${mid}`)).ok);
+    assert.equal(await num(brand), fresh);
+  } finally {
+    await sql(`revoke trigger on public.brand_memberships from authenticated, service_role, anon`);
+    await psqlSuper(`revoke set on parameter session_replication_role from ${mid}`);
+    await psqlSuper(`drop owned by ${mid}`);
+    await psqlSuper(`drop role if exists ${mid}`);
+  }
+  assert.equal(await exposure(), 'NONE');
+});
+
+test_('J1 V1 R3: a NOINHERIT path that can still SET ROLE (directly, through an intermediate role, or an ADMIN-only edge) to the owner or a superuser breaks the coverage and stops the install, although USAGE says no', async () => {
+  const a = await user();
+  const brand = await workspace([a]);
+  const e = await num(brand);
+  const mid = tag();
+  const su = tag();
+  const adm = tag();
+  // the runner made the owner a member of the API roles (to SET ROLE in tests); an API role -> owner edge would be a cycle, so it is taken away for this test
+  assert.ok((await psqlSuper(`revoke anon, service_role, kb_cal_svc_child from ${owner}`)).ok);
+  try {
+    const usage = (api: string, target: string) => sql(`select pg_has_role(${q(api)}, ${q(target)}, 'USAGE')::text || ',' || pg_has_role(${q(api)}, ${q(target)}, 'SET')::text || ',' || pg_has_role(${q(api)}, ${q(target)}, 'MEMBER')::text`);
+    // 1) direct: anon may SET ROLE to the owner but inherits nothing
+    assert.ok((await psqlSuper(`grant ${owner} to anon with inherit false, set true`)).ok);
+    assert.equal(await usage('anon', owner), 'false,true,true', 'USAGE says no, SET says yes');
+    assert.equal(await exposure(), 'API_ROLE_CAN_BECOME_OWNER');
+    assert.equal(await epoch(brand), 'NULL', 'direct: the getter refuses');
+    assert.ok((await run(owner, ['-f', rollbackFile()])).ok);
+    const refused = await run(owner, ['-f', candidateFile()]);
+    assert.ok(!refused.ok && /OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_BECOME_OWNER/u.test(refused.error), `the install refuses: ${refused.error}`);
+    assert.equal(await fenceTriggers(), '0');
+    assert.ok((await psqlSuper(`revoke ${owner} from anon`)).ok);
+    assert.ok((await run(owner, ['-f', candidateFile()])).ok, 'the install works once the edge is gone');
+    const fresh = await num(brand);
+    assert.ok(fresh > e);
+    // 2) indirect: authenticated -> (no inherit, SET) mid -> (no inherit, SET) a superuser role: SET ROLE works hop by hop, nothing is inherited
+    assert.ok((await psqlSuper(`create role ${su} nologin superuser; create role ${mid} nologin noinherit; grant ${su} to ${mid} with inherit false, set true; grant ${mid} to authenticated with inherit false, set true`)).ok);
+    assert.equal(await usage('authenticated', su), 'false,true,true', 'indirect: USAGE says no');
+    assert.equal(await exposure(), 'API_ROLE_CAN_BECOME_SUPERUSER');
+    assert.equal(await epoch(brand), 'NULL', 'indirect: the getter refuses');
+    assert.ok((await psqlSuper(`revoke ${mid} from authenticated`)).ok);
+    assert.equal(await num(brand), fresh);
+    // 3) an ADMIN-only edge (no inherit, no SET): the service key could grant itself the owner
+    assert.ok((await psqlSuper(`create role ${adm} nologin noinherit; grant ${owner} to ${adm} with admin true, inherit false, set false; grant ${adm} to service_role with inherit false, set false`)).ok);
+    assert.equal(await usage('service_role', owner), 'false,false,true', 'neither USAGE nor SET, still a member path');
+    assert.equal(await exposure(), 'API_ROLE_CAN_BECOME_OWNER');
+    assert.equal(await epoch(brand), 'NULL', 'admin edge: the getter refuses');
+    assert.ok((await psqlSuper(`revoke ${adm} from service_role`)).ok);
+    assert.equal(await num(brand), fresh);
+  } finally {
+    await psqlSuper(`revoke ${owner} from anon`);
+    for (const r of [adm, mid, su]) await psqlSuper(`drop role if exists ${r}`);
+    assert.ok((await psqlSuper(`grant anon, service_role, kb_cal_svc_child to ${owner}`)).ok, 'the runner\'s memberships are back');
+  }
+  assert.equal(await exposure(), 'NONE');
+  assert.equal(await covered(), 'true');
+});
+
+test_('concurrency (lock before read): a bump that waited for the epoch row records the owners committed meanwhile by ANOTHER membership row', async () => {
+  const a = await user();
+  const c = await user();
+  const brand = await workspace([a]);
+  await member(brand, c, 'admin');
+  const base = await num(brand);
+  // T1: a -> admin, then holds the epoch row; T2 (another row): c -> owner, its bump waits for T1's epoch row
+  const t1 = spawnHolder(`begin; update public.brand_memberships set role = 'admin' where brand_id = ${q(brand)} and user_id = '${a}'::uuid; select pg_sleep(2) /* oe-hold-lbr */; commit;`);
+  await untilSleeping('oe-hold-lbr');
+  const started = Date.now();
+  const t2 = await psql(`update public.brand_memberships set role = 'owner' where brand_id = ${q(brand)} and user_id = '${c}'::uuid`);
+  assert.ok(t2.ok, t2.error);
+  assert.ok(Date.now() - started >= 1000, 'T2 (another membership row) waited for T1 on the epoch row');
+  assert.ok((await t1.output()).success, 'T1 committed');
+  assert.equal(await ownerOf(brand), c);
+  assert.equal(await num(brand), base + 2, 'T2 recorded c as the single owner (it read the owners after the lock, seeing T1\'s commit)');
+});
+
 test_('a STALE attestation sends nothing: the send gate (a model of G4 / F3 using only the getter) refuses after every owner change, and the mock transport is never called', async () => {
   const a = await user();
   const b = await user();
@@ -382,16 +633,15 @@ test_('a STALE attestation sends nothing: the send gate (a model of G4 / F3 usin
 });
 
 // LAST: it empties public.brand_memberships of the whole (throw-away) database.
-test_('TRUNCATE is a change of every workspace, whoever runs it: every number moves up and every getter answers NULL', async () => {
+test_('TRUNCATE is a change of every workspace: the service key truncates, every number moves up and every getter answers NULL', async () => {
   const a = await user();
   const brand = await workspace([a]);
   const e = await num(brand);
   const others = (await sql(`select brand_id from private.account_lifecycle_brand_owner_epochs order by brand_id`)).split('\n').filter(Boolean);
   const before = new Map<string, number>();
   for (const id of others) before.set(id, Number(await stored(id)));
-  // the model world's default grants let the end-user role truncate (a latent hygiene gap, reported): the trigger covers it either way
-  const apiCanTruncate = (await sql(`select has_table_privilege('authenticated', 'public.brand_memberships', 'TRUNCATE')::text`)) === 'true';
-  const r = apiCanTruncate ? await psql(`begin; set local role authenticated; truncate public.brand_memberships; commit`) : await psql(`truncate public.brand_memberships`);
+  assert.ok(denied(await psql(`begin; set local role authenticated; truncate public.brand_memberships; commit`)), 'an end user cannot truncate (the install refuses otherwise)');
+  const r = await psql(`begin; set local role service_role; truncate public.brand_memberships; commit`);
   assert.ok(r.ok, r.error);
   for (const [id, was] of before) assert.equal(await stored(id), String(was + 1), `${id} moved by one`);
   assert.equal(await epoch(brand), 'NULL', 'no owner is known any more');
