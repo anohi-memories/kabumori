@@ -1,0 +1,12 @@
+# G2-01 negative controls (product source mutated temporarily, restored after each run)
+KILLED   ℹ fail 2 src/domain/threads-manual-publish.ts | export const THREADS_MANUAL_PUBLISH_UI_ENABLED = false;
+KILLED   ℹ fail 1 src/domain/threads-manual-publish.ts | pinned.userId === context.userId && 
+KILLED   ℹ fail 1 src/domain/threads-manual-publish.ts | || a.social_account_id !== accountId) return null;
+KILLED   ℹ fail 1 src/domain/threads-manual-publish.ts | if (account.connectionStatus !== 'connected') return 'reconnect';
+KILLED   ℹ fail 1 src/domain/threads-manual-publish.ts | if (!options.server.permitted) return 'consent_required';
+KILLED   ℹ fail 3 src/domain/threads-manual-publish.ts | if (options.server.open) return 'busy';
+KILLED   ℹ fail 1 src/features/threads-connect/use-threads-connect.ts | if (!releaseEnabled || running.current) return;
+KILLED   ℹ fail 1 src/features/threads-disconnect/use-threads-disconnect.ts | if (!releaseEnabled || running.current || !target || !userId) return;
+KILLED   ℹ fail 6 src/features/threads-publish/use-threads-manual-publish.ts | if (inFlight.current) return;
+KILLED   ℹ fail 1 src/features/threads-publish/use-threads-manual-publish.ts | buildAttemptRequest(action, attempt.id)
+# result 10/10 killed

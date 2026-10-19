@@ -220,6 +220,73 @@ test('FINDING G2-T1 (P2, owner G4): after a lost answer the post may already be 
   assert.notEqual(sent[0].body.idempotency_key, sent[1].body.idempotency_key, 'with a fresh key, so the server cannot treat it as a retry');
 });
 
+// ---------------------------------------------------------------- G2-T1 boundaries (2026-10-19, task generation 2)
+// What is already safe today, kept apart from the defect above so a fix can be checked against both.
+
+test('G2-T1 boundary: with no tap after a lost answer, publishes stay at exactly 1 (the app itself never resends)', async () => {
+  const c = await publishCard({ onPublish: async (_body, state) => { state.last_attempt = attempt(); return { data: null, error: {} }; } });
+  await typeAndSend(c, '放置した場合');
+  for (let i = 0; i < 3; i += 1) { c.render(); await settle(); }
+  assert.equal(publishes(c.calls).length, 1);
+  assert.ok(c.calls.filter((x) => x.body.action === 'account_state').length >= 2, 'the state is re-read instead');
+});
+
+test('G2-T1 boundary: an open "publishing" / "container_created" attempt blocks the composer; "続ける" resumes the SAME attempt id, never a new publish', async () => {
+  for (const status of ['publishing', 'container_created']) {
+    const open = attempt({ status, provider_post_id: null, permalink: null });
+    const c = await publishCard({ server: { permitted: true, open_attempt: open, last_attempt: null }, onPublish: async () => { throw new Error('must not publish'); } });
+    c.render();
+    await settle();
+    const tree = c.render();
+    assert.equal(input(tree), null, status);
+    const resume = button(tree, '続ける');
+    if (status === 'container_created') {
+      resume.onPress();
+      await settle();
+      const sent = c.calls.find((x) => x.body.action === 'resume');
+      assert.deepEqual({ ...sent.body }, { action: 'resume', attempt_id: ATTEMPT_ID });
+    } else {
+      assert.equal(resume, undefined);
+    }
+    assert.equal(publishes(c.calls).length, 0, status);
+  }
+});
+
+test('G2-T1 boundary: release ON but the account needs reconnecting (expired / revoked): no composer, not even a state request', async () => {
+  for (const connectionStatus of ['needs_attention', 'not_connected']) {
+    const c = await publishCard({ acct: threads({ connectionStatus }), onPublish: async () => { throw new Error('must not publish'); } });
+    c.render();
+    await settle();
+    const tree = c.render();
+    assert.equal(input(tree), null, connectionStatus);
+    assert.ok(texts(tree).some((t) => t.includes('接続し直す')), connectionStatus);
+    assert.equal(c.calls.length, 0, connectionStatus);
+  }
+});
+
+test('G2-T1 boundary: the per-account publish permission is off (never granted or withdrawn): consent first, no composer, no publish', async () => {
+  const c = await publishCard({ server: { permitted: false, open_attempt: null, last_attempt: attempt() }, onPublish: async () => { throw new Error('must not publish'); } });
+  c.render();
+  await settle();
+  const tree = c.render();
+  assert.equal(input(tree), null);
+  assert.ok(texts(tree).includes(publishDomain.CONSENT_COPY));
+  assert.equal(publishes(c.calls).length, 0);
+});
+
+test('G2-T1 boundary: a confirmation is pinned to ONE key — a double tap on the same confirmation reuses it (1 request), only a NEW confirmation mints a new key', async () => {
+  const c = await publishCard({ onPublish: async () => ({ data: { success: true, attempt: attempt({ status: 'failed', provider_post_id: null, permalink: null, error_code: 'THREADS_RATE_LIMITED' }) }, error: null }) });
+  await typeAndSend(c, '鍵の確認');
+  assert.equal(publishes(c.calls).length, 1);
+  input(c.render()).onChangeText('鍵の確認');
+  button(c.render(), '投稿内容を確認').onPress();
+  button(c.render(), '投稿する').onPress();
+  await settle();
+  const sent = publishes(c.calls);
+  assert.equal(sent.length, 2);
+  assert.notEqual(sent[0].body.idempotency_key, sent[1].body.idempotency_key, 'after a PROVEN failure a new attempt with a new key is correct');
+});
+
 // ---------------------------------------------------------------- disconnect: verification step
 
 async function disconnectCard(props) {
