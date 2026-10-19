@@ -1,0 +1,28 @@
+(node:31781) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file://<g2-worktree>/apps/social-mobile/src/domain/threads-manual-publish.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to <g2-worktree>/apps/social-mobile/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ gate OFF (source flags): publish / connect / disconnect release flags are all false (0.448125ms)
+✔ gate OFF: the publish card for every account state offers no input and sends zero requests (81.963584ms)
+✔ gate OFF: the connect card button is disabled and pressing its handler starts nothing (6.726458ms)
+✔ a lost publish answer is never auto-resent; while the server shows the attempt open, the composer is hidden (12.559334ms)
+✔ a lost publish answer with an unreadable server state: no composer, nothing claims success (9.630459ms)
+✔ an answer about ANOTHER account is not an answer: nothing is shown as posted for this one (9.756708ms)
+✔ uncertain: the only action is a read-only check (reconcile); no publish is offered or sent (11.429083ms)
+✔ a different signed-in person: a confirmation pinned for user A is never sent as user B (8.574833ms)
+✔ FINDING G2-T1 (P2, owner G4): after a lost answer the post may already be public, yet the old text stays and a re-confirm sends a SECOND publish with a NEW idempotency key (9.149375ms)
+✔ G2-T1 boundary: with no tap after a lost answer, publishes stay at exactly 1 (the app itself never resends) (8.275084ms)
+✔ G2-T1 boundary: an open "publishing" / "container_created" attempt blocks the composer; "続ける" resumes the SAME attempt id, never a new publish (16.091209ms)
+✔ G2-T1 boundary: release ON but the account needs reconnecting (expired / revoked): no composer, not even a state request (13.857709ms)
+✔ G2-T1 boundary: the per-account publish permission is off (never granted or withdrawn): consent first, no composer, no publish (6.871875ms)
+✔ G2-T1 boundary: a confirmation is pinned to ONE key — a double tap on the same confirmation reuses it (1 request), only a NEW confirmation mints a new key (7.207417ms)
+✔ gate OFF: the disconnect button is disabled and pressing its handler opens no confirmation and sends nothing (6.16475ms)
+✔ FINDING G2-T2 (P3, owner F4): while the account list reloads (it is empty until loaded), the card already says "解除しました" — the read-back check is skipped (6.864708ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 422.812875
