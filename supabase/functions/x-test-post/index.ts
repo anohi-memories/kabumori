@@ -149,6 +149,7 @@ import {
   shouldRetryMorningReport,
 } from "./morning_report_retry_logic.ts";
 import { resolveAdminAuthorization } from "./admin_auth_logic.ts";
+import { authorizeXTestPostCaller } from "./caller_auth_logic.ts";
 import {
   MORNING_GREETING_IMAGE_TEST_MODE,
   MorningGreetingImageTestError,
@@ -3317,6 +3318,25 @@ Deno.serve(async (req) => {
       mode?: unknown; titles?: unknown; post_type?: unknown; reference_time_iso?: unknown;
     } = {};
     try { requestBody = await req.json(); } catch { /* body is optional */ }
+    // Every mode authenticates its caller before anything else runs (verify_jwt is off for this Function):
+    // the scheduled dispatch only for the internal Cron / server credential, dry-run and test modes also for a
+    // verified admin; the manual publish keeps its own admin check below. See caller_auth_logic.ts.
+    const callerDecision = await authorizeXTestPostCaller({
+      mode: requestBody.mode,
+      headers: req.headers,
+      env: Deno.env,
+      resolveAdmin: (authorizationHeader) => {
+        const url = Deno.env.get("SUPABASE_URL");
+        const anon = Deno.env.get("SUPABASE_ANON_KEY");
+        const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        return url && anon && serviceRole
+          ? resolveAdminAuthorization({ authorizationHeader, supabaseUrl: url, anonKey: anon, serviceRoleKey: serviceRole })
+          : Promise.resolve({ authorized: false, userId: null });
+      },
+    });
+    if (!callerDecision.ok) {
+      return jsonResponse({ error: callerDecision.code }, callerDecision.status);
+    }
     const isUsefulTipDryRun = requestBody.mode === "useful_tip_dry_run";
     const isVoiceDryRun = requestBody.mode === "kabumori_voice_dry_run";
     const isMorningReportDryRun = requestBody.mode === "morning_report_dry_run";
