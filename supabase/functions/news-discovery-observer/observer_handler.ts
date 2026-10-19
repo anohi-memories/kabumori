@@ -69,6 +69,13 @@ export type ObserverDeps = {
   /** Wall clock (ms) for the invocation deadline; injectable for tests. */
   clock?: () => number;
   deadlineConfig?: DeadlineConfig;
+  /**
+   * F8 hard pause entry gate: resolves the news pause state after authentication and before any body handling / run
+   * creation. Anything but "running" refuses the whole request with 503. Production wiring (index.ts) always supplies it and
+   * a static test pins that; it is optional in the type only because older tests (_shared/news_discovery, outside this
+   * change's scope) construct the handler without it. The egress guard (pause_gate.ts) protects every outward call regardless.
+   */
+  pauseCheck?: () => Promise<"running" | "paused" | "unreadable">;
 };
 
 function json(status: number, body: unknown): Response {
@@ -148,6 +155,20 @@ export function createObserverHandler(deps: ObserverDeps): (request: Request) =>
     if (!isConfiguredObserverSecret(deps.observerSecret)) return json(503, { error: "OBSERVER_SECRET_NOT_CONFIGURED" });
     if (!isValidObserverSecret(deps.observerSecret, request.headers.get(OBSERVER_SECRET_HEADER))) {
       return json(401, { error: "UNAUTHORIZED" });
+    }
+
+    // F8 hard pause: after authentication (401/405/503 above are unchanged), before the body is read, a run is begun or
+    // anything outward happens. Not unlockable from the request.
+    let pause: "running" | "paused" | "unreadable" = "running";
+    if (deps.pauseCheck) {
+      try {
+        pause = await deps.pauseCheck();
+      } catch {
+        pause = "unreadable";
+      }
+    }
+    if (pause !== "running") {
+      return json(503, { error: pause === "unreadable" ? "NEWS_PAUSE_STATE_UNREADABLE" : "NEWS_HARD_PAUSED" });
     }
 
     let body: ObserverRequest;
