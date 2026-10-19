@@ -24,7 +24,7 @@ const provenance = JSON.parse(read('docs/common-account/brand-owner-epoch-proven
 
 test('the document has its sections, findings and the verdicts', () => {
   for (let n = 1; n <= 10; n += 1) assert.match(doc, new RegExp(`^## ${n}\\. `, 'mu'), `section ${n}`);
-  for (let n = 1; n <= 5; n += 1) assert.ok(doc.includes(`**L-${n}**`), `L-${n}`);
+  for (let n = 1; n <= 6; n += 1) assert.ok(doc.includes(`**L-${n}**`), `L-${n}`);
   for (const phrase of ['NOT_VERIFIED', 'TEST-ONLY', 'Codex Sol (high)', '#233', '#282', '#279', 'NULL', 'monotonic', 'rollback', 'A→B→A', 'owner→admin→owner', 'exactly one', 'reconcil',
     'managed_auth_delete', 'IDP_PREPAUSE_BLOCKED', 'POSTONA_END_SOURCE_ENABLED', 'HOLD', 'SIMULATED', 'ready, not done']) assert.ok(doc.includes(phrase), phrase);
   assert.match(doc, /Production is \*\*NO_GO\*\*/u);
@@ -47,11 +47,39 @@ test('the candidate has the shape the document quotes: owner-only definer functi
   assert.ok(!/references\s+public\.brands/u.test(code), 'no foreign key to brands: the history outlives the workspace');
   assert.ok(code.includes('lock table public.brand_memberships in share row exclusive mode;'));
   assert.ok(code.includes('revoke all on table private.account_lifecycle_brand_owner_epochs from public, anon, authenticated, service_role;'));
-  assert.ok(/revoke all on function[\s\S]*account_lifecycle_brand_owner_epoch_resync\(text\) from public, anon, authenticated, service_role;/u.test(code));
+  assert.ok(/revoke all on function[\s\S]*account_lifecycle_brand_owner_epoch_resync\(text\), private\.account_lifecycle_owner_epoch_exposure\(\) from public, anon, authenticated, service_role;/u.test(code));
   assert.ok(!/\bgrant\b/iu.test(code), 'the candidate grants nothing to anyone');
-  for (const marker of ['OWNER_EPOCH_ALREADY_APPLIED', 'OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_WRITE_MEMBERSHIPS', 'OWNER_EPOCH_POSTCONDITION_FUNCTION_ACL', 'OWNER_EPOCH_HISTORY_IS_APPEND_ONLY', 'OWNER_EPOCH_COVERAGE_BROKEN']) assert.ok(code.includes(marker), marker);
+  for (const marker of ['OWNER_EPOCH_ALREADY_APPLIED', "'OWNER_EPOCH_PRECONDITION_%', v_code", 'OWNER_EPOCH_POSTCONDITION_FUNCTION_ACL', 'OWNER_EPOCH_POSTCONDITION_EXPOSURE', 'OWNER_EPOCH_HISTORY_IS_APPEND_ONLY', 'OWNER_EPOCH_COVERAGE_BROKEN']) assert.ok(code.includes(marker), marker);
   // not inferred from anything else
   for (const banned of ['max(updated_at)', 'now()', 'xmin', 'md5(', 'sha256']) assert.ok(!code.includes(banned), `the candidate does not use ${banned}`);
+});
+
+test('the J1 V1 R1-R3 fixes are in the source: an unconditional re-start fence, the exact triggers, every membership path, lock before read; the F3 dependency is named', () => {
+  // R1: the install bumps every workspace it loops over, with no condition; the rollback moves every recorded number
+  assert.ok(code.includes('  loop\n    perform private.account_lifecycle_owner_epoch_bump(v_brand);\n  end loop;'), 'the install bumps unconditionally');
+  assert.ok(code.includes('    union\n    select e.brand_id from private.account_lifecycle_brand_owner_epochs e\n'), 'every recorded workspace is in the loop');
+  assert.ok(noComments(read(ROLLBACK)).includes('update private.account_lifecycle_brand_owner_epochs set epoch = epoch + 1;'), 'the rollback moves every number');
+  // R2: the exact identity of both triggers
+  for (const piece of ["t.tgtype = 29", "t.tgtype = 32", "t.tgfoid = 'private.account_lifecycle_owner_epoch_record()'::regprocedure", "t.tgfoid = 'private.account_lifecycle_owner_epoch_truncated()'::regprocedure",
+    't.tgqual is null', 'pg_catalog.cardinality(t.tgattr::int2[]) = 0', 't.tgconstraint = 0', 't.tgnargs = 0', "t.tgenabled in ('O', 'A')", 'and private.account_lifecycle_owner_epoch_exposure() is null']) {
+    assert.ok(code.includes(piece), piece);
+  }
+  for (const code_ of ['API_ROLE_CAN_BECOME_SUPERUSER', 'API_ROLE_CAN_BECOME_OWNER', 'API_ROLE_CAN_SKIP_TRIGGERS', 'API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS', 'API_ROLE_CAN_WRITE_MEMBERSHIPS']) {
+    assert.ok(code.includes(`'${code_}'`), code_);
+    assert.ok(doc.includes(code_), `${code_} is in the document`);
+  }
+  // R3: role paths are followed by MEMBER, never by USAGE or SET alone
+  assert.ok(/pg_has_role\(a\.oid, r\.oid, 'MEMBER'\)/u.test(code));
+  assert.ok(!/pg_has_role\([^)]*'(USAGE|SET)'\)/u.test(code), 'no USAGE- or SET-only role path');
+  // lock order: the row lock comes before the owners are read
+  const bump = code.slice(code.indexOf('create function private.account_lifecycle_owner_epoch_bump'), code.indexOf('create function private.account_lifecycle_owner_epoch_record'));
+  assert.ok(bump.indexOf('for update;') > 0 && bump.indexOf('for update;') < bump.lastIndexOf('from public.brand_memberships m'), 'the owners are read after the row lock');
+  // the dependency: the runner stands in for F3's revoke, the document names it, and the migration is not edited by this branch
+  const runner = read('supabase/tests/common_account_owner_epoch_run.sh');
+  assert.ok(runner.includes('revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated'));
+  assert.ok(doc.includes('revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated'));
+  const grants = provenance.sources.find((s) => s.id === 'MEMBERSHIPS-TABLE-GRANTS');
+  assert.ok(grants && grants.absent.includes('revoke trigger'), 'the missing TRIGGER revoke is pinned as an absence');
 });
 
 test('the candidate is a candidate: not in the migration path, and its rollback keeps the history', () => {

@@ -50,7 +50,8 @@
       ],
       "absent": [
         "revoke truncate",
-        "revoke all on table public.brand_memberships from authenticated"
+        "revoke all on table public.brand_memberships from authenticated",
+        "revoke trigger"
       ]
     },
     {

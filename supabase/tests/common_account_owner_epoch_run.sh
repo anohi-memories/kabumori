@@ -56,6 +56,10 @@ for f in 20261001150000_common_account_lifecycle_foundation 20261006230000_commo
 done
 
 cand="$repo/supabase/candidates/common_account_brand_owner_epoch"
+# The model world's default grants leave TRIGGER (all API roles) and TRUNCATE / REFERENCES (anon, authenticated) on public.brand_memberships; the
+# candidate refuses to install while they are there (J1 V1 R2). Taking them away belongs to the membership migration's owner (F3 / G3), whose file
+# this branch does not edit: this TEST-WORLD revoke stands in for that dependency, and the suite proves the refusal while any of them is back.
+own -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" >/dev/null
 own -f "$cand/001_brand_owner_epoch.sql" >/dev/null
 ( cd "$repo" && CAL_E2E=1 OE_CANDIDATE="$cand/001_brand_owner_epoch.sql" OE_ROLLBACK="$cand/001_brand_owner_epoch_rollback.sql" PGSUPER="$super" \
     PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db" \
