@@ -6,8 +6,8 @@
 //
 // Order of one call (each step refuses before anything costs money or leaves the process):
 //   request shape -> authority verdict (G5's, an INPUT here) -> app feature policy -> cost bound -> call key and
-//   claim (idempotency) -> [per attempt] ledger reserve -> authority RECHECK -> ledger mark sent -> ONE provider
-//   request -> ledger settle | unknown -> app output check -> record the outcome -> answer.
+//   claim (idempotency) -> [per attempt] ledger reserve -> authority RECHECK -> claim still held -> ledger mark sent ->
+//   ONE provider request -> ledger settle | unknown -> app output check -> record the outcome -> answer.
 //
 // 2026-10-19 (PR289 GAP-1..3): a revocation before ANY attempt is AUTH_REVOKED_BEFORE_SEND (not a quota); a ledger
 // that is unreachable or does not confirm the send is LEDGER_UNAVAILABLE (not a quota); the stored outcome uses the
@@ -292,9 +292,10 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   const fingerprint = await sha256(JSON.stringify([policy.app, policy.feature, policy.revision, policy.logicalRole, policy.provider, policy.model,
     policy.reasoningEffort, policy.maxOutputTokens, policy.maxAttempts, policy.schema, policy.systemInstructions, req.input]));
   const identity: CallIdentity = Object.freeze({ key: callKey, tenantTag, fingerprint });
+  const claimContext: ClaimContext = { app: req.app, feature: req.feature, storeFeature: policyKey(req.app, req.feature), subject: verdict.subject };
   let claim: CallClaim;
   try {
-    claim = await deps.store.claim(identity, { app: req.app, feature: req.feature, storeFeature: policyKey(req.app, req.feature), subject: verdict.subject });
+    claim = await deps.store.claim(identity, claimContext);
   } catch {
     return fail("STORE_UNAVAILABLE");
   }
@@ -314,8 +315,12 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   if (claim.kind !== "acquired") return fail("UNKNOWN");
 
   // 7. Before EACH attempt: the ledger reserves, then the authority is asked again; a changed answer stops the send
-  //    (the reservation is released, nothing leaves). After the last recheck a call in flight cannot be stopped.
+  //    (the reservation is released, nothing leaves). Then the claim must still be held (G6-07): recovery may have
+  //    closed the row while this process was stalled. It closes a row only when the ledger has no open attempt, and
+  //    this attempt's reservation is open from reserve on, so asking AFTER reserve leaves no gap; a closed or
+  //    unreadable claim sends nothing more. After the last check a call in flight cannot be stopped.
   let revoked = false;
+  let fenced = false;
   const budget: BudgetGuard = {
     reserve: (c, cost) => deps.budget.reserve(c, cost),
     markSent: async (r) => {
@@ -330,6 +335,17 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
         JSON.stringify(again.subject) !== JSON.stringify(verdict.subject)) {
         revoked = true;
         throw new Error("REVOKED");
+      }
+      // The row stays "acquired" (busy for a second claim) until this call completes it or recovery closes it.
+      let held: CallClaim;
+      try {
+        held = await deps.store.claim(identity, claimContext);
+      } catch {
+        held = { kind: "conflict" };
+      }
+      if (held.kind !== "busy") {
+        fenced = true;
+        throw new Error("CLAIM_NOT_HELD");
       }
       await deps.budget.markSent?.(r);
     },
@@ -346,6 +362,8 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
     callKey, tenantTag, app: req.app, feature: req.feature, model: policy.model,
     attempts: result.transportAttempts, estimatedCostUsd: result.estimatedCostUsd, costBasis: result.costBasis,
   };
+  // The claim was no longer held: the row's own outcome (recovery's tombstone) is the answer; nothing is recorded over it.
+  if (fenced) return fail("UNKNOWN", audit);
   // Why the call stopped without (another) send, decided in this order: a possibly billed attempt is UNKNOWN whatever
   // else happened; then a revocation (GAP-1: also after an earlier refused attempt); then the ledger: a budget limit
   // is a quota, any other refusal or failure is LEDGER_UNAVAILABLE (GAP-2). Both stop reasons are stored as

@@ -37,7 +37,7 @@ G6 の実行用コード（`supabase/ai_gateway/` の 8 ファイル。G6-06 で
 
 | ファイル | provider から使う名前 | 何に使うか |
 | --- | --- | --- |
-| `gateway.ts` | mod: `executeAiRequest`, `findModelSpec`, `upperBoundAttemptCostUsd`, 型 `AiRequest` `AiSubject` `BudgetGuard` `ExecuteDeps` `JsonSchema` | **AI を呼ぶ唯一の場所**。呼ぶのは次の 5 つを通った後だけ。決まりの一覧 → G5 の判定 → 1 回の最大額 → 保存の場所の claim → 送る直前の再確認（台帳の guard を包む） |
+| `gateway.ts` | mod: `executeAiRequest`, `findModelSpec`, `upperBoundAttemptCostUsd`, 型 `AiRequest` `AiSubject` `BudgetGuard` `ExecuteDeps` `JsonSchema` | **AI を呼ぶ唯一の場所**。呼ぶのは次の 5 つを通った後だけ。決まりの一覧 → G5 の判定 → 1 回の最大額 → 保存の場所の claim → 送る直前の再確認と claim の確認（台帳の guard を包む。G6-07） |
 | `runtime.ts` | mod: **`SupabaseLedgerBudgetGuard`**, `PROVIDER_API_KEY_ENV`, 型 `EnvReader` `RetryTiming`；secrets: `SecretValue`（`instanceof` に使う）；adapter: 型 `FetchLike` | **台帳の guard を組み立てる唯一の場所**。鍵は呼ぶ側から `SecretValue` で受け取り、自分では読まない。旧式の JWT の鍵は断り、本物の project では `sb_secret_` だけ。provider には、provider の鍵の名前だけを読める `readEnv` を渡す |
 | `ai_calls_store.ts` | adapter: 型 `FetchLike`；redact: `safeToken`；secrets: 型 `SecretValue` | `ai_calls` の RPC を呼ぶ。エラーは整えた記号だけを返す |
 | `g5_rpc_transport.ts` | adapter: 型 `FetchLike`；redact: `safeToken` | G5 の判定の RPC（**まだ無い**）を呼ぶ。本人の JWT はヘッダにだけ入れる |

@@ -94,6 +94,8 @@ class FakeSupabase {
   readonly reservations = new Map<string, string>();
   readonly rows = new Map<string, { identity: string; owner: string; state: "acquired" | "complete"; result: unknown }>();
   fault: Record<string, Fault | undefined> = {};
+  /** Runs after the named RPC answered (e.g. recovery closing the row while the process waits). */
+  after: Record<string, (() => void) | undefined> = {};
   private n = 0;
   // deno-lint-ignore require-await
   readonly fetch: FetchLike = async (input, init) => {
@@ -108,6 +110,7 @@ class FakeSupabase {
     if (typeof f === "number") return jsonResponse(f, { code: "XX000" });
     if (f === "bad") return jsonResponse(200, { surprise: true });
     const answer = this.answer(name, body.p, f);
+    this.after[name]?.();
     if (f === "error-ok") return jsonResponse(500, answer);
     return f === "lost" ? jsonResponse(504, { code: "504" }) : jsonResponse(200, answer);
   };
@@ -238,19 +241,19 @@ Deno.test("policy registry: every policy the gateway, ledger or call store would
   assert.equal(registry.get("postona:ideas") === ok, false, "a frozen copy, not the caller's object");
 });
 
-Deno.test("end to end, both providers: claim -> reserve -> mark_sent -> ONE request -> settle -> complete; replay from a NEW runtime sends nothing; only the provider key name is read", async () => {
+Deno.test("end to end, both providers: claim -> reserve -> claim still held -> mark_sent -> ONE request -> settle -> complete; replay from a NEW runtime sends nothing; only the provider key name is read", async () => {
   for (const [label, credential, request, provider] of [["openai", "jwt-a", ideas(), "openai"], ["anthropic", "jwt-a", consult(), "anthropic"], ["kabumori system", "cron-kabumori", report, "anthropic"]] as const) {
     const w = world();
     const r = await w.run(credential, request);
     assert.equal(r.ok, true, label);
-    assert.deepEqual(w.supabase.calls, ["claim", "reserve", "mark_sent", "settle", "complete"], label);
+    assert.deepEqual(w.supabase.calls, ["claim", "reserve", "claim", "mark_sent", "settle", "complete"], label);
     assert.equal(w.provider.calls.length, 1, label);
     assert.equal(w.provider.calls[0].url.includes(provider), true, label);
     assert.deepEqual([...new Set(w.envReads)], [provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"], `${label}: least privilege`);
     const again = world({ supabase: w.supabase });
     assert.deepEqual(await again.run(credential, request), r, label);
     assert.equal(again.provider.calls.length, 0, `${label}: replay sends nothing`);
-    assert.deepEqual(w.supabase.calls.slice(5), ["claim"], label);
+    assert.deepEqual(w.supabase.calls.slice(6), ["claim"], label);
     // Keys stay where they belong: the service key only in Supabase requests, the provider key never there.
     const providerText = JSON.stringify(w.provider.calls.map((c) => [c.body, [...c.headers]]));
     assert.equal(providerText.includes(SERVICE_KEY), false, label);
@@ -370,7 +373,7 @@ Deno.test("idempotency and separation: parallel duplicates send once, other cont
 Deno.test("provider behaviour through the runtime: a refused attempt is retried with a new reservation; 504 is UNKNOWN once; 400 is final", async () => {
   const r = world({ respond: (call, i) => i === 0 ? jsonResponse(429, { error: { type: "rate_limit_error" } }) : reply("どうぞ")(call) });
   const ok = await r.run("jwt-a", { app: "postona", feature: "retry", operationId: "op-retry-00001", input: "x", brand: BRAND_A });
-  assert.deepEqual([code(ok), r.provider.calls.length, r.supabase.calls], ["OK", 2, ["claim", "reserve", "mark_sent", "settle", "reserve", "mark_sent", "settle", "complete"]]);
+  assert.deepEqual([code(ok), r.provider.calls.length, r.supabase.calls], ["OK", 2, ["claim", "reserve", "claim", "mark_sent", "settle", "reserve", "claim", "mark_sent", "settle", "complete"]]);
   const u = world({ respond: (call) => call.url.includes("anthropic") ? jsonResponse(504, anthropicError(504, "timeout_error", "late")) : jsonResponse(504, { error: { type: "timeout" } }) });
   const unknown = await u.run("jwt-a", consult());
   assert.deepEqual([code(unknown), unknown.audit?.costBasis, u.provider.calls.length, [...u.supabase.reservations.values()]], ["UNKNOWN", "includes_upper_bound", 1, ["unknown"]]);
@@ -409,4 +412,22 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
       assert.ok(allowed.has(m[1]) || (name === "postona_consult_adapter.ts" && consultOnly.has(m[1])), `${name}: ${m[1]}`);
     }
   }
+});
+
+Deno.test("G6-07: the claim must still be held right before each send: closed by recovery while the process waited, or unreadable -> nothing is sent, the hold is released, UNKNOWN, nothing recorded over the row", async () => {
+  const closed = world();
+  closed.supabase.after = {
+    ai_ledger_reserve: () => {
+      for (const row of closed.supabase.rows.values()) Object.assign(row, { state: "complete", result: { tombstone: true } });
+    },
+  };
+  const r = await closed.run("jwt-a", ideas());
+  assert.deepEqual([code(r), closed.provider.calls.length, closed.supabase.calls, [...closed.supabase.reservations.values()]], ["UNKNOWN", 0, ["claim", "reserve", "claim", "release"], ["released"]]);
+  assert.deepEqual([...closed.supabase.rows.values()].map((row) => row.result), [{ tombstone: true }], "the tombstone is not overwritten");
+
+  const unreadable = world();
+  unreadable.supabase.after = { ai_ledger_reserve: () => unreadable.supabase.fault = { ai_calls_claim: "network" } };
+  const u = await unreadable.run("jwt-a", ideas());
+  assert.deepEqual([code(u), unreadable.provider.calls.length, unreadable.supabase.calls, [...unreadable.supabase.reservations.values()]], ["UNKNOWN", 0, ["claim", "reserve", "claim", "release"], ["released"]]);
+  assert.deepEqual([...unreadable.supabase.rows.values()].map((row) => row.state), ["acquired"], "left for recovery (NOT_SENT_PROVEN)");
 });
