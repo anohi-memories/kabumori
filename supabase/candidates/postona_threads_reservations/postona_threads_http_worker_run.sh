@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# G3 TASK 3/50 proof (disposable LOCAL PostgreSQL only; never a remote project): the TEST FIXTURE HTTP entry (create /
+# G3 TASK 3/50 (+ TASK 6/50: the dispatcher's native pre-publish hook) proof (disposable LOCAL PostgreSQL only; never a
+# remote project): the TEST FIXTURE HTTP entry (create /
 # cancel / text-free receipt, MOCK caller verdicts) and the worker test entry (PR #334 dispatcher + 007 worker store + the
 # PROPOSED pre-publish hook around a SIMULATED two-step send) over candidate 007 (PR #339). Same baseline and setup as
 # postona_threads_reservations_run.sh (001-006, the 2a-2 platform stand-in, test tables, people, 007, G4/G5 doubles);
@@ -113,7 +114,7 @@ echo "SETUP_007_DOUBLES_READY"
 if ! THREADS_HTTP_API_URL="postgres://$apilogin@127.0.0.1:$port/$db" THREADS_HTTP_WORKER_URL="postgres://$wklogin@127.0.0.1:$port/$db" \
   THREADS_HTTP_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" DENO_NO_PACKAGE_JSON=1 \
   deno test --no-config --allow-net=127.0.0.1:"$port" --allow-read --allow-env=THREADS_HTTP_API_URL,THREADS_HTTP_WORKER_URL,THREADS_HTTP_OWNER_URL \
-  "$t/http_worker_pg_e2e_test.ts" >"$tmp/e2e" 2>&1; then
+  "$t/http_worker_pg_e2e_test.ts" "$t/dispatch_native_hook_pg_e2e_test.ts" >"$tmp/e2e" 2>&1; then
   cat "$tmp/e2e"; fail "http/worker e2e"
 fi
 grep -E "passed|failed" "$tmp/e2e" | tail -1

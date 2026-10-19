@@ -23,6 +23,15 @@
  *        published + read-back confirms        -> published (media id)
  *   5. the outcome is recorded with the transport ('threads' only when G4's real transport is used; anything else is
  *      'simulated'); only what the store recorded counts; a row that MAY have been sent is never handed back.
+ *   6. (2026-10-20, Issue #318 TASK 6/50) the send carries a PRE-PUBLISH hook: G4's two-step send waits for the container
+ *      between this module's preflight and the publish request, so the send port is handed { beforePublish } to await
+ *      AFTER the container is ready and BEFORE the publish request (contract proposed to G4, #319 6267703384; a port
+ *      that ignores the third argument behaves as before). beforePublish re-runs the store's preflight for exactly the
+ *      claimed row and lease (owner, workspace, G4 verified, G5 state, freeze / stop / deletion, publish switch,
+ *      generation bound at claim, lease) within a bound, and answers true only for OK with the SAME generation the
+ *      credential carried. Refused / unreadable / late / after the send returned -> false: the port must not publish.
+ *      The hook never sees the token. A refusal the store already recorded (failed / released / lost) is not recorded
+ *      again; an unverified refusal on a still-claimed row is recorded failed_before_send.
  * No token is logged, stored, returned or put into an error; codes are fixed.
  */
 
@@ -53,9 +62,14 @@ export type ThreadsSendPort = {
   readonly available: boolean;
   /** 'threads' only when this port reaches the real Threads API; tests and mocks are 'simulated'. */
   readonly transport: "threads" | "simulated";
-  /** One two-step text publish with exactly this credential and text. Never retried by G4 either. */
-  send(credential: Readonly<{ threadsUserId: string; accessToken: string }>, text: string): Promise<ThreadsSendOutcome>;
+  /** One two-step text publish with exactly this credential and text. Never retried by G4 either. When `hooks` is
+   *  given, `beforePublish` is awaited after the container is ready and before the publish request; anything but
+   *  true -> no publish request ({ kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" }). */
+  send(credential: Readonly<{ threadsUserId: string; accessToken: string }>, text: string, hooks?: ThreadsSendHooks): Promise<ThreadsSendOutcome>;
 };
+/** The pre-publish re-check handed to the send port. Carries no token. */
+export type ThreadsSendHooks = { beforePublish(): Promise<boolean> };
+export const THREADS_PREPUBLISH_TIMEOUT_MS = 5_000;
 
 // ---- the reservation store (G3; SQL design only) -------------------------------------------------------------
 
@@ -85,6 +99,10 @@ export type ThreadsDispatchReport = {
   released: number;
   skipped: number;
   sends: number;
+  /** beforePublish calls answered (true or false). */
+  prepublishRechecks: number;
+  /** Sends the pre-publish re-check stopped before the publish request. */
+  prepublishRefused: number;
   notAvailable: boolean;
   stopped: boolean;
 };
@@ -115,7 +133,13 @@ export function dispatchOutcomeOf(outcome: unknown): { outcome: ThreadsDispatchO
 }
 
 /** Send one claimed row. Returns what the report counts; never throws. */
-async function dispatchOne(item: ClaimedThreadsReservation, deps: { store: ThreadsDispatchStore; credentials: ThreadsCredentialPort; sender: ThreadsSendPort },
+function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("PREPUBLISH_TIMEOUT")), ms); });
+  return Promise.race([promise, late]).finally(() => clearTimeout(timer));
+}
+
+async function dispatchOne(item: ClaimedThreadsReservation, deps: { store: ThreadsDispatchStore; credentials: ThreadsCredentialPort; sender: ThreadsSendPort; prepublishTimeoutMs: number },
   report: ThreadsDispatchReport, handBack: (item: ClaimedThreadsReservation) => Promise<void>): Promise<void> {
   // 1. only a Threads row with well-formed ids
   if (item.provider !== "threads" || !UUID_RE.test(item.reservationId) || !UUID_RE.test(item.leaseToken)) {
@@ -154,15 +178,55 @@ async function dispatchOne(item: ClaimedThreadsReservation, deps: { store: Threa
   } else if (typeof preflight.credentialGeneration !== "string" || !GENERATION_RE.test(preflight.credentialGeneration) || credential.generation !== preflight.credentialGeneration) {
     decided = { outcome: "failed_before_send", providerPostId: null, code: "CREDENTIAL_GENERATION_CHANGED" };
   } else {
-    // 4. exactly one send
+    // 4. exactly one send, with the pre-publish re-check of exactly this row and lease
     let outcome: unknown;
+    const boundGeneration = credential.generation;
+    let hookOpen = true;
+    let hook: { verdict: "not_called" | "ok" | "store_refused" | "unverified" | "generation_changed"; storeVerdict: ThreadsPreflight["verdict"] | null } = { verdict: "not_called", storeVerdict: null };
+    const hooks: ThreadsSendHooks = {
+      async beforePublish() {
+        if (!hookOpen) return false;
+        report.prepublishRechecks += 1;
+        let again: ThreadsPreflight | null;
+        try {
+          again = await within(deps.store.preflight(item.reservationId, item.leaseToken), deps.prepublishTimeoutMs);
+        } catch {
+          again = null;
+        }
+        if (!hookOpen) return false; // answered after the send returned: never a permission
+        if (again && again.verdict === "OK" && again.credentialGeneration === boundGeneration) {
+          hook = { verdict: "ok", storeVerdict: "OK" };
+          return true;
+        }
+        hook = again && again.verdict !== "OK" ? { verdict: "store_refused", storeVerdict: again.verdict }
+          : again ? { verdict: "generation_changed", storeVerdict: "OK" } : { verdict: "unverified", storeVerdict: null };
+        return false;
+      },
+    };
     report.sends += 1;
     try {
-      outcome = await deps.sender.send({ threadsUserId: credential.threadsUserId, accessToken: credential.accessToken }, item.body);
+      outcome = await deps.sender.send({ threadsUserId: credential.threadsUserId, accessToken: credential.accessToken }, item.body, hooks);
     } catch {
       outcome = { kind: "unknown", stage: "publish", code: "THREADS_SENDER_THREW" };
+    } finally {
+      hookOpen = false;
     }
-    decided = dispatchOutcomeOf(outcome);
+    const o = (typeof outcome === "object" && outcome !== null ? outcome : {}) as Record<string, unknown>;
+    const notWritten = o.kind === "not_written";
+    if (hook.verdict !== "not_called" && hook.verdict !== "ok" && notWritten) {
+      report.prepublishRefused += 1;
+      if (hook.verdict === "store_refused") {
+        // The store already decided this row (failed / handed back / not ours): nothing to record again.
+        if (hook.storeVerdict === "RELEASED") report.released += 1;
+        else report.skipped += 1;
+        credential = null;
+        return;
+      }
+      decided = { outcome: "failed_before_send", providerPostId: null, code: hook.verdict === "generation_changed" ? "CREDENTIAL_GENERATION_CHANGED" : "THREADS_PREPUBLISH_UNVERIFIED" };
+    } else {
+      // Includes a port that ignored a refusal and wrote anyway: what it says happened is what is recorded.
+      decided = dispatchOutcomeOf(outcome);
+    }
   }
   credential = null;
   // 5. record; only what the store recorded counts
@@ -186,8 +250,12 @@ export async function runThreadsReservationDelivery(input: {
   leaseSeconds?: number;
   limit?: number;
   shouldStop?: () => boolean;
+  /** Bound of one pre-publish re-check (default THREADS_PREPUBLISH_TIMEOUT_MS); a late answer refuses. */
+  prepublishTimeoutMs?: number;
 }): Promise<ThreadsDispatchReport> {
-  const report: ThreadsDispatchReport = { claimed: 0, published: 0, failedBeforeSend: 0, uncertain: 0, released: 0, skipped: 0, sends: 0, notAvailable: false, stopped: false };
+  const report: ThreadsDispatchReport = {
+    claimed: 0, published: 0, failedBeforeSend: 0, uncertain: 0, released: 0, skipped: 0, sends: 0, prepublishRechecks: 0, prepublishRefused: 0, notAvailable: false, stopped: false,
+  };
   // Nothing is claimed unless every part can run: a claim without a sender only ages into rows the user cannot cancel.
   if (input.enabled !== true || input.credentials?.available !== true || typeof input.credentials.credentialFor !== "function"
       || input.sender?.available !== true || typeof input.sender.send !== "function") {
@@ -224,7 +292,8 @@ export async function runThreadsReservationDelivery(input: {
       continue;
     }
     seen.add(item.reservationId);
-    await dispatchOne(item, { store: input.store, credentials: input.credentials, sender: input.sender }, report, handBack);
+    await dispatchOne(item, { store: input.store, credentials: input.credentials, sender: input.sender,
+      prepublishTimeoutMs: Math.min(Math.max(input.prepublishTimeoutMs ?? THREADS_PREPUBLISH_TIMEOUT_MS, 1), 30_000) }, report, handBack);
   }
   return report;
 }
