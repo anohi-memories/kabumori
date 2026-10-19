@@ -1,5 +1,15 @@
 # Kabumori Project Rules
 
+## 2026-10-19 単独FとG7〜G9担当変更（最新ユーザー指示）
+
+[全体指令 Issue #299 コメント6264872973](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6264872973)を最優先する。
+
+- **単独F/f**：現行15枠（G1〜G10、H1〜H5）の現役Issue/TASK状態・Report・競合だけを統括確認する。旧F1〜F10/J1〜J5を含む30枠の毎回の全件確認を廃止する。ただし移行中の旧TASKが直接関係する場合は、その対象に限り旧履歴・未受入・archiveを確認する。単独Fで他室のTASKを勝手に完了・再割当しない。
+- **G7・G8・G9の担当用途**：いずれも**ユーザー指示**。過去のMIC、ニュース改善A、API最適化Bへの案件固定は解除。ユーザーが用途・TASKを明示するまでは、idleを理由に別案件へ割り当てない。旧TASK・Report・pilot履歴は削除・変更しない。新規TASK前に旧新の競合と履歴を確認する。
+- G7 Issue #322、G8 Issue #304（pilot履歴あり）、G9 Issue #298（pilot継続中）。正式な新TASK登録時には世代と現役TASKの重複を確認する。
+- この節は下記の過去の30枠統括説明、およびG7〜G9の旧案件固定ルールより優先する。その他の安全・HISTORY/ACCEPT・return_to・完了コード規定は維持する。
+
+
 ## 2026-10-19 H1〜H5 Issue正式移行指令（J残TASK中止）
 
 ユーザーはJ1〜J5の残作業を不要と判断し、次の新規TASKから全H系Issueへ移行することを明示指示。全担当ちゃ向け詳細指令：[Issue #299 コメント6263006191](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6263006191)。この節は旧J継続・旧H/V3・下の段階移行説明より優先。
