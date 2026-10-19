@@ -162,7 +162,7 @@ created (the PG17 suite only reads catalogs, calls existing functions and runs t
 | --- | --- | --- | --- |
 | 1 | the model suite (no network permission) | `deno test --no-config --no-check supabase/tests/common_account_g5_02_rpc_preflight_test.ts` | **11 tests** passed, 0 failed |
 | 2 | the PG17 precondition suite on the real F5 chain + the PR #303 candidate | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_g5_02_rpc_preconditions_pg_run.sh` | **5 tests** passed, 0 failed (three consecutive runs) |
-| 3 | mutation check of the model | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, **32/32 detected**, 0 invalid |
+| 3 | mutation check of the model | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, **33/33 detected**, 0 invalid (32 at PR #344; G5-03 added the per-claim `is_anonymous` case to the model and one mutant) |
 | 4 | regression of the stack | G5-01 pure (13) + PG17 (10); owner-epoch suite (19) | all passed |
 | 5 | the whole harness incl. this document's test | `deno test --no-config --no-check --allow-read --allow-env supabase/preflight/managed_disposable/` | **194 passed**, 0 failed (189 of PR #340 + 5 new) |
 | 6 | type-check, lint, shell | `deno check --no-config` on the model and the new tests; `deno lint --no-config` on them and the harness; `bash -n` on the runner | no error; `Checked 50 files`; syntax OK |

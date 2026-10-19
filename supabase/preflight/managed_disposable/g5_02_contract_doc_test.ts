@@ -47,12 +47,12 @@ test('the shapes the document states are the model\'s: the RPC keys, the ACL per
   for (const code of ['RPC_NOT_DEPLOYED', 'RPC_FAILED', 'RPC_SHAPE', 'SCOPE_MISMATCH']) assert.ok(model.includes(`'${code}'`) && doc.includes(code), code);
 });
 
-test('nothing of the proposal exists as SQL, and the model is wired nowhere', () => {
+test('the proposal exists as SQL only in its own candidate directory (G5-03), never in the migration path; the model is wired nowhere', () => {
   for (const path of [...walk('supabase/migrations'), ...walk('supabase/candidates')].filter((p) => p.endsWith('.sql'))) {
+    if (path.startsWith('supabase/candidates/common_account_authorization_verdict/')) continue;
     const text = read(path);
     assert.ok(!/common_account_authorization_verdict|worker_brand_verdict/u.test(text), `${path} defines a proposed object`);
   }
-  assert.ok(!exists('supabase/candidates/common_account_authorization_verdict'), 'the next TASK\'s directory does not exist yet');
   for (const path of [...walk('supabase/functions'), ...walk('apps/social-mobile/src'), ...walk('src')]) {
     if (!/\.(ts|tsx|mjs|js|sql)$/u.test(path)) continue;
     assert.ok(!read(path).includes('rpc_preflight'), `${path} imports the model`);

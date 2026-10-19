@@ -17,7 +17,7 @@ import { type AuthFacts, BRAND_ID, decide, POSTONA_FEATURES, type Principal, typ
 // R1-3: the subject. The same claim sources F5 P3b reads (20261010051938): the per-claim settings of an older PostgREST when present, else the
 // JSON claims; the subject must also equal auth.uid(). A body field is never a source.
 export type ClaimSources = Readonly<{
-  legacy: Readonly<{ sub: string | null; role: string | null; sessionId: string | null }> | null; // request.jwt.claim.sub / .role / .session_id
+  legacy: Readonly<{ sub: string | null; role: string | null; sessionId: string | null; isAnonymous?: string | null }> | null; // request.jwt.claim.sub / .role / .session_id / .is_anonymous
   claimsJson: string | null;                                                                          // request.jwt.claims
   authUid: string | null;                                                                             // auth.uid()
 }>;
@@ -30,6 +30,8 @@ export function principalFromClaims(c: ClaimSources): Principal | { refused: 'AU
   if (c.legacy && c.legacy.sub) {
     ({ sub, role } = c.legacy);
     session = c.legacy.sessionId;
+    // a per-claim setting is text: absent, empty or 'false' is not anonymous; anything else is
+    anonymous = c.legacy.isAnonymous === undefined || c.legacy.isAnonymous === null || c.legacy.isAnonymous === '' || c.legacy.isAnonymous === 'false' ? false : c.legacy.isAnonymous;
   } else {
     let parsed: unknown = null;
     try {
