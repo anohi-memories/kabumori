@@ -93,7 +93,7 @@ async function loadRoute(world) {
   const stubs = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
-    'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
+    'react-native': { Platform: { OS: world.os ?? 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
     'expo-router': { Link: 'Link', Stack: { Screen: 'StackScreen' } },
     'expo-crypto': { randomUUID: () => '00000000-0000-4000-8000-000000000000' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
@@ -115,9 +115,9 @@ async function loadRoute(world) {
   return { mod, slots, getCursor: () => cursor, setCursor: (v) => { cursor = v; }, pendingEffects };
 }
 
-async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), clock = { t: 100_000 } } = {}) {
+async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), clock = { t: 100_000 }, os = 'ios' } = {}) {
   const store = realStore.createAttemptStore(kv);
-  const world = { status, userId, accounts, active, port: port.port, memory, store };
+  const world = { status, userId, accounts, active, port: port.port, memory, store, os };
   const rt = await loadRoute(world);
   let ids = 0;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
@@ -500,7 +500,6 @@ test('the header is set by the route itself (the root layout is not touched)', a
     headerStyle: { backgroundColor: 'background' },
     headerTintColor: 'ink',
     headerTitleStyle: { color: 'ink' },
-    statusBarStyle: 'dark',
   });
 });
 
@@ -1102,7 +1101,7 @@ test('P2 keyboard: the whole form is inside ONE scroll view that makes room for 
   const props = scrolls[0].props;
   assert.equal(props.automaticallyAdjustKeyboardInsets, true, 'iOS: the keyboard becomes a bottom inset, so the end of the form can be scrolled above it');
   assert.equal(props.keyboardShouldPersistTaps, 'handled', 'a tap on a button works while the keyboard is up');
-  assert.equal(props.keyboardDismissMode, 'on-drag');
+  assert.equal(props.keyboardDismissMode, 'interactive', 'iOS: the keyboard stays up while the content is scrolled; only a drag over the keyboard closes it');
   assert.ok(props.contentContainerStyle.paddingBottom >= 32, 'room below the last control');
   // The editor, the preview and the confirm button are all content of that scroll view -- none sits outside it.
   assert.equal(insideScroll(ui, (n) => n.type === 'TextInput').length, 1);
@@ -1160,7 +1159,6 @@ test('P3 status bar: dark text on the fixed light screen in EVERY situation -- e
 test('P3 status bar: the header is as fixed as the page (light header, dark text and tint) so the status bar text sits on a light surface in both device appearances', async () => {
   const ui = await mount();
   const options = JSON.parse(JSON.stringify(ui.all('StackScreen')[0].props.options));
-  assert.equal(options.statusBarStyle, 'dark');
   assert.equal(options.headerStyle.backgroundColor, 'background', 'the same light color as the page');
   assert.equal(options.headerTintColor, 'ink');
   assert.equal(options.headerTitleStyle.color, 'ink');
@@ -1219,4 +1217,34 @@ test('IME: a change that arrives after the consent was given can never reach the
   assert.equal(model.consentForSend({ ...before, draft: 'こんにちは！' }), null);
   await ui.press('Xに投稿する');
   assert.equal(fp.calls.send[0].renderedText, 'こんにちは');
+});
+
+// ---- G2 QA S1 (development red box) and the keyboard-up scroll (G2 K2 report 2026-10-19) ---------------------------------------------------
+
+test('S1 red box: NO screen option about the status bar is passed (react-native-screens demands UIViewControllerBasedStatusBarAppearance=YES for any of them)', async () => {
+  for (const status of ['ready', 'mock_preview', 'loading']) {
+    const ui = await mount({ status });
+    const options = ui.all('StackScreen')[0].props.options;
+    assert.deepEqual(Object.keys(options).filter((key) => /^statusBar/u.test(key)), [], status);
+  }
+  // Every other situation of the screen renders the same single header configuration.
+  const { ui, fp } = await readyConfirmation();
+  assert.deepEqual(Object.keys(ui.all('StackScreen')[0].props.options).filter((key) => /^statusBar/u.test(key)), []);
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'X_TIMEOUT', marks: REAL });
+  await ui.flush();
+  assert.deepEqual(Object.keys(ui.all('StackScreen')[0].props.options).filter((key) => /^statusBar/u.test(key)), []);
+  // The status bar color still comes from the one <StatusBar> (the header keeps its fixed light colors).
+  assert.deepEqual(ui.all('StatusBar').map((node) => node.props.style), ['dark']);
+});
+
+test('keyboard up: iOS keeps the keyboard while the content is scrolled (interactive); Android, which has no such mode, dismisses on drag', async () => {
+  const ios = await mount({ os: 'ios' });
+  assert.equal(ios.all('ScrollView')[0].props.keyboardDismissMode, 'interactive');
+  const android = await mount({ os: 'android' });
+  assert.equal(android.all('ScrollView')[0].props.keyboardDismissMode, 'on-drag');
+  for (const ui of [ios, android]) {
+    assert.equal(ui.all('ScrollView')[0].props.keyboardShouldPersistTaps, 'handled', 'a tap on a button works while the keyboard is up');
+    assert.equal(ui.all('ScrollView')[0].props.automaticallyAdjustKeyboardInsets, true);
+  }
 });

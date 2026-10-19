@@ -9,7 +9,7 @@ import { Link, Stack } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
@@ -62,14 +62,22 @@ function markNotes(marks: ResultMarks | null): string[] {
 // This screen is drawn on a FIXED light background (the app has no dark palette), so its header and status bar are
 // fixed too: dark text on light, whatever the device appearance. The root layout's status bar follows the device
 // ("auto") and turns the status bar text white in dark mode, i.e. invisible on this screen (G2 QA A07).
+// The status bar is set ONLY by the `<StatusBar>` below. The screen option `statusBarStyle` is deliberately NOT used:
+// react-native-screens then insists on the view-controller-based status bar key of Info.plist being YES, which this
+// app sets to NO, and raises the development red box (G2 QA S1). Any `statusBar*` option has the same effect.
 const HEADER_OPTIONS = {
   headerShown: true,
   title: '手入力でXに投稿',
   headerStyle: { backgroundColor: colors.background },
   headerTintColor: colors.ink,
   headerTitleStyle: { color: colors.ink },
-  statusBarStyle: 'dark',
 } as const;
+
+// With the soft keyboard up the form must stay scrollable AND the keyboard must stay up while the person scrolls to
+// the end of it (G2 QA: `on-drag` closed the keyboard on the first drag, so "scroll to the bottom with the keyboard
+// shown" was not possible). iOS: `interactive` only moves the keyboard when the finger drags INTO it, so dragging the
+// content scrolls it and a downward drag over the keyboard still closes it. Android has no such mode: `on-drag`.
+const KEYBOARD_DISMISS_MODE = Platform.OS === 'ios' ? 'interactive' : 'on-drag';
 
 /** One attempt id per attempt: a lowercase UUID, which is what the F3 server accepts as `clientRequestId`. */
 function defaultRequestId() {
@@ -196,11 +204,12 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
       <Stack.Screen options={HEADER_OPTIONS} />
       <StatusBar style="dark" />
       {/* The soft keyboard must never put the end of the form out of reach (G2 QA A03/B11/B17): the scroll view makes
-          room for it (iOS), keeps taps working while it is up and lets a downward drag dismiss it. */}
+          room for it (iOS), keeps taps working while it is up, keeps it up while the content is scrolled and lets a
+          downward drag over the keyboard dismiss it. */}
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentContainerStyle={{ gap: 16, paddingBottom: spacing.xl }}
-        keyboardDismissMode="on-drag"
+        keyboardDismissMode={KEYBOARD_DISMISS_MODE}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
