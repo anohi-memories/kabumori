@@ -1,129 +1,113 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import {
-  ACCOUNT_DELETION_CONFIRMATION,
-  ACCOUNT_DELETION_FUNCTION,
-  deletionAvailability,
-  deletionErrorMessage,
-  deletionItems,
-  deletionNeedsFreshReauth,
-  deletionPlatformSupport,
-  deletionResultMessage,
-  parseDeletionPreview,
-  parseDeletionResponse,
-  reauthMethods,
-  sameDeletionContext,
-} from '../src/domain/account-deletion.ts';
+import { sameDeletionContext, deletionAvailability } from '../src/domain/account-deletion.ts';
+import { POSTONA_END_SOURCE_ENABLED, POSTONA_END_CONFIRM_PHRASE, parseEndPreview, parseEndResult, endFailure } from '../src/domain/postona-service-end.ts';
+import { createPostonaEndClient } from '../src/lib/postona-service-end-client.ts';
+import { ERROR_NOTICES } from '../src/domain/postona-end-notices.ts';
 
-const root = resolve(import.meta.dirname, '..');
-const repo = resolve(root, '../..');
-const read = (path) => readFile(join(root, path), 'utf8');
-const serverLogic = () => readFile(join(repo, 'supabase/functions/social-mobile-account-delete/delete_logic.ts'), 'utf8');
+export const previewBody = (status = 'active') => ({ ok: true, account_status: 'active', lifecycle_version: 7,
+  services: [{ service: 'kabumori', status: 'active' }, { service: 'x_autopost', status }], blockers: [], deletion_in_progress: false,
+  deletion_available: false, apple: { required: false, supported: true, code_required: false }, x_cleanup: 'supported',
+  providers: [{ provider: 'x', adapter: 'saga', remote_revoke: 'saga' }, { provider: 'threads', adapter: 'registered', remote_revoke: 'unsupported' }],
+  acknowledgement_required: ['threads'], postona_end_available: true });
+const ended = { ok: true, outcome: 'ended', providers: { x: 'done', threads: 'local_removed_remote_unverified' }, remote_unverified: ['threads'], x_posts_unconfirmed: 2 };
+const context = { userId: 'synthetic-user', sessionId: 'synthetic-session' };
+const answer = (body, status = 200) => ({ status, body });
+function harness({ enabled = true, responses = [answer(previewBody()), answer(ended), answer(previewBody('ended'))] } = {}) {
+  const calls = []; let current = { ...context, accessToken: 'synthetic-token' };
+  const client = createPostonaEndClient({ enabled, session: async () => current, call: async (body, token) => {
+    calls.push({ body, token }); const next = responses.shift(); if (typeof next === 'function') return next(); if (!next) throw new Error('offline'); return next;
+  } });
+  return { client, calls, setSession: (next) => { current = next; } };
+}
+const input = (preview, extra = {}) => ({ context, preview, phrase: POSTONA_END_CONFIRM_PHRASE, acknowledged: ['threads'], ...extra });
 
-test('availability: only an explicit build flag with a configured backend', () => {
-  assert.equal(deletionAvailability({ enabledFlag: 'true', backendAvailable: true }), 'available');
-  for (const [enabledFlag, backendAvailable] of [[undefined, true], ['', true], ['1', true], ['yes', true], ['true', false]]) {
-    assert.equal(deletionAvailability({ enabledFlag, backendAvailable }), 'setup_pending', `${enabledFlag}/${backendAvailable}`);
+test('old flag and new runtime source stay closed, with no lifecycle request', async () => {
+  assert.equal(POSTONA_END_SOURCE_ENABLED, false);
+  assert.equal(deletionAvailability({ enabledFlag: 'true', backendAvailable: true }), 'setup_pending');
+  const h = harness({ enabled: false });
+  assert.equal((await h.client.preview()).code, 'POSTONA_END_UNAVAILABLE');
+  assert.equal((await h.client.end({})).code, 'POSTONA_END_UNAVAILABLE');
+  assert.deepEqual(h.calls, []);
+});
+test('only actual common POSTONA action + consent, followed by definitive read-back; login and Kabumori stay', async () => {
+  const h = harness(), p = await h.client.preview(); const result = await h.client.end(input(p));
+  assert.equal(result.ok, true); assert.match(result.lines[0], /ログイン用のアカウントとかぶモリのデータは残っています/u);
+  assert.match(result.lines[1], /Threads（Meta）側/u); assert.match(result.lines[2], /予約が2件/u);
+  assert.deepEqual(h.calls.map((c) => c.body), [{ action: 'preview' }, { action: 'withdraw_postona', confirmation: 'END_POSTONA_SERVICE', acknowledged_remote_unverified: ['threads'] }, { action: 'preview' }]);
+  assert.equal((await h.client.end(input(p))).code, 'LIFECYCLE_CHANGED'); assert.equal(h.calls.length, 3);
+});
+test('POSTONA-only user without Kabumori registration still retains common login', async () => {
+  const before = previewBody(); before.services = [{ service: 'x_autopost', status: 'active' }];
+  const after = { ...before, services: [{ service: 'x_autopost', status: 'ended' }] };
+  const h = harness({ responses: [answer(before), answer(ended), answer(after)] });
+  assert.equal((await h.client.end(input(await h.client.preview()))).ok, true);
+  assert.ok(h.calls.every((c) => !['delete_common_account', 'delete'].includes(c.body.action)));
+});
+test('active POSTONA, changed Kabumori or missing common-account/Auth read-back prevents success', async () => {
+  const states = [previewBody(), { ...previewBody('ended'), services: [{ service: 'x_autopost', status: 'ended' }] }, { ...previewBody('ended'), account_status: 'none' }, { ...previewBody('ended'), services: [{ service: 'kabumori', status: 'ended' }, { service: 'x_autopost', status: 'ended' }] }, { ok: false, error: 'AUTH_REQUIRED' }];
+  for (const after of states) {
+    const h = harness({ responses: [answer(previewBody()), answer(ended), answer(after)] });
+    const result = await h.client.end(input(await h.client.preview()));
+    assert.equal(result.ok, false); assert.equal(result.code, 'RESULT_UNCONFIRMED');
+    assert.ok(result.lines.some((s) => s.includes('予約が2件'))); assert.ok(!result.lines.some((s) => s.includes('終了しました')));
   }
 });
-
-test('H2 R2: copy matches the scope exactly; かぶモリ data is never implied deleted', () => {
-  const full = deletionItems('social_and_login');
-  assert.ok(full.deleted[0].startsWith('ログイン用のアカウント'));
-  assert.ok(!full.deleted.join().includes('かぶモリ'));
-  const social = deletionItems('social_only');
-  assert.ok(!social.deleted.some((item) => item.includes('ログイン用のアカウント')));
-  assert.match(social.kept[0], /ログイン用アカウントと「かぶモリ」のデータは削除されません/u);
-  for (const scope of ['social_only', 'social_and_login']) {
-    assert.ok(deletionItems(scope).kept.some((item) => item.includes('X上にすでに公開された投稿')));
+test('unknown/legacy/login-deleting/incomplete provider results fail closed, including unconsented remote grant', () => {
+  for (const body of [null, [], {}, { ok: true }, { ok: true, login_deleted: true }, { ...ended, login_deleted: true }, { ...ended, outcome: 'deleted' }, { ...ended, x_posts_unconfirmed: -1 }, { ...ended, x_posts_unconfirmed: '2' }, { ...ended, providers: { threads: 'blocked' } }, { ...ended, remote_unverified: ['unknown'] }, { ...ended, remote_unverified: [] }, { ...ended, remote_unverified: ['threads', 'threads'] }]) assert.equal(parseEndResult(200, body, ['threads']).ok, false, JSON.stringify(body));
+  assert.equal(parseEndResult(200, ended, []).ok, false); assert.equal(parseEndResult(202, ended, ['threads']).ok, false);
+  assert.equal(parseEndResult(200, { ok: true, outcome: 'already_ended', remote_unverified: ['threads'], x_posts_unconfirmed: 2 }, ['threads']).ok, true);
+  assert.equal(parseEndResult(200, { ok: true, outcome: 'not_registered' }, []).ok, true);
+});
+test('malformed preview, unknown provider and inconsistent consent block; busy or missing adapter unavailable', () => {
+  for (const patch of [{ acknowledgement_required: [] }, { acknowledgement_required: ['unknown'] }, { services: [{}] }, { lifecycle_version: -1 }, { providers: [{ provider: 'unknown' }] }, { account_status: 'unknown' }]) assert.equal(parseEndPreview(200, { ...previewBody(), ...patch }).ok, false);
+  for (const patch of [{ x_cleanup: 'unsupported' }, { blockers: ['LOCKED'] }, { postona_end_available: false }, { account_status: 'locked' }, { deletion_in_progress: true }]) assert.equal(parseEndPreview(200, { ...previewBody(), ...patch }).postonaAvailable, false);
+});
+test('distinct typed phrase and explicit exact provider consent, no mutation when missing', async () => {
+  const h = harness(), p = await h.client.preview();
+  for (const [extra, code] of [[{ phrase: '削除する' }, 'CONFIRMATION_REQUIRED'], [{ phrase: '共通IDを完全削除' }, 'CONFIRMATION_REQUIRED'], [{ acknowledged: [] }, 'REMOTE_UNVERIFIED_ACK_REQUIRED'], [{ acknowledged: ['x'] }, 'ACKNOWLEDGEMENT_INVALID'], [{ acknowledged: ['threads', 'threads'] }, 'ACKNOWLEDGEMENT_INVALID']]) assert.equal((await h.client.end(input(p, extra))).code, code);
+  assert.equal(h.calls.length, 1);
+});
+test('preview and reauthentication cannot cross users, sessions or fabricated previews', async () => {
+  const h = harness(), p = await h.client.preview(); assert.equal((await h.client.end(input({ ...p }))).code, 'LIFECYCLE_CHANGED');
+  for (const current of [{ ...context, userId: 'other', accessToken: 't' }, { ...context, sessionId: 'other', accessToken: 't' }, null]) { h.setSession(current); assert.equal((await h.client.end(input(p))).ok, false); }
+  assert.equal(h.calls.length, 1); assert.equal(sameDeletionContext({ userId: '', sessionId: '' }, { userId: '', sessionId: '' }), false);
+});
+test('double tap sends one mutation; stale response for another session is never successful', async () => {
+  let finish; const pending = new Promise((resolve) => { finish = resolve; });
+  const h = harness({ responses: [answer(previewBody()), () => pending] }), p = await h.client.preview();
+  const first = h.client.end(input(p)); assert.equal((await h.client.end(input(p))).code, 'DELETION_IN_PROGRESS');
+  await new Promise((r) => setImmediate(r)); h.setSession({ userId: 'other', sessionId: 'other', accessToken: 't' }); finish(answer(ended));
+  assert.equal((await first).code, 'SESSION_CHANGED'); assert.equal(h.calls.length, 2);
+});
+test('every F5 error has fixed notices; reasons and uncertain posts survive failure; never server prose', () => {
+  for (const [code, notice] of Object.entries(ERROR_NOTICES)) {
+    const f = endFailure(code, { message: 'secret prose', reasons: ['X_REVOKE_FAILED'], x_posts_unconfirmed: 3 });
+    assert.equal(f.ok, false); assert.equal(f.retryable, notice.retryable); assert.equal(f.lines.slice(0, notice.ja.split('\n').length).join('\n'), notice.ja);
+    assert.ok(f.lines.at(-1).includes('予約が3件')); assert.ok(!f.lines.join().includes('secret prose'));
   }
-  assert.match(deletionResultMessage({ loginDeleted: true }), /アカウントを削除しました/u);
-  assert.match(deletionResultMessage({ loginDeleted: false }), /ログイン用アカウントと「かぶモリ」のデータは残っています/u);
+  assert.match(endFailure('X_CLEANUP_FAILED', { reasons: ['X_REVOKE_FAILED'] }).lines[1], /取り消しを確認できませんでした/u);
 });
-
-test('preview and result parsing: only explicit server answers count', () => {
-  assert.deepEqual(parseDeletionPreview(200, { ok: true, scope: 'social_only', state: 'none', apple_supported: true, apple_code_required: false }),
-    { ok: true, scope: 'social_only', state: 'none', appleSupported: true, appleCodeRequired: false });
-  assert.deepEqual(parseDeletionPreview(200, { ok: true, scope: 'everything' }), { ok: false, code: 'FAILED' });
-  assert.deepEqual(parseDeletionPreview(401, { ok: false, error: 'AUTH_REQUIRED' }), { ok: false, code: 'AUTH_REQUIRED' });
-  assert.deepEqual(parseDeletionResponse(200, { ok: true, login_deleted: true }), { ok: true, loginDeleted: true, loginKept: false });
-  assert.deepEqual(parseDeletionResponse(200, { ok: true, login_deleted: false }), { ok: true, loginDeleted: false, loginKept: true });
-  assert.deepEqual(parseDeletionResponse(200, {}), { ok: false, code: 'FAILED' });
-  assert.deepEqual(parseDeletionResponse(204, { ok: true }), { ok: false, code: 'FAILED' });
-  assert.deepEqual(parseDeletionResponse(409, { ok: false, error: 'DELETION_OPERATOR_REQUIRED' }), { ok: false, code: 'DELETION_OPERATOR_REQUIRED' });
-  assert.deepEqual(parseDeletionResponse(500, { ok: false, error: '<b>server</b>' }), { ok: false, code: 'FAILED' });
-});
-
-test('messages are fixed Japanese; every code the server can return has a specific or safe message', async () => {
-  const logic = await serverLogic();
-  const codes = [...logic.matchAll(/(?:fail|stop)\(\d{3}, '([A-Z_]+)'/gu)].map((match) => match[1]);
-  const reasons = JSON.parse(logic.match(/BLOCK_REASONS = (\[[\s\S]*?\]) as const/u)[1].replace(/'/gu, '"').replace(/,\s*\]/u, ']'));
-  assert.ok(codes.length >= 12 && reasons.length >= 9);
-  for (const code of [...codes, ...reasons.map((reason) => `DELETION_BLOCKED_${reason}`), 'SESSION_CHANGED']) {
-    const text = deletionErrorMessage(code);
-    assert.ok(text.length > 0 && !/[A-Z]{3,}_/u.test(text), code);
+test('in-progress/consent/reconciliation/failed mutation must refresh preview before retry', async () => {
+  for (const code of ['REAUTH_REQUIRED', 'REMOTE_UNVERIFIED_ACK_REQUIRED', 'DELETION_IN_PROGRESS', 'RECONCILIATION_REQUIRED', 'X_CLEANUP_UNSUPPORTED', 'FAILED']) {
+    const h = harness({ responses: [answer(previewBody()), answer({ ok: false, error: code }, 409)] }), p = await h.client.preview();
+    assert.equal((await h.client.end(input(p))).code, code); assert.equal((await h.client.end(input(p))).code, 'LIFECYCLE_CHANGED'); assert.equal(h.calls.length, 2);
   }
-  for (const code of ['DELETION_OPERATOR_REQUIRED', 'CREDENTIALS_CHANGED', 'DELETION_IN_PROGRESS', 'SCOPE_CHANGED', 'SESSION_CHANGED', 'FINALIZE_FAILED']) {
-    assert.notEqual(deletionErrorMessage(code), deletionErrorMessage('SOMETHING_UNKNOWN'), `${code} has a specific message`);
-  }
-  assert.doesNotMatch(deletionErrorMessage('WHATEVER'), /WHATEVER/u);
+});
+test('application source has no callable legacy route or full-account fallback', async () => {
+  const provider = await readFile(new URL('../src/providers/auth-provider.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(provider, /social-mobile-account-delete|action: 'delete'|expected_scope|DELETE_MY_ACCOUNT/u);
+  const screen = await readFile(new URL('../src/app/account-deletion.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(screen, /deleteAccount\(|previewDeletion\(|Alert\.alert|loginDeleted/u);
+  assert.match(screen, /disabled style=\{\[styles.button/u);
 });
 
-test('H2 R5: after any code that consumes or invalidates the re-auth, a fresh one is required', () => {
-  for (const code of ['APPLE_REVOKE_FAILED', 'APPLE_REAUTH_REQUIRED', 'REAUTH_REQUIRED', 'SESSION_CHANGED', 'SCOPE_CHANGED', 'AUTH_REQUIRED']) {
-    assert.equal(deletionNeedsFreshReauth(code), true, code);
-  }
-  for (const code of ['X_REVOKE_FAILED', 'DELETION_IN_PROGRESS', 'FAILED']) assert.equal(deletionNeedsFreshReauth(code), false, code);
-});
-
-test('H2 R6: platform support is declared, Apple login deletion needs the native app', () => {
-  assert.equal(deletionPlatformSupport({ appleCodeRequired: false, appleSupported: false, nativeAppleAvailable: false }), 'supported');
-  assert.equal(deletionPlatformSupport({ appleCodeRequired: true, appleSupported: true, nativeAppleAvailable: true }), 'supported');
-  assert.equal(deletionPlatformSupport({ appleCodeRequired: true, appleSupported: true, nativeAppleAvailable: false }), 'apple_native_required');
-  assert.equal(deletionPlatformSupport({ appleCodeRequired: true, appleSupported: false, nativeAppleAvailable: true }), 'apple_unavailable');
-});
-
-test('client context pinning: exact user and session only', () => {
-  const context = { userId: 'u1', sessionId: 's1' };
-  assert.equal(sameDeletionContext(context, { userId: 'u1', sessionId: 's1' }), true);
-  assert.equal(sameDeletionContext(context, { userId: 'u2', sessionId: 's1' }), false);
-  assert.equal(sameDeletionContext(context, { userId: 'u1', sessionId: 's2' }), false);
-  assert.equal(sameDeletionContext(context, { userId: 'u1', sessionId: null }), false);
-  assert.equal(sameDeletionContext(null, { userId: 'u1', sessionId: 's1' }), false);
-});
-
-test('client and server agree on constants', async () => {
-  assert.match(await serverLogic(), new RegExp(`CONFIRMATION = '${ACCOUNT_DELETION_CONFIRMATION}'`, 'u'));
-  assert.equal(ACCOUNT_DELETION_FUNCTION, 'social-mobile-account-delete');
-  assert.deepEqual(reauthMethods(['email', 'x'], () => true), ['email', 'x']);
-  assert.deepEqual(reauthMethods(['x', 'apple'], (method) => method !== 'apple'), ['x']);
-});
-
-test('deletion screen: pinned confirmation gates the button; Apple code is dropped after every attempt', async () => {
-  const screen = await read('src/app/account-deletion.tsx');
-  assert.match(screen, /const pinned = reauthed && sameDeletionContext\(reauthed\.context, \{ userId, sessionId \}\) \? reauthed : null;/u);
-  assert.match(screen, /const canSubmit = Boolean\(pinned && ready && platform === 'supported' && phrase\.trim\(\) === ACCOUNT_DELETION_CONFIRM_PHRASE && busy === null\);/u);
-  assert.match(screen, /disabled=\{!canSubmit\}/u);
-  const submit = screen.slice(screen.indexOf('async function submit()'), screen.indexOf('return (\n'));
-  const drop = submit.indexOf('setReauthed((current) => (current ? { context: current.context } : null));');
-  assert.ok(drop > 0 && drop < submit.indexOf('if (outcome.ok)'), 'code dropped before any branch');
-  assert.match(screen, /scope: ready\.scope/u, 'the scope shown is the scope sent');
-  assert.doesNotMatch(screen, /provider_token|refresh_token|access_token|service_role|user_metadata/u);
-  const provider = await read('src/providers/auth-provider.tsx');
-  const del = provider.slice(provider.indexOf('const deleteAccount = useCallback'), provider.indexOf('const value = useMemo'));
-  const pin = del.indexOf("return { ok: false, code: 'SESSION_CHANGED' }");
-  assert.ok(pin > 0 && pin < del.indexOf('callDeletion('), 'pinning checked before the request');
-  const confirmed = del.indexOf('if (!outcome.ok) return outcome;');
-  assert.ok(confirmed > 0 && confirmed < del.indexOf("signOut({ scope: 'local' })"), 'local sign-out only after a confirmed deletion');
-  assert.doesNotMatch(del, /user_id|p_user_id/u, 'the request body never names a user');
-});
-
-test('D2: the sign-in screen renders the deletion result visibly (not only a native Alert)', async () => {
-  const authScreen = await read('src/components/auth-screen.tsx');
-  assert.match(authScreen, /\{deletionNotice \? \(/u, 'banner rendered from the provider state');
-  assert.match(authScreen, /onPress=\{dismissDeletionNotice\}/u);
-  const screen = await read('src/app/account-deletion.tsx');
-  assert.match(screen, /Alert\.alert\('削除しました'/u, 'native behavior is preserved');
+test('already-ended durable facts retain Threads warning and uncertainty after providers disappeared', async () => {
+  const state = { ...previewBody('ended'), providers: [], acknowledgement_required: [], x_cleanup: 'not_needed' };
+  const h = harness({ responses: [answer(state), answer({ ...ended, outcome: 'already_ended' }), answer(state)] });
+  const p = await h.client.preview(); const result = await h.client.end(input(p, { acknowledged: [] }));
+  assert.equal(result.ok, true); assert.match(result.lines[0], /すでに終了/u);
+  assert.match(result.lines[1], /Threads（Meta）側/u); assert.match(result.lines[2], /予約が2件/u);
+  assert.throws(() => { p.acknowledgementRequired.push('unknown'); }, TypeError);
 });
