@@ -399,7 +399,8 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
   // G6-02 adds the app policy catalog and the G5 authority port (same rules: no runtime API, named imports only).
   // G6-03 adds the POSTONA consult adapter, the only file that may import the (unchanged) consult handler module.
   // G6-04 adds the transport for G5's proposed verdict RPC (not connected anywhere).
-  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "runtime.ts"]);
+  // G6-06 adds the UNKNOWN recovery coordinator (no provider import; only the three recovery RPCs through its port).
+  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "recovery.ts", "runtime.ts"]);
   for (const name of files) {
     const text = await Deno.readTextFile(new URL(name, dir));
     assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\(/u, name);

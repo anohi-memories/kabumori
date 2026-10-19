@@ -16,6 +16,7 @@ const FILES = [
   "gateway.ts",
   "policy_registry.ts",
   "postona_consult_adapter.ts",
+  "recovery.ts",
   "runtime.ts",
 ];
 /** Imports any gateway file may use: its siblings and four named provider files. */

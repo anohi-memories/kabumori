@@ -6,18 +6,18 @@
 
 ## 0. まとめ
 
-G6 の実行用コード（`supabase/ai_gateway/` の 8 ファイル）を Edge で使うには、`supabase/functions/_shared/ai_gateway/` へ置く必要がある。そこは共有 provider の `isolation_test.ts` が守る範囲で、今の許可の一覧では置けない。
+G6 の実行用コード（`supabase/ai_gateway/` の 8 ファイル。G6-06 で `recovery.ts` を足して 9 ファイル）を Edge で使うには、`supabase/functions/_shared/ai_gateway/` へ置く必要がある。そこは共有 provider の `isolation_test.ts` が守る範囲で、今の許可の一覧では置けない。
 
 この PR は、**一覧を変えず・何も置かず**に、次のことを**実際に動く確認**として作った（`supabase/tests/common_ai_gateway_edge_preflight.ts`）。
 
 | 確認 | 結果 |
 | --- | --- |
 | 変えていない写しで、本物の制限のテスト（provider・bridge）を動かす | 18 PASS（基準） |
-| 写しに G6 の 8 ファイルを置く（import の行先だけを書き換える）。一覧は変えない | **7 件失敗**（境界が止める） |
+| 写しに G6 のファイル（G6-06 以降は 9 つ）を置く（import の行先だけを書き換える）。一覧は変えない | **7 件失敗**（境界が止める） |
 | 置いたうえで変更案（パッチ）と G6 用の制限のテストを当てる | **23 PASS**。置いたファイルは、その場所で `deno check` も通る |
 | 変更案を当てたうえで、悪い変更を 1 つずつ加える（12 種類） | **12/12 が失敗**（どのテストが止めたかも表示） |
-| 変更案から許可を 1 つずつ抜く（7 参照＋8 届く範囲＋26 名前） | **41/41 が失敗**（＝不要な許可は 1 つも無い） |
-| 変更案は行を足すだけか | 42 行を足すだけ、消す行は 0、対象は 1 ファイル（既存の確認を弱めない） |
+| 変更案から許可を 1 つずつ抜く（7 参照＋8 届く範囲＋26 名前。G6-06 以降は届く範囲が 9） | **41/41 が失敗**（G6-06 以降 42/42）（＝不要な許可は 1 つも無い） |
+| 変更案は行を足すだけか | 42 行（G6-06 以降 43 行）を足すだけ、消す行は 0、対象は 1 ファイル（既存の確認を弱めない） |
 
 - 写しはすべて一時フォルダに作り、終わったら消す。リポジトリの `supabase/functions/` は 1 バイトも変えていない。
 - 変えた G6 のファイルは `supabase/ai_gateway/runtime.ts` のコメント 1 行だけ（`ANTHROPIC_API_KEY` の文字を `PROVIDER_API_KEY_ENV` に）。共有の制限のテストは、コメントの中の `ANTHROPIC_*` の文字も数えるため。
@@ -56,7 +56,7 @@ G6 の実行用コード（`supabase/ai_gateway/` の 8 ファイル）を Edge 
 
 ファイル: `supabase/tests/fixtures/g6_05_edge_placement/ai_gateway_isolation_test.ts.txt`（置くときは `supabase/functions/_shared/ai_gateway/isolation_test.ts`）
 
-- ファイルはちょうど 8 つ（とこのテスト）。
+- ファイルはちょうど 8 つ（G6-06 以降は `recovery.ts` を含む 9 つ）（とこのテスト）。
 - Deno の API・`process.env`・console・`node:`・動的な import を使わない。
 - import してよいのは兄弟ファイルと provider の 4 ファイルだけ。相談のつなぎ口だけは、相談機能の `logic.ts` と設定の型も読める。
 - consumer bridge を読まない。

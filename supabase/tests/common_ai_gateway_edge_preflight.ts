@@ -229,10 +229,10 @@ if (!only || only === "minimality") {
     } else caught++;
     await Deno.remove(root, { recursive: true });
   }
-  // 7 file references + 8 reachers + 26 provider names (counted from the patch; a parse slip would show here).
-  if (variants.length !== 41) {
+  // 7 file references + 9 reachers (G6-06 adds recovery.ts) + 26 provider names (counted from the patch).
+  if (variants.length !== 42) {
     failures++;
-    console.log(`BAD  minimality: expected 41 single grants in the proposal, parsed ${variants.length}`);
+    console.log(`BAD  minimality: expected 42 single grants in the proposal, parsed ${variants.length}`);
   }
   console.log(`${caught === variants.length ? "OK  " : "BAD "} minimality: ${caught}/${variants.length} single-grant removals each make the placed tree fail`);
 }
