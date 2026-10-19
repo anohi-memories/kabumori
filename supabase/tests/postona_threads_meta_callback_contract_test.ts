@@ -11,7 +11,7 @@
 // the Threads user id stored as social_accounts.platform_user_id. A real handler must be checked against a real Meta call
 // in a non-production project before it is trusted.
 //
-// metaCallbackViolations(make) is what any delivered handler must pass. A test-only reference handler proves the checker
+// metaCallbackViolations(make) (M1-M7) is what any delivered handler must pass. A test-only reference handler proves the checker
 // can be satisfied, and three broken handlers prove it fails them.
 import { assert, assertEquals } from "jsr:@std/assert@1";
 
@@ -99,6 +99,10 @@ export async function metaCallbackViolations(make: (deps: CallbackDeps) => Callb
     for (const [label, signed] of [...forged, ["tampered payload", tampered] as const, ["signature of another body", `${sig}x.${body}`] as const]) {
       const res = await call(kind, post(signed));
       if (res.status < 400 || res.status >= 500) v.push(`M1 ${kind} ${label}: ${res.status}`);
+      const text = await res.text();
+      if (text.includes("178414000000000") || text.includes(secret) || (signed !== null && signed.length > 8 && text.includes(signed.slice(-8)))) {
+        v.push(`M1 ${kind} ${label}: the refusal echoes the request`);
+      }
     }
     const get = await call(kind, new Request("https://callbacks.postona.example/threads?signed_request=" + encodeURIComponent(good)));
     if (get.status !== 405) v.push(`M1 ${kind} GET: ${get.status}`);
@@ -136,6 +140,36 @@ export async function metaCallbackViolations(make: (deps: CallbackDeps) => Callb
 
   // M5 no outbound call, ever (Threads has no app-side revoke to call; the callbacks only record).
   if (fetches !== 0) v.push(`M5 ${fetches} outbound calls`);
+
+  // M6 a store that fails is never acknowledged: no 2xx for deauthorize (Meta would think the account stopped), no code
+  // for data deletion (Meta would think deletion started), and the store's error text never reaches the answer.
+  const detail = "relation social_accounts: connection refused sa_threads_alice";
+  const down: CallbackStore = {
+    accountByProviderUser: () => Promise.reject(new Error(detail)),
+    markDeauthorized: () => Promise.reject(new Error(detail)),
+    requestDeletion: () => Promise.reject(new Error(detail)),
+  };
+  const known: CallbackStore = { ...down, accountByProviderUser: (id) => store.accountByProviderUser(id) };
+  for (const [label, failing] of [["lookup fails", down], ["write fails", known]] as const) {
+    const failingHandler = make({ appSecret: secret, store: failing, statusBaseUrl: "https://postona.example/threads/deletion", fetch: () => { fetches += 1; return Promise.reject(new Error("no network")); } });
+    for (const kind of ["deauthorize", "data_deletion"] as const) {
+      let res: Response;
+      try { res = await failingHandler(kind, post(good)); } catch { res = new Response(null, { status: 599 }); }
+      const text = await res.text();
+      if (res.status < 500) v.push(`M6 ${kind} ${label}: ${res.status}`);
+      if (text.includes("connection refused") || text.includes("1784140000000001")) v.push(`M6 ${kind} ${label}: detail in the answer`);
+    }
+  }
+
+  // M7 a code the store hands back is answered only if it is a well-formed confirmation code.
+  for (const bad of ["", "short", "has space 123456", "1784140000000002?x=1", "x".repeat(65)]) {
+    const odd: CallbackStore = { ...known, requestDeletion: () => Promise.resolve(bad) };
+    const oddHandler = make({ appSecret: secret, store: odd, statusBaseUrl: "https://postona.example/threads/deletion", fetch: () => { fetches += 1; return Promise.reject(new Error("no network")); } });
+    let res: Response;
+    try { res = await oddHandler("data_deletion", post(good)); } catch { res = new Response(null, { status: 599 }); }
+    if (res.status < 500) v.push(`M7 code ${JSON.stringify(bad)}: ${res.status}`);
+  }
+  if (fetches !== 0) v.push(`M5 ${fetches} outbound calls`);
   return v;
 }
 
@@ -161,6 +195,7 @@ export function referenceHandler(deps: CallbackDeps): CallbackHandler {
       return new Response(null, { status: 204 });
     }
     const code = await deps.store.requestDeletion(account, user);
+    if (!/^[A-Za-z0-9]{8,64}$/u.test(code)) return new Response(null, { status: 503 });
     return Response.json({ url: `${deps.statusBaseUrl}?code=${code}`, confirmation_code: code });
   };
 }
@@ -225,4 +260,31 @@ Deno.test("handlers that skip the algorithm check, ignore deauthorize, or mint a
     requestDeletion: async (account, user) => { const c = crypto.randomUUID().replaceAll("-", ""); await deps.store.requestDeletion(account, user); return c; } } });
   const v = await metaCallbackViolations(newCodeEachTime);
   assert(v.some((x) => x.startsWith("M4 a repeated")), JSON.stringify(v));
+});
+
+Deno.test("handlers that acknowledge despite a failing store, leak its error, or pass any code through fail the contract", async () => {
+  const fakesSuccess = (deps: CallbackDeps): CallbackHandler => async (kind, request) => {
+    try {
+      return await referenceHandler(deps)(kind, request.clone());
+    } catch {
+      return kind === "deauthorize"
+        ? new Response(null, { status: 204 })
+        : Response.json({ url: `${deps.statusBaseUrl}?code=pending00`, confirmation_code: "pending00" });
+    }
+  };
+  const v1 = await metaCallbackViolations(fakesSuccess);
+  assert(v1.some((x) => x.startsWith("M6 deauthorize")) && v1.some((x) => x.startsWith("M6 data_deletion")), JSON.stringify(v1));
+  const leaks = (deps: CallbackDeps): CallbackHandler => (kind, request) =>
+    referenceHandler(deps)(kind, request).catch((e) => Response.json({ error: String(e) }, { status: 503 }));
+  assert((await metaCallbackViolations(leaks)).some((x) => x.includes("detail in the answer")));
+  const anyCode = (deps: CallbackDeps): CallbackHandler => async (kind, request) => {
+    if (kind !== "data_deletion" || request.method !== "POST") return referenceHandler(deps)(kind, request);
+    const signed = new URLSearchParams(await request.clone().text()).get("signed_request") ?? "";
+    const res = await referenceHandler(deps)(kind, request);
+    if (res.status !== 503) return res;
+    const payload = JSON.parse(new TextDecoder().decode(unb64url(signed.split(".")[1]) ?? new Uint8Array()));
+    const code = await deps.store.requestDeletion(await deps.store.accountByProviderUser(payload.user_id), payload.user_id);
+    return Response.json({ url: `${deps.statusBaseUrl}?code=${code}`, confirmation_code: code });
+  };
+  assert((await metaCallbackViolations(anyCode)).some((x) => x.startsWith("M7")));
 });
