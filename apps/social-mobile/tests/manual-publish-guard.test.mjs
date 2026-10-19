@@ -21,6 +21,7 @@ const ALLOWED_IMPORTS = new Set([
   'react-native',
   'expo-router',
   'expo-crypto',
+  'expo-status-bar',
   '@/constants/theme',
   '@/components/ui',
   '@/domain/types',
@@ -147,6 +148,20 @@ test('the screen never writes a "sent" claim for a simulated result: the simulat
   assert.ok(!block.includes('Xが投稿を受け付けました'));
   assert.ok(!block.includes('providerPostId'));
   assert.ok(!block.includes('retry_requested'));
+});
+
+// ---- the screen is fixed-light: its header, status bar and keyboard behaviour must not depend on the device appearance -----------------
+
+test('the screen pins a dark status bar and a light header, never "auto"/"light", and scrolls above the keyboard', async () => {
+  const route = await readFile(join(ROOT, ROUTE), 'utf8');
+  assert.ok(route.includes('<StatusBar style="dark" />'));
+  assert.ok(!/StatusBar style="(auto|light|inverted)"/u.test(route));
+  const header = /const HEADER_OPTIONS = \{[\s\S]*?\} as const;/u.exec(route)[0];
+  for (const needle of ["statusBarStyle: 'dark'", 'headerStyle: { backgroundColor: colors.background }', 'headerTintColor: colors.ink']) assert.ok(header.includes(needle), needle);
+  assert.ok(route.includes('automaticallyAdjustKeyboardInsets'));
+  assert.ok(route.includes('keyboardShouldPersistTaps="handled"'));
+  // No dark-mode-dependent colors in the screen: every color comes from the fixed light theme.
+  assert.ok(!/useColorScheme|Appearance/u.test(route));
 });
 
 // ---- the home entry ----------------------------------------------------------------------------------------------------------

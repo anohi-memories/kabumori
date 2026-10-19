@@ -96,6 +96,7 @@ async function loadRoute(world) {
     'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
     'expo-router': { Link: 'Link', Stack: { Screen: 'StackScreen' } },
     'expo-crypto': { randomUUID: () => '00000000-0000-4000-8000-000000000000' },
+    'expo-status-bar': { StatusBar: 'StatusBar' },
     '@/constants/theme': { colors: new Proxy({}, { get: (_t, name) => String(name) }), spacing: { xs: 6, sm: 10, md: 16, lg: 22, xl: 32 } },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: { muted: true } } },
     '@/features/manual-publish/manual-post-preview': { ManualPostPreview: 'ManualPostPreview' },
@@ -492,7 +493,15 @@ test('another signed-in user never inherits an unresolved attempt', async () => 
 test('the header is set by the route itself (the root layout is not touched)', async () => {
   const ui = await mount();
   const header = ui.all('StackScreen')[0];
-  assert.deepEqual({ ...header.props.options }, { headerShown: true, title: '手入力でXに投稿' });
+  // Fixed light header + dark status bar text (the theme colors are echoed by name in this harness).
+  assert.deepEqual(JSON.parse(JSON.stringify(header.props.options)), {
+    headerShown: true,
+    title: '手入力でXに投稿',
+    headerStyle: { backgroundColor: 'background' },
+    headerTintColor: 'ink',
+    headerTitleStyle: { color: 'ink' },
+    statusBarStyle: 'dark',
+  });
 });
 
 // ---- the handler is its own last line of defence --------------------------------------------------------------------------
@@ -1075,4 +1084,139 @@ test('this build: the send stays unreachable -- the unconnected port refuses, no
   await ui.pressIgnoringDisabled('Xに投稿する');
   assert.equal(ui.state().phase, 'confirming');
   assertNoSentClaim(ui);
+});
+
+// ---- P2 keyboard avoidance / P3 dark status bar / P3 IME (G2 QA 2026-10-19: A03 B11 B17 A07) -------------------------------------------
+
+const insideScroll = (ui, predicate) => {
+  const found = [];
+  walk(ui.all('ScrollView')[0].props.children, (node) => { if (predicate(node)) found.push(node); });
+  return found;
+};
+
+test('P2 keyboard: the whole form is inside ONE scroll view that makes room for the soft keyboard, keeps taps working and lets a drag dismiss it', async () => {
+  const ui = await mount();
+  await ui.typeText('こんにちは');
+  const scrolls = ui.all('ScrollView');
+  assert.equal(scrolls.length, 1);
+  const props = scrolls[0].props;
+  assert.equal(props.automaticallyAdjustKeyboardInsets, true, 'iOS: the keyboard becomes a bottom inset, so the end of the form can be scrolled above it');
+  assert.equal(props.keyboardShouldPersistTaps, 'handled', 'a tap on a button works while the keyboard is up');
+  assert.equal(props.keyboardDismissMode, 'on-drag');
+  assert.ok(props.contentContainerStyle.paddingBottom >= 32, 'room below the last control');
+  // The editor, the preview and the confirm button are all content of that scroll view -- none sits outside it.
+  assert.equal(insideScroll(ui, (n) => n.type === 'TextInput').length, 1);
+  assert.equal(insideScroll(ui, (n) => n.type === 'ManualPostPreview').length, 1);
+  assert.equal(insideScroll(ui, (n) => n.type === 'ActionButton' && n.props.label === '内容を確認する').length, 1);
+});
+
+test('P2 keyboard: the confirmation, its consent and every result are inside the same scroll view too', async () => {
+  const { ui, fp } = await readyConfirmation();
+  assert.equal(ui.all('ScrollView').length, 1);
+  assert.equal(insideScroll(ui, (n) => n.type === 'ActionButton' && n.props.label === 'Xに投稿する').length, 1);
+  assert.equal(insideScroll(ui, (n) => n.type === 'Pressable' && n.props.accessibilityRole === 'checkbox').length, 1);
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'pending', code: null, marks: REAL });
+  await ui.flush();
+  assert.equal(ui.all('ScrollView').length, 1);
+  assert.equal(insideScroll(ui, (n) => n.type === 'ActionButton' && n.props.label === '同じ内容・同じ送信IDで確認し直す').length, 1);
+  assert.equal(ui.all('ScrollView')[0].props.automaticallyAdjustKeyboardInsets, true);
+});
+
+test('P2 keyboard: the re-entry field of a restored attempt and the record-error screens keep the same scroll behaviour', async () => {
+  const restored = await mount({ kv: deviceWith(RESTORED()) });
+  await restored.press('前回と同じ本文を入力して確認し直す');
+  assert.equal(restored.all('TextInput').length, 1);
+  assert.equal(insideScroll(restored, (n) => n.type === 'TextInput').length, 1);
+  assert.equal(restored.all('ScrollView')[0].props.automaticallyAdjustKeyboardInsets, true);
+  const kv = fakeKV();
+  kv.fail.get = true;
+  const broken = await mount({ kv });
+  assert.equal(broken.all('ScrollView')[0].props.automaticallyAdjustKeyboardInsets, true);
+});
+
+test('P3 status bar: dark text on the fixed light screen in EVERY situation -- editing, confirming, results, loading and record errors', async () => {
+  const styleOf = (ui) => ui.all('StatusBar').map((node) => node.props.style);
+  const editing = await mount();
+  assert.deepEqual(styleOf(editing), ['dark']);
+  const { ui: confirming, fp } = await readyConfirmation();
+  assert.deepEqual(styleOf(confirming), ['dark']);
+  await confirming.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'X_TIMEOUT', marks: REAL });
+  await confirming.flush();
+  assert.deepEqual(styleOf(confirming), ['dark']);
+  const kv = fakeKV();
+  let release;
+  kv.getItem = () => new Promise((resolve) => { release = () => resolve(null); });
+  const loading = await mount({ kv });
+  assert.deepEqual(styleOf(loading), ['dark']);
+  release();
+  const broken = fakeKV();
+  broken.fail.get = true;
+  assert.deepEqual(styleOf(await mount({ kv: broken })), ['dark']);
+  assert.deepEqual(styleOf(await mount({ kv: deviceWith(RESTORED({ kind: 'uncertain' })) })), ['dark']);
+});
+
+test('P3 status bar: the header is as fixed as the page (light header, dark text and tint) so the status bar text sits on a light surface in both device appearances', async () => {
+  const ui = await mount();
+  const options = JSON.parse(JSON.stringify(ui.all('StackScreen')[0].props.options));
+  assert.equal(options.statusBarStyle, 'dark');
+  assert.equal(options.headerStyle.backgroundColor, 'background', 'the same light color as the page');
+  assert.equal(options.headerTintColor, 'ink');
+  assert.equal(options.headerTitleStyle.color, 'ink');
+});
+
+// IME: an unfinished composition is already in the draft (so the counter and the preview follow what is on screen),
+// but the consent, the confirmation and the request are bound to the text AT THE MOMENT OF CONFIRMATION.
+
+test('IME: the counter and the preview follow every step of a composition, and an empty / blank step cannot be confirmed', async () => {
+  const ui = await mount();
+  for (const [step, used] of [['こ', 2], ['こん', 4], ['こんに', 6], ['こんにちは', 10]]) {
+    await ui.typeText(step);
+    assert.equal(ui.all('ManualPostPreview')[0].props.text, step);
+    assert.ok(ui.text().includes(`${used} / 280`), `${step}: ${used}`);
+    assert.equal(ui.button('内容を確認する').props.disabled, false);
+  }
+  for (const blank of ['', '  ', '\n']) {
+    await ui.typeText(blank);
+    assert.equal(ui.button('内容を確認する').props.disabled, true, JSON.stringify(blank));
+  }
+});
+
+test('IME: a composition that is finished AFTER the confirmation opened cannot change the confirmed text, its hash or the request', async () => {
+  const { ui, fp } = await (async () => {
+    const fp = fakePort();
+    const ui = await mount({ port: fp });
+    await ui.typeText('こんにち');
+    const lateChange = ui.all('TextInput')[0].props.onChangeText; // the callback the native input would still call
+    await ui.press('内容を確認する');
+    assert.equal(ui.all('TextInput').length, 0, 'the editor is gone while confirming');
+    lateChange('こんにちは！'); // the composition is committed after the confirmation opened
+    await ui.flush();
+    return { ui, fp };
+  })();
+  assert.equal(ui.state().draft, 'こんにち', 'the late change was ignored');
+  assert.ok(ui.text().includes('こんにち'));
+  assert.ok(!ui.text().includes('こんにちは！'));
+  await ui.tick();
+  assert.equal(ui.checkbox().props.accessibilityState.checked, true);
+  assert.ok(ui.text().includes(model.shortHash(sha('こんにち'))), 'the consent names the confirmed text');
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send[0].renderedText, 'こんにち');
+  assert.deepEqual(fp.calls.send[0].consent, { confirmed: true, contentSha256: sha('こんにち') });
+});
+
+test('IME: a change that arrives after the consent was given can never reach the request (the consent hash is recomputed from the draft)', async () => {
+  const fp = fakePort();
+  const ui = await mount({ port: fp });
+  await ui.typeText('こんにちは');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  const before = ui.state();
+  const forged = model.manualPublishReducer(before, { type: 'draft_changed', text: 'こんにちは！' });
+  assert.equal(forged, before, 'no edit while confirming');
+  // Even a state whose draft were swapped after the consent would lose the consent (hash mismatch) and so the send.
+  assert.equal(model.consentForSend({ ...before, draft: 'こんにちは！' }), null);
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send[0].renderedText, 'こんにちは');
 });
