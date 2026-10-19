@@ -1,0 +1,15 @@
+# F6 archive manifest — 2026-10-19
+- task_id: common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019
+- result: L6 done / PASS_OFFLINE_CONFORMANCE_WITH_GAPS / PRODUCTION_NO_GO（Draft PR #289 HEAD 92911f0d3e4a4d38846bd4f64a41724bd08a3b54）。GAP-1〜3 の修正候補は Draft PR #302 HEAD 99d539573b162424992fac0f3767ab459e4b6a97（正式 F6 TASK なし、PR 限定 PASS_SOURCE_FIX_CANDIDATE）
+- original_path: .agent_v2/tasks/F6.md（TASK と末尾の Report・L6 decision を 1 ファイルで保存）
+- archive_path: .agent_v2/archive/2026-10-19-F6-common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019/files/.agent_v2/tasks/F6.md
+- original_commit: 09e4b2827d863fc0b240be81d0f88e8fedbb07d1（L6 で done / none にした commit。保存時の main 38e6c0e47dc13af9e78c151ee8e5271ad757009d でも同じ blob）
+- original_creation_commit: 1dd7e5be4fca1c7cfe4ab0e767b41d92555e3417（TASK 登録）
+- original_blob: 924e9aab0b1a91fefe555883206f82641d41881a
+- archive_blob: 924e9aab0b1a91fefe555883206f82641d41881a
+- size_bytes: 19121
+- SHA256: b4868a452c16cbdad77ce8b2ab2a3c8aab4ff7b8eac35556804e5662eff1b0f6
+- issue_history: https://github.com/anohi-memories/kabumori/issues/321#issuecomment-6262947336（担当ちゃが保存した全文。同じ SHA256・blob・サイズを記録）
+- restore: `git show 09e4b282:.agent_v2/tasks/F6.md` と archive のバイト一致・Git blob 一致、`shasum -a 256 -c SHA256SUMS` OK
+- sync: G6-01（Issue #321）の管理ブランチ `claude/g6-f6-archive-20261019` に保存。main への反映は未実施（MAIN_NOT_SYNCED、main 管理 push は未承認）
+- append_only: true（このディレクトリは書き換えない）

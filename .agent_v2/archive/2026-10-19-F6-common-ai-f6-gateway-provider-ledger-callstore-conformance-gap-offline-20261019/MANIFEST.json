@@ -1,0 +1,29 @@
+{
+  "task_id": "common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019",
+  "slot": "F6",
+  "successor": {
+    "slot": "G6",
+    "issue": 321,
+    "task_id": "common-ai-g6-runtime-adapter-ledger-callstore-integration-source-20261019"
+  },
+  "result": "L6 done / PASS_OFFLINE_CONFORMANCE_WITH_GAPS / PRODUCTION_NO_GO",
+  "pr": {
+    "number": 289,
+    "head": "92911f0d3e4a4d38846bd4f64a41724bd08a3b54"
+  },
+  "files": [
+    {
+      "original_path": ".agent_v2/tasks/F6.md",
+      "archive_path": ".agent_v2/archive/2026-10-19-F6-common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019/files/.agent_v2/tasks/F6.md",
+      "original_commit": "09e4b2827d863fc0b240be81d0f88e8fedbb07d1",
+      "original_creation_commit": "1dd7e5be4fca1c7cfe4ab0e767b41d92555e3417",
+      "original_blob": "924e9aab0b1a91fefe555883206f82641d41881a",
+      "archive_blob": "924e9aab0b1a91fefe555883206f82641d41881a",
+      "size_bytes": 19121,
+      "sha256": "b4868a452c16cbdad77ce8b2ab2a3c8aab4ff7b8eac35556804e5662eff1b0f6"
+    }
+  ],
+  "restore_verified": true,
+  "main_synced": false,
+  "append_only": true
+}
