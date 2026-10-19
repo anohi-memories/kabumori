@@ -1,0 +1,641 @@
+{
+  "version": 1,
+  "label": "PR115-base 8f430557",
+  "productionCode": [
+    {
+      "path": "supabase/functions/important-news-monitor/post_generation_logic.ts",
+      "sha256": "a9270242d3859f8d7aa814c6acc03f6e00d8742a362185a27a79932871eb3fa5"
+    },
+    {
+      "path": "supabase/functions/important-news-monitor/importance_judgement_logic.ts",
+      "sha256": "8a55e19f674748964044bc62a30175828dbe5db0ee520a98afb92a319fbbe958"
+    },
+    {
+      "path": "supabase/functions/important-news-monitor/breaking_market_source_fetchers.ts",
+      "sha256": "e544af4e67d392521552183ae9395d52b232bed9be12401bacbc8af4fd53e1a4"
+    },
+    {
+      "path": "supabase/functions/important-news-monitor/breaking_market_daily_schedule.ts",
+      "sha256": "432c9077b7302914fa754561ecf083fa7e39e8c9db6a7edb5f7d6a44be2ce027"
+    },
+    {
+      "path": "supabase/functions/important-news-monitor/news_candidate_logic.ts",
+      "sha256": "ebec31c95afd0d7143691f56d86a9dcd8471b7fa35b21fc49f6bd41645ddc243"
+    }
+  ],
+  "totals": {
+    "cases": 22,
+    "byOutcomeKind": {
+      "generation_failure": 7,
+      "miss": 1,
+      "negative_control": 2,
+      "success": 12
+    },
+    "byGroup": {
+      "boj": 2,
+      "disaster": 2,
+      "domestic_incident": 2,
+      "fsa_action": 1,
+      "fx": 1,
+      "geopolitics": 3,
+      "negative_control": 2,
+      "north_korea": 1,
+      "tdnet_capital": 5,
+      "tdnet_earnings": 3
+    },
+    "byExpected": {
+      "important": 18,
+      "most_important": 2,
+      "no_post": 2
+    },
+    "bySource": {
+      "al_jazeera": 3,
+      "bbc_world": 2,
+      "breaking_market": 3,
+      "jp_official": 1,
+      "market_macro": 2,
+      "tdnet": 11
+    },
+    "labelSources": {
+      "human_hint": 1,
+      "production_decision": 21
+    }
+  },
+  "labelQuality": {
+    "productionDecision": 21,
+    "humanHint": 1,
+    "independentOfProduction": 1,
+    "note": "21 of 22 labels are production's own decision; only the official-notice miss is an independent (human) label"
+  },
+  "sufficiency": {
+    "positives": 20,
+    "negatives": 2,
+    "knownMisses": 1,
+    "missRateUpperBound95": 0.216,
+    "positivesNeededFor5pct": 59,
+    "positivesNeededFor10pct": 29,
+    "verdict": "NOT sufficient: use it to find disagreements for human review, not to rank models on recall"
+  },
+  "hazardCoverage": {
+    "foreign_currency": 2,
+    "negative_or_loss": 1,
+    "withdraw_or_cancel": 1,
+    "approval_state": 6,
+    "multiple_amounts": 4,
+    "unit_conversion": 6,
+    "subject_pair": 4,
+    "hedge": 9
+  },
+  "factProbes": {
+    "total": 20,
+    "byMutation": {
+      "amount_swap": 3,
+      "currency_swap": 4,
+      "direction_flip": 3,
+      "hedge_removal": 3,
+      "state_flip": 3,
+      "subject_swap": 2,
+      "unit_equivalent": 2
+    },
+    "headline": 17,
+    "exploratory": 3
+  },
+  "gaps": [
+    {
+      "kind": "negatives_and_borderline",
+      "why": "precision / false alarms cannot be measured with 2 negatives",
+      "have": 2,
+      "want": 40,
+      "sourceHint": "no_post and low-confidence (<0.7) candidates from market_macro, jp_official, breaking trigger lane and TDnet (see export_gap_candidates.sql)"
+    },
+    {
+      "kind": "independent_positives_missed_by_production",
+      "why": "every non-miss positive was selected BECAUSE production flagged it, so agreement with production is circular",
+      "have": 1,
+      "want": 20,
+      "sourceHint": "events production dropped but another source reported as important (same event, different source); needs human labels"
+    },
+    {
+      "kind": "foreign_currency_amounts",
+      "why": "currency mix-ups (PR #116) need posts whose source amounts are in USD / EUR",
+      "have": 2,
+      "want": 8,
+      "sourceHint": "TDnet overseas acquisitions / US subsidiaries, BBC / AJ items with dollar figures"
+    },
+    {
+      "kind": "loss_or_negative_figures",
+      "why": "sign loss needs △ / ▲ / 赤字 / 損失 figures in the SOURCE",
+      "have": 1,
+      "want": 10,
+      "sourceHint": "TDnet 業績予想の修正 (下方・赤字転落)、特別損失の計上"
+    },
+    {
+      "kind": "withdrawn_cancelled_postponed",
+      "why": "approval / withdrawal state errors need sources that withdraw, cancel or postpone",
+      "have": 1,
+      "want": 8,
+      "sourceHint": "TDnet 開示事項の中止・撤回・延期、TOB の撤回、提携の解消"
+    },
+    {
+      "kind": "subject_ambiguity",
+      "why": "parent / subsidiary / reporter-vs-actor confusion",
+      "have": 4,
+      "want": 10,
+      "sourceHint": "TDnet 子会社の異動・グループ内再編、親会社報道、孫会社の債権放棄"
+    },
+    {
+      "kind": "large_ma_tob",
+      "why": "the most important TDnet class has only small or failed examples",
+      "have": 5,
+      "want": 10,
+      "sourceHint": "TOB 開始・賛同、大型 M&A、MBO"
+    },
+    {
+      "kind": "us_policy_tariff_sanctions",
+      "why": "no US government / tariff / sanctions case at all",
+      "have": 0,
+      "want": 6,
+      "sourceHint": "USTR / 商務省 / 財務省制裁 (market_macro) と BBC / AJ の関税・制裁見出し"
+    },
+    {
+      "kind": "financial_system_and_listing",
+      "why": "no bank failure / financial-system / delisting / special-alert case",
+      "have": 0,
+      "want": 6,
+      "sourceHint": "金融庁・日銀の金融システム関連、東証の特別注意銘柄・整理銘柄"
+    },
+    {
+      "kind": "domestic_disaster_infrastructure",
+      "why": "domestic disaster / infrastructure outage has no case (only overseas floods / hurricane)",
+      "have": 0,
+      "want": 4,
+      "sourceHint": "気象庁・消防庁・インフラ障害（jp_official / jma_eqvol）"
+    }
+  ],
+  "cases": [
+    {
+      "caseId": "aj-flydubai-attack-e956ae92",
+      "group": "geopolitics",
+      "outcomeKind": "success",
+      "sourceName": "al_jazeera",
+      "sourceType": "breaking_market",
+      "category": "major_security_incident",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.88,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 879,
+      "hazards": []
+    },
+    {
+      "caseId": "aj-hurricane-fact-failure-8792253b",
+      "group": "disaster",
+      "outcomeKind": "generation_failure",
+      "sourceName": "al_jazeera",
+      "sourceType": "breaking_market",
+      "category": "disaster",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.78,
+      "hasStoredPost": true,
+      "factStatus": "failed",
+      "voiceStatus": "not_run",
+      "bodyChars": 1038,
+      "hazards": [
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "aj-qatar-tanker-3a1fe802",
+      "group": "geopolitics",
+      "outcomeKind": "success",
+      "sourceName": "al_jazeera",
+      "sourceType": "breaking_market",
+      "category": "major_security_incident",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.82,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 977,
+      "hazards": []
+    },
+    {
+      "caseId": "bbc-flydubai-attack-fact-failure-f4a8a7cc",
+      "group": "geopolitics",
+      "outcomeKind": "generation_failure",
+      "sourceName": "bbc_world",
+      "sourceType": "breaking_market",
+      "category": "major_security_incident",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.88,
+      "hasStoredPost": true,
+      "factStatus": "failed",
+      "voiceStatus": "not_run",
+      "bodyChars": 1086,
+      "hazards": []
+    },
+    {
+      "caseId": "bbc-nepal-floods-1533a3fd",
+      "group": "disaster",
+      "outcomeKind": "success",
+      "sourceName": "bbc_world",
+      "sourceType": "breaking_market",
+      "category": "disaster",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.87,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 983,
+      "hazards": []
+    },
+    {
+      "caseId": "boj-governor-speech-a3dac612",
+      "group": "negative_control",
+      "outcomeKind": "negative_control",
+      "sourceName": "market_macro",
+      "sourceType": "market_macro",
+      "category": "boj",
+      "expected": "no_post",
+      "expectedSource": "production_decision",
+      "recordedImportance": "no_post",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.87,
+      "hasStoredPost": false,
+      "factStatus": null,
+      "voiceStatus": null,
+      "bodyChars": 0,
+      "hazards": []
+    },
+    {
+      "caseId": "boj-official-policy-change-notice-a989d1f3",
+      "group": "boj",
+      "outcomeKind": "miss",
+      "sourceName": "market_macro",
+      "sourceType": "market_macro",
+      "category": "boj",
+      "expected": "important",
+      "expectedSource": "human_hint",
+      "recordedImportance": "no_post",
+      "recordedModel": "gpt-5.6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.8,
+      "hasStoredPost": false,
+      "factStatus": null,
+      "voiceStatus": null,
+      "bodyChars": 0,
+      "hazards": []
+    },
+    {
+      "caseId": "boj-rate-hike-news-cafc0f82",
+      "group": "boj",
+      "outcomeKind": "success",
+      "sourceName": "breaking_market",
+      "sourceType": "breaking_market",
+      "category": "boj",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-5.6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.9,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 172,
+      "hazards": []
+    },
+    {
+      "caseId": "fsa-insurer-administrative-action-b5a10bac",
+      "group": "fsa_action",
+      "outcomeKind": "success",
+      "sourceName": "jp_official",
+      "sourceType": "market_macro",
+      "category": "administrative_action",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.88,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 708,
+      "hazards": []
+    },
+    {
+      "caseId": "fx-finance-minister-remarks-25c28b26",
+      "group": "fx",
+      "outcomeKind": "success",
+      "sourceName": "breaking_market",
+      "sourceType": "breaking_market",
+      "category": "fx",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-5.6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.88,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 356,
+      "hazards": []
+    },
+    {
+      "caseId": "north-korea-projectile-090e8d18",
+      "group": "north_korea",
+      "outcomeKind": "success",
+      "sourceName": "breaking_market",
+      "sourceType": "breaking_market",
+      "category": "major_security_incident",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-5.6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.84,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 286,
+      "hazards": [
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "tdnet-buyback-fact-failure-4887f2b0",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "share_buyback",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.94,
+      "hasStoredPost": true,
+      "factStatus": "failed",
+      "voiceStatus": "not_run",
+      "bodyChars": 1397,
+      "hazards": [
+        "approval_state",
+        "unit_conversion",
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "tdnet-dividend-increase-7207a56d",
+      "group": "tdnet_earnings",
+      "outcomeKind": "success",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "dividend_increase",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.97,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 839,
+      "hazards": [
+        "approval_state",
+        "unit_conversion",
+        "multiple_amounts"
+      ]
+    },
+    {
+      "caseId": "tdnet-earnings-revision-contract-loss-91569af5",
+      "group": "tdnet_earnings",
+      "outcomeKind": "success",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "earnings_revision_down",
+      "expected": "most_important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "most_important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.98,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 1796,
+      "hazards": [
+        "foreign_currency",
+        "negative_or_loss",
+        "withdraw_or_cancel",
+        "unit_conversion",
+        "subject_pair",
+        "hedge",
+        "multiple_amounts"
+      ]
+    },
+    {
+      "caseId": "tdnet-etf-daily-disclosure-201cf3c7",
+      "group": "negative_control",
+      "outcomeKind": "negative_control",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "other_corporate_ir",
+      "expected": "no_post",
+      "expectedSource": "production_decision",
+      "recordedImportance": "no_post",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.99,
+      "hasStoredPost": false,
+      "factStatus": null,
+      "voiceStatus": null,
+      "bodyChars": 748,
+      "hazards": [
+        "unit_conversion"
+      ]
+    },
+    {
+      "caseId": "tdnet-jftc-raid-0b73ef94",
+      "group": "domestic_incident",
+      "outcomeKind": "success",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "misconduct",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.91,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 208,
+      "hazards": [
+        "subject_pair",
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "tdnet-large-order-fact-failure-2f881cde",
+      "group": "tdnet_earnings",
+      "outcomeKind": "generation_failure",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "large_order",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.82,
+      "hasStoredPost": true,
+      "factStatus": "failed",
+      "voiceStatus": "not_run",
+      "bodyChars": 370,
+      "hazards": [
+        "foreign_currency",
+        "unit_conversion",
+        "multiple_amounts"
+      ]
+    },
+    {
+      "caseId": "tdnet-press-report-denial-fact-failure-26648baf",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "ma",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.88,
+      "hasStoredPost": true,
+      "factStatus": "failed",
+      "voiceStatus": "not_run",
+      "bodyChars": 232,
+      "hazards": [
+        "approval_state",
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "tdnet-sbi-merger-fact-failure-84832da2",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "ma",
+      "expected": "most_important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "most_important",
+      "recordedModel": "gpt-6-sol",
+      "escalatedToSol": true,
+      "confidence": 0.94,
+      "hasStoredPost": true,
+      "factStatus": "failed",
+      "voiceStatus": "not_run",
+      "bodyChars": 1785,
+      "hazards": [
+        "approval_state",
+        "subject_pair",
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "tdnet-share-consolidation-voice-failure-44df218f",
+      "group": "tdnet_capital",
+      "outcomeKind": "generation_failure",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "tob",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.96,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "failed",
+      "bodyChars": 1769,
+      "hazards": [
+        "approval_state",
+        "hedge"
+      ]
+    },
+    {
+      "caseId": "tdnet-small-acquisition-d09c88ce",
+      "group": "tdnet_capital",
+      "outcomeKind": "success",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "ma",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.91,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 1086,
+      "hazards": [
+        "approval_state",
+        "unit_conversion",
+        "subject_pair",
+        "multiple_amounts"
+      ]
+    },
+    {
+      "caseId": "tdnet-third-party-committee-60d9954a",
+      "group": "domestic_incident",
+      "outcomeKind": "success",
+      "sourceName": "tdnet",
+      "sourceType": "tdnet",
+      "category": "misconduct",
+      "expected": "important",
+      "expectedSource": "production_decision",
+      "recordedImportance": "important",
+      "recordedModel": "gpt-6-luna",
+      "escalatedToSol": false,
+      "confidence": 0.91,
+      "hasStoredPost": true,
+      "factStatus": "passed",
+      "voiceStatus": "passed",
+      "bodyChars": 601,
+      "hazards": [
+        "hedge"
+      ]
+    }
+  ]
+}

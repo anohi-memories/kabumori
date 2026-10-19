@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "source": "public.ai_usage_events (read-only SELECT, 2026-10-09 ~17:15 JST). Costs are the ledger's ESTIMATES (tokens x ledger rates), not an OpenAI invoice.",
+  "window": { "fromJst": "2026-10-06 00:31", "toJst": "2026-10-09 17:15", "days": 3.7, "note": "starts at the v92 deploy (generic search cut to 4 events/day); 10-minute fetch since 10-06 16:47" },
+  "features": {
+    "judgement_luna": { "model": "gpt-6-luna", "calls": 643, "searches": 0, "avgInputTokens": 1792, "avgOutputTokens": 172, "p90InputTokens": 4222, "avgUsd": 0.00027, "totalUsd": 0.170 },
+    "judgement_sol": { "model": "gpt-6-sol", "calls": 173, "searches": 0, "avgInputTokens": 1829, "avgOutputTokens": 256, "p90InputTokens": 5258, "avgUsd": 0.00622, "totalUsd": 1.076 },
+    "trigger_triage_luna": { "model": "gpt-6-luna", "calls": 199, "searches": 0, "avgInputTokens": 903, "avgOutputTokens": 205, "p90InputTokens": 1080, "avgUsd": 0.00019, "totalUsd": 0.038 },
+    "generation_draft": { "model": "gpt-6-luna", "calls": 116, "searches": 0, "avgInputTokens": 4073, "avgOutputTokens": 226, "p90InputTokens": 7102, "avgUsd": 0.00052, "totalUsd": 0.060 },
+    "generation_fact": { "model": "gpt-6-luna", "calls": 122, "searches": 0, "avgInputTokens": 2215, "avgOutputTokens": 182, "p90InputTokens": 5268, "avgUsd": 0.00031, "totalUsd": 0.038 },
+    "generation_fact_retry": { "model": "gpt-6-luna", "calls": 6, "searches": 0, "avgInputTokens": 2012, "avgOutputTokens": 297, "p90InputTokens": 3623, "avgUsd": 0.00035, "totalUsd": 0.002 },
+    "generation_voice": { "model": "gpt-6-luna", "calls": 99, "searches": 0, "avgInputTokens": 2340, "avgOutputTokens": 212, "p90InputTokens": 2396, "avgUsd": 0.00034, "totalUsd": 0.034 },
+    "generation_voice_retry": { "model": "gpt-6-luna", "calls": 1, "searches": 0, "avgInputTokens": 657, "avgOutputTokens": 67, "p90InputTokens": 657, "avgUsd": 0.0001, "totalUsd": 0.0 },
+    "app_copy_draft": { "model": "gpt-6-luna", "calls": 8, "searches": 0, "avgInputTokens": 1100, "avgOutputTokens": 407, "p90InputTokens": 1251, "avgUsd": 0.00031, "totalUsd": 0.003 },
+    "app_copy_fact": { "model": "gpt-6-luna", "calls": 8, "searches": 0, "avgInputTokens": 787, "avgOutputTokens": 192, "p90InputTokens": 887, "avgUsd": 0.00017, "totalUsd": 0.001 },
+    "breaking_search": { "model": "gpt-5.6-luna", "calls": 15, "searches": 17, "avgInputTokens": 13273, "avgOutputTokens": 216, "p90InputTokens": 13748, "avgUsd": 0.01425, "totalUsd": 0.214 }
+  },
+  "outcomes": {
+    "judged": 643,
+    "judgedBySol": 173,
+    "importantOrMore": 116,
+    "generated": 116,
+    "factPassed": 98,
+    "factFailed": 18,
+    "voiceFailed": 6,
+    "generationFailedStatus": 24,
+    "published": 91
+  },
+  "webSearchBaseline": {
+    "note": "Production generic web search since v92 (4 events/day, gpt-5.6-luna, news-outlet domain filter). From important_news_monitor_runs.diagnostics.",
+    "events": 15,
+    "searches": 17,
+    "eventsWithCandidates": 2,
+    "candidates": 2,
+    "importantOrMoreCandidates": 0,
+    "avgSurfacedSources": 17.3,
+    "surfacedSourcesOnAllowedDomains": 1.0,
+    "observation": "most surfaced URLs were outlet marketing / help / account pages (pitch.*, assist.*, lei.*, bookplus.*, scoopbox.* ...), not articles"
+  },
+  "otherOpenAiUse": "Not in this ledger snapshot: market-report-analysis / personalized-reports (gpt-6.1-sol via the Kabumori AI model registry), x-test-post and AI Lab brand posts (gpt-6-luna / gpt-6.1-sol via social_ai_model_policy.ts), morning greeting image (gpt-image-2)."
+}
