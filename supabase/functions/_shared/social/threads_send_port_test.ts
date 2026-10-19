@@ -263,7 +263,7 @@ test("rows that are not provably this account's current credential are refused",
   assert.deepEqual(s.calls, []);
 });
 
-test("isolation: the module imports only the existing transport, and nothing else imports it", async () => {
+test("isolation: the module imports only the existing transport; only its test and the G4-03 binding verdict import it", async () => {
   const source = await Deno.readTextFile(new URL("./threads_send_port.ts", import.meta.url));
   assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./threads_publish_contract.ts"]);
   assert.equal(/\b(Deno\.|console\.)/u.test(source.replace(/^\s*\/\/.*$/gmu, "")), false);
@@ -272,7 +272,7 @@ test("isolation: the module imports only the existing transport, and nothing els
     for await (const entry of Deno.readDir(dir)) {
       if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
       if (entry.isDirectory) await walk(new URL(`${entry.name}/`, dir), `${rel}${entry.name}/`);
-      else if (/\.(ts|tsx|mjs|js)$/u.test(entry.name) && /["'][^"']*threads_send_port(\.ts)?["']/u.test(await Deno.readTextFile(new URL(entry.name, dir)))) {
+      else if (/\.(ts|tsx|mjs|js)$/u.test(entry.name) && /(?:from|import\()\s*["'][^"']*\/threads_send_port\.ts["']/u.test(await Deno.readTextFile(new URL(entry.name, dir)))) {
         importers.push(`${rel}${entry.name}`);
       }
     }
@@ -280,5 +280,9 @@ test("isolation: the module imports only the existing transport, and nothing els
   const root = new URL("../../../../", import.meta.url);
   await walk(new URL("supabase/", root), "supabase/");
   await walk(new URL("apps/", root), "apps/");
-  assert.deepEqual(importers, ["supabase/functions/_shared/social/threads_send_port_test.ts"]);
+  // G4-03 reuses the service-key rule (read-only; it takes no credential and sends nothing).
+  assert.deepEqual(importers.sort(), [
+    "supabase/functions/_shared/social/threads_account_binding.ts",
+    "supabase/functions/_shared/social/threads_send_port_test.ts",
+  ]);
 });
