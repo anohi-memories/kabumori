@@ -157,9 +157,14 @@ test('the screen pins a dark status bar and a light header, never "auto"/"light"
   assert.ok(route.includes('<StatusBar style="dark" />'));
   assert.ok(!/StatusBar style="(auto|light|inverted)"/u.test(route));
   const header = /const HEADER_OPTIONS = \{[\s\S]*?\} as const;/u.exec(route)[0];
-  for (const needle of ["statusBarStyle: 'dark'", 'headerStyle: { backgroundColor: colors.background }', 'headerTintColor: colors.ink']) assert.ok(header.includes(needle), needle);
+  for (const needle of ['headerStyle: { backgroundColor: colors.background }', 'headerTintColor: colors.ink']) assert.ok(header.includes(needle), needle);
+  // No `statusBar*` screen option: react-native-screens then requires UIViewControllerBasedStatusBarAppearance=YES (this app sets NO)
+  // and raises the development red box (G2 QA S1). The only status bar setting is the <StatusBar> element.
+  assert.ok(!/\bstatusBar[A-Za-z]*\s*:/u.test(header), 'no statusBar* option in the header configuration');
+  assert.ok(!/\bstatusBar(Style|Hidden|Animation|Translucent)\b/u.test(route.replace(/\/\/.*$/gmu, '')), 'no statusBar* screen option anywhere in the code');
   assert.ok(route.includes('automaticallyAdjustKeyboardInsets'));
   assert.ok(route.includes('keyboardShouldPersistTaps="handled"'));
+  assert.ok(route.includes("Platform.OS === 'ios' ? 'interactive' : 'on-drag'"), 'the keyboard stays up while scrolling on iOS');
   // No dark-mode-dependent colors in the screen: every color comes from the fixed light theme.
   assert.ok(!/useColorScheme|Appearance/u.test(route));
 });
