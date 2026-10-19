@@ -228,7 +228,7 @@ test("refusals carry only a fixed code", async () => {
   for (const code of seen) assert.equal((THREADS_BINDING_REFUSALS as readonly string[]).includes(code), true);
 });
 
-test("isolation: imports only G4's service-key rule; nothing imports it but its test", async () => {
+test("isolation: imports only G4's service-key rule; only its test and the G4-04 vertical path import it", async () => {
   const source = await Deno.readTextFile(new URL("./threads_account_binding.ts", import.meta.url));
   assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./threads_send_port.ts"]);
   assert.equal(/\b(fetch|Deno\.|console\.)/u.test(source.replace(/^\s*\/\/.*$/gmu, "")), false);
@@ -245,5 +245,10 @@ test("isolation: imports only G4's service-key rule; nothing imports it but its 
   const root = new URL("../../../../", import.meta.url);
   await walk(new URL("supabase/", root), "supabase/");
   await walk(new URL("apps/", root), "apps/");
-  assert.deepEqual(importers, ["supabase/functions/_shared/social/threads_account_binding_test.ts"]);
+  // G4-04 composes the verdict into the vertical path (bind only; it adds no write).
+  assert.deepEqual(importers.sort(), [
+    "supabase/functions/_shared/social/threads_account_binding_test.ts",
+    "supabase/functions/_shared/social/threads_connect_to_send.ts",
+    "supabase/functions/_shared/social/threads_connect_to_send_test.ts", // types only
+  ]);
 });
