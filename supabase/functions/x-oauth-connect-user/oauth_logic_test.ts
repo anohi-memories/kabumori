@@ -13,6 +13,15 @@ const ANON_KEY = "anon-key-fixture";
 const CLIENT_ID = "x-client-id-fixture";
 const CLIENT_SECRET = "x-client-secret-fixture";
 
+// G4-05: every call now names the confirmed caller and G5's verdict port; these tests exercise the flow itself, so the
+// port allows (the refusals are in oauth_security_test.ts).
+const G4_05_USER = "user-under-test";
+const G4_05_ALLOW = {
+  userId: G4_05_USER,
+  authorization: (req: { phase: string; brandId: string | null }) =>
+    Promise.resolve({ decision: "allow", subjectUserId: G4_05_USER, brandId: req.brandId, ownerEpoch: req.phase === "begin" ? null : "1" }),
+};
+
 function authUserResponse(id: string): Response {
   return Response.json({ id, email: "qa@example.test" });
 }
@@ -57,7 +66,8 @@ test("startConnection: rejects a too-short/empty raw state before ever calling t
   let rpcCalls = 0;
   await assert.rejects(
     () => startConnection({
-      request: { rawState: "short", codeChallenge: "c", redirectUri: "app://cb" },
+      ...G4_05_ALLOW,
+      request: { rawState: "short", codeChallenge: "c", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
       fetchImpl: async () => { rpcCalls += 1; return Response.json([{ brand_id: "u_x", social_account_id: "sa_x" }]); },
     }),
@@ -72,6 +82,7 @@ test("startConnection: hashes the raw state exactly once for DB storage, but sen
   let capturedAuth = "";
   let capturedBody: Record<string, unknown> = {};
   const result = await startConnection({
+    ...G4_05_ALLOW,
     request: { rawState, codeChallenge: "challenge-value", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "real-user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
     fetchImpl: async (input, init) => {
@@ -102,6 +113,7 @@ test("startConnection: hashes the raw state exactly once for DB storage, but sen
 
 test("startConnection: requests only the minimum read, posting, media-upload, and refresh scopes", async () => {
   const result = await startConnection({
+    ...G4_05_ALLOW,
     request: {
       rawState: "minimum-scope-test-raw-state-value",
       codeChallenge: "challenge-value",
@@ -118,7 +130,8 @@ test("startConnection: requests only the minimum read, posting, media-upload, an
 test("startConnection: a cross-user or no-membership rejection from the RPC (e.g. ownership DB error) propagates as a real failure, not a fabricated success", async () => {
   await assert.rejects(
     () => startConnection({
-      request: { rawState: "a-sufficiently-long-raw-state-value", codeChallenge: "c", redirectUri: "app://cb" },
+      ...G4_05_ALLOW,
+      request: { rawState: "a-sufficiently-long-raw-state-value", codeChallenge: "c", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
       fetchImpl: async () => Response.json({ message: "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED" }, { status: 400 }),
     }),
@@ -135,6 +148,7 @@ test("end-to-end: a raw state generated once flows through start -> authorizatio
   const rawState = "one-raw-state-used-across-the-whole-flow";
   let storedHash = "";
   const startResult = await startConnection({
+    ...G4_05_ALLOW,
     request: { rawState, codeChallenge: "c", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
     fetchImpl: async (_input, init) => {
@@ -149,6 +163,7 @@ test("end-to-end: a raw state generated once flows through start -> authorizatio
 
   let consumeQueriedHash = "";
   const result = await completeConnection({
+    ...G4_05_ALLOW,
     request: { code: "auth-code", state: stateReturnedByX, codeVerifier: "verifier", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
     fetchImpl: async (input, init) => {
@@ -172,12 +187,13 @@ test("completeConnection: a redirect_uri mismatch between the consumed state and
   let tokenExchangeCalls = 0;
   await assert.rejects(
     () => completeConnection({
-      request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "app://cb-different" },
+      ...G4_05_ALLOW,
+      request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
       fetchImpl: async (input) => {
         const url = String(input);
         if (url.includes("consume_social_mobile_x_oauth_state")) {
-          return Response.json([{ oauth_state_id: "state-1", redirect_uri: "app://cb-original", brand_id: "u_x", social_account_id: "sa_x" }]);
+          return Response.json([{ oauth_state_id: "state-1", redirect_uri: "kabumori-social://oauth-callback-original", brand_id: "u_x", social_account_id: "sa_x" }]);
         }
         tokenExchangeCalls += 1;
         return new Response("should not be called", { status: 200 });
@@ -192,7 +208,8 @@ test("completeConnection: an unknown/foreign/expired state (consume() rejects) i
   let tokenExchangeCalls = 0;
   await assert.rejects(
     () => completeConnection({
-      request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "app://cb" },
+      ...G4_05_ALLOW,
+      request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
       fetchImpl: async (input) => {
         const url = String(input);
@@ -211,6 +228,7 @@ test("completeConnection: an unknown/foreign/expired state (consume() rejects) i
 test("completeConnection: happy path exchanges the code, reads identity, completes via the RPC (passing oauth_state_id, forwarding the user JWT), and never returns a token in its result", async () => {
   const calls: string[] = [];
   const result = await completeConnection({
+    ...G4_05_ALLOW,
     request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "kabumori-social://oauth-callback" },
     userAccessToken: "real-user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
     fetchImpl: async (input, init) => {
@@ -257,12 +275,13 @@ test("completeConnection: happy path exchanges the code, reads identity, complet
 test("completeConnection: a duplicate/already-connected X account error from the RPC (unique_violation mapped server-side) propagates as a real failure", async () => {
   await assert.rejects(
     () => completeConnection({
-      request: { code: "auth-code", state: "raw-state", codeVerifier: "v", redirectUri: "app://cb" },
+      ...G4_05_ALLOW,
+      request: { code: "auth-code", state: "raw-state", codeVerifier: "v", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
       fetchImpl: async (input) => {
         const url = String(input);
         if (url.includes("consume_social_mobile_x_oauth_state")) {
-          return Response.json([{ oauth_state_id: "state-1", redirect_uri: "app://cb", brand_id: "u_x", social_account_id: "sa_x" }]);
+          return Response.json([{ oauth_state_id: "state-1", redirect_uri: "kabumori-social://oauth-callback", brand_id: "u_x", social_account_id: "sa_x" }]);
         }
         if (url === "https://api.x.com/2/oauth2/token") return Response.json({ access_token: "a", refresh_token: "r" });
         if (url === "https://api.x.com/2/users/me") return Response.json({ data: { id: "already-connected-elsewhere", username: "dup" } });
@@ -278,19 +297,20 @@ test("completeConnection: a non-2xx token exchange fails closed and never calls 
   let laterCalls = 0;
   await assert.rejects(
     () => completeConnection({
-      request: { code: "auth-code", state: "raw-state", codeVerifier: "v", redirectUri: "app://cb" },
+      ...G4_05_ALLOW,
+      request: { code: "auth-code", state: "raw-state", codeVerifier: "v", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
       fetchImpl: async (input) => {
         const url = String(input);
         if (url.includes("consume_social_mobile_x_oauth_state")) {
-          return Response.json([{ oauth_state_id: "state-1", redirect_uri: "app://cb", brand_id: "u_x", social_account_id: "sa_x" }]);
+          return Response.json([{ oauth_state_id: "state-1", redirect_uri: "kabumori-social://oauth-callback", brand_id: "u_x", social_account_id: "sa_x" }]);
         }
         if (url === "https://api.x.com/2/oauth2/token") return new Response("rate limited", { status: 429 });
         laterCalls += 1;
         return new Response("should not be called", { status: 200 });
       },
     }),
-    (error: unknown) => error instanceof OAuthConnectUserError && error.message === "X_TOKEN_EXCHANGE_FAILED:429",
+    (error: unknown) => error instanceof OAuthConnectUserError && error.message === "X_TOKEN_EXCHANGE_FAILED",
   );
   assert.equal(laterCalls, 0);
 });
@@ -332,13 +352,14 @@ function makeFakeBackend(state: FakeOAuthState) {
 
 function baseArgs(overrides: Partial<Parameters<typeof completeConnection>[0]["request"]> = {}) {
   return {
-    request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "app://cb", ...overrides },
+    request: { code: "auth-code", state: "raw-state", codeVerifier: "verifier-value", redirectUri: "kabumori-social://oauth-callback", ...overrides },
     userAccessToken: "user-jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID, clientSecret: CLIENT_SECRET,
+    ...G4_05_ALLOW,
   };
 }
 
 test("retry: a token-exchange failure leaves the state consumable, and a retried callback succeeds", async () => {
-  const backend = makeFakeBackend({ id: "state-1", redirectUri: "app://cb", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
+  const backend = makeFakeBackend({ id: "state-1", redirectUri: "kabumori-social://oauth-callback", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
   let tokenAttempt = 0;
   const flaky: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -350,7 +371,7 @@ test("retry: a token-exchange failure leaves the state consumable, and a retried
     if (url === "https://api.x.com/2/users/me") return Response.json({ data: { id: "1", username: "user1" } });
     return backend.fetchImpl(input, init);
   };
-  await assert.rejects(() => completeConnection({ ...baseArgs(), fetchImpl: flaky }), (error: unknown) => error instanceof OAuthConnectUserError && error.message === "X_TOKEN_EXCHANGE_FAILED:504");
+  await assert.rejects(() => completeConnection({ ...baseArgs(), fetchImpl: flaky }), (error: unknown) => error instanceof OAuthConnectUserError && error.message === "X_TOKEN_EXCHANGE_FAILED");
   assert.equal(backend.state.consumedAt, null, "a failed token exchange must not have consumed the state");
 
   const retryResult = await completeConnection({ ...baseArgs(), fetchImpl: flaky });
@@ -359,7 +380,7 @@ test("retry: a token-exchange failure leaves the state consumable, and a retried
 });
 
 test("retry: an identity-read failure leaves the state consumable, and a retried callback succeeds", async () => {
-  const backend = makeFakeBackend({ id: "state-1", redirectUri: "app://cb", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
+  const backend = makeFakeBackend({ id: "state-1", redirectUri: "kabumori-social://oauth-callback", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
   let identityAttempt = 0;
   const flaky: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -371,7 +392,7 @@ test("retry: an identity-read failure leaves the state consumable, and a retried
     }
     return backend.fetchImpl(input, init);
   };
-  await assert.rejects(() => completeConnection({ ...baseArgs(), fetchImpl: flaky }), (error: unknown) => error instanceof OAuthConnectUserError && error.message === "X_IDENTITY_READ_FAILED:503");
+  await assert.rejects(() => completeConnection({ ...baseArgs(), fetchImpl: flaky }), (error: unknown) => error instanceof OAuthConnectUserError && error.message === "X_IDENTITY_READ_FAILED");
   assert.equal(backend.state.consumedAt, null, "a failed identity read must not have consumed the state");
 
   const retryResult = await completeConnection({ ...baseArgs(), fetchImpl: flaky });
@@ -379,7 +400,7 @@ test("retry: an identity-read failure leaves the state consumable, and a retried
 });
 
 test("retry: a completion/Vault-side RPC failure leaves the state consumable (per the fake's own contract: an error response never flips consumedAt), and a retried callback succeeds", async () => {
-  const state: FakeOAuthState = { id: "state-1", redirectUri: "app://cb", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null };
+  const state: FakeOAuthState = { id: "state-1", redirectUri: "kabumori-social://oauth-callback", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null };
   let completeAttempt = 0;
   const flaky: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -404,7 +425,7 @@ test("retry: a completion/Vault-side RPC failure leaves the state consumable (pe
 });
 
 test("replay: a successfully completed callback, replayed again with the same code/state, is denied -- not silently re-succeeded", async () => {
-  const backend = makeFakeBackend({ id: "state-1", redirectUri: "app://cb", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
+  const backend = makeFakeBackend({ id: "state-1", redirectUri: "kabumori-social://oauth-callback", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
   const identity = { id: "1", username: "user1" };
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);
@@ -422,7 +443,7 @@ test("replay: a successfully completed callback, replayed again with the same co
 });
 
 test("concurrency: two callbacks racing on the same state can never both succeed -- exactly one binding is created", async () => {
-  const backend = makeFakeBackend({ id: "state-1", redirectUri: "app://cb", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
+  const backend = makeFakeBackend({ id: "state-1", redirectUri: "kabumori-social://oauth-callback", brandId: "u_x", socialAccountId: "sa_x", consumedAt: null });
   const identity = { id: "1", username: "user1" };
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = String(input);

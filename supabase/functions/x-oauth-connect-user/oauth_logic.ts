@@ -69,6 +69,70 @@ export async function resolveConnectingUser({
   return { userId: id };
 }
 
+/** The fixed codes the begin / consume / complete RPCs raise (migrations 20260919120000, 20260922003101). */
+export const X_CONNECT_RPC_ERROR_CODES: ReadonlySet<string> = new Set([
+  "OAUTH_STATE_INPUT_INVALID",
+  "OAUTH_STATE_NOT_CONSUMABLE",
+  "OAUTH_TOKEN_OR_IDENTITY_INVALID",
+  "SOCIAL_MOBILE_ACCOUNT_NOT_OWNED",
+  "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED",
+  "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED",
+  "X_ACCOUNT_ALREADY_CONNECTED",
+  "X_IDENTITY_ACCOUNT_MISMATCH",
+]);
+
+// --- G4-05: who may connect, decided again right before anything irreversible --------------------------------------------
+//
+// G5 (Issue #320, G5-02 PR #344) owns the person's authorization verdict (R1, `common_account_authorization_verdict`,
+// feature `x_connect`). It is NOT implemented. This port is where it plugs in; its wire is not final, so the port answers
+// a normalised shape and anything else is "unknown". Without a port, or with any answer other than a well-formed allow
+// for this person (and, before the exchange, this workspace with a known owner epoch), nothing irreversible happens:
+// begin is not called, and the authorization code is never exchanged with X.
+//
+// Not closed here (documented in docs/postona/x-oauth-preexchange-reauth-20261020.md): the owner epoch seen at begin is
+// not kept with the state row (the state table has no column for it; a schema change), so an owner A -> B -> A between
+// begin and callback is not told apart from A all along; the 10-minute state lifetime bounds it.
+export type XConnectAuthorizationRequest = Readonly<{
+  phase: "begin" | "pre_exchange";
+  userId: string;
+  userAccessToken: string;
+  /** null at begin (the workspace is not known yet); the state's workspace before the exchange. */
+  brandId: string | null;
+}>;
+/** Normalised answer: { decision: "allow" | "deny" | "unknown", subjectUserId, brandId, ownerEpoch } (epoch opaque). */
+export type XConnectAuthorizationPort = (request: XConnectAuthorizationRequest) => Promise<unknown>;
+
+const OWNER_EPOCH = /^[1-9][0-9]{0,18}$/u;
+
+async function requireAuthorization(
+  authorization: XConnectAuthorizationPort | null | undefined,
+  request: XConnectAuthorizationRequest,
+): Promise<void> {
+  if (typeof authorization !== "function") fail("X_CONNECT_AUTHORIZATION_UNAVAILABLE", 503);
+  let answer: unknown;
+  try {
+    answer = await authorization(request);
+  } catch {
+    fail("X_CONNECT_AUTHORIZATION_UNAVAILABLE", 503);
+  }
+  const v = (typeof answer === "object" && answer !== null && !Array.isArray(answer) ? answer : {}) as Record<string, unknown>;
+  if (v.decision === "deny" && v.subjectUserId === request.userId) fail("X_CONNECT_NOT_AUTHORIZED", 403);
+  const epoch = typeof v.ownerEpoch === "number" && Number.isSafeInteger(v.ownerEpoch) ? String(v.ownerEpoch) : v.ownerEpoch;
+  const epochOk = request.phase === "begin"
+    ? epoch === null || (typeof epoch === "string" && OWNER_EPOCH.test(epoch))
+    : typeof epoch === "string" && OWNER_EPOCH.test(epoch);
+  if (v.decision !== "allow" || v.subjectUserId !== request.userId || v.brandId !== request.brandId || !epochOk) {
+    fail("X_CONNECT_AUTHORIZATION_UNKNOWN", 503);
+  }
+}
+
+// --- G4-05: the redirect URI is the registered one, exactly ---------------------------------------------------------------
+/** The value registered for this app in the X developer portal and fixed in the app (use-x-connect.ts). No normalisation. */
+export const X_CONNECT_REGISTERED_REDIRECT_URIS: ReadonlySet<string> = new Set(["kabumori-social://oauth-callback"]);
+function requireRegisteredRedirect(redirectUri: string): void {
+  if (!X_CONNECT_REGISTERED_REDIRECT_URIS.has(redirectUri)) fail("OAUTH_REDIRECT_URI_NOT_ALLOWED", 400);
+}
+
 // Calls a Postgres RPC as the connecting user (forwarding their own JWT), never as service_role.
 export async function rpcAsUser({
   supabaseUrl,
@@ -95,10 +159,12 @@ export async function rpcAsUser({
     body: JSON.stringify(body),
   });
   if (!response.ok) {
+    // G4-05: only the RPCs' own fixed codes reach the client; any other database text (constraint names, row ids,
+    // Vault or permission errors) collapses into one generic code.
     let code = "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED";
     try {
       const errorBody = await response.json() as { message?: unknown };
-      if (typeof errorBody.message === "string" && errorBody.message.length > 0) code = errorBody.message;
+      if (typeof errorBody.message === "string" && X_CONNECT_RPC_ERROR_CODES.has(errorBody.message)) code = errorBody.message;
     } catch {
       // keep the generic code
     }
@@ -123,6 +189,8 @@ const X_SCOPES = "tweet.read users.read tweet.write media.write offline.access";
 
 export async function startConnection({
   request,
+  userId,
+  authorization,
   userAccessToken,
   supabaseUrl,
   anonKey,
@@ -131,6 +199,10 @@ export async function startConnection({
   now = new Date(),
 }: {
   request: StartRequest;
+  /** The caller resolveConnectingUser() just confirmed. */
+  userId: string;
+  /** G5's verdict (not implemented: null refuses). */
+  authorization: XConnectAuthorizationPort | null;
   userAccessToken: string;
   supabaseUrl: string;
   anonKey: string;
@@ -142,6 +214,9 @@ export async function startConnection({
   // as a sanity floor without hardcoding the client's exact encoding.
   if (!request.rawState || request.rawState.length < 16) fail("OAUTH_STATE_INPUT_INVALID", 400);
   if (!request.codeChallenge || !request.redirectUri) fail("OAUTH_STATE_INPUT_INVALID", 400);
+  requireRegisteredRedirect(request.redirectUri);
+  // (4) before begin can create or reuse a workspace: is this person allowed to connect at all right now?
+  await requireAuthorization(authorization, { phase: "begin", userId, userAccessToken, brandId: null });
 
   const stateHash = await hashState(request.rawState);
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
@@ -208,7 +283,7 @@ async function exchangeCodeForTokens({
       client_id: clientId,
     }),
   });
-  if (!response.ok) fail(`X_TOKEN_EXCHANGE_FAILED:${response.status}`, 502);
+  if (!response.ok) fail("X_TOKEN_EXCHANGE_FAILED", 502);
   const body = await response.json() as { access_token?: unknown; refresh_token?: unknown };
   if (typeof body.access_token !== "string" || typeof body.refresh_token !== "string") {
     fail("X_TOKEN_EXCHANGE_INVALID_RESPONSE", 502);
@@ -218,7 +293,7 @@ async function exchangeCodeForTokens({
 
 async function readXIdentity({ accessToken, fetchImpl }: { accessToken: string; fetchImpl: FetchLike }): Promise<{ platformUserId: string; handle: string }> {
   const response = await fetchImpl(X_IDENTITY_URL, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!response.ok) fail(`X_IDENTITY_READ_FAILED:${response.status}`, 502);
+  if (!response.ok) fail("X_IDENTITY_READ_FAILED", 502);
   const body = await response.json() as { data?: { id?: unknown; username?: unknown } };
   const platformUserId = body.data?.id;
   const username = body.data?.username;
@@ -238,6 +313,8 @@ async function readXIdentity({ accessToken, fetchImpl }: { accessToken: string; 
 // concurrent/replayed duplicate racing against it) can ever change its consumed state.
 export async function completeConnection({
   request,
+  userId,
+  authorization,
   userAccessToken,
   supabaseUrl,
   anonKey,
@@ -246,6 +323,8 @@ export async function completeConnection({
   fetchImpl = fetch,
 }: {
   request: CallbackRequest;
+  userId: string;
+  authorization: XConnectAuthorizationPort | null;
   userAccessToken: string;
   supabaseUrl: string;
   anonKey: string;
@@ -256,6 +335,8 @@ export async function completeConnection({
   if (!request.code || !request.state || !request.codeVerifier || !request.redirectUri) {
     fail("OAUTH_CALLBACK_INPUT_INVALID", 400);
   }
+  requireRegisteredRedirect(request.redirectUri);
+  if (typeof authorization !== "function") fail("X_CONNECT_AUTHORIZATION_UNAVAILABLE", 503);
   const stateHash = await hashState(request.state);
 
   const consumed = await rpcAsUser({
@@ -267,6 +348,10 @@ export async function completeConnection({
   const state = Array.isArray(consumed) ? consumed[0] : consumed;
   if (!state?.oauth_state_id || !state.social_account_id) fail("OAUTH_STATE_NOT_CONSUMABLE", 400);
   if (state.redirect_uri !== request.redirectUri) fail("OAUTH_STATE_REDIRECT_MISMATCH", 400);
+
+  // (1) G4-05: decided again for this person and this workspace right before the code is spent with X. consume() only
+  // checks who started the state; ownership was otherwise re-checked only inside complete(), AFTER the exchange.
+  await requireAuthorization(authorization, { phase: "pre_exchange", userId, userAccessToken, brandId: state.brand_id });
 
   const tokens = await exchangeCodeForTokens({
     code: request.code, codeVerifier: request.codeVerifier, redirectUri: request.redirectUri,

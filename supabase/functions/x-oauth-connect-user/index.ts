@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   try {
     // Fails closed with a clear 401 before any RPC call is attempted if the token is missing, malformed,
     // or does not belong to a real signed-in user -- no admin_users check, any real user may proceed.
-    await resolveConnectingUser({ authorizationHeader, supabaseUrl, anonKey });
+    const user = await resolveConnectingUser({ authorizationHeader, supabaseUrl, anonKey });
 
     const path = new URL(req.url).pathname;
     let body: unknown;
@@ -55,6 +55,10 @@ Deno.serve(async (req) => {
       };
       const result = await completeConnection({
         request, userAccessToken, supabaseUrl, anonKey, clientId, clientSecret,
+        // G4-05: G5's verdict (R1) is not implemented, so no port is wired and the callback refuses before the code
+        // exchange (X_CONNECT_AUTHORIZATION_UNAVAILABLE). Deploying this as is turns X connect OFF until R1 exists.
+        userId: user.userId,
+        authorization: null,
       });
       return json({
         success: true,
@@ -72,7 +76,12 @@ Deno.serve(async (req) => {
       codeChallenge: typeof bodyRecord.code_challenge === "string" ? bodyRecord.code_challenge : "",
       redirectUri: typeof bodyRecord.redirect_uri === "string" ? bodyRecord.redirect_uri : "",
     };
-    const result = await startConnection({ request, userAccessToken, supabaseUrl, anonKey, clientId });
+    const result = await startConnection({
+      request, userAccessToken, supabaseUrl, anonKey, clientId,
+      // G4-05: see the callback above; begin is refused the same way until R1 exists.
+      userId: user.userId,
+      authorization: null,
+    });
     return json({
       authorization_url: result.authorizationUrl,
       brand_id: result.brandId,
