@@ -1,5 +1,24 @@
 # Kabumori Project Rules
 
+## 2026-10-19 H1〜H5 Issue正式移行指令（J残TASK中止）
+
+ユーザーはJ1〜J5の残作業を不要と判断し、次の新規TASKから全H系Issueへ移行することを明示指示。全担当ちゃ向け詳細指令：[Issue #299 コメント6263006191](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6263006191)。この節は旧J継続・旧H/V3・下の段階移行説明より優先。
+
+| H枠 | 固定Issue | 役割 |
+| --- | --- | --- |
+| H1 | #306 | Codexレビュー・修正・検証。旧pilot H1-02の世代契約を正式TASK登録前に整合 |
+| H2 | #329 | Codexレビュー・修正・検証 |
+| H3 | #330 | Codexレビュー・修正・検証 |
+| H4 | #331 | Codexレビュー・修正・検証 |
+| H5 | #332 | 臨時実装専用、原則空ける |
+
+旧J1〜J5の残TASK（J2 readyを含む）はユーザー判断で USER_CANCELLED_FOR_H_MIGRATION / NOT_ACCEPTED として扱い、再実行・次TASKのJ割当を行わない。既存の旧TASK/Report/ACTIVE・archive・PRは証拠として保持し、未受入をdone/PASSへ書換えない。旧Jのtask_idをHへ移動・再利用しない。旧Jの未処理V1〜V5を新Hへの割当の必須前提にしない。
+
+Hの新規TASKは開始Hn→完了Cn。担当ちゃが実際のreturn_to、completion_code、推薦モデル・tests・制約・対象Issue statusと他枠競合を確認した後に、H Issueへreadyとして登録・read-backする。`idle/task_id:none`からは開始不可。H1 #306はpilot履歴を保護し、正式移行前に50件世代の整合を取る。Issue本文は担当ちゃのみ編集、CodexはREPORT、ちゃはHISTORY→ACCEPT→次TASKをread-back。安全拒否ならSTOP。
+
+main管理ルール更新および付随Vercel deployは既存のユーザー承認範囲内。製品PR merge・DB/Auth/Secrets・SNS実投稿・外部write等の承認ではない。
+
+
 ## 2026-10-19 G枠Issue移行・V3 G10廃止（最新優先）
 
 ### 全G担当ちゃ共通指令（次の新規TASKからIssue方式）
