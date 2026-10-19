@@ -80,13 +80,13 @@ class G5 implements G5Transport {
       scope: { app: scope.app, feature: scope.feature, brand_slug: scope.brand?.slug ?? null },
       subject: userId ? { kind: "user", user_id: userId } : { kind: "system" },
       session: userId ? { state: recheck && this.revokeOnRecheck ? "revoked" : "active", ref: "s-1" } : null,
-      owner_epoch: owns ? "5" : null, entitlements: ["postona:x_autopost"], issued_at_ms: now, expires_at_ms: now + 60_000,
+      owner_epoch: owns ? "g5oe:5:1" : null, entitlements: ["postona:x_autopost"], issued_at_ms: now, expires_at_ms: now + 60_000,
     };
   }
   fetchVerdict(credential: unknown, scope: VerdictScope) {
     return Promise.resolve(this.wire(USERS[String(credential)], scope, false));
   }
-  fetchRecheck(scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
+  fetchRecheck(_credential: unknown, scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
     return Promise.resolve(this.wire(subject.kind === "user" ? subject.userId : undefined, scope, true));
   }
 }

@@ -74,13 +74,13 @@ class G5 implements G5Transport {
     const common = { v: 1, decision: "allow", reason: null, scope: { app: scope.app, feature: scope.feature, brand_slug: scope.brand?.slug ?? null }, issued_at_ms: now, expires_at_ms: now + 60_000 };
     if (!userId) return { ...common, subject: { kind: "system" }, session: null, owner_epoch: null, entitlements: [] };
     const state = recheck && this.revokeOnRecheck ? "revoked" : this.session[userId];
-    return { ...common, subject: { kind: "user", user_id: userId }, session: { state, ref: `s-${userId.slice(-2)}` }, owner_epoch: scope.brand ? "7" : null, entitlements: this.entitlements[userId] };
+    return { ...common, subject: { kind: "user", user_id: userId }, session: { state, ref: `s-${userId.slice(-2)}` }, owner_epoch: scope.brand ? "g5oe:7:1" : null, entitlements: this.entitlements[userId] };
   }
   fetchVerdict(credential: unknown, scope: VerdictScope) {
     const userId = credential === "jwt-a" ? USER_A : credential === "jwt-b" ? USER_B : null;
     return Promise.resolve(this.wire(userId, scope, false));
   }
-  fetchRecheck(scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
+  fetchRecheck(_credential: unknown, scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
     return Promise.resolve(this.wire(subject.kind === "user" ? subject.userId : null, scope, true));
   }
 }
@@ -94,7 +94,8 @@ function world(options: { respond?: (call: RecordedCall) => Response | Promise<R
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),
-    authority: createG5AuthorityPort({ transport: g5, planAllowlist: SET.planAllowlist }),
+    // This test transport also answers the Kabumori system job (G5 never does): a stand-in for a job authority.
+    authority: createG5AuthorityPort({ transport: g5, planAllowlist: SET.planAllowlist, acceptSystemSubject: true }),
     policies: SET.registry,
     fetch: (input, init) => (String(input).startsWith(SUPABASE) ? supabaseFetch(input, init) : provider.fetch(input, init)),
     retryTiming: { baseDelayMs: 1, maxDelayMs: 1, maxRetryAfterMs: 10, minAttemptMs: 1 },

@@ -1,0 +1,566 @@
+{
+  "provenance": {
+    "source": "G5 PR #340 supabase/candidates/common_account_postona_authz/verdict.ts",
+    "head": "80b90bd9d4030873f876a1d3d60c621f9a6173a2",
+    "blob": "e8ec7e716af2cbd760bf1b31970cbff0588e3812",
+    "generated": "decide(scope, principal, facts, 1760000000000) with times removed (the RPC returns no times; the Edge adds them)",
+    "note": "G5-owned code was run in a scratch directory only; this file holds its outputs, not its code."
+  },
+  "samples": [
+    {
+      "name": "allow consult",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "allow",
+      "g5_reason": null,
+      "rpc_wire": {
+        "v": 1,
+        "decision": "allow",
+        "reason": null,
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": {
+          "state": "active",
+          "ref": "s:ae902d0683d3d9c2b8d02af5d2175195"
+        },
+        "owner_epoch": "g5oe:7:4",
+        "entitlements": [
+          "postona:x_autopost"
+        ]
+      }
+    },
+    {
+      "name": "allow post_generation",
+      "scope": {
+        "app": "postona",
+        "feature": "post_generation",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "allow",
+      "g5_reason": null,
+      "rpc_wire": {
+        "v": 1,
+        "decision": "allow",
+        "reason": null,
+        "scope": {
+          "app": "postona",
+          "feature": "post_generation",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": {
+          "state": "active",
+          "ref": "s:ae902d0683d3d9c2b8d02af5d2175195"
+        },
+        "owner_epoch": "g5oe:7:4",
+        "entitlements": [
+          "postona:x_autopost"
+        ]
+      }
+    },
+    {
+      "name": "session revoked",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "SESSION_REVOKED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "SESSION_REVOKED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": {
+          "state": "revoked",
+          "ref": "s:ae902d0683d3d9c2b8d02af5d2175195"
+        },
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "session expired",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "SESSION_EXPIRED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "SESSION_EXPIRED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": {
+          "state": "expired",
+          "ref": "s:ae902d0683d3d9c2b8d02af5d2175195"
+        },
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "account deleting",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "ACCOUNT_DELETION_IN_PROGRESS",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "ACCOUNT_DELETION_IN_PROGRESS",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "account locked",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "ACCOUNT_LOCKED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "ACCOUNT_LOCKED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "account missing",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "ACCOUNT_NOT_FOUND",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "ACCOUNT_NOT_FOUND",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "service not registered",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "SERVICE_NOT_REGISTERED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "SERVICE_NOT_REGISTERED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "service provisioning",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "pending",
+      "g5_reason": "SERVICE_PROVISIONING",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "pending",
+        "reason": "SERVICE_PROVISIONING",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "service suspended",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "SERVICE_SUSPENDED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "SERVICE_SUSPENDED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "service ended",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "SERVICE_NOT_ACTIVE",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "SERVICE_NOT_ACTIVE",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "not a member",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "BRAND_ACCESS_DENIED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "BRAND_ACCESS_DENIED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "admin, not owner",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "ROLE_NOT_ALLOWED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "ROLE_NOT_ALLOWED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "two owners",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "unknown",
+      "g5_reason": "WORKSPACE_OWNER_UNKNOWN",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "unknown",
+        "reason": "WORKSPACE_OWNER_UNKNOWN",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "owner epoch null",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "unknown",
+      "g5_reason": "OWNER_EPOCH_UNAVAILABLE",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "unknown",
+        "reason": "OWNER_EPOCH_UNAVAILABLE",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "facts unreadable",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "unknown",
+      "g5_reason": "FACTS_UNAVAILABLE",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "unknown",
+        "reason": "FACTS_UNAVAILABLE",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "no principal",
+      "scope": {
+        "app": "postona",
+        "feature": "consult",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "AUTH_REQUIRED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "AUTH_REQUIRED",
+        "scope": {
+          "app": "postona",
+          "feature": "consult",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "system"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "kabumori feature",
+      "scope": {
+        "app": "kabumori",
+        "feature": "market_report",
+        "brand_slug": null
+      },
+      "g5_decision": "deny",
+      "g5_reason": "FEATURE_NOT_ENABLED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "FEATURE_NOT_ENABLED",
+        "scope": {
+          "app": "kabumori",
+          "feature": "market_report",
+          "brand_slug": null
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "miseiro feature",
+      "scope": {
+        "app": "miseiro",
+        "feature": "assistant",
+        "brand_slug": null
+      },
+      "g5_decision": "deny",
+      "g5_reason": "FEATURE_NOT_ENABLED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "FEATURE_NOT_ENABLED",
+        "scope": {
+          "app": "miseiro",
+          "feature": "assistant",
+          "brand_slug": null
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    },
+    {
+      "name": "unknown postona feature",
+      "scope": {
+        "app": "postona",
+        "feature": "something_else",
+        "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+      },
+      "g5_decision": "deny",
+      "g5_reason": "FEATURE_NOT_ENABLED",
+      "rpc_wire": {
+        "v": 1,
+        "decision": "deny",
+        "reason": "FEATURE_NOT_ENABLED",
+        "scope": {
+          "app": "postona",
+          "feature": "something_else",
+          "brand_slug": "u_ae343f5caedb67d4af33fc7a"
+        },
+        "subject": {
+          "kind": "user",
+          "user_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "session": null,
+        "owner_epoch": null,
+        "entitlements": []
+      }
+    }
+  ]
+}

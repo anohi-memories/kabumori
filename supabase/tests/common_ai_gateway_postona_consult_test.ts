@@ -71,14 +71,14 @@ class FakeG5 implements G5Transport {
     const state = recheck && this.revokeOnRecheck ? "revoked" : this.session[userId];
     return {
       v: 1, decision: owns ? "allow" : "deny", reason: owns ? null : "NOT_BRAND_OWNER", scope: scopeEcho, subject: { kind: "user", user_id: userId },
-      session: { state, ref: `s-${userId.slice(-1)}` }, owner_epoch: owns && scope.brand ? "5" : null, entitlements: this.entitlements[userId], issued_at_ms: now, expires_at_ms: now + 60_000,
+      session: { state, ref: `s-${userId.slice(-1)}` }, owner_epoch: owns && scope.brand ? "g5oe:5:1" : null, entitlements: this.entitlements[userId], issued_at_ms: now, expires_at_ms: now + 60_000,
     };
   }
   fetchVerdict(credential: unknown, scope: VerdictScope) {
     this.calls++;
     return Promise.resolve(this.wire(USERS[String(credential)], scope, false));
   }
-  fetchRecheck(scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
+  fetchRecheck(_credential: unknown, scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
     this.calls++;
     return Promise.resolve(this.wire(subject.kind === "user" ? subject.userId : undefined, scope, true));
   }

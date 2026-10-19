@@ -54,9 +54,9 @@ const CONTENT = { "postona:consult": content("consult"), "kabumori:market_report
 class FakeG5 implements G5Transport {
   calls: string[] = [];
   users = new Map<string, { userId: string; session: "active" | "revoked" | "expired" | "unknown"; sessionRef: string; entitlements: string[]; epochs: Record<string, string> }>([
-    ["jwt-a", { userId: USER_A, session: "active", sessionRef: "s-a1", entitlements: ["postona:x_autopost"], epochs: { [BRAND_A.slug]: "7", [BRAND_B.slug]: "3" } }],
-    ["jwt-b", { userId: USER_B, session: "active", sessionRef: "s-b1", entitlements: ["postona:x_autopost"], epochs: { [BRAND_A.slug]: "7" } }],
-    ["jwt-free", { userId: USER_B, session: "active", sessionRef: "s-f1", entitlements: [], epochs: { [BRAND_A.slug]: "9" } }],
+    ["jwt-a", { userId: USER_A, session: "active", sessionRef: "s-a1", entitlements: ["postona:x_autopost"], epochs: { [BRAND_A.slug]: "g5oe:7:1", [BRAND_B.slug]: "g5oe:3:1" } }],
+    ["jwt-b", { userId: USER_B, session: "active", sessionRef: "s-b1", entitlements: ["postona:x_autopost"], epochs: { [BRAND_A.slug]: "g5oe:7:2" } }],
+    ["jwt-free", { userId: USER_B, session: "active", sessionRef: "s-f1", entitlements: [], epochs: { [BRAND_A.slug]: "g5oe:9:1" } }],
   ]);
   down = false;
   hang = false;
@@ -88,7 +88,7 @@ class FakeG5 implements G5Transport {
     this.calls.push(`verdict:${scope.app}:${scope.feature}`);
     return this.answer(String(credential), scope);
   }
-  fetchRecheck(scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
+  fetchRecheck(_credential: unknown, scope: VerdictScope, subject: { kind: "user"; userId: string } | { kind: "system" }) {
     this.calls.push(`recheck:${scope.app}:${scope.feature}`);
     const credential = subject.kind === "system" ? "cron-kabumori" : [...this.users.entries()].find(([, u]) => u.userId === subject.userId)?.[0] ?? "-";
     return this.answer(credential, scope);
@@ -163,7 +163,8 @@ function world(options: { respond?: (call: RecordedCall) => Response | Promise<R
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),
-    authority: createG5AuthorityPort({ transport: g5, planAllowlist: set.planAllowlist, timeoutMs: 200 }),
+    // This test transport also answers the Kabumori system job (G5 never does): a stand-in for a job authority.
+    authority: createG5AuthorityPort({ transport: g5, planAllowlist: set.planAllowlist, timeoutMs: 200, acceptSystemSubject: true }),
     policies: set.registry,
     fetch: (input, init) => (String(input).startsWith(SUPABASE) ? supabase.fetch(input, init) : provider.fetch(input, init)),
     retryTiming: { baseDelayMs: 1, maxDelayMs: 1, maxRetryAfterMs: 10, minAttemptMs: 1 },
@@ -247,7 +248,7 @@ Deno.test("G5 port strictness: only a complete, in-scope, live, owned, plan-allo
     ["no session for a person", (w) => Object.assign(w, { session: null }), "unknown", "SESSION_SHAPE"],
     ["owner epoch missing", (w) => Object.assign(w, { owner_epoch: null }), "unknown", "OWNER_EPOCH_MISSING"],
     ["slug as user id", (w) => Object.assign(w, { subject: { kind: "user", user_id: BRAND_A.slug } }), "unknown", "SUBJECT_SHAPE"],
-    ["system subject for a brand", (w) => Object.assign(w, { subject: { kind: "system" }, session: null, owner_epoch: null }), "unknown", "SYSTEM_SHAPE"],
+    ["system subject for a brand", (w) => Object.assign(w, { subject: { kind: "system" }, session: null, owner_epoch: null }), "unknown", "SYSTEM_SUBJECT_NOT_FROM_G5"],
     ["entitlements malformed", (w) => Object.assign(w, { entitlements: ["x_autopost"] }), "unknown", "WIRE_ENTITLEMENTS"],
     ["entitlements duplicated", (w) => Object.assign(w, { entitlements: ["postona:x_autopost", "postona:x_autopost"] }), "unknown", "WIRE_ENTITLEMENTS"],
     ["no plan entitlement", (w) => Object.assign(w, { entitlements: ["postona:other"] }), "deny", "PLAN_NOT_ALLOWED"],
@@ -301,7 +302,7 @@ Deno.test("E2E both apps: a POSTONA person with the plan (OpenAI) and Kabumori s
 Deno.test("E2E recheck (G5 changes right before the send): session revoked, owner epoch moved, plan entitlement removed, G5 unreachable or slow -> AUTH_REVOKED_BEFORE_SEND, reservation released, nothing sent; replay NOT_SENT", async () => {
   const changes: Array<[string, (g5: FakeG5) => void]> = [
     ["session revoked", (g5) => g5.users.get("jwt-a")!.session = "revoked"],
-    ["owner epoch moved (A -> B -> A)", (g5) => g5.users.get("jwt-a")!.epochs[BRAND_A.slug] = "8"],
+    ["owner epoch moved (A -> B -> A)", (g5) => g5.users.get("jwt-a")!.epochs[BRAND_A.slug] = "g5oe:8:1"],
     ["plan entitlement removed", (g5) => g5.users.get("jwt-a")!.entitlements = []],
     ["new session", (g5) => g5.users.get("jwt-a")!.sessionRef = "s-a2"],
     ["brand no longer owned", (g5) => delete g5.users.get("jwt-a")!.epochs[BRAND_A.slug]],
@@ -313,12 +314,12 @@ Deno.test("E2E recheck (G5 changes right before the send): session revoked, owne
     const supabase = new FakeSupabase();
     let changed = false;
     const original = g5.fetchRecheck.bind(g5);
-    g5.fetchRecheck = (scope, subject) => {
+    g5.fetchRecheck = (credential, scope, subject) => {
       if (!changed) {
         change(g5);
         changed = true;
       }
-      return original(scope, subject);
+      return original(credential, scope, subject);
     };
     const w = world({ g5, supabase });
     const r = await w.run("jwt-a", consult());
