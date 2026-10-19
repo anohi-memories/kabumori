@@ -7,6 +7,7 @@
 // single-post-port.ts for the F3 contract adapter (prepared, not connected).
 import { Link, Stack } from 'expo-router';
 import * as Crypto from 'expo-crypto';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
@@ -57,6 +58,18 @@ function markNotes(marks: ResultMarks | null): string[] {
   if (marks === null) return [];
   return [...(marks.simulated ? [SIMULATED_NOTE] : []), ...(marks.afterFreeze ? [AFTER_FREEZE_NOTE] : [])];
 }
+
+// This screen is drawn on a FIXED light background (the app has no dark palette), so its header and status bar are
+// fixed too: dark text on light, whatever the device appearance. The root layout's status bar follows the device
+// ("auto") and turns the status bar text white in dark mode, i.e. invisible on this screen (G2 QA A07).
+const HEADER_OPTIONS = {
+  headerShown: true,
+  title: '手入力でXに投稿',
+  headerStyle: { backgroundColor: colors.background },
+  headerTintColor: colors.ink,
+  headerTitleStyle: { color: colors.ink },
+  statusBarStyle: 'dark',
+} as const;
 
 /** One attempt id per attempt: a lowercase UUID, which is what the F3 server accepts as `clientRequestId`. */
 function defaultRequestId() {
@@ -180,8 +193,17 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
 
   return (
     <Screen>
-      <Stack.Screen options={{ headerShown: true, title: '手入力でXに投稿' }} />
-      <ScrollView contentContainerStyle={{ gap: 16 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <Stack.Screen options={HEADER_OPTIONS} />
+      <StatusBar style="dark" />
+      {/* The soft keyboard must never put the end of the form out of reach (G2 QA A03/B11/B17): the scroll view makes
+          room for it (iOS), keeps taps working while it is up and lets a downward drag dismiss it. */}
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={{ gap: 16, paddingBottom: spacing.xl }}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Card>
           <Pill tone={pill.tone}>{pill.label}</Pill>
           <Text style={styles.muted}>
