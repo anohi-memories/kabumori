@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 
 import { type AuthFacts, decide, type Principal, type Scope } from '../candidates/common_account_postona_authz/verdict.ts';
-import { workerBrandVerdict } from '../candidates/common_account_postona_authz/rpc_preflight.ts';
+import { bindingFromAllow, workerBrandVerdict } from '../candidates/common_account_postona_authz/rpc_preflight.ts';
 
 const enabled = Deno.env.get('CAL_E2E') === '1';
 const db = Deno.env.get('PGDATABASE') ?? '';
@@ -121,8 +121,8 @@ const why = (v: Record<string, unknown>) => `${v.decision}:${v.reason}`;
 test_('install: three STABLE definer functions with an empty search path; R1 authenticated only, W2 service_role only, W1 no API role; a second install is refused; rollback and re-install', async () => {
   const acl = (fn: string) => sql(`select array_to_string(proacl::text[], ',') from pg_proc where oid = ${lit(fn)}::regprocedure`);
   assert.equal(await acl('public.common_account_authorization_verdict(text,text,text)'), `${owner}=X/${owner},authenticated=X/${owner}`);
-  assert.equal(await acl('public.common_account_worker_brand_verdict(text,text,bigint,timestamptz)'), `${owner}=X/${owner},service_role=X/${owner}`);
-  assert.equal(await acl('private.account_lifecycle_worker_brand_verdict(text,text,bigint,timestamptz)'), `${owner}=X/${owner}`);
+  assert.equal(await acl('public.common_account_worker_brand_verdict(text,text,bigint,bigint)'), `${owner}=X/${owner},service_role=X/${owner}`);
+  assert.equal(await acl('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'), `${owner}=X/${owner}`);
   assert.equal(await sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict')
     and provolatile = 's' and prosecdef and proconfig @> array['search_path=""'] and proowner = (select oid from pg_roles where rolname = current_user)`), '3');
   assert.ok(/AUTH_VERDICT_ALREADY_APPLIED/u.test((await run(owner, ['-f', candidate()])).error));
@@ -135,7 +135,7 @@ test_('install: three STABLE definer functions with an empty search path; R1 aut
   }
   for (const [role, fn] of [['authenticated', 'public.common_account_worker_brand_verdict'], ['anon', 'public.common_account_worker_brand_verdict'],
     ['authenticated', 'private.account_lifecycle_worker_brand_verdict'], ['service_role', 'private.account_lifecycle_worker_brand_verdict']] as const) {
-    const r = await psql(`begin; set local role ${role}; select ${fn}('u_x', 'x_autopost', 1, now()); commit`);
+    const r = await psql(`begin; set local role ${role}; select ${fn}('u_x', 'x_autopost', 1, 1); commit`);
     assert.ok(!r.ok && /permission denied/u.test(r.error), `${role} cannot call ${fn}`);
   }
   const extra = await psql(asCaller({ kind: 'legacy', sub: randomUUID(), session: randomUUID() }, `select ${R1}('postona', 'x_publish', 'u_x', '${randomUUID()}')`));
@@ -290,56 +290,116 @@ test_('one snapshot through the RPC: two calls in ONE statement agree across a c
   assert.notEqual(restarted.owner_epoch, back.owner_epoch, 'ended and re-started: a new token (lifecycle_version)');
 });
 
-test_('the worker forms: W2 for service_role equals the reference worker answer; owner change, re-activation since the bind, freeze, two owners, broken coverage, a bad bind or key', async () => {
-  const W2 = (brand: string, key: string, epoch: string, bound: string) =>
-    sql(`begin; set local role service_role; select public.common_account_worker_brand_verdict(${lit(brand)}, ${lit(key)}, ${epoch}, ${bound}); commit`);
-  async function both(p: Person, key: string, epoch: number | null, boundSql: string, label: string): Promise<string> {
-    const got = await W2(p.brand, key, epoch === null ? 'null' : String(epoch), boundSql);
-    const facts = JSON.parse(await sql(`select json_build_object('serviceState', public.common_account_brand_service_state(${lit(p.brand)}, 'x_autopost'),
-      'ownerEpoch', private.account_lifecycle_brand_owner_epoch(${lit(p.brand)}),
-      'activatedAtMs', (select (extract(epoch from e.activated_at) * 1000)::bigint from public.service_entitlements e
-                         where e.user_id = private.account_lifecycle_brand_owner(${lit(p.brand)}) and e.service_key = 'x_autopost'),
-      'boundAtMs', (select (extract(epoch from (${boundSql})::timestamptz) * 1000)::bigint))`));
-    const model = workerBrandVerdict({ serviceState: facts.serviceState, ownerEpoch: facts.ownerEpoch, entitlementActivatedAtMs: facts.activatedAtMs },
-      { serviceKey: key, expectedOwnerEpoch: epoch, boundAtMs: facts.boundAtMs });
-    assert.equal(got, model, `${label}: W2 equals the reference`);
-    return got;
-  }
+// ---- the worker forms: the binding is (owner epoch, owner lifecycle_version), compared for equality (H1 C1 P2 of PR #351) -------------------
+const W2 = (brand: string, key: string, epoch: string, lifecycle: string) =>
+  sql(`begin; set local role service_role; select public.common_account_worker_brand_verdict(${lit(brand)}, ${lit(key)}, ${epoch}, ${lifecycle}); commit`);
+const bindNow = async (p: Person) => {
+  const [epoch, lifecycle] = (await sql(`select private.account_lifecycle_brand_owner_epoch(${lit(p.brand)}) || '|' || (select lifecycle_version from public.common_accounts where user_id = '${p.user}')`)).split('|').map(Number);
+  return { epoch, lifecycle };
+};
+/** W2 (real) and the reference over the same facts. */
+async function worker(p: Person, key: string, epoch: number | null, lifecycle: number | null, label: string): Promise<string> {
+  const got = await W2(p.brand, key, epoch === null ? 'null' : String(epoch), lifecycle === null ? 'null' : String(lifecycle));
+  const facts = JSON.parse(await sql(`select json_build_object('serviceState', public.common_account_brand_service_state(${lit(p.brand)}, 'x_autopost'),
+    'ownerEpoch', private.account_lifecycle_brand_owner_epoch(${lit(p.brand)}),
+    'ownerLifecycleVersion', (select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(${lit(p.brand)})))`));
+  const model = workerBrandVerdict(facts, { serviceKey: key, expectedOwnerEpoch: epoch, expectedLifecycleVersion: lifecycle });
+  assert.equal(got, model, `${label}: W2 equals the reference`);
+  return got;
+}
+/** The person's real explicit restart (F5 P9: a live session, the expected lifecycle_version). */
+const restartSql = (p: Person) => `set local request.jwt.claim.sub = '${p.user}'; set local request.jwt.claim.role = 'authenticated'; set local request.jwt.claim.session_id = '${p.session}';
+  set local role authenticated; select public.reactivate_x_autopost_service((select lifecycle_version from public.common_accounts where user_id = '${p.user}'))::text; reset role;`;
+const endSql = (p: Person) => `update public.service_entitlements set status = 'ended', ended_at = now() where user_id = '${p.user}' and service_key = 'x_autopost';`;
+
+test_('the worker forms: W2 for service_role equals the reference; the generation pair; owner change, freeze, two owners, broken coverage, a bad binding or key; no timestamp parameter', async () => {
+  assert.equal(await sql(`select pg_get_function_identity_arguments('public.common_account_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure)`),
+    'p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint', 'no timestamp is compared or accepted');
   const a = await person();
-  const epoch = Number(await sql(`select private.account_lifecycle_brand_owner_epoch(${lit(a.brand)})`));
-  assert.equal(await both(a, 'x_autopost', epoch, 'now()', 'fresh'), 'active');
-  assert.equal(await both(a, 'x_autopost', 0, 'now()', 'stand-in 0'), 'EXPECTED_OWNER_EPOCH_REQUIRED');
-  assert.equal(await both(a, 'x_autopost', epoch, 'null', 'no bind time'), 'BOUND_AT_REQUIRED');
-  assert.equal(await both(a, 'threads', epoch, 'now()', 'threads key'), 'ACCOUNT_LIFECYCLE_SERVICE_INVALID');
-  assert.equal(await both(a, 'kabumori', epoch, 'now()', 'kabumori key'), 'ACCOUNT_LIFECYCLE_SERVICE_INVALID', 'POSTONA posting is x_autopost only');
-  // re-activated after the bind (the start / reactivate RPCs set activated_at = now())
-  const boundAt = await sql(`select now()::text`);
-  await sql(`update public.service_entitlements set status = 'ended', ended_at = now() where user_id = '${a.user}'`);
-  await sql(`update public.service_entitlements set status = 'active', ended_at = null, activated_at = clock_timestamp() + interval '1 second' where user_id = '${a.user}'`);
-  assert.equal(await both(a, 'x_autopost', epoch, lit(boundAt) + '::timestamptz', 'reactivated'), 'SERVICE_REACTIVATED_SINCE_BIND');
+  const bind = await bindNow(a);
+  assert.equal(await worker(a, 'x_autopost', bind.epoch, bind.lifecycle, 'fresh'), 'active');
+  assert.equal(await worker(a, 'x_autopost', 0, bind.lifecycle, 'stand-in 0'), 'EXPECTED_OWNER_EPOCH_REQUIRED');
+  assert.equal(await worker(a, 'x_autopost', bind.epoch, null, 'no generation'), 'EXPECTED_LIFECYCLE_VERSION_REQUIRED');
+  assert.equal(await worker(a, 'x_autopost', bind.epoch, 0, 'generation 0'), 'EXPECTED_LIFECYCLE_VERSION_REQUIRED');
+  assert.equal(await worker(a, 'x_autopost', bind.epoch, bind.lifecycle + 1, 'a binding from the future'), 'SERVICE_GENERATION_CHANGED');
+  assert.equal(await worker(a, 'threads', bind.epoch, bind.lifecycle, 'threads key'), 'ACCOUNT_LIFECYCLE_SERVICE_INVALID');
+  assert.equal(await worker(a, 'kabumori', bind.epoch, bind.lifecycle, 'kabumori key'), 'ACCOUNT_LIFECYCLE_SERVICE_INVALID', 'POSTONA posting is x_autopost only');
   // A -> B -> A after the bind
   const b = await person();
   await sql(`delete from public.brand_memberships where brand_id = ${lit(a.brand)} and user_id = '${a.user}'`);
   await sql(`insert into public.brand_memberships values (${lit(a.brand)}, '${b.user}', 'owner')`);
   await sql(`delete from public.brand_memberships where brand_id = ${lit(a.brand)} and user_id = '${b.user}'`);
   await sql(`insert into public.brand_memberships values (${lit(a.brand)}, '${a.user}', 'owner')`);
-  assert.equal(await both(a, 'x_autopost', epoch, 'now()', 'A -> B -> A'), 'OWNER_EPOCH_CHANGED');
-  const now = Number(await sql(`select private.account_lifecycle_brand_owner_epoch(${lit(a.brand)})`));
+  assert.equal(await worker(a, 'x_autopost', bind.epoch, bind.lifecycle, 'A -> B -> A'), 'OWNER_EPOCH_CHANGED');
+  const now = await bindNow(a);
   await sql(`insert into public.brand_memberships values (${lit(a.brand)}, '${b.user}', 'owner')`);
-  assert.equal(await both(a, 'x_autopost', now, 'now()', 'two owners'), 'WORKSPACE_OWNER_UNKNOWN');
+  assert.equal(await worker(a, 'x_autopost', now.epoch, now.lifecycle, 'two owners'), 'WORKSPACE_OWNER_UNKNOWN');
   await sql(`delete from public.brand_memberships where brand_id = ${lit(a.brand)} and user_id = '${b.user}'`);
-  const settled = Number(await sql(`select private.account_lifecycle_brand_owner_epoch(${lit(a.brand)})`));
+  const settled = await bindNow(a);
   await sql(`alter table public.brand_memberships disable trigger account_lifecycle_owner_epoch_row`);
   try {
-    assert.equal(await both(a, 'x_autopost', settled, 'now()', 'coverage broken'), 'OWNER_EPOCH_UNAVAILABLE');
+    assert.equal(await worker(a, 'x_autopost', settled.epoch, settled.lifecycle, 'coverage broken'), 'OWNER_EPOCH_UNAVAILABLE');
   } finally {
     await sql(`alter table public.brand_memberships enable trigger account_lifecycle_owner_epoch_row`);
   }
+  // an unrelated account change (Kabumori started) moves the generation too: refused, fail closed (documented trade-off)
+  assert.equal(JSON.parse(await sql(asCaller({ kind: 'legacy', sub: a.user, session: null }, 'select to_jsonb(public.start_kabumori_service())'))).status, 'active');
+  assert.equal(await worker(a, 'x_autopost', settled.epoch, settled.lifecycle, 'Kabumori started'), 'SERVICE_GENERATION_CHANGED');
+  const latest = await bindNow(a);
   await sql(`begin; set local role service_role; select public.begin_service_deletion('${a.user}'::uuid, 'x_autopost'); commit`);
-  assert.equal(await both(a, 'x_autopost', settled, 'now()', 'freeze'), 'SERVICE_DELETION_IN_PROGRESS');
+  assert.equal(await worker(a, 'x_autopost', latest.epoch, latest.lifecycle, 'freeze'), 'SERVICE_DELETION_IN_PROGRESS');
 });
 
-test_('the install refuses, and leaves nothing, when a precondition or the role graph is unsafe: API-role TRIGGER, forced RLS, a VOLATILE helper, anon in authenticated, authenticated in service_role', async () => {
+test_('H1 C1 P2: transaction start < bind < restart -- the real restart RPC records activated_at = now() BEFORE the bind, yet the old reservation is refused', async () => {
+  const a = await person();
+  // T: a long transaction that ends and re-starts the service; it begins before the reservation is bound
+  const t = spawn(`begin; select pg_sleep(2) /* av-long */; ${endSql(a)} ${restartSql(a)} commit;`);
+  await untilSleeping('av-long');
+  const bind = await bindNow(a);                                   // the reservation is bound while T is open (T's now() is earlier)
+  const boundAt = await sql(`select clock_timestamp()::text`);
+  const out = await t.output();
+  assert.ok(out.success, decoder.decode(out.stderr));
+  assert.match(decoder.decode(out.stdout), /"status"\s*:\s*"active"/u, 'the real reactivate RPC restarted the service');
+  const activatedBeforeBind = await sql(`select (activated_at < ${lit(boundAt)}::timestamptz)::text from public.service_entitlements where user_id = '${a.user}' and service_key = 'x_autopost'`);
+  assert.equal(activatedBeforeBind, 'true', 'the scenario of the review: activated_at (= T\'s now()) is earlier than the bind, so a time comparison would accept');
+  assert.equal(await worker(a, 'x_autopost', bind.epoch, bind.lifecycle, 'long transaction'), 'SERVICE_GENERATION_CHANGED');
+});
+
+test_('H1 C1 P2: bind -> end -> restart inside ONE transaction (activated_at equals the bind instant) is refused, and the same check sees it in that transaction', async () => {
+  const a = await person();
+  const r = await sql(`begin;
+    create temp table g5_bind on commit drop as select private.account_lifecycle_brand_owner_epoch(${lit(a.brand)}) as e,
+      (select lifecycle_version from public.common_accounts where user_id = '${a.user}') as l, now() as at;
+    ${endSql(a)} ${restartSql(a)}
+    select (select (e.activated_at <= b.at)::text from public.service_entitlements e, g5_bind b where e.user_id = '${a.user}' and e.service_key = 'x_autopost')
+      || '|' || private.account_lifecycle_worker_brand_verdict(${lit(a.brand)}, 'x_autopost', (select e from g5_bind), (select l from g5_bind));
+    commit`);
+  const last = r.split('\n').filter((l) => l.includes('|')).pop() ?? '';
+  assert.equal(last, 'true|SERVICE_GENERATION_CHANGED', `same transaction: ${r}`);
+});
+
+test_('the old reservation sends 0: a binding from the real R1 allow token, then a real end and restart; an unchanged world sends once', async () => {
+  const a = await person();
+  const allow = await rpc(legacy(a), 'postona', 'x_publish', a.brand);
+  const binding = bindingFromAllow(allow);
+  assert.ok(binding, 'the allow token carries the binding');
+  let sends = 0;
+  const dispatch = async () => {
+    const verdict = await W2(a.brand, binding!.serviceKey, String(binding!.expectedOwnerEpoch), String(binding!.expectedLifecycleVersion));
+    if (verdict === 'active') sends += 1;
+    return verdict;
+  };
+  assert.equal(await dispatch(), 'active');
+  assert.equal(sends, 1);
+  await sql(`begin; ${endSql(a)} commit`);
+  assert.equal(await dispatch(), 'SERVICE_NOT_ACTIVE');
+  await sql(`begin; ${restartSql(a)} commit`);
+  assert.equal((await rpc(legacy(a), 'postona', 'x_publish', a.brand)).decision, 'allow', 'the person is allowed again (a new generation)');
+  assert.equal(await dispatch(), 'SERVICE_GENERATION_CHANGED', 'the reservation of the earlier generation stays refused');
+  assert.equal(sends, 1, 'the old reservation sent nothing after the restart');
+});
+
+test_('the install refuses, and leaves nothing, when a precondition or the role graph is unsafe: API-role TRIGGER, forced RLS, a VOLATILE helper, a disabled lifecycle trigger, anon in authenticated, authenticated in service_role', async () => {
   const gone = () => sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict')`);
   const attempt = async (label: string, before: () => Promise<unknown>, after: () => Promise<unknown>, code: RegExp) => {
     assert.ok((await run(owner, ['-f', rollback()])).ok);
@@ -358,6 +418,10 @@ test_('the install refuses, and leaves nothing, when a precondition or the role 
     () => sql(`alter table public.service_entitlements no force row level security`), /AUTH_VERDICT_PRECONDITION_RLS_FORCED/u);
   await attempt('a VOLATILE helper', () => sql(`alter function private.account_lifecycle_brand_owner(text) volatile`),
     () => sql(`alter function private.account_lifecycle_brand_owner(text) stable`), /AUTH_VERDICT_PRECONDITION_HELPER_SHAPE/u);
+  await attempt('the service-generation trigger disabled', () => sql(`alter table public.service_entitlements disable trigger account_lifecycle_touch_entitlement`),
+    () => sql(`alter table public.service_entitlements enable trigger account_lifecycle_touch_entitlement`), /AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS/u);
+  await attempt('the account-version trigger disabled', () => sql(`alter table public.common_accounts disable trigger account_lifecycle_touch_account`),
+    () => sql(`alter table public.common_accounts enable trigger account_lifecycle_touch_account`), /AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS/u);
   await attempt('anon a member of authenticated', () => psqlSuper(`grant authenticated to anon`), () => psqlSuper(`revoke authenticated from anon`),
     /AUTH_VERDICT_POSTCONDITION_API_ROLE_REACHES|AUTH_VERDICT_PRECONDITION/u);
   await attempt('authenticated a member of service_role', () => psqlSuper(`grant service_role to authenticated`), () => psqlSuper(`revoke service_role from authenticated`),

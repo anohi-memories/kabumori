@@ -71,18 +71,21 @@ Invariants the implementation TASK must prove (each is a test of section 8 or an
 
 For jobs with no person session: the brand_post dispatcher, a Threads dispatcher, a credential statement.
 
-- **W1** `private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_bound_at timestamptz) returns
-  text` — STABLE, definer, empty `search_path`, **owner-only** (no API role). For a reviewed SQL writer of another owner to call inside its own statement
+- **W1** `private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)
+  returns text` — STABLE, definer, empty `search_path`, **owner-only** (no API role). For a reviewed SQL writer of another owner to call inside its own statement
   (G3's claim / store preflight, G4's credential statement).
 - **W2** `public.common_account_worker_brand_verdict(...same...) returns text` — W1 with `EXECUTE` to **`service_role` only**, for an Edge worker's last check
   right before the provider.
 - Answer: `'active'`, or P5's code (`WORKSPACE_OWNER_UNKNOWN`, `ACCOUNT_DELETION_IN_PROGRESS`, `SERVICE_DELETION_IN_PROGRESS`, `SERVICE_NOT_ACTIVE`, ...), or
-  `OWNER_EPOCH_UNAVAILABLE`, `OWNER_EPOCH_CHANGED`, `SERVICE_REACTIVATED_SINCE_BIND`, `EXPECTED_OWNER_EPOCH_REQUIRED`, `BOUND_AT_REQUIRED`,
+  `OWNER_EPOCH_UNAVAILABLE`, `OWNER_EPOCH_CHANGED`, `SERVICE_GENERATION_CHANGED`, `EXPECTED_OWNER_EPOCH_REQUIRED`, `EXPECTED_LIFECYCLE_VERSION_REQUIRED`,
   `ACCOUNT_LIFECYCLE_SERVICE_INVALID`, `SERVICE_STATE_UNKNOWN`, `FACTS_UNAVAILABLE`.
-- **ABA for workers.** The reservation / attestation stores the F5 owner epoch (a `bigint`, never PR #282's stand-in 0) and its bind time. At dispatch the
-  current epoch must be equal (owner A -> B -> A refused) and the entitlement's `activated_at` must not be later than the bind time (ended and re-started
-  after the reservation = a new service period; the old reservation does not ride on it). `activated_at` is set to `now()` by every start and re-activation
-  RPC [M: `20261001150000:821-827`, `20261006230000:105,172`]; a manual SQL status flip does not move it [A: writers are RPCs].
+- **ABA for workers (revised by G5-04 after H1 C1 P2 on PR #351).** The reservation / attestation stores TWO monotonic counters taken from R1's allow
+  token `g5oe:<epoch>:<lifecycle_version>`: the F5 owner epoch (a `bigint`, never PR #282's stand-in 0) and the owner's `lifecycle_version` -- the service
+  GENERATION (F5 P1's row trigger moves it on every insert / update / delete of the owner's entitlements and on every account status change, and refuses a
+  decrease [M: `20261001150000:410-477`]). At dispatch both must be EQUAL in one statement. The first design compared `activated_at` with a bind time; that
+  is not a fence: the re-activation RPC writes `now()` = the transaction's START, so a long transaction or a bind -> end -> restart inside one transaction
+  made an old reservation pass (reproduced on PG17 against PR #351: `active`). No clock is compared any more. Trade-off: any change of the owner's account
+  (e.g. starting Kabumori) also moves the generation, so such reservations are refused (fail closed) and need a fresh confirmation (G3's UX).
 - **Service key.** `x_autopost` for X and Threads posting (section 1). Any other key is `ACCOUNT_LIFECYCLE_SERVICE_INVALID`.
 
 ## 5. Consumers: where the recheck must sit (matched against the code paths)
@@ -90,7 +93,7 @@ For jobs with no person session: the brand_post dispatcher, a Threads dispatcher
 | Consumer (owner) | Today's path | Form | Where | Gap today |
 | --- | --- | --- | --- | --- |
 | X brand_post dispatcher (G3 / F3) | `x-test-post` + `vault_account_brand_post.ts` points 1–3 (`:36-41`) [M] | W1 in `check_x_account_publish_authority`, the enabled setter and the `claim_due_post` planner; W2 right before the X create | every claim; again immediately before the create | no entitlement check; caller authentication question already sent to G3 (Issue #318, comment 6267545726) |
-| Threads dispatcher (G3 / F3, PR #334) | `threads_dispatch.ts` store preflight "G5 + G4 decided in SQL" [C] | W1 inside the preflight statement, with the reservation's bound epoch and time | the LAST step before the provider | the G5 part is unwired |
+| Threads dispatcher (G3 / F3, PR #334) | `threads_dispatch.ts` store preflight "G5 + G4 decided in SQL" [C] | W1 inside the preflight statement, with the reservation's bound epoch and lifecycle_version | the LAST step before the provider | the G5 part is unwired |
 | X OAuth connect (G4 / F4) | `x-oauth-connect-user`: the code is exchanged at `oauth_logic.ts:271` before the ownership recheck at `:279` [M] | R1 (`x_connect`) at begin; R1 again at the callback | **before** the code exchange | exchange before recheck; begin creates a workspace during a deletion |
 | Threads OAuth / account binding (G4 / F4, PR #251 / #335, Issue #319 G4-03) | OAuth begin / callback, binding adapter [C] | R1 (`threads_connect`) at begin and right before the exchange; W1 in the binding writer | before the exchange; inside the binding statement | service key was undecided -> `x_autopost` |
 | Threads credential / send port (G4 / F4, PR #337) | `ThreadsCredentialStatement(socialAccountId, serviceKey)` [C] | W1 inside the credential statement with `x_autopost` | per lookup | `THREADS_POSTING_SERVICE_KEY = null` until G4 adopts `x_autopost` |
@@ -141,7 +144,8 @@ NOT_VERIFIED: managed claim names and `auth.uid()`, GoTrue session revocation ti
 
 - The verdict is advisory (no lock); the recheck narrows the TOCTOU window to recheck -> provider acceptance.
 - Admin / member roles, organisation workspaces and Miseiro stay refused.
-- The worker form trusts the bind time recorded by the consumer; a consumer that records a wrong time weakens its own ABA guard.
+- The worker form trusts the binding the consumer recorded; it must come from an R1 allow token (or the same counters read in the reservation's own
+  statement), never be re-read later. Any unrelated change of the owner's account refuses earlier reservations (fail closed).
 
 ## 10. Re-run
 
@@ -162,7 +166,7 @@ created (the PG17 suite only reads catalogs, calls existing functions and runs t
 | --- | --- | --- | --- |
 | 1 | the model suite (no network permission) | `deno test --no-config --no-check supabase/tests/common_account_g5_02_rpc_preflight_test.ts` | **11 tests** passed, 0 failed |
 | 2 | the PG17 precondition suite on the real F5 chain + the PR #303 candidate | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_g5_02_rpc_preconditions_pg_run.sh` | **5 tests** passed, 0 failed (three consecutive runs) |
-| 3 | mutation check of the model | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, **33/33 detected**, 0 invalid (32 at PR #344; G5-03 added the per-claim `is_anonymous` case to the model and one mutant) |
+| 3 | mutation check of the model | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, **35/35 detected**, 0 invalid (32 at PR #344; 33 at PR #351; G5-04 rewrote the worker mutants for the generation pair) |
 | 4 | regression of the stack | G5-01 pure (13) + PG17 (10); owner-epoch suite (19) | all passed |
 | 5 | the whole harness incl. this document's test | `deno test --no-config --no-check --allow-read --allow-env supabase/preflight/managed_disposable/` | **194 passed**, 0 failed (189 of PR #340 + 5 new) |
 | 6 | type-check, lint, shell | `deno check --no-config` on the model and the new tests; `deno lint --no-config` on them and the harness; `bash -n` on the runner | no error; `Checked 50 files`; syntax OK |

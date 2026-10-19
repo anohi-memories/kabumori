@@ -39,10 +39,12 @@ test('the shapes the document states are the model\'s: the RPC keys, the ACL per
   assert.ok(model.includes('export const EDGE_TTL_MS = 60_000;') && doc.includes('an `allow` lives 60 s'));
   assert.ok(model.includes("export const POSTONA_POSTING_SERVICE_KEY = 'x_autopost' as const;") && doc.includes('**`x_autopost`**'));
   for (const sig of ['public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text) returns jsonb',
-    'private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_bound_at timestamptz)',
+    'private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)',
     'public.common_account_worker_brand_verdict(']) assert.ok(doc.includes(sig), sig);
   const workerCodes = [...model.slice(model.indexOf('export function workerBrandVerdict')).matchAll(/return '([A-Z_]+)'/gu)].map((m) => m[1]);
-  assert.ok(workerCodes.length >= 8);
+  assert.ok(workerCodes.length >= 7, String(workerCodes));
+  assert.ok(workerCodes.includes('SERVICE_GENERATION_CHANGED') && workerCodes.includes('EXPECTED_LIFECYCLE_VERSION_REQUIRED'), 'the generation pair (G5-04)');
+  assert.ok(!/BOUND_AT|REACTIVATED_SINCE_BIND|boundAt/u.test(model), 'no time-based binding is left');
   for (const code of workerCodes) assert.ok(doc.includes(code), `the document lists ${code}`);
   for (const code of ['RPC_NOT_DEPLOYED', 'RPC_FAILED', 'RPC_SHAPE', 'SCOPE_MISMATCH']) assert.ok(model.includes(`'${code}'`) && doc.includes(code), code);
 });

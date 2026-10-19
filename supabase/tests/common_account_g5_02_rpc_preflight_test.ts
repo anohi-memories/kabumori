@@ -11,7 +11,7 @@ import test from 'node:test';
 import { acceptAllow, type AuthFacts, guardIrreversible, type Principal, type Scope } from '../candidates/common_account_postona_authz/verdict.ts';
 import {
   aclViolation, type ClaimSources, edgeStamp, POSTONA_POSTING_SERVICE_KEY, principalFromClaims, RPC_KEYS, type RoleEdge, rpcInputRefusal, rpcVerdict,
-  workerBrandVerdict, type WorkerFacts,
+  bindingFromAllow, workerBrandVerdict, type WorkerFacts,
 } from '../candidates/common_account_postona_authz/rpc_preflight.ts';
 
 globalThis.fetch = (() => { throw new Error('the G5-02 tests make no network request'); }) as typeof fetch;
@@ -153,10 +153,10 @@ test('R1-1 / W2-1 the ACL postcondition over the role graph: R1 = authenticated 
   assert.equal(w1(['service_role']), 'SERVICE_ROLE_CAN_EXECUTE');
 });
 
-test('W-3 the worker answer: P5 state, owner epoch equal to the bound one, no re-activation since the bind; the Threads posting service key is x_autopost', () => {
-  const facts = (over: Partial<WorkerFacts> = {}): WorkerFacts => ({ serviceState: 'active', ownerEpoch: 5, entitlementActivatedAtMs: NOW - 10_000, ...over });
-  const bound = (over: Partial<{ serviceKey: string; expectedOwnerEpoch: number | null; boundAtMs: number | null }> = {}) =>
-    ({ serviceKey: POSTONA_POSTING_SERVICE_KEY, expectedOwnerEpoch: 5, boundAtMs: NOW - 5_000, ...over });
+test('W-3 the worker answer: P5 state, owner epoch AND owner lifecycle_version equal to the bound pair (no clock compared); the Threads posting service key is x_autopost', async () => {
+  const facts = (over: Partial<WorkerFacts> = {}): WorkerFacts => ({ serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3, ...over });
+  const bound = (over: Partial<{ serviceKey: string; expectedOwnerEpoch: number | null; expectedLifecycleVersion: number | null }> = {}) =>
+    ({ serviceKey: POSTONA_POSTING_SERVICE_KEY, expectedOwnerEpoch: 5, expectedLifecycleVersion: 3, ...over });
   assert.equal(POSTONA_POSTING_SERVICE_KEY, 'x_autopost');
   assert.equal(workerBrandVerdict(facts(), bound()), 'active');
   for (const code of ['WORKSPACE_OWNER_UNKNOWN', 'ACCOUNT_DELETION_IN_PROGRESS', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_NOT_ACTIVE', 'ACCOUNT_LOCKED', 'SERVICE_NOT_REGISTERED']) {
@@ -165,13 +165,27 @@ test('W-3 the worker answer: P5 state, owner epoch equal to the bound one, no re
   assert.equal(workerBrandVerdict(facts({ serviceState: 'ACTIVE' }), bound()), 'SERVICE_STATE_UNKNOWN');
   assert.equal(workerBrandVerdict(facts({ ownerEpoch: null }), bound()), 'OWNER_EPOCH_UNAVAILABLE');
   assert.equal(workerBrandVerdict(facts({ ownerEpoch: 7 }), bound()), 'OWNER_EPOCH_CHANGED', 'A -> B -> A after the bind');
-  assert.equal(workerBrandVerdict(facts({ entitlementActivatedAtMs: NOW - 1_000 }), bound()), 'SERVICE_REACTIVATED_SINCE_BIND', 'ended and re-activated after the bind');
-  assert.equal(workerBrandVerdict(facts({ entitlementActivatedAtMs: null }), bound()), 'SERVICE_STATE_UNKNOWN');
+  // ended and re-started after the bind moves lifecycle_version by >= 2, whatever the clocks say (H1 C1 P2)
+  assert.equal(workerBrandVerdict(facts({ ownerLifecycleVersion: 5 }), bound()), 'SERVICE_GENERATION_CHANGED', 'ended and re-started after the bind');
+  assert.equal(workerBrandVerdict(facts({ ownerLifecycleVersion: 2 }), bound()), 'SERVICE_GENERATION_CHANGED', 'a binding from the future is not this generation either');
+  assert.equal(workerBrandVerdict(facts({ ownerLifecycleVersion: null }), bound()), 'SERVICE_GENERATION_CHANGED', 'an unreadable generation is a changed one');
   assert.equal(workerBrandVerdict(facts(), bound({ expectedOwnerEpoch: 0 })), 'EXPECTED_OWNER_EPOCH_REQUIRED', 'the PR #282 stand-in 0 is not an epoch');
   assert.equal(workerBrandVerdict(facts(), bound({ expectedOwnerEpoch: null })), 'EXPECTED_OWNER_EPOCH_REQUIRED');
-  assert.equal(workerBrandVerdict(facts(), bound({ boundAtMs: null })), 'BOUND_AT_REQUIRED');
+  assert.equal(workerBrandVerdict(facts(), bound({ expectedLifecycleVersion: 0 })), 'EXPECTED_LIFECYCLE_VERSION_REQUIRED');
+  assert.equal(workerBrandVerdict(facts(), bound({ expectedLifecycleVersion: null })), 'EXPECTED_LIFECYCLE_VERSION_REQUIRED');
+  assert.equal(workerBrandVerdict(facts(), bound({ expectedLifecycleVersion: 3.5 })), 'EXPECTED_LIFECYCLE_VERSION_REQUIRED');
   for (const key of ['threads', 'kabumori', 'postona:x_autopost', '']) assert.equal(workerBrandVerdict(facts(), bound({ serviceKey: key })), 'ACCOUNT_LIFECYCLE_SERVICE_INVALID', key);
   assert.equal(workerBrandVerdict(undefined, bound()), 'FACTS_UNAVAILABLE');
+  // the binding comes from R1's ALLOW token only
+  const allow = await rpcVerdict(params('x_publish'), claimsOf(), () => Promise.resolve(factsFor(A, { epoch: 5, lv: 3 })));
+  assert.deepEqual(bindingFromAllow(allow), { serviceKey: 'x_autopost', expectedOwnerEpoch: 5, expectedLifecycleVersion: 3 });
+  const denied = await rpcVerdict(params('x_publish'), claimsOf(), () => Promise.resolve(factsFor(A, { ent: 'ended' })));
+  assert.equal(bindingFromAllow(denied), null, 'a refusal binds nothing');
+  assert.equal(bindingFromAllow({ ...allow, decision: 'deny' }), null, 'not even a refusal that carries a token');
+  assert.equal(bindingFromAllow({ ...allow, decision: 'pending' }), null);
+  for (const token of ['g5oe:0:3', 'g5oe:5:0', 'g5oe:5', 'g5oe:05:3', 'g5oe:5:3:1', 'g5oe:99999999999999999:3', 5, null]) {
+    assert.equal(bindingFromAllow({ ...allow, owner_epoch: token }), null, String(token));
+  }
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -214,22 +228,23 @@ test('flow 1 (G4): the OAuth code is exchanged only after a fresh verdict at the
   for (const [label, between, code, at] of cases) assert.deepEqual(await run(between, at), { out: { sent: false, refused: code }, exchanges: 0 }, label);
 });
 
-test('flow 2 (G3): a scheduled post binds the owner epoch and time at reservation; the worker answer right before the provider sends 0 on any change', () => {
-  const reservation = { serviceKey: POSTONA_POSTING_SERVICE_KEY, expectedOwnerEpoch: 5, boundAtMs: NOW };
+test('flow 2 (G3): a scheduled post binds the owner epoch and lifecycle_version from the allow token; the worker answer right before the provider sends 0 on any change', () => {
+  const reservation = { serviceKey: POSTONA_POSTING_SERVICE_KEY, expectedOwnerEpoch: 5, expectedLifecycleVersion: 3 };
   const dispatch = (now: WorkerFacts | undefined) => {
     let sends = 0;
     const verdict = workerBrandVerdict(now, reservation);
     if (verdict === 'active') sends += 1;
     return { verdict, sends };
   };
-  assert.deepEqual(dispatch({ serviceState: 'active', ownerEpoch: 5, entitlementActivatedAtMs: NOW - 86_400_000 }), { verdict: 'active', sends: 1 });
+  assert.deepEqual(dispatch({ serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3 }), { verdict: 'active', sends: 1 });
   const changed: [string, WorkerFacts | undefined, string][] = [
-    ['owner A -> B -> A after the reservation', { serviceState: 'active', ownerEpoch: 9, entitlementActivatedAtMs: NOW - 86_400_000 }, 'OWNER_EPOCH_CHANGED'],
-    ['POSTONA ended and re-started after the reservation', { serviceState: 'active', ownerEpoch: 5, entitlementActivatedAtMs: NOW + 60_000 }, 'SERVICE_REACTIVATED_SINCE_BIND'],
-    ['service-end freeze', { serviceState: 'SERVICE_DELETION_IN_PROGRESS', ownerEpoch: 5, entitlementActivatedAtMs: NOW - 1 }, 'SERVICE_DELETION_IN_PROGRESS'],
-    ['退会', { serviceState: 'ACCOUNT_DELETION_IN_PROGRESS', ownerEpoch: 5, entitlementActivatedAtMs: NOW - 1 }, 'ACCOUNT_DELETION_IN_PROGRESS'],
-    ['two owners', { serviceState: 'WORKSPACE_OWNER_UNKNOWN', ownerEpoch: null, entitlementActivatedAtMs: NOW - 1 }, 'WORKSPACE_OWNER_UNKNOWN'],
-    ['epoch coverage broken', { serviceState: 'active', ownerEpoch: null, entitlementActivatedAtMs: NOW - 1 }, 'OWNER_EPOCH_UNAVAILABLE'],
+    ['owner A -> B -> A after the reservation', { serviceState: 'active', ownerEpoch: 9, ownerLifecycleVersion: 3 }, 'OWNER_EPOCH_CHANGED'],
+    ['POSTONA ended and re-started after the reservation (any transaction shape)', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 5 }, 'SERVICE_GENERATION_CHANGED'],
+    ['an unrelated account change (e.g. Kabumori started) also moves the generation: refused, fail closed', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 4 }, 'SERVICE_GENERATION_CHANGED'],
+    ['service-end freeze', { serviceState: 'SERVICE_DELETION_IN_PROGRESS', ownerEpoch: 5, ownerLifecycleVersion: 4 }, 'SERVICE_DELETION_IN_PROGRESS'],
+    ['退会', { serviceState: 'ACCOUNT_DELETION_IN_PROGRESS', ownerEpoch: 5, ownerLifecycleVersion: 4 }, 'ACCOUNT_DELETION_IN_PROGRESS'],
+    ['two owners', { serviceState: 'WORKSPACE_OWNER_UNKNOWN', ownerEpoch: null, ownerLifecycleVersion: 3 }, 'WORKSPACE_OWNER_UNKNOWN'],
+    ['epoch coverage broken', { serviceState: 'active', ownerEpoch: null, ownerLifecycleVersion: 3 }, 'OWNER_EPOCH_UNAVAILABLE'],
     ['G5 down', undefined, 'FACTS_UNAVAILABLE'],
   ];
   for (const [label, now, code] of changed) assert.deepEqual(dispatch(now), { verdict: code, sends: 0 }, label);

@@ -54,8 +54,8 @@ test('the candidate is a candidate: outside the migration path, wired nowhere, o
 
 test('the shape: three STABLE definer functions with an empty search path; R1 to authenticated, W2 to service_role, nothing else granted; no identity parameter', () => {
   for (const sig of ['create function public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text)\nreturns jsonb language plpgsql stable security definer set search_path = \'\' as $$',
-    'create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_bound_at timestamptz)\nreturns text language plpgsql stable security definer set search_path = \'\' as $$',
-    'create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_bound_at timestamptz)\nreturns text language sql stable security definer set search_path = \'\' as $$']) {
+    'create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)\nreturns text language plpgsql stable security definer set search_path = \'\' as $$',
+    'create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)\nreturns text language sql stable security definer set search_path = \'\' as $$']) {
     assert.ok(code.includes(sig), sig.split('(')[0]);
   }
   const grants = [...code.matchAll(/grant execute on function ([a-z_.]+)\([^)]*\) to ([a-z_]+);/gu)].map((m) => `${m[1]}->${m[2]}`);
@@ -63,6 +63,10 @@ test('the shape: three STABLE definer functions with an empty search path; R1 to
   assert.equal((code.match(/\bgrant\b/giu) ?? []).length, 2, 'no other grant');
   assert.ok(!/p_user_id|p_session|p_principal/u.test(code), 'no identity parameter');
   for (const banned of ['for update', 'for share', 'insert into', 'update public', 'delete from', 'perform pg_', 'dblink', 'http']) assert.ok(!code.toLowerCase().includes(banned), banned);
+  // the worker generation is a counter compared for equality; no clock (H1 C1 P2)
+  const w1 = code.slice(code.indexOf('create function private.account_lifecycle_worker_brand_verdict'), code.indexOf('create function public.common_account_worker_brand_verdict'));
+  assert.ok(!/timestamp|activated_at|now\(|clock_/iu.test(w1), 'W1 compares no time');
+  assert.ok(w1.includes('if v_lifecycle is distinct from p_expected_lifecycle_version then') && w1.includes('if v_epoch <> p_expected_owner_epoch then'));
 });
 
 test('the SQL agrees with the reference on the feature list, the codes and the token', () => {
@@ -71,7 +75,7 @@ test('the SQL agrees with the reference on the feature list, the codes and the t
   for (const reason of ['FEATURE_NOT_ENABLED', 'BRAND_REQUIRED', 'AUTH_REQUIRED', 'SESSION_REVOKED', 'SESSION_EXPIRED', 'ACCOUNT_NOT_FOUND', 'ACCOUNT_UNREADABLE',
     'ACCOUNT_DELETION_IN_PROGRESS', 'ACCOUNT_LOCKED', 'ACCOUNT_STATE_UNKNOWN', 'SERVICE_NOT_REGISTERED', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_PROVISIONING',
     'SERVICE_SUSPENDED', 'SERVICE_NOT_ACTIVE', 'SERVICE_STATE_UNKNOWN', 'BRAND_ACCESS_DENIED', 'ROLE_NOT_ALLOWED', 'WORKSPACE_KIND_UNSUPPORTED',
-    'WORKSPACE_OWNER_UNKNOWN', 'OWNER_EPOCH_UNAVAILABLE', 'EXPECTED_OWNER_EPOCH_REQUIRED', 'BOUND_AT_REQUIRED', 'OWNER_EPOCH_CHANGED', 'SERVICE_REACTIVATED_SINCE_BIND']) {
+    'WORKSPACE_OWNER_UNKNOWN', 'OWNER_EPOCH_UNAVAILABLE', 'EXPECTED_OWNER_EPOCH_REQUIRED', 'EXPECTED_LIFECYCLE_VERSION_REQUIRED', 'OWNER_EPOCH_CHANGED', 'SERVICE_GENERATION_CHANGED']) {
     assert.ok(code.includes(`'${reason}'`), reason);
   }
   assert.ok(code.includes("'g5oe:' || f_epoch::text || ':' || f_lifecycle::text"));
