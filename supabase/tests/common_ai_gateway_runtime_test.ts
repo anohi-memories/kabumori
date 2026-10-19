@@ -392,7 +392,8 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
   const dir = new URL("../ai_gateway/", import.meta.url);
   const files: string[] = [];
   for await (const e of Deno.readDir(dir)) files.push(e.name);
-  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "gateway.ts", "policy_registry.ts", "runtime.ts"]);
+  // G6-02 adds the app policy catalog and the G5 authority port (same rules: no runtime API, named imports only).
+  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "gateway.ts", "policy_registry.ts", "runtime.ts"]);
   for (const name of files) {
     const text = await Deno.readTextFile(new URL(name, dir));
     assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\(/u, name);
