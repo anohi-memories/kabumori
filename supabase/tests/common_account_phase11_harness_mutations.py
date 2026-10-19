@@ -9,7 +9,7 @@ import tempfile
 
 src_root = sys.argv[1]
 # the Phase 13 documentation-consistency tests also read these trees
-TREES = ['supabase/preflight', 'supabase/migrations', 'supabase/tests', 'docs/common-account', 'docs/postona', '.agent', 'apps/social-mobile', 'supabase/functions', 'supabase/candidates/common_account_brand_owner_epoch']
+TREES = ['supabase/preflight', 'supabase/migrations', 'supabase/tests', 'docs/common-account', 'docs/postona', '.agent', 'apps/social-mobile', 'supabase/functions', 'supabase/candidates/common_account_brand_owner_epoch', 'supabase/candidates/common_account_postona_authz']
 SUITE = 'supabase/preflight/managed_disposable/'
 G = 'supabase/preflight/managed_disposable/guard.ts'
 R = 'supabase/preflight/managed_disposable/runner.ts'
