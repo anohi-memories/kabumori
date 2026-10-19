@@ -267,7 +267,7 @@ Deno.test("with G5's own allow on the RPC: the consult goes through once; verdic
   const r = await w.send("consult-g5-0002");
   assert.deepEqual([r.status, r.body.success, w.openai.calls.length], [200, true, 1]);
   assert.deepEqual(ok.rpc.requests.map((q) => q.headers.get("authorization")), [`Bearer ${JWT}`, `Bearer ${JWT}`], "verdict + recheck, same JWT");
-  assert.deepEqual(ok.gatewayRpc, ["claim", "reserve", "mark_sent", "settle", "complete"]);
+  assert.deepEqual(ok.gatewayRpc, ["claim", "reserve", "claim", "mark_sent", "settle", "complete"]);
   const moved = new FakeProject();
   moved.rpc.answers = [{ status: 200, body: ALLOW.rpc_wire }, { status: 200, body: { ...ALLOW.rpc_wire, owner_epoch: "g5oe:8:4" } }];
   const m = consultWorld(moved);

@@ -201,7 +201,7 @@ Deno.test("the unchanged handler through the gateway: one OpenAI request with th
   assert.equal(sent.includes("誰向けに書けばいい？") && sent.includes("こんにちは！"), true, "message and history are sent as data");
   assert.equal(sent.includes("saved_settings") && sent.includes("read_only"), true, "the saved state the handler builds is sent as data");
   for (const secret of [JWT.a, USER_A, BRAND_A, SERVICE_KEY, PUBLISHABLE, "sk-test-direct-openai-NOT-USED"]) assert.equal(sent.includes(secret), false, `not in the provider request: ${secret}`);
-  assert.deepEqual(w.supabase.rpc, ["claim", "reserve", "mark_sent", "settle", "complete"]);
+  assert.deepEqual(w.supabase.rpc, ["claim", "reserve", "claim", "mark_sent", "settle", "complete"]);
   const [row] = [...w.supabase.rows.values()];
   assert.deepEqual([row.brandRef, row.userId], [BRAND_A, USER_A]);
   const replay = await w.send(JWT.a, ask(BRAND_A, "誰向けに書けばいい？", [{ role: "user", text: "こんにちは" }, { role: "assistant", text: "こんにちは！" }]));
