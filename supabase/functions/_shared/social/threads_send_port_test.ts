@@ -283,6 +283,7 @@ test("isolation: the module imports only the existing transport; only its test a
   // G4-03 reuses the service-key rule (read-only; it takes no credential and sends nothing).
   assert.deepEqual(importers.sort(), [
     "supabase/functions/_shared/social/threads_account_binding.ts",
+    "supabase/functions/_shared/social/threads_connect_to_send.ts", // G4-04 composes the same ports
     "supabase/functions/_shared/social/threads_send_port_test.ts",
   ]);
 });
