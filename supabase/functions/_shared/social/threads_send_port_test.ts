@@ -1,0 +1,284 @@
+// Offline: no --allow-net, no --allow-env (read only, for the isolation scan); the Threads API is a scripted fake.
+//   deno test --no-config --cached-only --allow-read=. supabase/functions/_shared/social/threads_send_port_test.ts
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { FetchLike } from "./threads_publish_contract.ts";
+import {
+  acceptableServiceKey,
+  createGatedThreadsCredentialPort,
+  createGatedThreadsSendPort,
+  createThreadsCredentialPort,
+  createThreadsSendPort,
+  parseThreadsCredentialRow,
+  THREADS_CREDENTIAL_PORT_ENABLED,
+  THREADS_POSTING_SERVICE_KEY,
+  THREADS_SEND_PORT_ENABLED,
+  type ThreadsSendOutcome,
+} from "./threads_send_port.ts";
+
+const USER = "17841400000000001";
+const TOKEN = "THfaketoken0123456789abcdef";
+const CRED = { threadsUserId: USER, accessToken: TOKEN };
+const ACCOUNT = "3f6c1b8e-5d2a-4c7f-9e1b-0a2b3c4d5e6f";
+const GEN = "a".repeat(64);
+const PERMALINK = "https://www.threads.net/@postona_tester/post/AbC_123";
+
+const json = (status: number, body: unknown) =>
+  new Response(typeof body === "string" ? body : JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const graphError = (status: number, code: number) => json(status, { error: { message: `detail ${TOKEN}`, code } });
+const CONTAINER_OK = () => json(200, { id: "111" });
+const STATUS = (s: string) => () => json(200, { id: "111", status: s });
+const PUBLISH_OK = () => json(200, { id: "222" });
+const READBACK_OK = () => json(200, { id: "222", permalink: PERMALINK, owner: { id: USER } });
+
+type Step = () => Response | Error;
+/** Scripted Threads: one entry per expected request; an extra request fails the test. Records method + path only. */
+function fakeThreads(steps: Step[]) {
+  const calls: string[] = [];
+  const bodies: string[] = [];
+  const queue = [...steps];
+  const fetch: FetchLike = (input, init) => {
+    const url = new URL(input);
+    calls.push(`${init?.method ?? "GET"} ${url.pathname}`);
+    bodies.push(`${input} ${typeof init?.body === "string" ? init.body : ""}`);
+    const next = queue.shift();
+    if (!next) return Promise.reject(new Error("unexpected extra request"));
+    const answer = next();
+    return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+  };
+  return { fetch, calls, bodies, left: () => queue.length };
+}
+const sleeps: number[] = [];
+const port = (fetch: FetchLike, checks = 3) =>
+  createGatedThreadsSendPort(true, "simulated", fetch, {
+    containerChecks: checks,
+    containerCheckDelayMs: 7,
+    sleep: (ms) => {
+      sleeps.push(ms);
+      return Promise.resolve();
+    },
+  });
+const C = "POST /v1.0/17841400000000001/threads";
+const S = "GET /v1.0/111";
+const P = "POST /v1.0/17841400000000001/threads_publish";
+const R = "GET /v1.0/222";
+
+async function run(steps: Step[], expected: ThreadsSendOutcome, calls: string[], text = "hello threads") {
+  const fake = fakeThreads(steps);
+  const outcome = await port(fake.fetch).send(CRED, text);
+  assert.deepEqual(outcome, expected);
+  assert.deepEqual(fake.calls, calls);
+  assert.equal(fake.left(), 0, "every scripted answer was used");
+  assert.equal(JSON.stringify(outcome).includes(TOKEN), false);
+  if ("code" in outcome) assert.match(outcome.code, /^[A-Z][A-Z0-9_]{1,63}$/u);
+  return fake;
+}
+
+// ---- gates ------------------------------------------------------------------------------------------------------
+
+test("the static gates are closed and no service key is decided", () => {
+  assert.equal(THREADS_SEND_PORT_ENABLED, false);
+  assert.equal(THREADS_CREDENTIAL_PORT_ENABLED, false);
+  assert.equal(THREADS_POSTING_SERVICE_KEY, null);
+});
+
+test("the deployable send port is unavailable, declares the real transport, and sends nothing", async () => {
+  const fake = fakeThreads([]);
+  const deployable = createThreadsSendPort(fake.fetch);
+  assert.equal(deployable.available, false);
+  assert.equal(deployable.transport, "threads");
+  assert.deepEqual(await deployable.send(CRED, "hello"), { kind: "not_written", stage: "container", code: "THREADS_SEND_DISABLED" });
+  assert.deepEqual(fake.calls, []);
+});
+
+test("a mock port is 'simulated' and cannot be relabelled", () => {
+  const simulated = port(fakeThreads([]).fetch);
+  assert.equal(simulated.available, true);
+  assert.equal(simulated.transport, "simulated");
+  assert.throws(() => ((simulated as { transport: string }).transport = "threads"));
+  assert.equal(createGatedThreadsSendPort(true, "bogus" as "simulated", fakeThreads([]).fetch).transport, "simulated");
+  assert.equal(createGatedThreadsSendPort(true, "bogus" as "simulated", fakeThreads([]).fetch).available, false);
+});
+
+// ---- send outcomes ------------------------------------------------------------------------------------------------
+
+test("published and read back: four requests in order, token never in a write URL", async () => {
+  const fake = await run([CONTAINER_OK, STATUS("FINISHED"), PUBLISH_OK, READBACK_OK], { kind: "published", mediaId: "222", readBack: "confirmed" }, [C, S, P, R]);
+  assert.equal(fake.bodies[0].startsWith(`https://graph.threads.net/v1.0/${USER}/threads `), true);
+  assert.equal(fake.bodies[0].split(" ")[0].includes(TOKEN), false);
+  assert.equal(fake.bodies[2].split(" ")[0].includes(TOKEN), false);
+  assert.match(fake.bodies[2], /creation_id=111/u);
+});
+
+test("container step: a definite refusal is not_written, anything uncertain is unknown, and nothing follows", async () => {
+  await run([() => graphError(400, 100)], { kind: "not_written", stage: "container", code: "THREADS_REQUEST_REJECTED" }, [C]);
+  await run([() => graphError(400, 190)], { kind: "not_written", stage: "container", code: "THREADS_TOKEN_INVALID" }, [C]);
+  await run([() => graphError(429, 4)], { kind: "not_written", stage: "container", code: "THREADS_RATE_LIMITED" }, [C]);
+  await run([() => new Error("connection reset")], { kind: "unknown", stage: "container", code: "THREADS_UNAVAILABLE" }, [C]);
+  await run([() => json(500, "{}")], { kind: "unknown", stage: "container", code: "THREADS_UNAVAILABLE" }, [C]);
+  await run([() => json(200, "not json")], { kind: "unknown", stage: "container", code: "THREADS_RESPONSE_MALFORMED" }, [C]);
+  await run([() => json(200, { id: "abc" })], { kind: "unknown", stage: "container", code: "THREADS_RESPONSE_MALFORMED" }, [C]);
+});
+
+test("bad input is refused before any request", async () => {
+  for (const [cred, text] of [
+    [{ threadsUserId: "0123", accessToken: TOKEN }, "hi"],
+    [{ threadsUserId: USER, accessToken: "short" }, "hi"],
+    [{ threadsUserId: USER, accessToken: `${TOKEN} x` }, "hi"],
+    [null, "hi"],
+    [CRED, ""],
+    [CRED, "x".repeat(501)],
+    [CRED, "a\rb"],
+  ] as const) {
+    const fake = fakeThreads([]);
+    const outcome = await port(fake.fetch).send(cred as typeof CRED, text);
+    assert.deepEqual(outcome, { kind: "not_written", stage: "container", code: "THREADS_REQUEST_INVALID" });
+    assert.deepEqual(fake.calls, []);
+  }
+});
+
+test("container wait: never publishes unless FINISHED; ERROR / EXPIRED / not ready / unreadable are no post", async () => {
+  await run([CONTAINER_OK, STATUS("ERROR")], { kind: "not_written", stage: "publish", code: "THREADS_CONTAINER_ERROR" }, [C, S]);
+  await run([CONTAINER_OK, STATUS("EXPIRED")], { kind: "not_written", stage: "publish", code: "THREADS_CONTAINER_EXPIRED" }, [C, S]);
+  await run([CONTAINER_OK, () => new Error("reset")], { kind: "not_written", stage: "publish", code: "THREADS_CONTAINER_STATUS_UNREADABLE" }, [C, S]);
+  await run([CONTAINER_OK, () => json(200, { id: "999", status: "FINISHED" })], {
+    kind: "not_written",
+    stage: "publish",
+    code: "THREADS_CONTAINER_STATUS_UNREADABLE",
+  }, [C, S]);
+  sleeps.length = 0;
+  await run([CONTAINER_OK, STATUS("IN_PROGRESS"), STATUS("IN_PROGRESS"), STATUS("IN_PROGRESS")], {
+    kind: "not_written",
+    stage: "publish",
+    code: "THREADS_CONTAINER_NOT_READY",
+  }, [C, S, S, S]);
+  assert.deepEqual(sleeps, [7, 7]);
+  await run([CONTAINER_OK, STATUS("IN_PROGRESS"), STATUS("FINISHED"), PUBLISH_OK, READBACK_OK], { kind: "published", mediaId: "222", readBack: "confirmed" }, [C, S, S, P, R]);
+});
+
+test("a container already PUBLISHED that we never published is unknown at the publish step, never published again", async () => {
+  await run([CONTAINER_OK, STATUS("PUBLISHED")], { kind: "unknown", stage: "publish", code: "THREADS_CONTAINER_ALREADY_PUBLISHED" }, [C, S]);
+});
+
+test("publish step: refused is not_written; lost, 5xx, transient or unreadable is unknown; exactly one publish request", async () => {
+  const head = [CONTAINER_OK, STATUS("FINISHED")];
+  await run([...head, () => graphError(400, 100)], { kind: "not_written", stage: "publish", code: "THREADS_REQUEST_REJECTED" }, [C, S, P]);
+  await run([...head, () => graphError(403, 10)], { kind: "not_written", stage: "publish", code: "THREADS_PERMISSION_MISSING" }, [C, S, P]);
+  await run([...head, () => new Error("timeout")], { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" }, [C, S, P]);
+  await run([...head, () => json(502, "{}")], { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" }, [C, S, P]);
+  await run([...head, () => graphError(500, 2)], { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" }, [C, S, P]);
+  await run([...head, () => json(200, { nope: 1 })], { kind: "unknown", stage: "publish", code: "THREADS_RESPONSE_MALFORMED" }, [C, S, P]);
+});
+
+test("read-back: another owner or id is a mismatch, a failed read is unknown; the media id is kept, no further request", async () => {
+  const head = [CONTAINER_OK, STATUS("FINISHED"), PUBLISH_OK];
+  await run([...head, () => json(200, { id: "222", permalink: PERMALINK, owner: { id: "999" } })], { kind: "published", mediaId: "222", readBack: "mismatch" }, [C, S, P, R]);
+  await run([...head, () => json(200, { id: "223", permalink: PERMALINK })], { kind: "published", mediaId: "222", readBack: "mismatch" }, [C, S, P, R]);
+  await run([...head, () => new Error("reset")], { kind: "published", mediaId: "222", readBack: "unknown" }, [C, S, P, R]);
+  await run([...head, () => json(200, { id: "222", permalink: "https://evil.example/x" })], { kind: "published", mediaId: "222", readBack: "unknown" }, [C, S, P, R]);
+});
+
+test("send never throws: a failing sleep after the container is an unknown publish, not a failure", async () => {
+  const fake = fakeThreads([CONTAINER_OK, STATUS("IN_PROGRESS")]);
+  const p = createGatedThreadsSendPort(true, "simulated", fake.fetch, { sleep: () => Promise.reject(new Error("killed")) });
+  assert.deepEqual(await p.send(CRED, "hello"), { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" });
+  assert.deepEqual(fake.calls, [C, S]);
+});
+
+// ---- credential port ------------------------------------------------------------------------------------------------
+
+const ROW = { social_account_id: ACCOUNT, threads_user_id: USER, access_token: TOKEN, generation: GEN };
+function statement(answers: unknown[]) {
+  const calls: string[] = [];
+  const fn = (account: string, key: string) => {
+    calls.push(`${account} ${key}`);
+    const next = answers.shift();
+    return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+  };
+  return { fn, calls };
+}
+
+test("the deployable credential port is unavailable and never calls the statement", async () => {
+  const s = statement([ROW]);
+  const deployable = createThreadsCredentialPort(s.fn);
+  assert.equal(deployable.available, false);
+  assert.equal(await deployable.credentialFor(ACCOUNT), null);
+  assert.deepEqual(s.calls, []);
+});
+
+test("service key: undecided, X's, the app's or malformed keys leave the port unavailable", async () => {
+  for (const key of [null, "x_autopost", "kabumori", "", "Threads", "a"]) {
+    const s = statement([ROW]);
+    const p = createGatedThreadsCredentialPort(true, key, s.fn);
+    assert.equal(p.available, false, String(key));
+    assert.equal(await p.credentialFor(ACCOUNT), null);
+    assert.deepEqual(s.calls, []);
+  }
+  assert.equal(acceptableServiceKey("postona_threads"), true);
+  assert.equal(createGatedThreadsCredentialPort(true, "postona_threads", null).available, false);
+  assert.equal(createGatedThreadsCredentialPort(false, "postona_threads", statement([]).fn).available, false);
+});
+
+test("one statement per lookup, nothing cached: an owner change or a newer generation is what the next call says", async () => {
+  const newer = { ...ROW, access_token: `${TOKEN}2`, generation: "b".repeat(64) };
+  const s = statement([ROW, newer, null, [ROW]]);
+  const p = createGatedThreadsCredentialPort(true, "postona_threads", s.fn);
+  assert.equal(p.available, true);
+  const first = await p.credentialFor(ACCOUNT);
+  assert.deepEqual(first, { socialAccountId: ACCOUNT, threadsUserId: USER, accessToken: TOKEN, generation: GEN });
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal((await p.credentialFor(ACCOUNT))?.generation, "b".repeat(64));
+  assert.equal(await p.credentialFor(ACCOUNT), null); // owner changed / credential stale: the statement refuses
+  assert.equal((await p.credentialFor(ACCOUNT))?.generation, GEN);
+  assert.deepEqual(s.calls, Array(4).fill(`${ACCOUNT} postona_threads`));
+});
+
+test("rows that are not provably this account's current credential are refused", async () => {
+  const bad: unknown[] = [
+    { ...ROW, social_account_id: "11111111-2222-4333-8444-555555555555" }, // cross-account / cross-brand
+    { ...ROW, generation: "A".repeat(64) },
+    { ...ROW, generation: "a".repeat(63) },
+    { ...ROW, generation: null },
+    { ...ROW, threads_user_id: 17841400000000001 },
+    { ...ROW, threads_user_id: "0" },
+    { ...ROW, access_token: "short" },
+    { ...ROW, refresh_token: "x".repeat(20) },
+    { social_account_id: ACCOUNT, threads_user_id: USER, access_token: TOKEN },
+    [ROW, ROW],
+    [],
+    null,
+    "row",
+  ];
+  for (const answer of bad) {
+    assert.equal(parseThreadsCredentialRow(ACCOUNT, answer), null, JSON.stringify(answer));
+    const p = createGatedThreadsCredentialPort(true, "postona_threads", statement([answer]).fn);
+    assert.equal(await p.credentialFor(ACCOUNT), null);
+  }
+  const failing = createGatedThreadsCredentialPort(true, "postona_threads", statement([new Error(`db ${TOKEN}`)]).fn);
+  assert.equal(await failing.credentialFor(ACCOUNT), null);
+  const s = statement([ROW]);
+  const p = createGatedThreadsCredentialPort(true, "postona_threads", s.fn);
+  assert.equal(await p.credentialFor("not-a-uuid"), null);
+  assert.equal(await p.credentialFor(ACCOUNT.toUpperCase()), null);
+  assert.deepEqual(s.calls, []);
+});
+
+test("isolation: the module imports only the existing transport, and nothing else imports it", async () => {
+  const source = await Deno.readTextFile(new URL("./threads_send_port.ts", import.meta.url));
+  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./threads_publish_contract.ts"]);
+  assert.equal(/\b(Deno\.|console\.)/u.test(source.replace(/^\s*\/\/.*$/gmu, "")), false);
+  const importers: string[] = [];
+  async function walk(dir: URL, rel: string) {
+    for await (const entry of Deno.readDir(dir)) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+      if (entry.isDirectory) await walk(new URL(`${entry.name}/`, dir), `${rel}${entry.name}/`);
+      else if (/\.(ts|tsx|mjs|js)$/u.test(entry.name) && /["'][^"']*threads_send_port(\.ts)?["']/u.test(await Deno.readTextFile(new URL(entry.name, dir)))) {
+        importers.push(`${rel}${entry.name}`);
+      }
+    }
+  }
+  const root = new URL("../../../../", import.meta.url);
+  await walk(new URL("supabase/", root), "supabase/");
+  await walk(new URL("apps/", root), "apps/");
+  assert.deepEqual(importers, ["supabase/functions/_shared/social/threads_send_port_test.ts"]);
+});
