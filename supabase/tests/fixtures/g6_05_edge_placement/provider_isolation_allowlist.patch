@@ -1,0 +1,65 @@
+--- a/supabase/functions/_shared/ai_provider/isolation_test.ts
++++ b/supabase/functions/_shared/ai_provider/isolation_test.ts
+@@ -96,12 +96,28 @@
+   "_shared/ai_consumer_bridge/bridge_test.ts": ["../ai_provider/test_support.ts"],
+   "_shared/ai_consumer_bridge/isolation_test.ts": ["../ai_provider/mod.ts"],
+   "_shared/ai_consumer_bridge/offline_samples_test.ts": ["../ai_provider/mod.ts", "../ai_provider/test_support.ts"],
++  // G6 common AI gateway (PROPOSED, G6-05): an unwired server library; no Edge entry point reaches it.
++  "_shared/ai_gateway/ai_calls_store.ts": ["../ai_provider/adapter.ts", "../ai_provider/redact.ts", "../ai_provider/secrets.ts"],
++  "_shared/ai_gateway/app_policies.ts": ["../ai_provider/mod.ts"],
++  "_shared/ai_gateway/g5_rpc_transport.ts": ["../ai_provider/adapter.ts", "../ai_provider/redact.ts"],
++  "_shared/ai_gateway/gateway.ts": ["../ai_provider/mod.ts"],
++  "_shared/ai_gateway/isolation_test.ts": ["../ai_provider/adapter.ts", "../ai_provider/mod.ts", "../ai_provider/redact.ts", "../ai_provider/secrets.ts"],
++  "_shared/ai_gateway/policy_registry.ts": ["../ai_provider/mod.ts"],
++  "_shared/ai_gateway/runtime.ts": ["../ai_provider/adapter.ts", "../ai_provider/mod.ts", "../ai_provider/secrets.ts"],
+ };
+
+ /** The deployable sources that may reach this module: the report handler and its entry point, and the bridge library. */
+ const AUTHORIZED_REACHERS = [
+   "_shared/ai_consumer_bridge/bridge.ts",
+   "_shared/ai_consumer_bridge/types.ts",
++  "_shared/ai_gateway/ai_calls_store.ts",
++  "_shared/ai_gateway/app_policies.ts",
++  "_shared/ai_gateway/authority_port.ts",
++  "_shared/ai_gateway/g5_rpc_transport.ts",
++  "_shared/ai_gateway/gateway.ts",
++  "_shared/ai_gateway/policy_registry.ts",
++  "_shared/ai_gateway/postona_consult_adapter.ts",
++  "_shared/ai_gateway/runtime.ts",
+   "market-report-analysis/handler.ts",
+   "market-report-analysis/index.ts",
+ ];
+@@ -137,7 +153,33 @@
+   },
+   "_shared/ai_consumer_bridge/types.ts": {
+     "_shared/ai_provider/mod.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
++  },
++  // G6 gateway (PROPOSED, G6-05). runtime.ts is the one place that constructs the ledger guard (SupabaseLedgerBudgetGuard)
++  // and takes a SecretValue; executeAiRequest is called only by gateway.ts, behind the feature policy, the authority
++  // verdict / recheck and the call store. Nothing here reads the environment or a secret by name.
++  "_shared/ai_gateway/ai_calls_store.ts": {
++    "_shared/ai_provider/adapter.ts": ["FetchLike"],
++    "_shared/ai_provider/redact.ts": ["safeToken"],
++    "_shared/ai_provider/secrets.ts": ["SecretValue"],
++  },
++  "_shared/ai_gateway/app_policies.ts": {
++    "_shared/ai_provider/mod.ts": ["AiReasoningEffort", "findModelSpec", "JsonSchema"],
++  },
++  "_shared/ai_gateway/g5_rpc_transport.ts": {
++    "_shared/ai_provider/adapter.ts": ["FetchLike"],
++    "_shared/ai_provider/redact.ts": ["safeToken"],
++  },
++  "_shared/ai_gateway/gateway.ts": {
++    "_shared/ai_provider/mod.ts": ["AiRequest", "AiSubject", "BudgetGuard", "executeAiRequest", "ExecuteDeps", "findModelSpec", "JsonSchema", "upperBoundAttemptCostUsd"],
+   },
++  "_shared/ai_gateway/policy_registry.ts": {
++    "_shared/ai_provider/mod.ts": ["AiRequest", "assertSchemaSupported", "findModelSpec", "upperBoundAttemptCostUsd"],
++  },
++  "_shared/ai_gateway/runtime.ts": {
++    "_shared/ai_provider/adapter.ts": ["FetchLike"],
++    "_shared/ai_provider/mod.ts": ["EnvReader", "PROVIDER_API_KEY_ENV", "RetryTiming", "SupabaseLedgerBudgetGuard"],
++    "_shared/ai_provider/secrets.ts": ["SecretValue"],
++  },
+   "market-report-analysis/handler.ts": {
+     "_shared/ai_provider/market_report_primary.ts": [
+       "MARKET_REPORT_AI_MODE_ENV",

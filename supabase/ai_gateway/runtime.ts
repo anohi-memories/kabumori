@@ -23,7 +23,7 @@ export type AiGatewayOptions = Readonly<{
    * on a real project only a secret key ("sb_secret_...") is accepted.
    */
   serviceKey: SecretValue;
-  /** Environment reader; the runtime asks it only for the provider key names (OPENAI_API_KEY / ANTHROPIC_API_KEY). */
+  /** Environment reader; the runtime asks it only for the provider key names (PROVIDER_API_KEY_ENV). */
   readEnv: EnvReader;
   authority: AuthorityPort;
   /** Built by definePolicyRegistry (checked and frozen); anything else is refused. */
