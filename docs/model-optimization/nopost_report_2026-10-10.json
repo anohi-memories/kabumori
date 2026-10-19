@@ -1,0 +1,169 @@
+{
+  "sampled": 150,
+  "byLayer": {
+    "gate_suppressed": 75,
+    "not_gated": 75
+  },
+  "bySource": {
+    "al_jazeera": 33,
+    "bbc_world": 3,
+    "breaking_market": 2,
+    "jp_official": 2,
+    "market_macro": 14,
+    "tdnet": 96
+  },
+  "byStatus": {
+    "ai_provisional": 66,
+    "human_review_pending": 3,
+    "independent_confirmed": 61,
+    "insufficient_evidence": 20
+  },
+  "byExpected": {
+    "important": 3,
+    "no_post": 124,
+    "null": 23
+  },
+  "undeterminedByReason": {
+    "policy_question": 3,
+    "stored_text_lacks_decisive_fact": 11,
+    "tanshin_current_row_missing": 9
+  },
+  "bodiesStored": 17,
+  "estimate": {
+    "sampled": 150,
+    "frame": 1706,
+    "layers": [
+      {
+        "layer": "gate_suppressed",
+        "frame": 354,
+        "sampled": 75,
+        "misses": 3,
+        "independentMisses": 1,
+        "undetermined": 19,
+        "missShare": 0.0405,
+        "upperBoundOptimistic": 0.1125,
+        "upperBoundConservative": 0.4098
+      },
+      {
+        "layer": "not_gated",
+        "frame": 1352,
+        "sampled": 75,
+        "misses": 0,
+        "independentMisses": 0,
+        "undetermined": 4,
+        "missShare": 0,
+        "upperBoundOptimistic": 0.048,
+        "upperBoundConservative": 0.131
+      }
+    ],
+    "overall": {
+      "alphaPerLayer": 0.025,
+      "estimatedMisses": 14.3,
+      "upperBoundMissesOptimistic": 104.7,
+      "upperBoundMissesConservative": 322.2,
+      "upperBoundShareOptimistic": 0.0614,
+      "upperBoundShareConservative": 0.1889
+    }
+  },
+  "priorityReview": [
+    {
+      "caseId": "nopost-al-jazeera-095f383b",
+      "layer": "gate_suppressed",
+      "expected": "no_post",
+      "status": "ai_provisional",
+      "rule": null,
+      "suspected": true,
+      "title": "Russia warns NATO of possible nuclear response if Kaliningrad is cut off"
+    },
+    {
+      "caseId": "nopost-al-jazeera-5377df77",
+      "layer": "gate_suppressed",
+      "expected": "no_post",
+      "status": "ai_provisional",
+      "rule": null,
+      "suspected": true,
+      "title": "Somali pirates killed five crew members on hijacked tanker, officials say"
+    },
+    {
+      "caseId": "nopost-al-jazeera-74c1786d",
+      "layer": "gate_suppressed",
+      "expected": "no_post",
+      "status": "ai_provisional",
+      "rule": "R-FEATURE",
+      "suspected": true,
+      "title": "Iran war live: Iranian media reports ‘massive explosions’ in Hormuz Strait"
+    },
+    {
+      "caseId": "nopost-al-jazeera-d2e702ee",
+      "layer": "gate_suppressed",
+      "expected": "no_post",
+      "status": "ai_provisional",
+      "rule": null,
+      "suspected": true,
+      "title": "US delivers F-16V fighter jets to Taiwan as island eyes threat from China"
+    },
+    {
+      "caseId": "nopost-tdnet-07087ae4",
+      "layer": "gate_suppressed",
+      "expected": "important",
+      "status": "ai_provisional",
+      "rule": "R-REVISION",
+      "suspected": true,
+      "title": "個別業績の前期実績値との差異に関するお知らせ"
+    },
+    {
+      "caseId": "nopost-tdnet-16a0eec4",
+      "layer": "not_gated",
+      "expected": null,
+      "status": "human_review_pending",
+      "rule": null,
+      "suspected": true,
+      "title": "IgA腎症治療薬「VOYXACT（シベプレンリマブ）」米国で生物製剤承認一部変更申請（sBLA）の段階的提出を完了"
+    },
+    {
+      "caseId": "nopost-tdnet-574850ce",
+      "layer": "gate_suppressed",
+      "expected": "important",
+      "status": "ai_provisional",
+      "rule": null,
+      "suspected": true,
+      "title": "2027 年３月期第２四半期（中間期）の決算発表日に関するお知らせ"
+    },
+    {
+      "caseId": "nopost-tdnet-6fb822d9",
+      "layer": "not_gated",
+      "expected": null,
+      "status": "human_review_pending",
+      "rule": null,
+      "suspected": false,
+      "title": "2027年２月期第２四半期 決算説明資料"
+    },
+    {
+      "caseId": "nopost-tdnet-94ebccf4",
+      "layer": "not_gated",
+      "expected": null,
+      "status": "insufficient_evidence",
+      "rule": null,
+      "suspected": true,
+      "title": "Argo Space社とのミッション2.5に関する打上げ契約に関するお知らせ"
+    },
+    {
+      "caseId": "nopost-tdnet-d0fd4e00",
+      "layer": "gate_suppressed",
+      "expected": null,
+      "status": "human_review_pending",
+      "rule": null,
+      "suspected": true,
+      "title": "一部報道につきまして"
+    },
+    {
+      "caseId": "nopost-tdnet-e2d11344",
+      "layer": "gate_suppressed",
+      "expected": "important",
+      "status": "independent_confirmed",
+      "rule": "R-REVISION",
+      "suspected": true,
+      "title": "連結業績予想の修正に関するお知らせ"
+    }
+  ]
+}
