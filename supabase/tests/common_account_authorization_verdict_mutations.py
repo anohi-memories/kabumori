@@ -49,19 +49,24 @@ M = [
     ('the raw session id travels', C, "  v_session_ref := 's:' || pg_catalog.left(pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to('g5-session:' || v_session_id::text, 'UTF8')), 'hex'), 32);",
      "  v_session_ref := 's:' || v_session_id::text;"),
     ('another app\'s entitlement is listed', C, "'entitlements', '[\"postona:x_autopost\"]'::jsonb)", "'entitlements', '[\"kabumori:kabumori\", \"postona:x_autopost\"]'::jsonb)"),
-    # ---- the worker form
+    # ---- the worker form (the generation pair; H1 C1 P2)
     ('the worker accepts another service key', C, "  if p_service_key is distinct from 'x_autopost' then\n    return 'ACCOUNT_LIFECYCLE_SERVICE_INVALID';", "  if p_service_key not in ('x_autopost', 'kabumori') then\n    return 'ACCOUNT_LIFECYCLE_SERVICE_INVALID';"),
     ('the worker accepts the stand-in 0', C, "  if p_expected_owner_epoch is null or p_expected_owner_epoch < 1 then\n    return 'EXPECTED_OWNER_EPOCH_REQUIRED';", "  if p_expected_owner_epoch is null then\n    return 'EXPECTED_OWNER_EPOCH_REQUIRED';"),
-    ('the worker accepts no bind time', C, "  if p_bound_at is null then\n    return 'BOUND_AT_REQUIRED';\n  end if;", ''),
+    ('the worker accepts no generation', C, "  if p_expected_lifecycle_version is null or p_expected_lifecycle_version < 1 then\n    return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED';\n  end if;", ''),
     ('the worker accepts a NULL epoch', C, "  if v_epoch is null or v_epoch < 1 then\n    return 'OWNER_EPOCH_UNAVAILABLE';\n  end if;", ''),
     ('the worker ignores an owner change', C, "  if v_epoch <> p_expected_owner_epoch then\n    return 'OWNER_EPOCH_CHANGED';\n  end if;", ''),
-    ('the worker ignores a re-activation since the bind', C, "  if v_activated > p_bound_at then\n    return 'SERVICE_REACTIVATED_SINCE_BIND';\n  end if;", ''),
+    ('the worker ignores a new service generation (stop -> restart ABA)', C, "  if v_lifecycle is distinct from p_expected_lifecycle_version then\n    return 'SERVICE_GENERATION_CHANGED';\n  end if;", ''),
+    ('the worker only refuses a LATER generation', C, "  if v_lifecycle is distinct from p_expected_lifecycle_version then", "  if v_lifecycle > p_expected_lifecycle_version then"),
+    ('the worker reads the generation of another account', C, "(select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(p_brand_id))",
+     "(select pg_catalog.min(a.lifecycle_version) from public.common_accounts a)"),
     # ---- the install
     ('forced RLS is accepted', C, "    if (select c.relforcerowsecurity from pg_catalog.pg_class c where c.oid = to_regclass(v_rel)) then", "    if false then"),
     ('a VOLATILE helper is accepted', C, "                    and p.provolatile = 's' and p.prosecdef and p.proconfig @> array['search_path=\"\"'] and p.proowner = v_owner) then",
      "                    and p.prosecdef and p.proconfig @> array['search_path=\"\"'] and p.proowner = v_owner) then"),
     ('the exposure precondition is skipped', C, "  if private.account_lifecycle_owner_epoch_exposure() is not null then\n    raise exception 'AUTH_VERDICT_PRECONDITION_%', private.account_lifecycle_owner_epoch_exposure();",
      "  if false then\n    raise exception 'AUTH_VERDICT_PRECONDITION_%', private.account_lifecycle_owner_epoch_exposure();"),
+    ('the lifecycle triggers are not checked', C, "                  and g.tgenabled in ('O', 'A') and g.tgtype = 29 and g.tgfoid = 'private.account_lifecycle_touch_entitlement()'::regprocedure)",
+     "                  )"),
     ('an API role reaching an allowed role is accepted', C, "                where a.rolname in ('anon', 'authenticated', 'service_role')\n                  and a.rolname is distinct from v_allowed",
      "                where a.rolname in ('anon', 'authenticated', 'service_role')\n                  and false"),
 ]

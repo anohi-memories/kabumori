@@ -9,9 +9,13 @@
 --         request.jwt.claims; equal to auth.uid(); not anonymous); there is no identity parameter. App / feature / brand id are refused before
 --         any row is read. Every fact is read in ONE statement (one snapshot). An unknown brand and a brand the caller is not a member of give
 --         the same answer; no other person's id or role, no owner id, no raw session id is ever returned. No exception is caught into a value.
---   W1  private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_bound_at) -> text    owner-only
---         a worker's answer for a reservation / attestation bound earlier: F5 P5's brand state, the F5 owner epoch EQUAL to the bound one, and no
---         entitlement re-activation after the bind ('active' or a fixed code). For a reviewed SQL writer of another owner, inside its statement.
+--   W1  private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_expected_lifecycle_version) -> text
+--         owner-only. A worker's answer for a reservation / attestation bound earlier: F5 P5's brand state, the F5 owner epoch EQUAL to the bound one,
+--         and the owner's lifecycle_version EQUAL to the bound one ('active' or a fixed code). lifecycle_version is the service GENERATION: F5 P1's
+--         row trigger moves it on every insert / update / delete of the owner's entitlements and on every account status change, and it never goes
+--         back -- so a service ended and re-started after the bind (even inside one transaction, or a long one: no clock is compared) is a new
+--         generation (H1 C1 P2 of PR #351). The bound pair is what R1's allow token `g5oe:<epoch>:<lifecycle_version>` carries. For a reviewed SQL
+--         writer of another owner, inside its statement.
 --   W2  public.common_account_worker_brand_verdict(...same...) -> text                                            EXECUTE: service_role ONLY
 --         W1 for an Edge worker's last check right before the provider. Never callable by a person.
 --
@@ -33,8 +37,8 @@ begin
     raise exception 'AUTH_VERDICT_PRECONDITION_OWNER_IS_SUPERUSER';
   end if;
   if to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is not null
-     or to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,timestamp with time zone)') is not null
-     or to_regprocedure('public.common_account_worker_brand_verdict(text,text,bigint,timestamp with time zone)') is not null then
+     or to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)') is not null
+     or to_regprocedure('public.common_account_worker_brand_verdict(text,text,bigint,bigint)') is not null then
     raise exception 'AUTH_VERDICT_ALREADY_APPLIED';
   end if;
   -- the helpers this file calls: present, STABLE, definer with an empty search path, owned by this owner
@@ -65,6 +69,13 @@ begin
        and ((a.attname = 'id' and a.atttypid = 'uuid'::regtype) or (a.attname = 'user_id' and a.atttypid = 'uuid'::regtype)
          or (a.attname = 'not_after' and a.atttypid = 'timestamptz'::regtype))) <> 3 then
     raise exception 'AUTH_VERDICT_PRECONDITION_SESSIONS_SHAPE';
+  end if;
+  -- the service generation W1 compares: F5 P1's lifecycle_version triggers, present, enabled and pointing at their functions
+  if not exists (select 1 from pg_catalog.pg_trigger g where g.tgrelid = 'public.service_entitlements'::regclass and g.tgname = 'account_lifecycle_touch_entitlement'
+                  and g.tgenabled in ('O', 'A') and g.tgtype = 29 and g.tgfoid = 'private.account_lifecycle_touch_entitlement()'::regprocedure)
+     or not exists (select 1 from pg_catalog.pg_trigger g where g.tgrelid = 'public.common_accounts'::regclass and g.tgname = 'account_lifecycle_touch_account'
+                  and g.tgenabled in ('O', 'A') and g.tgfoid = 'private.account_lifecycle_touch_account()'::regprocedure) then
+    raise exception 'AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS';
   end if;
   -- PR #303's exposure check: no API role reaches the owner, a superuser, TRIGGER, session_replication_role or a membership write
   if private.account_lifecycle_owner_epoch_exposure() is not null then
@@ -233,13 +244,14 @@ begin
          end;
 end $$;
 
--- W1: the worker's answer for a reservation / attestation bound earlier.
-create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_bound_at timestamptz)
+-- W1: the worker's answer for a reservation / attestation bound earlier. The bind is the pair (owner epoch, owner lifecycle_version) -- both
+-- monotonic counters, compared for EQUALITY in one statement; no timestamp is trusted.
+create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)
 returns text language plpgsql stable security definer set search_path = '' as $$
 declare
   v_state text;
   v_epoch bigint;
-  v_activated timestamptz;
+  v_lifecycle bigint;
 begin
   if p_service_key is distinct from 'x_autopost' then
     return 'ACCOUNT_LIFECYCLE_SERVICE_INVALID';
@@ -247,15 +259,14 @@ begin
   if p_expected_owner_epoch is null or p_expected_owner_epoch < 1 then
     return 'EXPECTED_OWNER_EPOCH_REQUIRED';
   end if;
-  if p_bound_at is null then
-    return 'BOUND_AT_REQUIRED';
+  if p_expected_lifecycle_version is null or p_expected_lifecycle_version < 1 then
+    return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED';
   end if;
-  -- one statement: F5 P5's state, the owner epoch and the owner's entitlement activation
+  -- one statement: F5 P5's state, the owner epoch and the owner's lifecycle_version (the service generation)
   select public.common_account_brand_service_state(p_brand_id, p_service_key),
          private.account_lifecycle_brand_owner_epoch(p_brand_id),
-         (select e.activated_at from public.service_entitlements e
-           where e.user_id = private.account_lifecycle_brand_owner(p_brand_id) and e.service_key = p_service_key)
-    into v_state, v_epoch, v_activated;
+         (select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(p_brand_id))
+    into v_state, v_epoch, v_lifecycle;
   if v_state is distinct from 'active' then
     return case when v_state in ('WORKSPACE_OWNER_UNKNOWN', 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND', 'ACCOUNT_DELETION_IN_PROGRESS', 'ACCOUNT_LOCKED',
                                  'SERVICE_NOT_REGISTERED', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_NOT_ACTIVE', 'ACCOUNT_LIFECYCLE_SERVICE_INVALID')
@@ -267,26 +278,24 @@ begin
   if v_epoch <> p_expected_owner_epoch then
     return 'OWNER_EPOCH_CHANGED';
   end if;
-  if v_activated is null then
-    return 'SERVICE_STATE_UNKNOWN';
-  end if;
-  if v_activated > p_bound_at then
-    return 'SERVICE_REACTIVATED_SINCE_BIND';
+  -- null-safe: an unreadable generation is a changed one (P5 'active' implies the account row, so NULL is not expected here)
+  if v_lifecycle is distinct from p_expected_lifecycle_version then
+    return 'SERVICE_GENERATION_CHANGED';
   end if;
   return 'active';
 end $$;
 
 -- W2: W1 for an Edge worker (service_role).
-create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_bound_at timestamptz)
+create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)
 returns text language sql stable security definer set search_path = '' as $$
-  select private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_bound_at)
+  select private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_expected_lifecycle_version)
 $$;
 
 revoke all on function public.common_account_authorization_verdict(text, text, text),
-  private.account_lifecycle_worker_brand_verdict(text, text, bigint, timestamptz),
-  public.common_account_worker_brand_verdict(text, text, bigint, timestamptz) from public, anon, authenticated, service_role;
+  private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint),
+  public.common_account_worker_brand_verdict(text, text, bigint, bigint) from public, anon, authenticated, service_role;
 grant execute on function public.common_account_authorization_verdict(text, text, text) to authenticated;
-grant execute on function public.common_account_worker_brand_verdict(text, text, bigint, timestamptz) to service_role;
+grant execute on function public.common_account_worker_brand_verdict(text, text, bigint, bigint) to service_role;
 
 -- Postconditions: the exact ACL, the shape, and the role graph -- every role an API role is a MEMBER of (direct or indirect, INHERIT or not,
 -- SET or not, ADMIN-only) is checked with its own privileges. authenticator reaching authenticated / service_role is PostgREST's role switch.
@@ -294,8 +303,8 @@ do $$
 declare
   v_owner text := quote_ident(current_user);
   v_r1 regprocedure := 'public.common_account_authorization_verdict(text,text,text)'::regprocedure;
-  v_w1 regprocedure := 'private.account_lifecycle_worker_brand_verdict(text,text,bigint,timestamp with time zone)'::regprocedure;
-  v_w2 regprocedure := 'public.common_account_worker_brand_verdict(text,text,bigint,timestamp with time zone)'::regprocedure;
+  v_w1 regprocedure := 'private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure;
+  v_w2 regprocedure := 'public.common_account_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure;
   v_fn regprocedure;
   v_allowed text;
 begin

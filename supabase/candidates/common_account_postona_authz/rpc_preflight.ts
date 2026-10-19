@@ -3,14 +3,14 @@
 //
 //   R1  public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text) -> jsonb       (EXECUTE: authenticated ONLY)
 //       the person's verdict (G5-01 wire v1 without the times), the subject and session taken from the request's JWT claims, never a parameter.
-//   W1  private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_bound_at) -> text   (owner-only)
+//   W1  private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_expected_lifecycle_version) -> text   (owner-only)
 //       the same answer for a reviewed SQL writer of another owner (G3's claim / preflight, G4's credential statement) inside its own statement.
 //   W2  public.common_account_worker_brand_verdict(...same...) -> text                                          (EXECUTE: service_role ONLY)
 //       W1 for an Edge worker's last check right before the provider (no person session; never callable by a person).
 //
 // What this file models and the tests prove: where the subject comes from (R1-3), which inputs are refused before any read (R1-4), why the
 // facts must be ONE snapshot (R1-6), how the Edge stamps and classifies an answer (R1-8), the ACL postcondition over the role graph (R1-1), and
-// the worker answer with its own ABA guard (W-3).
+// the worker answer with its generation guard (W-3).
 import { type AuthFacts, BRAND_ID, decide, POSTONA_FEATURES, type Principal, type Scope, UUID, type VerdictWire } from './verdict.ts';
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -165,27 +165,44 @@ export function aclViolation(input: Readonly<{
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// W1 / W2: the worker answer. No person and no session: the brand's owner state (F5 P5 common_account_brand_service_state), the F5 owner epoch
-// now, the epoch stored when the reservation / attestation was bound, and the entitlement's activated_at against the bind time (an entitlement
-// that ended and was re-activated after the bind is a NEW service period: its earlier reservations do not ride on it).
-export type WorkerFacts = Readonly<{ serviceState: string; ownerEpoch: number | null; entitlementActivatedAtMs: number | null }>;
+// W1 / W2: the worker answer. No person and no session: the brand's owner state (F5 P5 common_account_brand_service_state), and two monotonic
+// counters bound when the reservation / attestation was made -- the F5 owner epoch (owner changes) and the owner's lifecycle_version (the service
+// GENERATION: F5 P1 moves it on every entitlement insert / update / delete and every account status change, and never lowers it). Both must be
+// EQUAL now. No timestamp is compared: a service ended and re-started after the bind is a new generation even inside one transaction or a long one,
+// where now() is the transaction's start (H1 C1 P2 of PR #351).
+export type WorkerFacts = Readonly<{ serviceState: string; ownerEpoch: number | null; ownerLifecycleVersion: number | null }>;
+export type WorkerBinding = Readonly<{ serviceKey: string; expectedOwnerEpoch: number | null; expectedLifecycleVersion: number | null }>;
 export const P5_REFUSALS = Object.freeze(['WORKSPACE_OWNER_UNKNOWN', 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND', 'ACCOUNT_DELETION_IN_PROGRESS', 'ACCOUNT_LOCKED',
   'SERVICE_NOT_REGISTERED', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_NOT_ACTIVE', 'ACCOUNT_LIFECYCLE_SERVICE_INVALID']);
 /** The service key POSTONA posting (X and Threads) is entitled under. G5's decision for PR #337's THREADS_POSTING_SERVICE_KEY. */
 export const POSTONA_POSTING_SERVICE_KEY = 'x_autopost' as const;
 
-export function workerBrandVerdict(
-  facts: WorkerFacts | undefined,
-  bound: Readonly<{ serviceKey: string; expectedOwnerEpoch: number | null; boundAtMs: number | null }>,
-): 'active' | string {
+const positive = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 1;
+
+/**
+ * The binding a consumer stores when it creates a reservation from a person's request: taken from R1's ALLOW token `g5oe:<epoch>:<lifecycle>`.
+ * Anything else (a refusal, a malformed or out-of-range token) gives no binding: the reservation is not created.
+ */
+export function bindingFromAllow(wire: unknown): WorkerBinding | null {
+  if (typeof wire !== 'object' || wire === null || (wire as { decision?: unknown }).decision !== 'allow') return null;
+  const token = (wire as { owner_epoch?: unknown }).owner_epoch;
+  const m = typeof token === 'string' ? /^g5oe:([1-9][0-9]{0,15}):([1-9][0-9]{0,15})$/u.exec(token) : null;
+  if (!m) return null;
+  const epoch = Number(m[1]);
+  const lifecycle = Number(m[2]);
+  if (!positive(epoch) || !positive(lifecycle)) return null;
+  return { serviceKey: POSTONA_POSTING_SERVICE_KEY, expectedOwnerEpoch: epoch, expectedLifecycleVersion: lifecycle };
+}
+
+export function workerBrandVerdict(facts: WorkerFacts | undefined, bound: WorkerBinding): 'active' | string {
   if (bound.serviceKey !== POSTONA_POSTING_SERVICE_KEY) return 'ACCOUNT_LIFECYCLE_SERVICE_INVALID';
-  if (!Number.isSafeInteger(bound.expectedOwnerEpoch) || (bound.expectedOwnerEpoch as number) < 1) return 'EXPECTED_OWNER_EPOCH_REQUIRED';
-  if (!Number.isSafeInteger(bound.boundAtMs)) return 'BOUND_AT_REQUIRED';
+  if (!positive(bound.expectedOwnerEpoch)) return 'EXPECTED_OWNER_EPOCH_REQUIRED';
+  if (!positive(bound.expectedLifecycleVersion)) return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED';
   if (!facts) return 'FACTS_UNAVAILABLE';
   if (facts.serviceState !== 'active') return P5_REFUSALS.includes(facts.serviceState) ? facts.serviceState : 'SERVICE_STATE_UNKNOWN';
-  if (!Number.isSafeInteger(facts.ownerEpoch) || (facts.ownerEpoch as number) < 1) return 'OWNER_EPOCH_UNAVAILABLE';
+  if (!positive(facts.ownerEpoch)) return 'OWNER_EPOCH_UNAVAILABLE';
   if (facts.ownerEpoch !== bound.expectedOwnerEpoch) return 'OWNER_EPOCH_CHANGED';
-  if (!Number.isSafeInteger(facts.entitlementActivatedAtMs)) return 'SERVICE_STATE_UNKNOWN';
-  if ((facts.entitlementActivatedAtMs as number) > (bound.boundAtMs as number)) return 'SERVICE_REACTIVATED_SINCE_BIND';
+  // an unreadable generation is a changed one (as the SQL's null-safe `is distinct from`)
+  if (facts.ownerLifecycleVersion !== bound.expectedLifecycleVersion) return 'SERVICE_GENERATION_CHANGED';
   return 'active';
 }

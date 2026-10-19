@@ -38,8 +38,9 @@ Evidence labels: **[D]** derived by a test of this task, **[C]** candidate in th
   Steps 1-2 read no row [D: with the facts table locked, refusals return at once]. The answer is the 8-key wire without times; the session reference is
   `s:` + 32 hex of `sha256('g5-session:' || session_id)`; the owner-epoch token is `g5oe:<epoch>:<lifecycle_version>`; `entitlements` is
   `["postona:x_autopost"]` on allow, `[]` otherwise. No exception handler except around the claims JSON cast (a malformed claim is `AUTH_REQUIRED`).
-- **W1** — `x_autopost` only; expected epoch >= 1; a bind time; then ONE `select` of P5's state, the owner epoch and the owner's `activated_at`; answer
-  `active` or a fixed code (G5-02 §4). **W2** — W1 for `service_role`.
+- **W1** — `x_autopost` only; expected owner epoch >= 1 and expected `lifecycle_version` >= 1 (the pair from R1's allow token); then ONE `select` of
+  P5's state, the owner epoch and the owner's `lifecycle_version`; both must be EQUAL; answer `active` or a fixed code (G5-02 §4). No timestamp is taken
+  or compared (section 10). **W2** — W1 for `service_role`.
 - **ACL** — `revoke all ... from public, anon, authenticated, service_role`, then R1 to `authenticated`, W2 to `service_role`. **Postconditions**: the exact
   `proacl` strings, STABLE / definer / empty `search_path` / owner; no API role other than the allowed one is a MEMBER (direct or indirect, INHERIT or not,
   SET or not, ADMIN-only) of a role holding EXECUTE; `authenticator` may reach only the API roles; the exposure check still clean.
@@ -84,7 +85,9 @@ Evidence labels: **[D]** derived by a test of this task, **[C]** candidate in th
 ## 6. NOT_VERIFIED and limits
 
 - Managed: claim names, `auth.uid()`, `is_anonymous` delivery, PostgREST error mapping, GoTrue session row lifecycle, real grants and default privileges.
-- The verdict is advisory (no lock); W1 trusts the bind time the consumer records.
+- The verdict is advisory (no lock); W1 trusts the binding the consumer records (from an R1 allow token). An unrelated change of the owner's account
+  (e.g. Kabumori started) refuses earlier reservations (fail closed). The generation relies on F5 P1's lifecycle triggers; disabling them needs the table
+  owner or a superuser (the install checks they are enabled; a later disable is the owner-level L-6 class of PR #303).
 - The postconditions run at install; a later grant or role edge made by the owner or a superuser is not re-checked at call time (the owner-epoch
   coverage, which R1 consults on every call, does catch the PR #303 exposure conditions).
 - Admin / member roles, organisation workspaces and Miseiro stay refused.
@@ -109,19 +112,49 @@ deno test --no-config --no-check --allow-read --allow-env supabase/preflight/man
 
 ## 9. What was executed for this document
 
-All commands ran in `/Users/yuya/Developer/kabumori-g5-03` (a clean worktree stacked on PR #344) against a throw-away local PostgreSQL 17.11 (`listen_addresses`
+Re-run by G5-04 (section 10) in `/Users/yuya/Developer/kabumori-g5-04` (a clean worktree stacked on PR #351); first run by G5-03 in `/Users/yuya/Developer/kabumori-g5-03` (stacked on PR #344) against a throw-away local PostgreSQL 17.11 (`listen_addresses`
 empty, a Unix socket under `/private/tmp`, fake data, deleted at the end; every runner refuses a host that is not a `/tmp` socket directory). The candidate
 was installed only there. No managed or production system, no credential, no network request.
 
 | # | Check | Command | Result |
 | --- | --- | --- | --- |
-| 1 | the PG17 suite (install, ACL, oracle, subject, nothing read first, no leak, one snapshot, worker forms, unsafe installs) | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_authorization_verdict_pg_run.sh` | **10 tests** passed, 0 failed (three consecutive runs) |
-| 2 | mutation check of the SQL | `python3 supabase/tests/common_account_authorization_verdict_mutations.py <repository root>` | control PASS, **36/36 detected**, 0 invalid |
+| 1 | the PG17 suite (install, ACL, oracle, subject, nothing read first, no leak, one snapshot, worker forms, unsafe installs) | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_authorization_verdict_pg_run.sh` | **13 tests** passed, 0 failed (three consecutive runs; 10 at PR #351) |
+| 2 | mutation check of the SQL | `python3 supabase/tests/common_account_authorization_verdict_mutations.py <repository root>` | control PASS, **39/39 detected**, 0 invalid (36 at PR #351; the worker mutants rewritten for the generation pair) |
 | 3 | G6 cross-check (scratch, not committed) | G6's `g5_rpc_transport.ts` + `authority_port.ts` from PR #345 (`529153f4ceab2a37a49fed82edd23102fe8d4293`) reading answers captured from the real R1 | 1 scratch test passed: allow accepted; foreign brand, suspended, revoked session refused at the recheck; the same answer keeps the generation |
 | 4 | regression of the stack | G5-01 pure (13) + G5-02 model (11); G5-01 PG17 (10); G5-02 PG17 (5); owner-epoch suite (19) | all passed |
-| 5 | the G5-02 model after the per-claim `is_anonymous` addition | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, 33/33 detected |
+| 5 | the G5-02 model (per-claim `is_anonymous`; the generation pair) | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, 35/35 detected |
 | 6 | the whole harness incl. the document tests | `deno test --no-config --no-check --allow-read --allow-env supabase/preflight/managed_disposable/` | **200 passed**, 0 failed (194 of PR #344 + 6 new) |
-| 7 | type-check, lint, shell | `deno check --no-config` (models, the new suite, the harness); `deno lint --no-config`; `bash -n` on the runner | no error; `Checked 50 files`; syntax OK |
+| 7 | type-check, lint, shell | `deno check --no-config` (models, the new suite, the harness); `deno lint --no-config`; `bash -n` on the runner | no error; `Checked 51 files`; syntax OK |
 
 Not run, on purpose: any managed access; applying the candidate anywhere but the throw-away database; wiring a consumer; the Codex Sol (high) review
 (the next step).
+
+## 10. G5-04: the H1 C1 P2 fix — the worker generation is a counter, not a clock
+
+TASK `common-account-g5-pr351-worker-reactivation-aba-p2-source-fix-20261020` (Issue #320, task 4). Review: H1 #306 (C1, `CHANGES_REQUIRED / P2×1`) on
+PR #351 head `59d3dff0ad23a492e9e397d8c6c5f379d0f120a9`.
+
+- **Finding (confirmed).** W1 / W2 compared the entitlement's `activated_at` with a bind time. The re-activation RPC writes `activated_at = now()`, the
+  START of its transaction, so a transaction that began before the bind and ended / re-started the service after it (or a bind -> end -> restart inside
+  one transaction) left `activated_at <= bind time` and an old reservation was answered `active`. Reproduced on PG17 against the PR #351 SQL with the real
+  `reactivate_x_autopost_service`: `active`.
+- **Fix.** W1 / W2 take `p_expected_lifecycle_version bigint` instead of `p_bound_at timestamptz` and require, in ONE statement, the owner epoch AND the
+  owner's `lifecycle_version` to EQUAL the bound pair (`SERVICE_GENERATION_CHANGED` otherwise; `EXPECTED_LIFECYCLE_VERSION_REQUIRED` for a missing / < 1
+  value). `lifecycle_version` moves on every insert / update / delete of the owner's entitlements (row trigger, so an end and a restart inside one
+  transaction move it twice) and on every account status change, and can never decrease (F5 P1). No timestamp is accepted or compared. The install
+  now also refuses unless both P1 lifecycle triggers are present, enabled and bound to their functions (`AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS`).
+  R1 is unchanged: its allow token `g5oe:<epoch>:<lifecycle_version>` already carries the same pair.
+- **Binding wire for consumers (G3 reservations, G4 credential / binding).** Store both numbers from R1's ALLOW token at creation, as `bigint` (G4 already
+  parses them as strings without JS numbers); pass them unchanged to W1 / W2. The reference helper `bindingFromAllow()` accepts only an allow with a
+  well-formed token. Never re-read the counters at dispatch time to "refresh" a binding.
+- **Trade-off (fail closed).** Any change of the owner's account — starting or ending Kabumori, a status change — also moves the generation, so a
+  reservation made before it is refused and needs a fresh confirmation. A per-service generation would avoid that but needs a new trigger / table on a
+  G5 table (a separate TASK if wanted).
+- **Proofs added** (`common_account_authorization_verdict_pg_test.ts`): the review's exact case with a real long transaction (transaction start < bind <
+  real restart; asserts `activated_at` is earlier than the bind, then `SERVICE_GENERATION_CHANGED`); bind -> end -> restart inside ONE transaction
+  (`activated_at <= bind instant`, refused in that transaction); an old reservation bound from a real R1 allow token sends 0 after a real end and restart
+  while an unchanged world sends once; owner A -> B -> A; an unrelated Kabumori start; a binding from the future; generation 0 / null; no timestamp
+  parameter exists; a disabled lifecycle trigger refuses the install. The worker answer still equals the reference in every case.
+- **Not in this fix.** G4's question (Issue #320 comment 6279536652): R1 needs `p_brand_id`, but the first X connection creates the workspace in its begin
+  RPC, so there is no brand to name yet. Recommendation for a G5 decision in a later TASK: a brand-less person verdict for the connect features only
+  (account, entitlement, deletion, freeze, session; no owner epoch), with the brand verdict required again at the callback once the workspace exists.

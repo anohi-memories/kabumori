@@ -41,16 +41,20 @@ M = [
     ('an API role reaching a superuser is accepted', R, "if (input.superusers.some((s) => reach.has(s))) return `${api.toUpperCase()}_REACHES_SUPERUSER`;", ''),
     ('an extra API role executing is accepted', R, "      return `${api.toUpperCase()}_CAN_EXECUTE`;", "      continue;"),
     ('a missing grant is accepted', R, "if (!executes && expected) return `${api.toUpperCase()}_CANNOT_EXECUTE`;", ''),
-    # ---- W-3 the worker answer
+    # ---- W-3 the worker answer (the generation pair; H1 C1 P2)
     ('the worker accepts another service key', R, "if (bound.serviceKey !== POSTONA_POSTING_SERVICE_KEY) return 'ACCOUNT_LIFECYCLE_SERVICE_INVALID';", ''),
-    ('the worker accepts no bound epoch (the stand-in 0)', R, "if (!Number.isSafeInteger(bound.expectedOwnerEpoch) || (bound.expectedOwnerEpoch as number) < 1) return 'EXPECTED_OWNER_EPOCH_REQUIRED';", ''),
-    ('the worker accepts no bind time', R, "if (!Number.isSafeInteger(bound.boundAtMs)) return 'BOUND_AT_REQUIRED';", ''),
+    ('the worker accepts no bound epoch (the stand-in 0)', R, "if (!positive(bound.expectedOwnerEpoch)) return 'EXPECTED_OWNER_EPOCH_REQUIRED';", ''),
+    ('the worker accepts no bound generation', R, "if (!positive(bound.expectedLifecycleVersion)) return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED';", ''),
     ('the worker turns an unknown state into a known code', R, "return P5_REFUSALS.includes(facts.serviceState) ? facts.serviceState : 'SERVICE_STATE_UNKNOWN';", "return facts.serviceState;"),
-    ('the worker accepts a NULL epoch', R, "if (!Number.isSafeInteger(facts.ownerEpoch) || (facts.ownerEpoch as number) < 1) return 'OWNER_EPOCH_UNAVAILABLE';", ''),
+    ('the worker accepts a NULL epoch', R, "if (!positive(facts.ownerEpoch)) return 'OWNER_EPOCH_UNAVAILABLE';", ''),
     ('the worker ignores an owner change (A -> B -> A)', R, "if (facts.ownerEpoch !== bound.expectedOwnerEpoch) return 'OWNER_EPOCH_CHANGED';", ''),
-    ('the worker ignores a re-activation since the bind', R, "if ((facts.entitlementActivatedAtMs as number) > (bound.boundAtMs as number)) return 'SERVICE_REACTIVATED_SINCE_BIND';", ''),
-    ('the worker accepts an unknown activation time', R, "if (!Number.isSafeInteger(facts.entitlementActivatedAtMs)) return 'SERVICE_STATE_UNKNOWN';", ''),
+    ('the worker ignores a new service generation (stop -> restart ABA)', R, "if (facts.ownerLifecycleVersion !== bound.expectedLifecycleVersion) return 'SERVICE_GENERATION_CHANGED';", ''),
+    ('the worker only refuses a LATER generation (a one-sided compare)', R, "if (facts.ownerLifecycleVersion !== bound.expectedLifecycleVersion) return 'SERVICE_GENERATION_CHANGED';",
+     "if ((facts.ownerLifecycleVersion as number) > (bound.expectedLifecycleVersion as number)) return 'SERVICE_GENERATION_CHANGED';"),
     ('the worker answers without facts', R, "if (!facts) return 'FACTS_UNAVAILABLE';", "if (!facts) return 'active';"),
+    ('a refusal yields a binding', R, "if (typeof wire !== 'object' || wire === null || (wire as { decision?: unknown }).decision !== 'allow') return null;",
+     "if (typeof wire !== 'object' || wire === null) return null;"),
+    ('a malformed token yields a binding', R, "/^g5oe:([1-9][0-9]{0,15}):([1-9][0-9]{0,15})$/u", "/^g5oe:([0-9]+):([0-9]+)/u"),
     ('Threads posting under its own key', R, "export const POSTONA_POSTING_SERVICE_KEY = 'x_autopost' as const;", "export const POSTONA_POSTING_SERVICE_KEY = 'threads' as const;"),
 ]
 
