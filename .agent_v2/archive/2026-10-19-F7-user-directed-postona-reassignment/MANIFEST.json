@@ -1,0 +1,14 @@
+{
+  "slot": "F7",
+  "date": "2026-10-19",
+  "reason": "User-directed closure of suspended Kabumori work and reassignment of slot to POSTONA; original status preserved, no claim of implementation completion",
+  "original_path": ".agent_v2/tasks/F7.md",
+  "archive_path": ".agent_v2/archive/2026-10-19-F7-user-directed-postona-reassignment/F7.md",
+  "original_blob_sha": "de35f825da3f8521c649ab6e466b81cacfdb5de0",
+  "archive_blob_sha": "de35f825da3f8521c649ab6e466b81cacfdb5de0",
+  "original_commit": "Unresolved: captured from main at branch creation",
+  "bytes": 12641,
+  "sha256": "0e2c7911a49609943a3c5d80621eea88ad0dc34466c979f2a1c43d35c8b71530",
+  "byte_restoration": "PASS: Git blob SHA identical; archive content read-back",
+  "original_status": "ready"
+}
