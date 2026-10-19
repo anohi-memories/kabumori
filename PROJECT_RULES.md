@@ -1,5 +1,29 @@
 # Kabumori Project Rules
 
+## 2026-10-19 G枠Issue移行・V3 G10廃止（最新優先）
+
+この節は下の旧.agent／.agent_v2／V3説明より優先する。ユーザーはG1〜G10の固定Issue管理への移行およびこの管理更新に伴うmain更新・Vercelデプロイを明示承認した。管理正本の実切替は対象枠の既存TASKが完了・受入・履歴保護され、新規TASKをIssueへ登録・読み戻した時点からとする。idle/task_id:none のIssueは開始不可。Issue本文は担当ちゃのみ更新、ClaudeはREPORTのみ、担当ちゃはHISTORY・ACCEPTを保存し読み戻す。1世代50件。推薦モデル・return_to・完了コードは毎TASK必須。
+
+| 枠 | 管理Issue | 切替条件・現状 |
+| --- | --- | --- |
+| G1 | #316 | F1 done／最新archive確認後、次新規TASKから |
+| G2 | #317 | F2 review_required：受入・archive後 |
+| G3 | #318 | F3 done／最新archive確認後 |
+| G4 | #319 | F4 done／最新archive確認後 |
+| G5 | #320 | F5 done／最新archive確認後 |
+| G6 | #321 | F6 done／最新archive確認後 |
+| G7 | #322 | F7 readyの既存TASKをF7/L7で完結後 |
+| G8 | #304 | pilot idle／F8 review_requiredの受入・archive後 |
+| G9 | #298 | G9 pilot task-002継続、F9 archive・pilot後処理後に正式新世代判断 |
+| G10 | #323 | V3は新規運用しない。旧K10は受入待ちから外す。Issue idle、次TASK未登録 |
+
+G10旧task_id orchestration-v3-g10-automation-readiness-default-deny-20261018 はユーザー判断により CANCELED_FOR_MIGRATION / NOT_ACCEPTED として棚上げする。旧V3 TASK/Report（review_required）とDraft PR #281は歴史証拠として原文保護し、PASS/doneと記録しない。下のV3切替表G10は過去の記録であり新規TASKの割当根拠にしない。K10の受入完了をIssue移行の前提としない。
+
+進行中の旧F/J task_idは移動しない。担当ちゃが元TASK/Report/未処理L/K・archive/SHA256/復元・PR HEAD・独立worktree/変更path競合・他枠Issue重複を確認してからIssue登録。条件不明ならidleのまま。F/J廃止、H正式切替は別工程。安全拒否時はSTOPし別ツール・別経路で回避しない。
+
+main更新と付随するVercelデプロイのユーザー許可は本管理ルール変更に限る。他PRのmerge、DB/Auth/Secret変更、SNS実投稿、アプリreleaseは未承認。main read-backと実際のデプロイ成否は別々に確認・記録する。
+
+
 ## この文書の位置づけ
 
 - このファイルを、長期的な方針・共通ルール・決定事項の唯一の正本とする。
