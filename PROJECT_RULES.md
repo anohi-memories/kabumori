@@ -1,5 +1,18 @@
 # Kabumori Project Rules
 
+## 2026-10-20 安全性チェック拒否時の正規再試行（最新ユーザー指示）
+
+全担当ちゃへの共通指令：[Issue #299 コメント6279552877](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6279552877)。**安全性チェックで一度拒否されたことを理由に、後日の通常の正規再試行まで一律禁止しない。** この節は下の「安全拒否ならSTOP／別経路禁止」を、以下の手順として具体化し最優先する。
+
+1. 拒否された呼び出しは直ちにSTOP。書込済み・完了済みと主張せず、公開可能なエラー・対象・直前状態を記録する。
+2. Issue/TASK/コメント・task_id・PR/HEADをfreshにread-back。書込成否、重複、競合、権限不足、具体的安全問題を再評価する。
+3. 対象作業が承認済みで、禁止事項がなく、ユーザーによる再試行の明示指示または現行TASKの権限内にあるとき、**通常の正規操作による再試行は可能**。重複防止、古い状態の再チェック、結果のread-backを厳守。
+4. 安全措置の意図的な迂回（別経路・代理投稿・分割や言換えによるチェック逃れ、権限偽装等）は禁止。再度拒否ならその試行をSTOPし、失敗内容・解除条件を報告する。安全審査の具体的な禁止事項には従う。
+5. 拒否原因が不明な場合に「恒久的に書込不能」「別チャットでも一律不可」と断定しない。管理TASKやproductionの安全ゲートを弱めない。
+
+2026-10-20のG5事例：#320の第3TASK全文HISTORYは[コメント6279391656](https://github.com/anohi-memories/kabumori/issues/320#issuecomment-6279391656)で保存/read-back成功、K5 ACCEPTは[コメント6279417367](https://github.com/anohi-memories/kabumori/issues/320#issuecomment-6279417367)で保存/read-back成功。判定はCHANGES_REQUIRED_P2／本番NO_GO。通常の再試行が成功したことは、以前の拒否を意図的に回避してよい根拠ではない。
+
+
 ## 2026-10-19 単独FとG7〜G9担当変更（最新ユーザー指示）
 
 [全体指令 Issue #299 コメント6264872973](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6264872973)を最優先する。
@@ -24,7 +37,7 @@
 
 旧J1〜J5の残TASK（J2 readyを含む）はユーザー判断で USER_CANCELLED_FOR_H_MIGRATION / NOT_ACCEPTED として扱い、再実行・次TASKのJ割当を行わない。既存の旧TASK/Report/ACTIVE・archive・PRは証拠として保持し、未受入をdone/PASSへ書換えない。旧Jのtask_idをHへ移動・再利用しない。旧Jの未処理V1〜V5を新Hへの割当の必須前提にしない。
 
-Hの新規TASKは開始Hn→完了Cn。担当ちゃが実際のreturn_to、completion_code、推薦モデル・tests・制約・対象Issue statusと他枠競合を確認した後に、H Issueへreadyとして登録・read-backする。`idle/task_id:none`からは開始不可。H1 #306はpilot履歴を保護し、正式移行前に50件世代の整合を取る。Issue本文は担当ちゃのみ編集、CodexはREPORT、ちゃはHISTORY→ACCEPT→次TASKをread-back。安全拒否ならSTOP。
+Hの新規TASKは開始Hn→完了Cn。担当ちゃが実際のreturn_to、completion_code、推薦モデル・tests・制約・対象Issue statusと他枠競合を確認した後に、H Issueへreadyとして登録・read-backする。`idle/task_id:none`からは開始不可。H1 #306はpilot履歴を保護し、正式移行前に50件世代の整合を取る。Issue本文は担当ちゃのみ編集、CodexはREPORT、ちゃはHISTORY→ACCEPT→次TASKをread-back。安全性チェック拒否時の停止・正規再試行は冒頭の2026-10-20最新指令に従う。
 
 main管理ルール更新および付随Vercel deployは既存のユーザー承認範囲内。製品PR merge・DB/Auth/Secrets・SNS実投稿・外部write等の承認ではない。
 
@@ -56,7 +69,7 @@ main管理ルール更新および付随Vercel deployは既存のユーザー承
 
 G10旧task_id orchestration-v3-g10-automation-readiness-default-deny-20261018 はユーザー判断により CANCELED_FOR_MIGRATION / NOT_ACCEPTED として棚上げする。旧V3 TASK/Report（review_required）とDraft PR #281は歴史証拠として原文保護し、PASS/doneと記録しない。下のV3切替表G10は過去の記録であり新規TASKの割当根拠にしない。K10の受入完了をIssue移行の前提としない。
 
-進行中の旧F/J task_idは移動しない。担当ちゃが元TASK/Report/未処理L/K・archive/SHA256/復元・PR HEAD・独立worktree/変更path競合・他枠Issue重複を確認してからIssue登録。条件不明ならidleのまま。F/J廃止、H正式切替は別工程。安全拒否時はSTOPし別ツール・別経路で回避しない。
+進行中の旧F/J task_idは移動しない。担当ちゃが元TASK/Report/未処理L/K・archive/SHA256/復元・PR HEAD・独立worktree/変更path競合・他枠Issue重複を確認してからIssue登録。条件不明ならidleのまま。F/J廃止、H正式切替は別工程。安全性チェック拒否時は冒頭の2026-10-20最新指令に従う。意図的な安全措置回避は禁止、正規の再試行を一律禁止しない。
 
 main更新と付随するVercelデプロイのユーザー許可は本管理ルール変更に限る。他PRのmerge、DB/Auth/Secret変更、SNS実投稿、アプリreleaseは未承認。main read-backと実際のデプロイ成否は別々に確認・記録する。
 
