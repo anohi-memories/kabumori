@@ -39,6 +39,7 @@ function policy(app: AppId, feature: string, over: Partial<FeaturePolicy> = {}):
   return {
     app,
     feature,
+    revision: "r1",
     ledgerFeature: feature.replace(/\./g, "_"),
     logicalRole: `${app}.${feature}`,
     provider: "openai",

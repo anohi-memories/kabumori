@@ -78,6 +78,7 @@
 | 項目 | 意味 |
 |---|---|
 | `app`, `feature` | 登録の鍵と一致しなければ「決まりなし」と同じ |
+| `revision` | 決まりの版（2026-10-19 追加、GAP-3）。保存の控えの `policyVersion` になり、操作の中身（fingerprint）にも入る。無い・形が違えば「決まりなし」 |
 | `ledgerFeature`, `logicalRole` | 台帳に数える名前 |
 | `provider`, `model`, `reasoningEffort`, `maxOutputTokens`, `timeoutMs`, `maxAttempts` | **モデルと provider はここだけで決まる**（要求からは選べない） |
 | `maxCostUsdPerOperation` | 1 回の操作のすべての試みの最大額。超えれば予約の前に断る |
@@ -94,7 +95,7 @@
 | 段 | 内容 |
 |---|---|
 | 1 回の操作の上限 | 決まりの `maxCostUsdPerOperation` ≥ 試み 1 回の最大額 × `maxAttempts` でなければ、予約の前に `COST_DENIED` |
-| 上限の枠 | 台帳の枠（アプリ・機能・主体ごと。#241 の「広い枠を作らない」決まり）。断られたら送信 0 で `QUOTA_EXCEEDED` |
+| 上限の枠 | 台帳の枠（アプリ・機能・主体ごと。#241 の「広い枠を作らない」決まり）。枠で断られたら送信 0 で `QUOTA_EXCEEDED`。台帳に届かない・送信を確定しない場合は送信 0 で `LEDGER_UNAVAILABLE`（GAP-2） |
 | 予約 → 送信の確定 → 確定 / 不明 | 台帳の予約 → 認可の再確認 → 送信の確定（1 回だけ）→ 使用量が分かれば確定、分からなければ最大額で不明 |
 | 費用と使用量の正本 | **台帳**。答えの audit（回数・概算額・確定か最大額か）は控え |
 
@@ -115,6 +116,8 @@
 
 `callKey`, `tenantTag`, `app`, `feature`, `model`, `attempts`, `estimatedCostUsd`, `costBasis`（`measured` / `includes_upper_bound` / `no_request`）。利用者 ID・ブランド・入力・出力の文は入れない。
 
+- 保存の場所へは、共通の口がこれを**保存の場所の 9 項目**（`callId`, `tenantTag`, `feature`＝`app:feature`, `role`＝`logicalRole`, `model`, `policyVersion`＝`revision`, `attempts`, `estimatedCostUsd`, `costBasis`）に変えて渡す。再送のときは、すべての項目がこの呼び出しと今の決まりに合うことを確かめてから戻す。合わなければ `UNKNOWN`（2026-10-19、GAP-3。`docs/ai-provider/F6_GATEWAY_GAP_FIXES.md`）。
+
 ### 2.8 答えの error
 
 | コード | いつ | 送信 | 費用 | 同じ operationId で送り直すと |
@@ -123,10 +126,11 @@
 | `AUTH_UNAVAILABLE` / `AUTH_DENIED` / `AUTH_UNKNOWN` / `AUTH_PENDING` / `AUTH_EXPIRED` / `AUTH_SCOPE_MISMATCH` | 認可の判定 | 0 | 0 | 判定しだい |
 | `POLICY_MISSING` / `POLICY_SUBJECT_DENIED` | 決まりが無い・合わない | 0 | 0 | 同じ |
 | `COST_DENIED` | 1 回の操作の上限を超える | 0 | 0 | 同じ |
-| `QUOTA_EXCEEDED` | 台帳の枠 | 0 | 0 | 保存した答え |
+| `QUOTA_EXCEEDED` | 台帳の枠（`CALL_LIMIT` / `COST_LIMIT` / `PER_CALL_LIMIT` / 枠が無い） | 0 | 0 | 保存した答え |
+| `LEDGER_UNAVAILABLE` | 台帳に届かない・送信を確定しない・その他の台帳の拒否（GAP-2） | 0 | 0 | `NOT_SENT`（同じ番号では送らない。新しい番号でやり直す） |
 | `STORE_UNAVAILABLE` | 保存の場所に届かない | 0 | 0 | もう一度試せる |
 | `IN_PROGRESS` / `OPERATION_REUSED` | §2.6 | 0 | 0 | — |
-| `AUTH_REVOKED_BEFORE_SEND` | 送る直前の再確認で止まった（予約は返す） | 0 | 0 | 保存した答え（`NOT_SENT`） |
+| `AUTH_REVOKED_BEFORE_SEND` | 送る直前の再確認で止まった（予約は返す）。2 回目以降の試みの前でも同じ（GAP-1） | 0（それより前の試みの分だけ） | 0（同上） | 保存した答え（`NOT_SENT`） |
 | `NOT_SENT` | 何も送らずに終わった操作の再送 | 0 | 0 | 同じ |
 | `PROVIDER_FAILED` / `OUTPUT_REJECTED` | AI の失敗・形の違う出力・アプリの検査で弾いた | 1 | 1 回 | 保存した答え（送り直さない） |
 | `UNKNOWN` | 送った後の切断・時間切れ・記録の喪失 | 1 | 最大額 1 回 | 保存した答え（送り直さない） |

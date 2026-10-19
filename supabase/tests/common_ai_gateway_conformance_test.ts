@@ -2,9 +2,9 @@
 // parts it would run on: both provider adapters (OpenAI and Anthropic, through executeAiRequest) and the REAL
 // SupabaseLedgerBudgetGuard speaking to a fake in-memory PostgREST. The provider and the ledger endpoints are fake
 // fetches: no network, fake keys. Every PASS here is a mock PASS (the managed runtime, the production ledger and real
-// provider behaviour are NOT_VERIFIED). Tests named "GAP-n" pin a CURRENT behaviour that the conformance table in
-// docs/ai-provider/F6_GATEWAY_PROVIDER_LEDGER_CALLSTORE_CONFORMANCE.md records as a gap: the safety half is asserted
-// as required, the label half as it is today, so a fix has to change the test on purpose.
+// provider behaviour are NOT_VERIFIED). Tests named "GAP-n fixed" assert the behaviour after the fixes of
+// docs/ai-provider/F6_GATEWAY_GAP_FIXES.md (the gaps PR289 recorded: the label half used to be wrong; the safety half
+// is unchanged and still asserted).
 //   deno test --cached-only --frozen --config supabase/functions/_shared/ai_consumer_bridge/deno.json --deny-net \
 //     --deny-write --allow-env=ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY supabase/tests/common_ai_gateway_conformance_test.ts
 import assert from "node:assert/strict";
@@ -54,6 +54,7 @@ function policy(provider: Provider, over: Partial<FeaturePolicy> = {}): FeatureP
   return {
     app: "postona",
     feature: "ideas",
+    revision: "r1",
     ledgerFeature: "ideas",
     logicalRole: "postona.ideas",
     provider,
@@ -112,7 +113,7 @@ class Store implements CallStore {
 
 /** A recording guard with the database guard's shape (reserve -> markSent -> settle | release). */
 class RecordingLedger implements BudgetGuard {
-  readonly inner = new InMemoryBudgetGuard([{ id: "postona", scope: { application: "postona" }, maxCalls: 100, maxUsdPerCall: 0.05 }]);
+  inner = new InMemoryBudgetGuard([{ id: "postona", scope: { application: "postona" }, maxCalls: 100, maxUsdPerCall: 0.05 }]);
   readonly events: string[] = [];
   async reserve(c: BudgetCallContext, upper: number) {
     const d = await this.inner.reserve(c, upper);
@@ -280,23 +281,48 @@ Deno.test("both providers: a known refusal (429 / overload) is resent within max
   }
 });
 
-Deno.test("GAP-1 (both providers): revoked before the SECOND attempt -> nothing more is sent and the reservation is released, but the answer says QUOTA_EXCEEDED instead of AUTH_REVOKED_BEFORE_SEND", async () => {
+const refused429 = (p: Provider): Responder => () => jsonResponse(429, p === "openai" ? { error: { type: "rate_limit_error" } } : anthropicError(429, "rate_limit_error", "x"));
+
+Deno.test("GAP-1 fixed (both providers): revoked before the SECOND attempt -> AUTH_REVOKED_BEFORE_SEND (not a quota); nothing more sent, the reservation released, replay NOT_SENT", async () => {
   for (const p of PROVIDERS) {
-    const net = recordingFetch(() => jsonResponse(429, p === "openai" ? { error: { type: "rate_limit_error" } } : anthropicError(429, "rate_limit_error", "x")));
-    const ledger = new RecordingLedger();
+    for (const [label, revoke] of [
+      ["deny", (prior: AuthVerdict) => ({ ...prior, decision: "deny" as const })],
+      ["new generation", (prior: AuthVerdict) => ({ ...prior, generation: "epoch-2" })],
+      ["unreadable", () => new Error("authority down")],
+    ] as const) {
+      const net = recordingFetch(refused429(p));
+      const ledger = new RecordingLedger();
+      const authority = new Authority();
+      authority.answer = (n, prior) => (n === 1 ? prior : revoke(prior));
+      const store = new Store();
+      const d = deps(net.fetch, ledger, authority, store, policy(p, { maxAttempts: 2 }));
+      const r = await gatewayExecute(d, "jwt-a", ideas());
+      assert.equal(net.calls.length, 1, `${p} ${label}`);
+      assert.deepEqual(ledger.events, ["reserve", "mark_sent", "settle:measured:failed", "reserve", "release"], `${p} ${label}`);
+      assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, r.audit?.attempts], [false, "AUTH_REVOKED_BEFORE_SEND", "measured", 1], `${p} ${label}`);
+      const [row] = [...store.rows.values()];
+      assert.equal(row.outcome?.ok === false && row.outcome.code, "POLICY_DENIED", `${p} ${label}`);
+      authority.answer = (_n, prior) => prior;
+      const replay = await gatewayExecute(d, "jwt-a", ideas());
+      assert.deepEqual([replay.ok, !replay.ok && replay.code, net.calls.length], [false, "NOT_SENT", 1], `${p} ${label}: never resent`);
+    }
+  }
+});
+
+Deno.test("GAP-1 fixed: a possibly billed first attempt stays UNKNOWN (upper bound) even if a revocation follows; a quota on the second attempt stays a quota", async () => {
+  for (const p of PROVIDERS) {
+    // 504 is final (never retried), so a later revocation cannot even be asked: UNKNOWN wins.
+    const net = recordingFetch(() => jsonResponse(504, p === "openai" ? { error: { type: "timeout" } } : anthropicError(504, "timeout_error", "late")));
     const authority = new Authority();
     authority.answer = (n, prior) => (n === 1 ? prior : { ...prior, decision: "deny" });
-    const store = new Store();
-    const d = deps(net.fetch, ledger, authority, store, policy(p, { maxAttempts: 2 }));
-    const r = await gatewayExecute(d, "jwt-a", ideas());
-    // Safety (required): one request only; the second reservation is released, not marked sent.
-    assert.equal(net.calls.length, 1, p);
-    assert.deepEqual(ledger.events, ["reserve", "mark_sent", "settle:measured:failed", "reserve", "release"], p);
-    // Label (GAP-1, current): the revocation is stored as BUDGET_DENIED because the first attempt made the cost basis
-    // "measured", so the gateway's "revoked && no_request" branch does not match.
-    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis], [false, "QUOTA_EXCEEDED", "measured"], p);
-    const [row] = [...store.rows.values()];
-    assert.equal(row.outcome?.ok === false && row.outcome.code, "BUDGET_DENIED", p);
+    const r = await gatewayExecute(deps(net.fetch, new RecordingLedger(), authority, new Store(), policy(p, { maxAttempts: 2 })), "jwt-a", ideas());
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, net.calls.length], [false, "UNKNOWN", "includes_upper_bound", 1], p);
+    // A real budget limit on the second attempt (no revocation) is still QUOTA_EXCEEDED.
+    const q = recordingFetch(refused429(p));
+    const ledger = new RecordingLedger();
+    ledger.inner = new InMemoryBudgetGuard([{ id: "postona", scope: { application: "postona" }, maxCalls: 1, maxUsdPerCall: 0.05 }]);
+    const quota = await gatewayExecute(deps(q.fetch, ledger, new Authority(), new Store(), policy(p, { maxAttempts: 2 })), "jwt-a", ideas());
+    assert.deepEqual([quota.ok, !quota.ok && quota.code, q.calls.length], [false, "QUOTA_EXCEEDED", 1], p);
   }
 });
 
@@ -305,8 +331,8 @@ type Rpc = "ai_ledger_reserve" | "ai_ledger_mark_sent" | "ai_ledger_settle" | "a
 class FakeLedgerRest {
   readonly calls: string[] = [];
   readonly status = new Map<string, string>();
-  /** Per RPC: an injected failure (HTTP status, "network", or a mark_sent refusal). */
-  fault: Partial<Record<Rpc, number | "network" | "refuse">> = {};
+  /** Per RPC: an injected failure (HTTP status, "network", a mark_sent refusal, or a reserve refusal "deny:<reason>"). */
+  fault: Partial<Record<Rpc, number | "network" | "refuse" | `deny:${string}`>> = {};
   private n = 0;
   readonly fetch: FetchLike = (input, init) => {
     const rpc = new URL(String(input)).pathname.replace("/rest/v1/rpc/", "") as Rpc;
@@ -317,6 +343,7 @@ class FakeLedgerRest {
     const p = (JSON.parse(String(init?.body)) as { p: Record<string, unknown> }).p;
     switch (rpc) {
       case "ai_ledger_reserve": {
+        if (typeof f === "string" && f.startsWith("deny:")) return Promise.resolve(jsonResponse(200, { allowed: false, reason: f.slice(5), policy_key: "gwc.policy" }));
         const id = `00000000-0000-4000-8000-${String(++this.n).padStart(12, "0")}`;
         this.status.set(id, "reserved");
         return Promise.resolve(jsonResponse(200, { allowed: true, reservation_id: id }));
@@ -376,10 +403,12 @@ Deno.test("real ledger guard: a revoked recheck never reaches mark_sent; the res
   }
 });
 
-Deno.test("GAP-2 (real ledger guard): ledger unreachable / failing / refusing the send -> nothing is sent (required), but the operation is stored FINAL as BUDGET_DENIED and answered QUOTA_EXCEEDED, also after the ledger recovers", async () => {
+Deno.test("GAP-2 fixed (real ledger guard): unreachable / failing / not confirming ledger -> LEDGER_UNAVAILABLE (not a quota); nothing sent; the same operation never resends; a new operation works after recovery", async () => {
   const cases: Array<[string, FakeLedgerRest["fault"], string[]]> = [
     ["reserve network", { ai_ledger_reserve: "network" }, ["reserve"]],
     ["reserve 500", { ai_ledger_reserve: 500 }, ["reserve"]],
+    ["reserve refused: attempt already final", { ai_ledger_reserve: "deny:ATTEMPT_FINALIZED" }, ["reserve"]],
+    ["reserve refused: unknown reason", { ai_ledger_reserve: "deny:SOMETHING_NEW" }, ["reserve"]],
     ["mark_sent network", { ai_ledger_mark_sent: "network" }, ["reserve", "mark_sent", "release"]],
     ["mark_sent 503", { ai_ledger_mark_sent: 503 }, ["reserve", "mark_sent", "release"]],
     ["mark_sent refused (no permit)", { ai_ledger_mark_sent: "refuse" }, ["reserve", "mark_sent", "release"]],
@@ -394,11 +423,99 @@ Deno.test("GAP-2 (real ledger guard): ledger unreachable / failing / refusing th
       const r = await gatewayExecute(d, "jwt-a", ideas());
       assert.equal(net.calls.length, 0, `${p} ${label}: nothing sent`);
       assert.deepEqual(rest.calls, calls, `${p} ${label}`);
-      assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis], [false, "QUOTA_EXCEEDED", "no_request"], `${p} ${label}`);
+      assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis], [false, "LEDGER_UNAVAILABLE", "no_request"], `${p} ${label}`);
+      const [row] = [...store.rows.values()];
+      assert.equal(row.outcome?.ok === false && row.outcome.code, "POLICY_DENIED", `${p} ${label}: stored as not sent`);
       rest.fault = {};
       const again = await gatewayExecute(d, "jwt-a", ideas());
-      assert.deepEqual([again.ok, !again.ok && again.code, net.calls.length], [false, "QUOTA_EXCEEDED", 0], `${p} ${label}: final, not retried after recovery`);
+      assert.deepEqual([again.ok, !again.ok && again.code, net.calls.length], [false, "NOT_SENT", 0], `${p} ${label}: the same operation is final, never resent`);
+      const fresh = await gatewayExecute(d, "jwt-a", ideas("op-conformance-2"));
+      assert.deepEqual([fresh.ok, net.calls.length], [true, 1], `${p} ${label}: a new operation works after recovery`);
     }
+  }
+});
+
+Deno.test("GAP-2 fixed (real ledger guard): only a budget limit is QUOTA_EXCEEDED; the ledger failing on the SECOND attempt after a refused first one is LEDGER_UNAVAILABLE", async () => {
+  for (const p of PROVIDERS) {
+    for (const reason of ["CALL_LIMIT", "COST_LIMIT", "PER_CALL_LIMIT", "NO_MATCHING_POLICY"]) {
+      const rest = new FakeLedgerRest();
+      rest.fault = { ai_ledger_reserve: `deny:${reason}` };
+      const net = recordingFetch(ok("どうぞ")[p]);
+      const store = new Store();
+      const r = await gatewayExecute(deps(net.fetch, realGuard(rest), new Authority(), store, policy(p)), "jwt-a", ideas());
+      assert.deepEqual([r.ok, !r.ok && r.code, net.calls.length], [false, "QUOTA_EXCEEDED", 0], `${p} ${reason}`);
+      const [row] = [...store.rows.values()];
+      assert.equal(row.outcome?.ok === false && row.outcome.code, "BUDGET_DENIED", `${p} ${reason}`);
+    }
+    const rest = new FakeLedgerRest();
+    const net = recordingFetch((c, i, init) => {
+      rest.fault = { ai_ledger_reserve: "network" }; // the ledger goes away after the first request
+      return refused429(p)(c, i, init);
+    });
+    const r = await gatewayExecute(deps(net.fetch, realGuard(rest), new Authority(), new Store(), policy(p, { maxAttempts: 2 })), "jwt-a", ideas());
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.attempts, net.calls.length], [false, "LEDGER_UNAVAILABLE", 1, 1], p);
+    assert.deepEqual(rest.calls, ["reserve", "mark_sent", "settle", "reserve"], p);
+  }
+});
+
+Deno.test("GAP-3 fixed: the stored outcome is the call store's nine-key audit (feature app:feature, role, policyVersion); replay checks every field and refuses a tampered or foreign one (UNKNOWN, nothing sent)", async () => {
+  const net = recordingFetch(ok("どうぞ").openai);
+  const store = new Store();
+  const pol = policy("openai");
+  const d = deps(net.fetch, new RecordingLedger(), new Authority(), store, pol);
+  const first = await gatewayExecute(d, "jwt-a", ideas());
+  assert.equal(first.ok, true);
+  const [row] = [...store.rows.values()];
+  assert.deepEqual(row.outcome?.audit, {
+    callId: first.audit!.callKey,
+    tenantTag: first.audit!.tenantTag,
+    feature: "postona:ideas",
+    role: "postona.ideas",
+    model: "gpt-6-luna",
+    policyVersion: "r1",
+    attempts: 1,
+    estimatedCostUsd: first.audit!.estimatedCostUsd,
+    costBasis: "measured",
+  });
+  assert.deepEqual(await gatewayExecute(d, "jwt-a", ideas()), first, "the GatewayAudit is rebuilt exactly");
+  const original = structuredClone(row.outcome!);
+  const tampered: Array<[string, (o: Record<string, unknown>) => void]> = [
+    ["role", (o) => (o.audit as Record<string, unknown>).role = "postona.consult"],
+    ["policyVersion", (o) => (o.audit as Record<string, unknown>).policyVersion = "r0"],
+    ["feature", (o) => (o.audit as Record<string, unknown>).feature = "postona:consult"],
+    ["model", (o) => (o.audit as Record<string, unknown>).model = "claude-haiku-5-5"],
+    ["callId", (o) => (o.audit as Record<string, unknown>).callId = "h5m2_" + "0".repeat(64)],
+    ["extra audit key", (o) => (o.audit as Record<string, unknown>).app = "postona"],
+    ["gateway audit shape", (o) => o.audit = first.audit],
+    ["attempts > maxAttempts", (o) => (o.audit as Record<string, unknown>).attempts = 2],
+    ["attempts vs cost basis", (o) => (o.audit as Record<string, unknown>).costBasis = "no_request"],
+    ["negative cost", (o) => (o.audit as Record<string, unknown>).estimatedCostUsd = -1],
+    ["public code stored", (o) => { o.ok = false; delete o.data; o.code = "QUOTA_EXCEEDED"; }],
+    ["extra result key", (o) => o.extra = 1],
+  ];
+  for (const [label, mutate] of tampered) {
+    const o = structuredClone(original) as unknown as Record<string, unknown>;
+    mutate(o);
+    row.outcome = o as unknown as StoredOutcome;
+    const r = await gatewayExecute(d, "jwt-a", ideas());
+    assert.deepEqual([r.ok, !r.ok && r.code], [false, "UNKNOWN"], label);
+  }
+  assert.equal(net.calls.length, 1, "never resent");
+  // A new policy revision is another operation content: the same operation id is refused, not replayed or resent.
+  row.outcome = original;
+  const bumped = deps(net.fetch, new RecordingLedger(), new Authority(), store, { ...pol, revision: "r2" });
+  const r = await gatewayExecute(bumped, "jwt-a", ideas());
+  assert.deepEqual([r.ok, !r.ok && r.code, net.calls.length], [false, "OPERATION_REUSED", 1]);
+});
+
+Deno.test("GAP-3 fixed: a policy without a usable revision or store role is refused before anything happens", async () => {
+  for (const over of [{ revision: "" }, { revision: undefined as unknown as string }, { revision: "r 1" }, { logicalRole: "bad role" }]) {
+    const net = recordingFetch(ok("どうぞ").openai);
+    const ledger = new RecordingLedger();
+    const store = new Store();
+    const r = await gatewayExecute(deps(net.fetch, ledger, new Authority(), store, policy("openai", over)), "jwt-a", ideas());
+    assert.deepEqual([r.ok, !r.ok && r.code], [false, "POLICY_MISSING"], JSON.stringify(over));
+    assert.deepEqual([net.calls.length, ledger.events.length, store.rows.size], [0, 0, 0]);
   }
 });
 

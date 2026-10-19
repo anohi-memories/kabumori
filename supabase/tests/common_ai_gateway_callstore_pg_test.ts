@@ -1,10 +1,10 @@
 // Disposable-PostgreSQL conformance of the cross-app common AI gateway (PR284 reference, unchanged) against the REAL
 // ledger migration (20261010050613) and the REAL call store migration (20261017120000, ai_calls), with the REAL
-// SupabaseLedgerBudgetGuard and the REAL provider adapters (OpenAI and Anthropic). Test-only adapters: two CallStores
-// over the public.ai_calls_* RPCs (a direct one and an audit-mapping one) and a fetch that turns the guard's PostgREST
-// requests into the same RPCs; both run psql AS service_role on the local socket the runner gives. The providers are
-// fake fetches: no network, fake keys. Tests named "GAP-n" pin a current behaviour recorded as a gap in
-// docs/ai-provider/F6_GATEWAY_PROVIDER_LEDGER_CALLSTORE_CONFORMANCE.md.
+// SupabaseLedgerBudgetGuard and the REAL provider adapters (OpenAI and Anthropic). Test-only adapters: a CallStore that
+// hands the gateway's stored outcome to the public.ai_calls_* RPCs UNCHANGED (the gateway maps its audit to the store's
+// nine keys itself since the GAP-3 fix) and a fetch that turns the guard's PostgREST requests into the same RPCs; both
+// run psql AS service_role on the local socket the runner gives. The providers are fake fetches: no network, fake keys.
+// "GAP-n fixed" tests assert the fixes of docs/ai-provider/F6_GATEWAY_GAP_FIXES.md against the real SQL.
 // Run by supabase/tests/common_ai_gateway_callstore_pg_run.sh; skipped when its environment is absent.
 import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
@@ -17,12 +17,14 @@ import {
   type CallClaim,
   type CallIdentity,
   type CallStore,
+  type ClaimContext,
   type FeaturePolicy,
   gatewayExecute,
   type GatewayAudit,
   type GatewaySubject,
   policyKey,
   type StoredOutcome,
+  toStoreAudit,
 } from "./common_ai_cross_app_gateway_reference.ts";
 
 const HOST = Deno.env.get("GWC_PGHOST");
@@ -39,7 +41,7 @@ const USER_B = "00000000-0000-4000-8000-0000000000b2";
 const BRAND_A = { app: "postona" as const, slug: "u_ae343f5caedb67d4af33fc7a" };
 const BRAND_A2 = { app: "postona" as const, slug: "u_0b1c2d3e4f5061728394a5b6" };
 const HOUR = 3_600_000;
-const POLICY_VERSION = "gateway-ref-2026-10-19";
+const REVISION = "r2026-10-19";
 
 async function psql(statement: string): Promise<{ ok: boolean; out: string; err: string }> {
   const output = await new Deno.Command("psql", {
@@ -69,11 +71,23 @@ async function rows(sql: string): Promise<string> {
   return result.out;
 }
 
+/**
+ * Test-only ledger faults: "down" fails an RPC before it runs; "lost" runs it (COMMITTED) and then loses the
+ * response. Each fault applies to the named RPC `count` times.
+ */
+const ledgerFault: { rpc: string; mode: "down" | "lost"; count: number } = { rpc: "", mode: "down", count: 0 };
 /** The guard's PostgREST request -> the same RPC through psql (never a network request). */
 const ledgerFetch: FetchLike = async (input, init) => {
   const match = new URL(String(input)).pathname.match(/^\/rest\/v1\/rpc\/(ai_ledger_[a-z_]+)$/);
   if (!match || init?.method !== "POST") return new Response("{}", { status: 404 });
+  const faulted = ledgerFault.count > 0 && ledgerFault.rpc === match[1];
+  if (faulted) ledgerFault.count -= 1;
+  if (faulted && ledgerFault.mode === "down") throw new TypeError("ledger unreachable");
   try {
+    if (faulted) {
+      await rpc(match[1], (JSON.parse(String(init.body)) as { p: unknown }).p);
+      return new Response(JSON.stringify({ code: "504" }), { status: 504 });
+    }
     const body = JSON.parse(String(init.body)) as { p: unknown };
     return new Response(JSON.stringify(await rpc(match[1], body.p)), { status: 200, headers: { "content-type": "application/json" } });
   } catch {
@@ -81,80 +95,32 @@ const ledgerFetch: FetchLike = async (input, init) => {
   }
 };
 
-function claimParams(identity: CallIdentity, context: { app: AppId; feature: string; subject: GatewaySubject }) {
+function claimParams(identity: CallIdentity, context: ClaimContext) {
   const s = context.subject;
   return {
     call_key: identity.key,
     tenant_tag: identity.tenantTag,
     fingerprint: identity.fingerprint,
     application: context.app,
-    feature: policyKey(context.app, context.feature),
+    feature: context.storeFeature,
     subject_kind: s.kind,
     ...(s.kind === "user" ? { user_id: s.userId, ...(s.brand ? { brand_ref: s.brand.slug } : {}) } : {}),
   };
 }
 
-/** GAP-3 probe: hands the gateway's own outcome to ai_calls unchanged. */
-class DirectSqlStore implements CallStore {
-  async claim(identity: CallIdentity, context: { app: AppId; feature: string; subject: GatewaySubject }): Promise<CallClaim> {
+/** The gateway's stored outcome goes to ai_calls unchanged; what the store returns goes back unchanged. */
+class SqlCallStore implements CallStore {
+  loseNextComplete: "before_write" | "after_write" | null = null;
+  async claim(identity: CallIdentity, context: ClaimContext): Promise<CallClaim> {
     const c = await rpc("ai_calls_claim", claimParams(identity, context)) as Record<string, unknown>;
     return c.kind === "complete" ? { kind: "complete", fingerprint: String(c.fingerprint), outcome: c.result as StoredOutcome } : c as CallClaim;
-  }
-  async complete(identity: CallIdentity, owner: string, outcome: StoredOutcome): Promise<void> {
-    await rpc("ai_calls_complete", { call_key: identity.key, tenant_tag: identity.tenantTag, fingerprint: identity.fingerprint, owner, result: outcome });
-  }
-}
-
-/**
- * Test adapter that makes the gateway outcome storable: GatewayAudit (8 keys) <-> the store's 9-key Audit. The store
- * needs role and policyVersion, which the gateway outcome does not carry; this adapter supplies them from the policy
- * registry and a fixed version (GAP-3). It is a proof of the SQL contract, not the store to ship.
- */
-class MappedSqlStore implements CallStore {
-  loseNextComplete: "before_write" | "after_write" | null = null;
-  constructor(private readonly policies: ReadonlyMap<string, FeaturePolicy>) {}
-  private context = new Map<string, { app: AppId; feature: string }>();
-  static toStore(a: GatewayAudit, role: string, ledgerKey: string) {
-    return {
-      callId: a.callKey,
-      tenantTag: a.tenantTag,
-      feature: ledgerKey,
-      role,
-      model: a.model,
-      policyVersion: POLICY_VERSION,
-      attempts: a.attempts,
-      estimatedCostUsd: a.estimatedCostUsd,
-      costBasis: a.costBasis,
-    };
-  }
-  async claim(identity: CallIdentity, context: { app: AppId; feature: string; subject: GatewaySubject }): Promise<CallClaim> {
-    this.context.set(identity.key, { app: context.app, feature: context.feature });
-    const c = await rpc("ai_calls_claim", claimParams(identity, context)) as Record<string, unknown>;
-    if (c.kind !== "complete") return c as CallClaim;
-    const r = c.result as { ok: boolean; data?: unknown; code?: string; audit: Record<string, unknown> };
-    const audit: GatewayAudit = {
-      callKey: String(r.audit.callId),
-      tenantTag: String(r.audit.tenantTag),
-      app: context.app,
-      feature: context.feature,
-      model: String(r.audit.model),
-      attempts: Number(r.audit.attempts),
-      estimatedCostUsd: Number(r.audit.estimatedCostUsd),
-      costBasis: r.audit.costBasis as GatewayAudit["costBasis"],
-    };
-    const outcome = (r.ok ? { ok: true, data: r.data, audit } : { ok: false, code: r.code, audit }) as StoredOutcome;
-    return { kind: "complete", fingerprint: String(c.fingerprint), outcome };
   }
   async complete(identity: CallIdentity, owner: string, outcome: StoredOutcome): Promise<void> {
     if (this.loseNextComplete === "before_write") {
       this.loseNextComplete = null;
       throw new Error("response_lost");
     }
-    const ctx = this.context.get(identity.key)!;
-    const key = policyKey(ctx.app, ctx.feature);
-    const audit = MappedSqlStore.toStore(outcome.audit, this.policies.get(key)!.logicalRole, key);
-    const result = outcome.ok ? { ok: true, data: outcome.data, audit } : { ok: false, code: outcome.code, audit };
-    await rpc("ai_calls_complete", { call_key: identity.key, tenant_tag: identity.tenantTag, fingerprint: identity.fingerprint, owner, result });
+    await rpc("ai_calls_complete", { call_key: identity.key, tenant_tag: identity.tenantTag, fingerprint: identity.fingerprint, owner, result: outcome });
     if (this.loseNextComplete === "after_write") {
       this.loseNextComplete = null;
       throw new Error("response_lost");
@@ -167,6 +133,7 @@ function policy(app: AppId, feature: string, provider: Provider, over: Partial<F
   return {
     app,
     feature,
+    revision: REVISION,
     ledgerFeature: feature,
     logicalRole: `${app}.${feature}`,
     provider,
@@ -202,11 +169,16 @@ const VERDICTS: Record<string, AuthVerdict> = {
 };
 class Authority implements AuthorityPort {
   revokeOnRecheck = false;
+  /** Revoke from this recheck on (1-based); 0 = never. */
+  revokeFrom = 0;
+  private rechecks = 0;
   verdict(credential: unknown): Promise<AuthVerdict> {
     return Promise.resolve(structuredClone(VERDICTS[String(credential)]));
   }
   recheck(prior: AuthVerdict): Promise<AuthVerdict> {
-    return Promise.resolve(this.revokeOnRecheck ? { ...prior, decision: "deny" } : structuredClone(prior));
+    const n = ++this.rechecks;
+    const revoke = this.revokeOnRecheck || (this.revokeFrom > 0 && n >= this.revokeFrom);
+    return Promise.resolve(revoke ? { ...prior, decision: "deny" } : structuredClone(prior));
   }
 }
 
@@ -215,15 +187,15 @@ const okBody = (reply: string): Responder => (call) =>
     ? jsonResponse(200, anthropicBody({ reply }, { model: MODEL.anthropic }))
     : jsonResponse(200, openAiBody({ reply }, { model: MODEL.openai }));
 
-function world(options: { respond?: Responder; store?: "direct" | "mapped"; authority?: Authority } = {}) {
+function world(options: { respond?: Responder; authority?: Authority; policies?: Map<string, FeaturePolicy> } = {}) {
   const net = recordingFetch(options.respond ?? okBody("どうぞ"));
   const key = resolveSecret("GWC_LEDGER_KEY", () => "local-gwc-key-not-a-secret");
   assert.ok(key.ok);
-  const store = options.store === "direct" ? new DirectSqlStore() : new MappedSqlStore(POLICIES);
+  const store = new SqlCallStore();
   const authority = options.authority ?? new Authority();
   const deps = {
     authority,
-    policies: POLICIES,
+    policies: options.policies ?? POLICIES,
     provider: {
       readEnv: (name: string) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),
       fetch: net.fetch,
@@ -249,19 +221,102 @@ Deno.test({ name: "setup: fully scoped ledger policies per app / feature / provi
            ('gwc.kabumori.market_report.system.daily', 'anthropic', 'claude-haiku-5-5', 'kabumori', 'market_report', 'system', false, 'day', 10, 1, 0.05)`);
 });
 
-Deno.test({ name: "GAP-3: the gateway's own outcome is not a shape ai_calls stores -> UNKNOWN after ONE send, the row stays acquired (IN_PROGRESS) until recovery; never resent", ...opts }, async () => {
-  const w = world({ store: "direct" });
-  const first = await w.run("jwt-a", ideas({ operationId: "op-gap3-000001" }));
-  assert.deepEqual([first.ok, !first.ok && first.code], [false, "UNKNOWN"]);
-  const callKey = first.audit!.callKey;
-  assert.equal(await rows(`select state from ai_calls.consumer_calls where call_key = '${callKey}'`), "acquired");
-  assert.equal(await rows(`select status from ai_ledger.reservations where request_id = '${callKey}'`), "settled", "the ledger charged the one request");
-  const again = await w.run("jwt-a", ideas({ operationId: "op-gap3-000001" }));
-  assert.deepEqual([again.ok, !again.ok && again.code], [false, "IN_PROGRESS"]);
+Deno.test({ name: "GAP-3 fixed (both providers): the gateway's stored outcome is accepted by ai_calls as is -> complete row with the nine-key audit; no UNKNOWN, nothing left in progress; replay rebuilds the same answer without sending", ...opts }, async () => {
+  for (const [req, role, model] of [[ideas({ operationId: "op-gap3-000001" }), "postona.ideas", MODEL.openai], [consult({ operationId: "op-gap3-000002" }), "postona.consult", MODEL.anthropic]] as const) {
+    const w = world();
+    const first = await w.run("jwt-a", req);
+    assert.equal(first.ok, true, model);
+    const k = first.audit!.callKey;
+    assert.equal(await rows(`select state from ai_calls.consumer_calls where call_key = '${k}'`), "complete");
+    const audit = JSON.parse(await rows(`select audit::text from ai_calls.consumer_calls where call_key = '${k}'`));
+    assert.deepEqual(audit, {
+      callId: k,
+      tenantTag: first.audit!.tenantTag,
+      feature: `postona:${req.feature}`,
+      role,
+      model,
+      policyVersion: REVISION,
+      attempts: 1,
+      estimatedCostUsd: first.audit!.estimatedCostUsd,
+      costBasis: "measured",
+    }, model);
+    assert.ok(Number(await rows(`select sum(estimated_cost_usd) from ai_ledger.usage_events where request_id = '${k}'`)) <= audit.estimatedCostUsd + 1e-6, "the audit never shows less than the ledger");
+    assert.deepEqual(await world().run("jwt-a", req), first, model);
+    assert.equal(w.net.calls.length, 1);
+  }
+  assert.equal(await rows(`select count(*) from ai_calls.consumer_calls where state = 'acquired' and call_key in (select request_id from ai_ledger.reservations)`), "0");
+});
+
+Deno.test({ name: "GAP-3 fixed: a stored audit changed in the database (role / version / feature) replays as UNKNOWN, never resent; a new policy revision is OPERATION_REUSED", ...opts }, async () => {
+  const w = world();
+  const first = await w.run("jwt-a", ideas({ operationId: "op-gap3-tamper1" }));
+  assert.equal(first.ok, true);
+  const k = first.audit!.callKey;
+  for (const [field, value] of [["role", "postona.consult"], ["policyVersion", "r0"]]) {
+    await rows(`set session_replication_role = replica; update ai_calls.consumer_calls set result = jsonb_set(result, '{audit,${field}}', '"${value}"') where call_key = '${k}'`);
+    const r = await w.run("jwt-a", ideas({ operationId: "op-gap3-tamper1" }));
+    assert.deepEqual([r.ok, !r.ok && r.code], [false, "UNKNOWN"], field);
+    await rows(`set session_replication_role = replica; update ai_calls.consumer_calls set result = jsonb_set(result, '{audit}', audit) where call_key = '${k}'`);
+  }
+  assert.deepEqual(await w.run("jwt-a", ideas({ operationId: "op-gap3-tamper1" })), first, "restored row replays again");
+  const bumped = new Map(POLICIES);
+  bumped.set(policyKey("postona", "ideas"), { ...POLICIES.get(policyKey("postona", "ideas"))!, revision: "r2026-10-20" });
+  const r = await world({ policies: bumped }).run("jwt-a", ideas({ operationId: "op-gap3-tamper1" }));
+  assert.deepEqual([r.ok, !r.ok && r.code], [false, "OPERATION_REUSED"]);
   assert.equal(w.net.calls.length, 1);
 });
 
-Deno.test({ name: "mapped store: one operation = one ai_calls row + one ledger reservation under the same key, for both providers; a new gateway instance replays without sending", ...opts }, async () => {
+Deno.test({ name: "GAP-1 fixed (real SQL, both providers): revoked before the second attempt -> AUTH_REVOKED_BEFORE_SEND; first reservation settled at 0, second released; POLICY_DENIED stored with attempts 1; replay NOT_SENT", ...opts }, async () => {
+  const twoAttempts = new Map(POLICIES);
+  for (const key of [policyKey("postona", "ideas"), policyKey("postona", "consult")]) twoAttempts.set(key, { ...POLICIES.get(key)!, maxAttempts: 2 });
+  for (const req of [ideas({ operationId: "op-gap1-openai1" }), consult({ operationId: "op-gap1-claude1" })]) {
+    const authority = new Authority();
+    authority.revokeFrom = 2;
+    const w = world({
+      authority,
+      policies: twoAttempts,
+      respond: (call) => String(call.url).includes("anthropic") ? jsonResponse(429, { type: "error", error: { type: "rate_limit_error", message: "x" } }) : jsonResponse(429, { error: { type: "rate_limit_error" } }),
+    });
+    const r = await w.run("jwt-a", req);
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.attempts, r.audit?.costBasis], [false, "AUTH_REVOKED_BEFORE_SEND", 1, "measured"], req.feature);
+    const k = r.audit!.callKey;
+    assert.equal(await rows(`select string_agg(attempt || ':' || status, ',' order by attempt) from ai_ledger.reservations where request_id = '${k}'`), "1:settled,2:released");
+    assert.equal(await rows(`select (result ->> 'code') || '|' || (audit ->> 'attempts') from ai_calls.consumer_calls where call_key = '${k}'`), "POLICY_DENIED|1");
+    const replay = await world({ policies: twoAttempts }).run("jwt-a", req);
+    assert.deepEqual([replay.ok, !replay.ok && replay.code], [false, "NOT_SENT"]);
+    assert.equal(w.net.calls.length, 1);
+  }
+});
+
+Deno.test({ name: "GAP-2 fixed (real SQL): the ledger unreachable -> LEDGER_UNAVAILABLE, nothing sent, no reservation; same operation NOT_SENT after recovery; a new operation goes through", ...opts }, async () => {
+  for (const rpcName of ["ai_ledger_reserve", "ai_ledger_mark_sent"]) {
+    Object.assign(ledgerFault, { rpc: rpcName, mode: "down", count: 1 });
+    const w = world();
+    const op = `op-gap2-${rpcName.slice(10, 16)}1`;
+    const r = await w.run("jwt-a", ideas({ operationId: op }));
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, w.net.calls.length], [false, "LEDGER_UNAVAILABLE", "no_request", 0], rpcName);
+    const k = r.audit!.callKey;
+    assert.equal(await rows(`select coalesce(string_agg(status, ','), '-') from ai_ledger.reservations where request_id = '${k}'`), rpcName === "ai_ledger_reserve" ? "-" : "released", rpcName);
+    assert.equal(await rows(`select result ->> 'code' from ai_calls.consumer_calls where call_key = '${k}'`), "POLICY_DENIED");
+    const again = await w.run("jwt-a", ideas({ operationId: op }));
+    assert.deepEqual([again.ok, !again.ok && again.code, w.net.calls.length], [false, "NOT_SENT", 0], rpcName);
+    const fresh = await w.run("jwt-a", ideas({ operationId: `${op}-new` }));
+    assert.deepEqual([fresh.ok, w.net.calls.length], [true, 1], rpcName);
+  }
+});
+
+Deno.test({ name: "GAP-2 / GAP-4 (real SQL): mark_sent COMMITTED but its answer lost -> nothing sent, LEDGER_UNAVAILABLE; the ledger keeps the attempt 'sent' (release refused) for recovery at the upper bound: the ledger may over-count, never under-count", ...opts }, async () => {
+  Object.assign(ledgerFault, { rpc: "ai_ledger_mark_sent", mode: "lost", count: 1 });
+  const w = world();
+  const r = await w.run("jwt-a", ideas({ operationId: "op-gap2-lostms1" }));
+  assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, w.net.calls.length], [false, "LEDGER_UNAVAILABLE", "no_request", 0]);
+  const k = r.audit!.callKey;
+  assert.equal(await rows(`select status from ai_ledger.reservations where request_id = '${k}'`), "sent");
+  assert.equal(await rows(`select count(*) from ai_ledger.usage_events where request_id = '${k}'`), "0");
+  assert.equal(await rows(`select result ->> 'code' from ai_calls.consumer_calls where call_key = '${k}'`), "POLICY_DENIED");
+});
+
+Deno.test({ name: "real SQL: one operation = one ai_calls row + one ledger reservation under the same key, for both providers; a new gateway instance replays without sending", ...opts }, async () => {
   for (const [label, req, credential] of [["openai ideas", ideas(), "jwt-a"], ["anthropic consult", consult(), "jwt-a"], ["anthropic kabumori system", { app: "kabumori", feature: "market_report", operationId: "run-2026-10-19-close", input: "市況", brand: null }, "cron-kabumori"]] as const) {
     const w = world();
     const r = await w.run(credential, req);
@@ -286,7 +341,7 @@ Deno.test({ name: "mapped store: one operation = one ai_calls row + one ledger r
   }
 });
 
-Deno.test({ name: "mapped store: other content under the same operation id -> OPERATION_REUSED; parallel duplicates -> ONE request, the other IN_PROGRESS", ...opts }, async () => {
+Deno.test({ name: "real SQL: other content under the same operation id -> OPERATION_REUSED; parallel duplicates -> ONE request, the other IN_PROGRESS", ...opts }, async () => {
   const w = world();
   assert.equal((await w.run("jwt-a", ideas({ operationId: "op-drift-00001" }))).ok, true);
   const drift = await w.run("jwt-a", ideas({ operationId: "op-drift-00001", input: "別の内容" }));
@@ -304,7 +359,7 @@ Deno.test({ name: "mapped store: other content under the same operation id -> OP
   assert.equal(p.net.calls.length, 1);
 });
 
-Deno.test({ name: "mapped store: the same operation id for another person / brand is another row, another ledger key, its own charge", ...opts }, async () => {
+Deno.test({ name: "real SQL: the same operation id for another person / brand is another row, another ledger key, its own charge", ...opts }, async () => {
   const keys: string[] = [];
   for (const credential of ["jwt-a", "jwt-a2", "jwt-b"]) {
     const brand = credential === "jwt-a2" ? BRAND_A2 : BRAND_A;
@@ -318,7 +373,7 @@ Deno.test({ name: "mapped store: the same operation id for another person / bran
   assert.equal(await rows(`select user_id from ai_calls.consumer_calls where call_key = '${keys[2]}'`), USER_B);
 });
 
-Deno.test({ name: "mapped store: revoked before the send -> nothing sent, the ledger reservation is released (no usage row), POLICY_DENIED stored, replay NOT_SENT", ...opts }, async () => {
+Deno.test({ name: "real SQL: revoked before the send -> nothing sent, the ledger reservation is released (no usage row), POLICY_DENIED stored, replay NOT_SENT", ...opts }, async () => {
   const authority = new Authority();
   authority.revokeOnRecheck = true;
   const w = world({ authority });
@@ -334,7 +389,7 @@ Deno.test({ name: "mapped store: revoked before the send -> nothing sent, the le
   assert.equal(w.net.calls.length, 0);
 });
 
-Deno.test({ name: "mapped store: the ledger's daily limit -> QUOTA_EXCEEDED before any request (no reservation), stored BUDGET_DENIED and replayed", ...opts }, async () => {
+Deno.test({ name: "real SQL: the ledger's daily limit -> QUOTA_EXCEEDED before any request (no reservation), stored BUDGET_DENIED and replayed", ...opts }, async () => {
   const w = world();
   assert.equal((await w.run("jwt-a", { app: "postona", feature: "quota", operationId: "op-quota-00001", input: "1", brand: BRAND_A })).ok, true);
   const denied = await w.run("jwt-a", { app: "postona", feature: "quota", operationId: "op-quota-00002", input: "2", brand: BRAND_A });
@@ -346,7 +401,7 @@ Deno.test({ name: "mapped store: the ledger's daily limit -> QUOTA_EXCEEDED befo
   assert.equal(w.net.calls.length, 1);
 });
 
-Deno.test({ name: "mapped store, both providers: 504 -> UNKNOWN at the upper bound in the ledger and the store; replay never resends", ...opts }, async () => {
+Deno.test({ name: "real SQL, both providers: 504 -> UNKNOWN at the upper bound in the ledger and the store; replay never resends", ...opts }, async () => {
   for (const req of [ideas({ operationId: "op-504-openai1" }), consult({ operationId: "op-504-claude1" })]) {
     const w = world({ respond: () => jsonResponse(504, { type: "error", error: { type: "timeout_error", message: "late" } }) });
     const first = await w.run("jwt-a", req);
@@ -360,9 +415,9 @@ Deno.test({ name: "mapped store, both providers: 504 -> UNKNOWN at the upper bou
   }
 });
 
-Deno.test({ name: "mapped store: a lost completion stays IN_PROGRESS until recovery abandons it with an audit that agrees with the ledger; then UNKNOWN, never resent", ...opts }, async () => {
+Deno.test({ name: "real SQL: a lost completion stays IN_PROGRESS until recovery abandons it with an audit that agrees with the ledger; then UNKNOWN, never resent", ...opts }, async () => {
   const w = world();
-  (w.store as MappedSqlStore).loseNextComplete = "before_write";
+  (w.store as SqlCallStore).loseNextComplete = "before_write";
   const lost = await w.run("jwt-a", ideas({ operationId: "op-lost-000001" }));
   assert.deepEqual([lost.ok, !lost.ok && lost.code], [false, "UNKNOWN"]);
   const busy = await w.run("jwt-a", ideas({ operationId: "op-lost-000001" }));
@@ -371,7 +426,7 @@ Deno.test({ name: "mapped store: a lost completion stays IN_PROGRESS until recov
   await rows(`set session_replication_role = replica; update ai_calls.consumer_calls set created_at = created_at - interval '1 hour' where call_key = '${k}'`);
   const cost = Number(await rows(`select sum(estimated_cost_usd) from ai_ledger.usage_events where request_id = '${k}'`));
   // The gateway's audit, mapped as the store adapter would: the store checks it against the ledger.
-  const audit = MappedSqlStore.toStore({ ...lost.audit!, attempts: 1, estimatedCostUsd: cost, costBasis: "measured" }, "postona.ideas", "postona:ideas");
+  const audit = toStoreAudit({ ...lost.audit!, attempts: 1, estimatedCostUsd: cost, costBasis: "measured" }, POLICIES.get(policyKey("postona", "ideas"))!);
   await assert.rejects(rpc("ai_calls_abandon", { call_key: k, audit: { ...audit, attempts: 0, costBasis: "no_request", estimatedCostUsd: 0 } }), /AUDIT_LEDGER_MISMATCH/);
   assert.ok(cost > 0);
   await assert.rejects(rpc("ai_calls_abandon", { call_key: k, audit: { ...audit, estimatedCostUsd: 0 } }), /AUDIT_LEDGER_MISMATCH/, "never less cost than the ledger charged");
@@ -381,7 +436,7 @@ Deno.test({ name: "mapped store: a lost completion stays IN_PROGRESS until recov
   assert.equal(w.net.calls.length, 1);
 
   const v = world();
-  (v.store as MappedSqlStore).loseNextComplete = "after_write";
+  (v.store as SqlCallStore).loseNextComplete = "after_write";
   const lostAfter = await v.run("jwt-a", ideas({ operationId: "op-lost-000002" }));
   assert.deepEqual([lostAfter.ok, !lostAfter.ok && lostAfter.code], [false, "UNKNOWN"]);
   assert.equal((await v.run("jwt-a", ideas({ operationId: "op-lost-000002" }))).ok, true, "written before the response was lost: served");
@@ -397,7 +452,7 @@ Deno.test({ name: "code map: the six codes the gateway stores are all accepted b
     const tenant = "a".repeat(64);
     const fingerprint = "b".repeat(64);
     const claim = await rpc("ai_calls_claim", { call_key: key, tenant_tag: tenant, fingerprint, application: "postona", feature: "postona:ideas", subject_kind: "user", user_id: USER_A }) as { owner: string };
-    const audit = { callId: key, tenantTag: tenant, feature: "postona:ideas", role: "postona.ideas", model: "gpt-6-luna", policyVersion: POLICY_VERSION, attempts: 0, estimatedCostUsd: 0, costBasis: "no_request" };
+    const audit = { callId: key, tenantTag: tenant, feature: "postona:ideas", role: "postona.ideas", model: "gpt-6-luna", policyVersion: REVISION, attempts: 0, estimatedCostUsd: 0, costBasis: "no_request" };
     const done = rpc("ai_calls_complete", { call_key: key, tenant_tag: tenant, fingerprint, owner: claim.owner, result: { ok: false, code, audit } });
     if (accepted) assert.deepEqual(await done, { state: "complete", duplicate: false }, code);
     else await assert.rejects(done, /AI_CALLS_INVALID_INPUT/, code);
@@ -409,7 +464,7 @@ Deno.test({ name: "code map: the six codes the gateway stores are all accepted b
   const fingerprint = "d".repeat(64);
   const claim = await rpc("ai_calls_claim", { call_key: key, tenant_tag: tenant, fingerprint, application: "postona", feature: "postona:ideas", subject_kind: "user", user_id: USER_A }) as { owner: string };
   const gatewayAudit: GatewayAudit = { callKey: key, tenantTag: tenant, app: "postona", feature: "ideas", model: "gpt-6-luna", attempts: 0, estimatedCostUsd: 0, costBasis: "no_request" };
-  const storeAudit = MappedSqlStore.toStore(gatewayAudit, "postona.ideas", "postona:ideas");
+  const storeAudit = toStoreAudit(gatewayAudit, POLICIES.get(policyKey("postona", "ideas"))!);
   const { callKey: _k, ...rest } = gatewayAudit;
   for (const [label, audit] of [
     ["gateway audit as is", gatewayAudit],
