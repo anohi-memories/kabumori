@@ -1,0 +1,5 @@
+# tests/threads-disconnect.test.mjs on G4 PR #373 HEAD 61e94a10026df2eb6aa5f3acdc4f4512c4cb96fd (parent of #381)
+✔ parity: the database's exact answers through the REAL server handler parse in the app as intended (54.840958ms)
+ℹ tests 17
+ℹ pass 17
+ℹ fail 0
