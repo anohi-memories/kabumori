@@ -123,8 +123,11 @@ async function preclaim(p: Person, members: [string, string][], kind = 'social_m
 // =============================================================================================================================================
 test_('install: one STABLE definer function with an empty search path, EXECUTE to authenticated only, no brand or person parameter; a second install is refused; rollback and re-install', async () => {
   assert.equal(await sql(`select array_to_string(proacl::text[], ',') from pg_proc where oid = '${R0}(text,text)'::regprocedure`), `${owner}=X/${owner},authenticated=X/${owner}`);
-  assert.equal(await sql(`select (provolatile = 's' and prosecdef and proconfig @> array['search_path=""'] and proowner = (select oid from pg_roles where rolname = current_user))::text
+  assert.equal(await sql(`select (provolatile = 's' and prosecdef and proconfig @> array['search_path=""', 'row_security=off'] and proowner = (select oid from pg_roles where rolname = current_user))::text
     from pg_proc where oid = '${R0}(text,text)'::regprocedure`), 'true');
+  assert.equal(await sql(`select count(*) from pg_proc where oid in ('public.common_account_authorization_verdict(text,text,text)'::regprocedure,
+    'private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure, 'public.common_account_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure,
+    'private.account_lifecycle_generation_covered()'::regprocedure) and proconfig @> array['row_security=off']`), '4', 'R1 / W1 / W2 / GC run with row_security = off too');
   assert.equal(await sql(`select pg_get_function_identity_arguments('${R0}(text,text)'::regprocedure)`), 'p_app text, p_feature text');
   assert.ok(/BOOTSTRAP_VERDICT_ALREADY_APPLIED/u.test((await run(owner, ['-f', candidate()])).error));
   assert.ok((await run(owner, ['-f', rollback()])).ok);
@@ -363,6 +366,152 @@ test_('the install refuses, and leaves nothing, when a precondition or the role 
     await sql(`alter default privileges in schema public revoke execute on functions from anon, service_role`);
   }
   assert.equal(await gone(), '1', 'installed again at the end');
+});
+
+// ---- G5-08: every row the verdicts read must be visible to their owner (H1 C1 P2 on PR #383) ----------------------------------------------
+const otherRole = () => Deno.env.get('BV_OTHER') ?? '';
+const r1Candidate = () => Deno.env.get('BV_R1_CANDIDATE') ?? '';
+const r1Rollback = () => Deno.env.get('BV_R1_ROLLBACK') ?? '';
+async function superSql(statement: string): Promise<string> {
+  const r = await psqlSuper(statement);
+  if (!r.ok) throw new Error(r.error);
+  return r.out;
+}
+/** H1's layout on `table`: owned by ANOTHER role, ordinary RLS on (NOT forced), every table privilege granted to the function owner. The table's
+ *  own main policies (to authenticated: members / own rows only) then filter the function owner, which is a member of authenticated. */
+async function hostile<T>(table: string, body: () => Promise<T>, options: { inherit?: boolean; noInherit?: boolean; bypass?: boolean } = {}): Promise<T> {
+  const rls = await sql(`select relrowsecurity::text from pg_class where oid = '${table}'::regclass`);
+  await superSql(`alter table ${table} owner to ${otherRole()}; grant all on ${table} to ${owner}; alter table ${table} enable row level security`);
+  if (options.inherit) await superSql(`grant ${otherRole()} to ${owner}`);
+  if (options.noInherit) await superSql(`grant ${otherRole()} to ${owner} with inherit false, set true`);
+  if (options.bypass) await superSql(`alter role ${owner} bypassrls`);
+  try {
+    return await body();
+  } finally {
+    if (options.bypass) await superSql(`alter role ${owner} nobypassrls`);
+    if (options.inherit || options.noInherit) await superSql(`revoke ${otherRole()} from ${owner}`);
+    await superSql(`alter table ${table} owner to ${owner}; revoke all on ${table} from ${otherRole()}${rls === 'true' ? '' : `; alter table ${table} disable row level security`}`);
+  }
+}
+const RLS_ERROR = /query would be affected by row-level security policy for table/u;
+const installs = (file: string) => run(owner, ['-f', file]);
+const reinstallAll = async () => {
+  for (const rb of [rollback(), r1Rollback()]) assert.ok((await installs(rb)).ok);
+  for (const file of [r1Candidate(), candidate()]) {
+    const r = await installs(file);
+    assert.ok(r.ok, r.error);
+  }
+};
+
+test_('H1 C1 P2: a pre-claimed workspace that RLS hides from the function owner is an ERROR at the call and a refusal at the install (R0 and R1); 0 begin, 0 exchange', async () => {
+  const victim = await person();
+  const someone = randomUUID();
+  const ws = await preclaim(victim, [[someone, 'owner']]);
+  assert.equal(why(await agree(victim, 'pre-claimed, every row visible')), 'deny:OWN_WORKSPACE_CONFLICT');
+  try {
+    await hostile('public.brands', async () => {
+      assert.equal(await sql(`select relrowsecurity::text || relforcerowsecurity::text || (relowner = '${otherRole()}'::regrole)::text || has_table_privilege('${owner}', 'public.brands', 'SELECT')::text
+        from pg_class where oid = 'public.brands'::regclass`), 'truefalsetruetrue', 'the layout: RLS on, not forced, another owner, SELECT granted');
+      assert.equal(await sql(`select count(*) from public.brands where id = ${lit(ws)}`), '0', 'the function owner cannot see the pre-claimed workspace');
+      // the call: R0 (installed before the layout turned hostile) raises instead of reading the hidden row as absent
+      const call = await psql(asCaller(legacy(victim), callR0('postona', 'x_connect_bootstrap')));
+      assert.ok(!call.ok && RLS_ERROR.test(call.error) && call.error.includes('"brands"'), `R0 is an error: ${call.error}`);
+      // ... and that guard is what closes the hole: without row_security = off the same call answers allow (H1 C1 P2 reproduced on the real SQL)
+      await sql(`alter function ${R0}(text, text) reset row_security`);
+      try {
+        assert.equal(why(await r0(legacy(victim))), 'allow:null', 'with ordinary row security R0 reads the hidden workspace as absent');
+      } finally {
+        await sql(`alter function ${R0}(text, text) set row_security = off`);
+      }
+      // the G4 port: a non-200 is deny / unreachable, so main's begin and the code exchange never run
+      let begins = 0;
+      let exchanges = 0;
+      const gate = await psql(asCaller(legacy(victim), callR0('postona', 'x_connect_bootstrap')));
+      if (gate.ok && JSON.parse(gate.out).decision === 'allow') {
+        begins += 1;
+        await begin(victim);
+        exchanges += 1;
+      }
+      assert.deepEqual([gate.ok, begins, exchanges], [false, 0, 0]);
+      assert.equal(await superSql(`select string_agg(user_id::text || ':' || role, ',') from public.brand_memberships where brand_id = ${lit(ws)}`), `${someone}:owner`, 'no second owner');
+      // R1 reads the same relation: an error too
+      const r1call = await psql(asCaller(legacy(victim), `select public.common_account_authorization_verdict('postona', 'x_connect', ${lit(ws)})::text`));
+      assert.ok(!r1call.ok && RLS_ERROR.test(r1call.error), `R1 is an error: ${r1call.error}`);
+      // the installs: both refuse this layout and leave nothing
+      assert.ok((await installs(rollback())).ok);
+      const i0 = await installs(candidate());
+      assert.ok(!i0.ok && /BOOTSTRAP_VERDICT_PRECONDITION_RLS_HIDES_ROWS public\.brands/u.test(i0.error), `R0 install refused: ${i0.error}`);
+      assert.equal(await sql(`select count(*) from pg_proc where proname = 'common_account_bootstrap_verdict'`), '0');
+      assert.ok((await installs(r1Rollback())).ok);
+      const i1 = await installs(r1Candidate());
+      assert.ok(!i1.ok && /AUTH_VERDICT_PRECONDITION_RLS_HIDES_ROWS public\.brands/u.test(i1.error), `R1 install refused: ${i1.error}`);
+      assert.equal(await sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict',
+        'common_account_worker_brand_verdict', 'account_lifecycle_generation_covered')`), '0');
+    });
+  } finally {
+    await reinstallAll();
+  }
+  assert.equal(why(await agree(victim, 'pre-claimed, visible again')), 'deny:OWN_WORKSPACE_CONFLICT');
+  // W1 (an owner-only writer's check) on a hidden entitlement / account: an error, never a stale 'active'
+  const a = await person({ workspace: true });
+  const allow = await r0(legacy(a));
+  assert.equal(allow.decision, 'allow');
+  const [epoch, lv] = (await sql(`select private.account_lifecycle_brand_owner_epoch(${lit(await derived(a.user))}) || '|' || lifecycle_version from public.common_accounts where user_id = '${a.user}'`)).split('|');
+  const w1 = `select private.account_lifecycle_worker_brand_verdict(${lit(await derived(a.user))}, 'x_autopost', ${epoch}, ${lv})`;
+  assert.equal(await sql(w1), 'active');
+  for (const [table, name] of [['public.common_accounts', 'common_accounts'], ['public.service_entitlements', 'service_entitlements']] as const) {
+    // common_accounts is read by W1 itself; service_entitlements only inside the helper it calls (P5's service state), under W1's row_security
+    await hostile(table, async () => {
+      const r = await psql(w1);
+      assert.ok(!r.ok && RLS_ERROR.test(r.error) && r.error.includes(`"${name}"`), `W1 is an error for ${table}: ${r.error}`);
+    });
+  }
+  assert.equal(await sql(w1), 'active');
+});
+
+test_('every row visible, the legitimate ways: the table owner\'s privileges (also by inheritance) or BYPASSRLS install and see the pre-claimed workspace; a SET-only (NOINHERIT) membership and a view are refused', async () => {
+  const victim = await person();
+  await preclaim(victim, [[randomUUID(), 'owner']]);
+  const fresh = await person();
+  const reinstallR0 = async (label: string) => {
+    assert.ok((await installs(rollback())).ok);
+    const r = await installs(candidate());
+    assert.ok(r.ok, `${label}: installs (${r.error})`);
+    assert.equal(why(await agree(victim, `${label}: pre-claimed`)), 'deny:OWN_WORKSPACE_CONFLICT');
+    assert.equal(why(await agree(fresh, `${label}: no workspace`)), 'allow:null');
+  };
+  try {
+    // RLS on, the function owner owns the table: PostgreSQL's owner rule shows every row
+    await sql(`alter table public.brands enable row level security`);
+    try {
+      await reinstallR0('RLS on, owned by the function owner');
+    } finally {
+      await sql(`alter table public.brands disable row level security`);
+    }
+    await hostile('public.brands', () => reinstallR0('another owner whose privileges the function owner inherits'), { inherit: true });
+    await hostile('public.brands', () => reinstallR0('another owner, the function owner has BYPASSRLS'), { bypass: true });
+    // a membership WITHOUT inherit (SET only) is not the owner's privileges: PostgreSQL filters, so the install must refuse (not "safe")
+    await hostile('public.brands', async () => {
+      assert.equal(await sql(`select (pg_has_role('${owner}', '${otherRole()}', 'MEMBER') and not pg_has_role('${owner}', '${otherRole()}', 'USAGE'))::text`), 'true');
+      assert.equal(await sql(`select count(*) from public.brands where id = ${lit(await derived(victim.user))}`), '0', 'the owner is filtered');
+      assert.ok((await installs(rollback())).ok);
+      const r = await installs(candidate());
+      assert.ok(!r.ok && /BOOTSTRAP_VERDICT_PRECONDITION_RLS_HIDES_ROWS public\.brands/u.test(r.error), `NOINHERIT is refused: ${r.error}`);
+    }, { noInherit: true });
+    // a view under a relation's name could hide rows with its WHERE: refused
+    await sql(`alter table auth.sessions rename to sessions_bv_table; create view auth.sessions as select * from auth.sessions_bv_table`);
+    try {
+      assert.ok((await installs(rollback())).ok);
+      const r = await installs(candidate());
+      assert.ok(!r.ok && /BOOTSTRAP_VERDICT_PRECONDITION_RELATION auth\.sessions/u.test(r.error), `a view is refused: ${r.error}`);
+    } finally {
+      await sql(`drop view auth.sessions; alter table auth.sessions_bv_table rename to sessions`);
+    }
+  } finally {
+    assert.ok((await installs(rollback())).ok);
+    const r = await installs(candidate());
+    assert.ok(r.ok, r.error);
+  }
 });
 
 test_('no network: the model made no request', () => {

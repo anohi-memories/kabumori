@@ -53,9 +53,9 @@ test('the candidate is a candidate: outside the migration path, wired nowhere, o
 });
 
 test('the shape: three STABLE definer functions with an empty search path; R1 to authenticated, W2 to service_role, nothing else granted; no identity parameter', () => {
-  for (const sig of ['create function public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text)\nreturns jsonb language plpgsql stable security definer set search_path = \'\' as $$',
-    'create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)\nreturns text language plpgsql stable security definer set search_path = \'\' as $$',
-    'create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)\nreturns text language sql stable security definer set search_path = \'\' as $$']) {
+  for (const sig of ['create function public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text)\nreturns jsonb language plpgsql stable security definer set search_path = \'\' set row_security = off as $$',
+    'create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)\nreturns text language plpgsql stable security definer set search_path = \'\' set row_security = off as $$',
+    'create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)\nreturns text language sql stable security definer set search_path = \'\' set row_security = off as $$']) {
     assert.ok(code.includes(sig), sig.split('(')[0]);
   }
   const grants = [...code.matchAll(/grant execute on function ([a-z_.]+)\([^)]*\) to ([a-z_]+);/gu)].map((m) => `${m[1]}->${m[2]}`);
@@ -68,7 +68,7 @@ test('the shape: three STABLE definer functions with an empty search path; R1 to
   assert.ok(!/timestamp|activated_at|now\(|clock_/iu.test(w1), 'W1 compares no time');
   assert.ok(w1.includes('if v_lifecycle is distinct from p_expected_lifecycle_version then') && w1.includes('if v_epoch <> p_expected_owner_epoch then'));
   // G5-05: the generation is checked for exact P1 triggers before / after the install and on every W1 call
-  assert.ok(code.includes('create function private.account_lifecycle_generation_covered()\nreturns boolean language sql stable security definer set search_path = \'\' as $$'));
+  assert.ok(code.includes('create function private.account_lifecycle_generation_covered()\nreturns boolean language sql stable security definer set search_path = \'\' set row_security = off as $$'));
   for (const piece of ['t.tgqual is null', 'pg_catalog.cardinality(t.tgattr::int2[]) = 0', 't.tgconstraint = 0', 'not t.tgdeferrable', 'not t.tginitdeferred', 't.tgnargs = 0',
     't.tgoldtable is null', 't.tgnewtable is null', "t.tgtype = 29", "t.tgtype = 19", 'pg_catalog.pg_rewrite', "t.tgname <> 'account_lifecycle_touch_account'"]) assert.ok(code.includes(piece), piece);
   assert.ok(w1.includes('private.account_lifecycle_generation_covered()') && w1.includes("return 'SERVICE_GENERATION_UNAVAILABLE';"));

@@ -14,8 +14,10 @@
 --
 -- STABLE, SECURITY DEFINER, empty search_path, owned by the lifecycle owner, read-only: no write, no row lock, no workspace, no OAuth state, no
 -- grant beyond the one above. Installed after 001_authorization_verdict.sql (it does not depend on it; the two never call each other). The install
--- refuses unless the F5 chain and the owner-epoch candidate are installed (helpers STABLE / definer / owner-owned), no relation read has RLS FORCED
--- and PR #303's exposure check is clean; its postconditions check the exact ACL and the role graph (direct and indirect membership).
+-- refuses unless the F5 chain and the owner-epoch candidate are installed (helpers STABLE / definer / owner-owned), every relation read is a
+-- table whose EVERY row this owner sees (RLS off, BYPASSRLS, or the table owner's privileges with RLS not FORCED -- G5-08, H1 C1 P2 on PR #383)
+-- and PR #303's exposure check is clean; R0 runs with row_security = off (a relation filtered later is an error, never fewer rows); its
+-- postconditions check the exact ACL and the role graph (direct and indirect membership).
 begin;
 
 set local lock_timeout = '5s';
@@ -25,6 +27,10 @@ declare
   v_owner oid := (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user);
   v_fn text;
   v_rel text;
+  v_kind "char";
+  v_rls boolean;
+  v_forced boolean;
+  v_relowner oid;
 begin
   if (select r.rolsuper from pg_catalog.pg_roles r where r.oid = v_owner) is distinct from false then
     raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_OWNER_IS_SUPERUSER';
@@ -43,14 +49,24 @@ begin
      or (select p.provolatile from pg_catalog.pg_proc p where p.oid = 'auth.uid()'::regprocedure) <> 's' then
     raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_HELPER_SHAPE';
   end if;
-  -- the relations read: readable by this owner, RLS not FORCED
+  -- the relations read: plain tables this owner may SELECT, with EVERY row visible to it (H1 C1 P2 on PR #383). SELECT alone is not enough: a
+  -- SECURITY DEFINER function runs as its owner, and ordinary RLS still filters an owner that neither has the table owner's privileges nor
+  -- BYPASSRLS -- a hidden row (another person's workspace under the derived id, an open deletion) would look absent and an absent workspace is
+  -- an allow. So RLS must be off, or this owner must have BYPASSRLS, or this owner must have the table owner's privileges with RLS not FORCED
+  -- (PostgreSQL's own rule). A view is refused (its WHERE could hide rows). R0 also runs with row_security = off, so a relation that becomes
+  -- filtered after this install raises an error instead of returning fewer rows.
   foreach v_rel in array array['public.common_accounts', 'public.service_entitlements', 'public.brands', 'public.brand_memberships',
                                'private.account_lifecycle_operations', 'auth.users', 'auth.sessions'] loop
-    if to_regclass(v_rel) is null or not pg_catalog.has_table_privilege(v_owner, v_rel, 'SELECT') then
+    select c.relkind, c.relrowsecurity, c.relforcerowsecurity, c.relowner into v_kind, v_rls, v_forced, v_relowner
+      from pg_catalog.pg_class c where c.oid = to_regclass(v_rel);
+    if not found or v_kind not in ('r', 'p') or not pg_catalog.has_table_privilege(v_owner, v_rel, 'SELECT') then
       raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_RELATION %', v_rel;
     end if;
-    if (select c.relforcerowsecurity from pg_catalog.pg_class c where c.oid = to_regclass(v_rel)) then
+    if v_forced then
       raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_RLS_FORCED %', v_rel;
+    end if;
+    if v_rls and not (select r.rolbypassrls from pg_catalog.pg_roles r where r.oid = v_owner) and not pg_catalog.pg_has_role(v_owner, v_relowner, 'USAGE') then
+      raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_RLS_HIDES_ROWS %', v_rel;
     end if;
   end loop;
   if (select count(*) from pg_catalog.pg_attribute a where a.attrelid = 'auth.sessions'::regclass and not a.attisdropped
@@ -71,7 +87,7 @@ end $$;
 
 -- R0: the brand-less bootstrap verdict.
 create function public.common_account_bootstrap_verdict(p_app text, p_feature text)
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql stable security definer set search_path = '' set row_security = off as $$
 declare
   v_scope jsonb := pg_catalog.jsonb_build_object('app', p_app, 'feature', p_feature, 'brand_slug', null);
   v_claims jsonb;
@@ -215,8 +231,8 @@ begin
   if (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_r0) is distinct from format('%s=X/%s,authenticated=X/%s', v_owner, v_owner, v_owner) then
     raise exception 'BOOTSTRAP_VERDICT_POSTCONDITION_ACL';
   end if;
-  if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_r0 and p.provolatile = 's' and p.prosecdef and p.proconfig @> array['search_path=""']
-                  and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)) then
+  if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_r0 and p.provolatile = 's' and p.prosecdef
+                  and p.proconfig @> array['search_path=""', 'row_security=off'] and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)) then
     raise exception 'BOOTSTRAP_VERDICT_POSTCONDITION_SHAPE';
   end if;
   if exists (select 1 from pg_catalog.pg_roles a join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.oid, r.oid, 'MEMBER')

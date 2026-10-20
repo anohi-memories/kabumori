@@ -4,6 +4,10 @@ Status: **SQL source candidate + local PG17 proofs. Not in `supabase/migrations/
 any Edge function or app; no grant outside the throw-away test database.** Production is **NO_GO**. Review: a focused **Codex Sol (high)** security
 review of the SQL is required before anything else, then the G5 担当ちゃ's acceptance and the owner's explicit production approval.
 
+> **G5-08 update (Issue #320 task 8):** the install now also requires every relation read to show the function owner every row (RLS off,
+> BYPASSRLS, or the table owner's privileges with RLS not FORCED; no view), and R1 / W1 / W2 / GC run with `row_security = off` -- the class of
+> H1 C1 P2 on PR #383. See `docs/common-account/g5-08-r0-rls-visibility-fix.md`.
+
 - TASK `common-account-g5-postona-auth-verdict-rpc-sql-source-candidate-20261019` (Issue #320, G5-01 generation, task 3, completion K5).
 - Stacked on PR #344 (G5-02 preflight, ACCEPT `PASS_RPC_PREFLIGHT_SOURCE_CONTRACT`) -> PR #340 (G5-01 contract) -> PR #303 (owner epoch).
 - New G5-owned files: the candidate and its rollback, `supabase/tests/common_account_authorization_verdict_{pg_run.sh,pg_test.ts,mutations.py}`, this document and

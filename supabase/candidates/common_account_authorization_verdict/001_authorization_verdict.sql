@@ -22,9 +22,11 @@
 --         whether the service generation (the owner's lifecycle_version) is moved by EXACTLY F5 P1's two triggers (G5-05, H1 C1 P2 on PR #358);
 --         checked before and after the install and by W1 on every call (W1 answers SERVICE_GENERATION_UNAVAILABLE otherwise).
 --
--- All four are STABLE, SECURITY DEFINER, empty search_path, owned by the lifecycle owner, read-only: no write, no row lock, no table, no grant
--- beyond the two above. The install refuses unless the F5 chain (P1..P10) and the owner-epoch candidate (PR #303) are installed, every helper is
--- STABLE / definer / owner-owned, no relation read has RLS FORCED, PR #303's exposure check is clean (no API role reaches the owner, a
+-- All four are STABLE, SECURITY DEFINER, empty search_path, row_security = off (G5-08: a relation that RLS filters for the owner is an error,
+-- never fewer rows), owned by the lifecycle owner, read-only: no write, no row lock, no table, no grant beyond the two above. The install refuses
+-- unless the F5 chain (P1..P10) and the owner-epoch candidate (PR #303) are installed, every helper is STABLE / definer / owner-owned, every
+-- relation read is a table whose EVERY row this owner sees (RLS off, BYPASSRLS, or the table owner's privileges with RLS not FORCED), PR #303's
+-- exposure check is clean (no API role reaches the owner, a
 -- superuser, TRIGGER, session_replication_role, ...) and GC is true. Its postconditions check the ACL over the role graph (direct and indirect
 -- membership) and GC again.
 begin;
@@ -36,6 +38,10 @@ declare
   v_owner oid := (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user);
   v_fn text;
   v_rel text;
+  v_kind "char";
+  v_rls boolean;
+  v_forced boolean;
+  v_relowner oid;
 begin
   if (select r.rolsuper from pg_catalog.pg_roles r where r.oid = v_owner) is distinct from false then
     raise exception 'AUTH_VERDICT_PRECONDITION_OWNER_IS_SUPERUSER';
@@ -60,14 +66,22 @@ begin
   if (select p.provolatile from pg_catalog.pg_proc p where p.oid = 'auth.uid()'::regprocedure) <> 's' then
     raise exception 'AUTH_VERDICT_PRECONDITION_HELPER_SHAPE auth.uid()';
   end if;
-  -- the relations read: readable by this owner, RLS not FORCED (the owner reads past RLS only when it is not forced)
+  -- the relations read: plain tables this owner may SELECT, with EVERY row visible to it (G5-08; the class of H1 C1 P2 on PR #383). SELECT alone
+  -- is not enough: ordinary RLS still filters a definer owner that neither has the table owner's privileges nor BYPASSRLS, and a hidden row
+  -- (an open deletion, another owner) must never read as absent. So RLS off, or BYPASSRLS, or the table owner's privileges with RLS not FORCED
+  -- (PostgreSQL's own rule); a view is refused. Every function below also runs with row_security = off: a relation filtered later is an error.
   foreach v_rel in array array['public.common_accounts', 'public.service_entitlements', 'public.brands', 'public.brand_memberships',
                                'private.account_lifecycle_operations', 'auth.users', 'auth.sessions'] loop
-    if to_regclass(v_rel) is null or not pg_catalog.has_table_privilege(v_owner, v_rel, 'SELECT') then
+    select c.relkind, c.relrowsecurity, c.relforcerowsecurity, c.relowner into v_kind, v_rls, v_forced, v_relowner
+      from pg_catalog.pg_class c where c.oid = to_regclass(v_rel);
+    if not found or v_kind not in ('r', 'p') or not pg_catalog.has_table_privilege(v_owner, v_rel, 'SELECT') then
       raise exception 'AUTH_VERDICT_PRECONDITION_RELATION %', v_rel;
     end if;
-    if (select c.relforcerowsecurity from pg_catalog.pg_class c where c.oid = to_regclass(v_rel)) then
+    if v_forced then
       raise exception 'AUTH_VERDICT_PRECONDITION_RLS_FORCED %', v_rel;
+    end if;
+    if v_rls and not (select r.rolbypassrls from pg_catalog.pg_roles r where r.oid = v_owner) and not pg_catalog.pg_has_role(v_owner, v_relowner, 'USAGE') then
+      raise exception 'AUTH_VERDICT_PRECONDITION_RLS_HIDES_ROWS %', v_rel;
     end if;
   end loop;
   if (select count(*) from pg_catalog.pg_attribute a where a.attrelid = 'auth.sessions'::regclass and not a.attisdropped
@@ -88,7 +102,7 @@ end $$;
 -- trigger on public.common_accounts (one firing after it could put lifecycle_version back), no rule on either table (a DO INSTEAD rule would swallow
 -- the bump), and this session honours triggers. Used by the install (pre and post) and by W1 on every call.
 create function private.account_lifecycle_generation_covered()
-returns boolean language sql stable security definer set search_path = '' as $$
+returns boolean language sql stable security definer set search_path = '' set row_security = off as $$
   select pg_catalog.current_setting('session_replication_role') = 'origin'
      and (select pg_catalog.count(*) from pg_catalog.pg_trigger t join pg_catalog.pg_proc f on f.oid = t.tgfoid
            where not t.tgisinternal and t.tgenabled in ('O', 'A')
@@ -117,7 +131,7 @@ end $$;
 
 -- R1: the person's verdict.
 create function public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text)
-returns jsonb language plpgsql stable security definer set search_path = '' as $$
+returns jsonb language plpgsql stable security definer set search_path = '' set row_security = off as $$
 declare
   v_scope jsonb := pg_catalog.jsonb_build_object('app', p_app, 'feature', p_feature, 'brand_slug', p_brand_id);
   v_claims jsonb;
@@ -279,7 +293,7 @@ end $$;
 -- W1: the worker's answer for a reservation / attestation bound earlier. The bind is the pair (owner epoch, owner lifecycle_version) -- both
 -- monotonic counters, compared for EQUALITY in one statement; no timestamp is trusted.
 create function private.account_lifecycle_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)
-returns text language plpgsql stable security definer set search_path = '' as $$
+returns text language plpgsql stable security definer set search_path = '' set row_security = off as $$
 declare
   v_state text;
   v_epoch bigint;
@@ -325,7 +339,7 @@ end $$;
 
 -- W2: W1 for an Edge worker (service_role).
 create function public.common_account_worker_brand_verdict(p_brand_id text, p_service_key text, p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)
-returns text language sql stable security definer set search_path = '' as $$
+returns text language sql stable security definer set search_path = '' set row_security = off as $$
   select private.account_lifecycle_worker_brand_verdict(p_brand_id, p_service_key, p_expected_owner_epoch, p_expected_lifecycle_version)
 $$;
 
@@ -355,7 +369,8 @@ begin
     raise exception 'AUTH_VERDICT_POSTCONDITION_ACL';
   end if;
   foreach v_fn in array array[v_r1, v_w1, v_w2, v_gc] loop
-    if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.provolatile = 's' and p.prosecdef and p.proconfig @> array['search_path=""']
+    if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.provolatile = 's' and p.prosecdef
+                    and p.proconfig @> array['search_path=""', 'row_security=off']
                     and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)) then
       raise exception 'AUTH_VERDICT_POSTCONDITION_SHAPE %', v_fn;
     end if;

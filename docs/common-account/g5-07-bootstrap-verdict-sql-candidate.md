@@ -4,6 +4,10 @@ Status: **SQL source candidate + local PG17 proofs. Not in `supabase/migrations/
 G4's Edge or any app; no grant outside the throw-away test database; no workspace or OAuth state is ever written by it.** Production is **NO_GO**.
 A focused **Codex Sol (high)** security review of the SQL is required next.
 
+> **G5-08 update (Issue #320 task 8):** H1 C1 on this PR found one P2 (an RLS-filtered workspace read as absent). The fix -- every relation read must
+> show the function owner every row, and R0 runs with `row_security = off` -- is in `docs/common-account/g5-08-r0-rls-visibility-fix.md`. The
+> precondition "RLS not FORCED" below is now stricter, and the counts in section 8 are as of G5-07 (11 tests, 30/30).
+
 - TASK `common-account-g5-brandless-oauth-r0-verdict-sql-source-candidate-20261020` (Issue #320, G5-01 generation, task 7, completion K5).
 - Stacked on PR #375 (`c47cbed48ab410a34c6827a5d44fba2f4e928e1f`, the R0 contract `docs/common-account/g5-06-brandless-oauth-bootstrap.md` §4 and the
   reference `bootstrap.ts`) -> PR #371 (R1 / W1 / W2, H1 C1 source PASS) -> PR #358 -> PR #351 -> PR #303.

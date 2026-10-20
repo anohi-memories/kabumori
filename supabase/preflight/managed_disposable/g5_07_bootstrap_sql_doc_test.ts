@@ -50,7 +50,7 @@ test('the candidate is a candidate: outside the migration path, wired nowhere, o
 });
 
 test('the shape: one STABLE definer function, two parameters, EXECUTE to authenticated only, no write, no lock, no brand, no person', () => {
-  assert.ok(code.includes("create function public.common_account_bootstrap_verdict(p_app text, p_feature text)\nreturns jsonb language plpgsql stable security definer set search_path = '' as $$"));
+  assert.ok(code.includes("create function public.common_account_bootstrap_verdict(p_app text, p_feature text)\nreturns jsonb language plpgsql stable security definer set search_path = '' set row_security = off as $$"));
   const grants = [...code.matchAll(/grant execute on function ([a-z_.]+)\([^)]*\) to ([a-z_]+);/gu)].map((m) => `${m[1]}->${m[2]}`);
   assert.deepEqual(grants, ['public.common_account_bootstrap_verdict->authenticated']);
   assert.equal((code.match(/\bgrant\b/giu) ?? []).length, 1);
@@ -78,11 +78,9 @@ test('the SQL keeps R1\'s claim rules, the begin\'s derivation and the reference
   }
 });
 
-test('the document names its tests with the real counts and the files exist', () => {
-  const pg = (read(PG).match(/^test_\(/gmu) ?? []).length;
-  const mutants = (read(MUT).match(/^ {4}\(['"]/gmu) ?? []).length;
-  assert.ok(doc.includes(`${pg} tests`), `the document should say ${pg} tests`);
-  assert.ok(doc.includes(`${mutants}/${mutants} detected`), `the document should say ${mutants}/${mutants} detected`);
+test('the document names its tests with the counts as of G5-07 (the current counts are in the G5-08 document) and the files exist', () => {
+  assert.ok(doc.includes('11 tests') && doc.includes('30/30 detected'), 'the G5-07 counts');
+  assert.ok(doc.includes('G5-08 update') && doc.includes('g5-08-r0-rls-visibility-fix.md'), 'points to G5-08');
   for (const path of [SQL, RB, PG, MUT, 'supabase/tests/common_account_bootstrap_verdict_pg_run.sh']) {
     assert.ok(exists(path), path);
     assert.ok(doc.includes(path.split('/').pop()!), `${path} is named`);
