@@ -214,6 +214,27 @@ select tb.check(tb.record(:'a', 'a2', tb.epoch(:'a'), tb.lifecycle(:'a')) = 'OK'
 select tb.check((select b.oauth_state_id = tb.state('a2') from postona_threads_binding.bindings b where b.social_account_id = :'acct_a'), '7 the binding is the new state''s');
 select tb.check((select count(*) = 1 from postona_threads_binding.bindings b where b.social_account_id = :'acct_a'), '7 one binding per account');
 
+-- 7b. G4-13 (H2 #329): S1 -> S2 -> S1. After the reconnect above (a1 then a2), the old state a1 is never attested again --
+--     not through the helper, not in any later transaction; the binding stays a2's.
+select tb.snap() as s \gset
+select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'a', tb.state('a1'), '17841400000000001')),
+                  'THREADS_BINDING_ALREADY_ATTESTED', :'s', '7b S1 re-attested after S2');
+select tb.check((select b.oauth_state_id = tb.state('a2') from postona_threads_binding.bindings b where b.social_account_id = :'acct_a'), '7b the binding is still S2''s');
+select tb.check((select count(*) = 2 from postona_threads_binding.state_generations g where g.oauth_state_id in (tb.state('a1'), tb.state('a2')) and g.attested_at is not null),
+                '7b both states recorded as attested once');
+
+-- 7c. G4-13: attest only in the transaction whose complete consumed the state. A complete committed alone, then an attest
+--     in a later transaction, is refused (H5's owner transport must run complete + attest atomically).
+select tb.enroll(10) as k \gset
+select tb.begin(:'k', 'k1') as acct_k \gset
+select tb.check(tb.record(:'k', 'k1', tb.epoch(:'k'), tb.lifecycle(:'k')) = 'OK', '7c record');
+select tb.check(tb.as_person(:'k', format('select public.complete_social_mobile_threads_oauth_connection(%L::uuid, %L, %L, %L, %L)::text',
+                tb.state('k1'), '17841400000000010', 'h17841400000000010', tb.token('k1'),
+                tb.attest(tb.state('k1'), '17841400000000010', 'h17841400000000010', tb.token('k1')))) not like 'ERR:%', '7c complete alone');
+select tb.snap() as s \gset
+select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'k', tb.state('k1'), '17841400000000010')),
+                  'THREADS_BINDING_NOT_IN_COMPLETE_TRANSACTION', :'s', '7c attest in a later transaction');
+
 -- 8. The binding row: none, an account that no longer carries the bound identity, a disconnected account.
 select tb.check(tb.row(:'acct_b') like '%,,,)', '8 no binding: bind columns null: ' || tb.row(:'acct_b'));
 select tb.check(tb.row('sa_no_such_account') is null, '8 unknown account: no row');

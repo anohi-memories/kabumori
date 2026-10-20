@@ -23,6 +23,15 @@
 -- Every refusal raises, so the caller's transaction (PR #124's begin / complete and this call together) rolls back: no
 -- consumed state, no stored credential, no binding. Nothing decides by time; bound_at is for the audit trail only.
 --
+-- G4-13 (H2 #329 review of PR #367, P2 R1 + the S1 -> S2 -> S1 gap):
+--   * R1: the install refuses while any API role (anon, authenticated, service_role, authenticator) can become this owner
+--     (MEMBER / SET / USAGE: NOINHERIT and SET-only memberships included), and the postconditions enumerate the ACLs of the
+--     schema, both tables and the three functions: ANY grantee other than the owner -- a delegate role that a default ACL
+--     of the owner granted, whoever can SET ROLE to it -- refuses the whole install. Nothing is silently revoked.
+--   * S1 -> S2 -> S1: a state can be attested at most ONCE, ever (state_generations.attested_at), and only in the very
+--     transaction whose PR #124 complete consumed it (consumed_at = now()). An old state re-attested later -- directly
+--     through the helper, after a reconnect replaced the binding -- is refused; it can no longer bring an old state back.
+--
 -- Not done here (named, not assumed):
 --   * the caller. H5's owner transport must call record_state_generation right after begin and attest_binding right after
 --     complete, in the same transaction, with the numbers of a fresh R1 allow (G4-06 adapter). BLOCKER: R1 needs the
@@ -43,6 +52,14 @@ begin
   if (select rolsuper from pg_catalog.pg_roles where oid = v_me) then
     raise exception 'THREADS_BINDING_PRECONDITION_OWNER';
   end if;
+  -- No API role may become this owner (SET ROLE), directly or through any membership, inherited or not.
+  foreach v_fn in array array['anon', 'authenticated', 'service_role', 'authenticator'] loop
+    if exists (select 1 from pg_catalog.pg_roles r where r.rolname = v_fn)
+       and (pg_catalog.pg_has_role(v_fn, v_me, 'MEMBER') or pg_catalog.pg_has_role(v_fn, v_me, 'SET')
+            or pg_catalog.pg_has_role(v_fn, v_me, 'USAGE')) then
+      raise exception 'THREADS_BINDING_PRECONDITION_OWNER_REACHABLE %', v_fn;
+    end if;
+  end loop;
   if to_regclass('public.social_accounts') is null or to_regclass('public.social_account_oauth_states') is null
      or to_regclass('public.common_accounts') is null or to_regclass('public.brand_memberships') is null
      or (select relowner from pg_catalog.pg_class where oid = to_regclass('public.social_accounts')) <> v_me
@@ -85,7 +102,8 @@ create table postona_threads_binding.state_generations (
   social_account_id text not null,
   owner_epoch bigint not null check (owner_epoch >= 1),
   lifecycle_version bigint not null check (lifecycle_version >= 1),
-  recorded_at timestamptz not null default now() -- audit only
+  recorded_at timestamptz not null default now(), -- audit only
+  attested_at timestamptz -- set once by attest_binding; a state is never attested twice (G4-13)
 );
 
 create table postona_threads_binding.bindings (
@@ -175,13 +193,19 @@ begin
   if v_gen.initiated_by is distinct from p_actor then
     raise exception 'THREADS_BINDING_NOT_INITIATOR' using errcode = 'P0001';
   end if;
+  -- Once per state, ever (G4-13): even after a reconnect replaced the binding, an old state is never attested again.
+  if v_gen.attested_at is not null
+     or exists (select 1 from postona_threads_binding.bindings b where b.oauth_state_id = p_oauth_state_id) then
+    raise exception 'THREADS_BINDING_ALREADY_ATTESTED' using errcode = 'P0001';
+  end if;
   if not exists (select 1 from public.social_account_oauth_states s
                   where s.id = p_oauth_state_id and s.initiated_by_user_id = p_actor and s.consumed_at is not null
                     and s.brand_id = v_gen.brand_id and s.social_account_id = v_gen.social_account_id) then
     raise exception 'THREADS_BINDING_STATE_NOT_COMPLETED' using errcode = 'P0001';
   end if;
-  if exists (select 1 from postona_threads_binding.bindings b where b.oauth_state_id = p_oauth_state_id) then
-    raise exception 'THREADS_BINDING_ALREADY_ATTESTED' using errcode = 'P0001';
+  -- Only in the transaction whose PR #124 complete consumed this state (complete sets consumed_at = now()).
+  if not exists (select 1 from public.social_account_oauth_states s where s.id = p_oauth_state_id and s.consumed_at = now()) then
+    raise exception 'THREADS_BINDING_NOT_IN_COMPLETE_TRANSACTION' using errcode = 'P0001';
   end if;
   select sa.* into v_account from public.social_accounts sa where sa.id = v_gen.social_account_id for update;
   if not found or v_account.platform is distinct from 'threads' or v_account.brand_id is distinct from v_gen.brand_id
@@ -205,6 +229,7 @@ begin
   if v_lifecycle is distinct from v_gen.lifecycle_version then
     raise exception 'THREADS_BINDING_SERVICE_GENERATION_CHANGED' using errcode = 'P0001';
   end if;
+  update postona_threads_binding.state_generations set attested_at = now() where oauth_state_id = p_oauth_state_id;
   -- A reconnect replaces the account's binding with this one (a new state, the numbers it was begun under).
   insert into postona_threads_binding.bindings
     (social_account_id, brand_id, threads_user_id, bound_by, oauth_state_id, owner_epoch, lifecycle_version)
@@ -236,13 +261,15 @@ revoke all on function postona_threads_binding.record_state_generation(uuid, uui
                     postona_threads_binding.binding_row(text)
   from public, anon, authenticated, service_role;
 
--- Postconditions: owner, definer, empty search_path; no API role reaches a function, a table or the schema (directly,
--- through PUBLIC or a membership).
+-- Postconditions (G4-13, H2 #329 R1): owner / definer / empty search_path, and every ACL of what 001 created names ONLY this
+-- owner: any other grantee (a default-ACL grant to some delegate role, whoever can SET ROLE to it) refuses the install.
+-- A function's NULL proacl means PUBLIC may execute it: refused too. API roles must not be able to become the owner.
 do $$
 declare
   v_me oid := (select oid from pg_catalog.pg_roles where rolname = current_user);
   v_fn text;
-  v_role text;
+  v_rel text;
+  v_api text;
 begin
   foreach v_fn in array array[
     'postona_threads_binding.record_state_generation(uuid,uuid,bigint,bigint)',
@@ -252,19 +279,27 @@ begin
                      and coalesce(p.proconfig @> array['search_path=""'], false)) then
       raise exception 'THREADS_BINDING_POSTCONDITION_FUNCTION %', v_fn;
     end if;
-    foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
-      if exists (select 1 from pg_catalog.pg_roles r where r.rolname = v_role)
-         and has_function_privilege(v_role, to_regprocedure(v_fn), 'EXECUTE') then
-        raise exception 'THREADS_BINDING_POSTCONDITION_API_ROLE_REACHES % %', v_role, v_fn;
-      end if;
-    end loop;
+    if (select p.proacl from pg_catalog.pg_proc p where p.oid = to_regprocedure(v_fn)) is null
+       or exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a
+                   where p.oid = to_regprocedure(v_fn) and a.grantee <> v_me) then
+      raise exception 'THREADS_BINDING_POSTCONDITION_FUNCTION_ACL %', v_fn;
+    end if;
   end loop;
-  foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
-    if exists (select 1 from pg_catalog.pg_roles r where r.rolname = v_role)
-       and (has_schema_privilege(v_role, 'postona_threads_binding', 'USAGE')
-            or has_table_privilege(v_role, 'postona_threads_binding.state_generations', 'SELECT,INSERT,UPDATE,DELETE')
-            or has_table_privilege(v_role, 'postona_threads_binding.bindings', 'SELECT,INSERT,UPDATE,DELETE')) then
-      raise exception 'THREADS_BINDING_POSTCONDITION_API_ROLE_TABLE %', v_role;
+  foreach v_rel in array array['postona_threads_binding.state_generations', 'postona_threads_binding.bindings'] loop
+    if exists (select 1 from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a
+                where c.oid = to_regclass(v_rel) and a.grantee <> v_me) then
+      raise exception 'THREADS_BINDING_POSTCONDITION_TABLE_ACL %', v_rel;
+    end if;
+  end loop;
+  if exists (select 1 from pg_catalog.pg_namespace n, pg_catalog.aclexplode(n.nspacl) a
+              where n.nspname = 'postona_threads_binding' and a.grantee <> v_me) then
+    raise exception 'THREADS_BINDING_POSTCONDITION_SCHEMA_ACL';
+  end if;
+  foreach v_api in array array['anon', 'authenticated', 'service_role', 'authenticator'] loop
+    if exists (select 1 from pg_catalog.pg_roles r where r.rolname = v_api)
+       and (pg_catalog.pg_has_role(v_api, v_me, 'MEMBER') or pg_catalog.pg_has_role(v_api, v_me, 'SET')
+            or pg_catalog.pg_has_role(v_api, v_me, 'USAGE')) then
+      raise exception 'THREADS_BINDING_POSTCONDITION_OWNER_REACHABLE %', v_api;
     end if;
   end loop;
 end $$;
