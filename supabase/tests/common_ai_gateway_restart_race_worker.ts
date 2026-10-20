@@ -42,7 +42,7 @@ export type GatewayJob = Readonly<{
    * "<when>:<rpc>#<n>" names the n-th call of that RPC (G6-08: the second ai_calls_claim is the pre-send check);
    * "after:g5_verdict#<n>" the n-th answer of the fake G5 (G6-09: #2 is the first recheck).
    */
-  pauseAt: string | null;
+  pauseAt: string | readonly string[] | null;
   /**
    * G6-08: "<rpc>#<n>" -> "lost" (the RPC commits, the answer never arrives: a network error);
    * G6-10: -> "down" (the statement never reaches the database: a network error, nothing ran).
@@ -90,7 +90,8 @@ async function serviceRpc(name: string, p: unknown): Promise<{ ok: true; answer:
 /** Stop here until the harness opens this worker's gate (or kills the process). */
 async function pause(name: string, point: string): Promise<void> {
   await rows(`insert into g6r_fake.events (worker, point) values (${literal(name)}, ${literal(point)})`);
-  while ((await rows(`select count(*) from g6r_fake.gates where worker = ${literal(name)}`)) === "0") {
+  // G6-12: a gate opens one pause point, or ('*') every one of this worker.
+  while ((await rows(`select count(*) from g6r_fake.gates where worker = ${literal(name)} and point in ('*', ${literal(point)})`)) === "0") {
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
@@ -157,7 +158,10 @@ function jobWire(app: string, feature: string) {
 async function runGateway(job: GatewayJob): Promise<unknown> {
   const set = policySet(job.revision, "all");
   const pauseIf = async (point: string, n?: number) => {
-    if (job.pauseAt === point || (n !== undefined && job.pauseAt === `${point}#${n}`)) await pause(job.name, job.pauseAt);
+    // G6-12: several pause points may be given; each is entered once.
+    const points: readonly string[] = Array.isArray(job.pauseAt) ? job.pauseAt : job.pauseAt ? [job.pauseAt as string] : [];
+    const hit = points.find((p) => p === point || (n !== undefined && p === `${point}#${n}`));
+    if (hit) await pause(job.name, hit);
   };
   const event = (point: string) => rows(`insert into g6r_fake.events (worker, point) values (${literal(job.name)}, ${literal(point)})`);
   const counts = new Map<string, number>();

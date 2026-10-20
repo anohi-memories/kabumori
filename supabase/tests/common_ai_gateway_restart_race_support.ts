@@ -45,7 +45,7 @@ export type Gw = {
   app?: "postona" | "kabumori";
   feature?: string;
   brand?: string | null;
-  pauseAt?: string | null;
+  pauseAt?: string | readonly string[] | null;
   faults?: Record<string, "lost" | "down">;
   providerReplies?: string[];
   rpcTimeoutMs?: number;
@@ -98,6 +98,8 @@ export async function paused(p: ReturnType<typeof spawn>, point: string): Promis
   throw new Error(`${p.name} never paused at ${point}: ${(await p.done).err}`);
 }
 export const resume = (p: ReturnType<typeof spawn>) => rows(`insert into g6r_fake.gates (worker) values ('${p.name}')`);
+/** G6-12: open one pause point only (the worker may stop again at a later one). */
+export const resumeAt = (p: ReturnType<typeof spawn>, point: string) => rows(`insert into g6r_fake.gates (worker, point) values ('${p.name}', '${point}')`);
 export async function crash(p: ReturnType<typeof spawn>): Promise<void> {
   p.child.kill("SIGKILL");
   const d = await p.done;
