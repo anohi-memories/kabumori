@@ -1,0 +1,17 @@
+running 13 tests from ./docs/postona/qa/g2-threads-prepublish/g2_threads_prepublish_boundary_test.ts
+both sides real: container -> FINISHED -> beforePublish (G3 re-check) -> publish -> read back; one hook call, one publish, published recorded ... ok (8ms)
+re-check refuses — permission / freeze / account no longer publishable (NOT_PUBLISHABLE): a container was created, publish requests = 0, nothing reported as published ... ok (454µs)
+re-check refuses — the lease was lost to another worker (LEASE_LOST): a container was created, publish requests = 0, nothing reported as published ... ok (292µs)
+re-check refuses — the reservation was cancelled / handed back (RELEASED): a container was created, publish requests = 0, nothing reported as published ... ok (217µs)
+re-check refuses — the service epoch / credential generation changed during the container wait: a container was created, publish requests = 0, nothing reported as published ... ok (158µs)
+re-check refuses — the re-check could not be read (store threw): a container was created, publish requests = 0, nothing reported as published ... ok (189µs)
+re-check refuses — the re-check did not answer in time (timeout): a container was created, publish requests = 0, nothing reported as published ... ok (52ms)
+publish answer lost: recorded 'uncertain' (not published, not failed); the same row delivered twice in one run is sent once ... ok (729µs)
+published but the read-back is unknown: 'uncertain', never 'published' ... ok (444µs)
+two workers race for the same row: only the one whose lease still holds publishes (the other is refused at preflight) ... ok (427µs)
+deployable G4 ports are closed: the G3 loop claims nothing and sends nothing ... ok (527µs)
+G3's own gate is closed in source ... ok (47µs)
+OBSERVATION (P3, owners G3/G4): G3 cannot tell whether a port honours the hook — a port that ignores `hooks` publishes and is recorded as published with 0 re-checks ... ok (368µs)
+
+ok | 13 passed | 0 failed (67ms)
+
