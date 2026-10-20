@@ -1,0 +1,22 @@
+# node --test tests/g2-draft-session-boundary.test.mjs  (PR #366 HEAD 44ab2e6bb812f3484c85f847574de103757e3dfc + this G2 test only; node v24.19.0; auth-js 2.115.0)
+✔ G2-S1 token-only refresh (MOCK: same last_sign_in_at): the draft and the account come back, nothing is removed (59.401833ms)
+✔ G2-S2 sign-out then a new sign-in of the same person: nothing comes back and the old text is removed from the device (20.121333ms)
+✔ G2-S3 a new sign-in of the same person without a SIGNED_OUT in between (screen closed): nothing comes back, removed (18.547709ms)
+✔ G2-S4 another person signs in while the screen is open: a fresh screen, nothing of A is shown or written under B; A keeps its own record (15.64825ms)
+✔ G2-S5 app restart with the stored session (INITIAL_SESSION / recovered SIGNED_IN, user object as stored): restored (28.67275ms)
+✔ G2-S6 ABA: a restore read that answers after a NEW sign-in of the same person is not applied; the record is removed (13.421708ms)
+✔ G2-S7 ABA: a restore read that answers after ANOTHER person signed in (or after sign-out) shows nothing (28.398333ms)
+✔ G2-S8 a last_sign_in_at that cannot be a mark (not a string, longer than 64) is never restored -- fail closed (27.7165ms)
+✔ FINDING G2-SM1 (P3, owner G1 route / G5 auth): with no last_sign_in_at the mark is "" for every session, so a NEW sign-in of the same person gets the old draft back (37.412708ms)
+✔ FINDING G2-SM2 (P3, MOCK server semantics): the same person signing in on ANOTHER device makes this device lose its draft at the next refresh / restart (34.822541ms)
+✔ FINDING G2-SM3 (P3, owner G1): a new sign-in of the same person while the screen stays mounted keeps the open text and re-saves it under the NEW mark (11.156417ms)
+✔ FINDING G2-SM4 (P3, owner G1 / G5): signing out leaves the text on the device, and "24 hours" is only checked when the same person reads it again (11.487542ms)
+✔ negative controls: route without the per-user key, a constant mark, a restore without its cancel check, and a store that ignores the mark each LEAK the old text in the very scenario that passes unmutated (87.37275ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 618.950292
