@@ -108,7 +108,9 @@ probe() {
   got="$(sed -n 's/^.*ERROR: *\([0-9A-Z]\{5\}\):.*$/\1/p' <<<"$out" | head -1)"
   [[ "$got" == "$want" ]] || fail "E2 $role: [$stmt] expected $want, got [${got:-ALLOWED}]"
   printf '  %-18s %-6s %s\n' "$role" "$got" "$stmt"
+  if [[ "$want" == 42501 ]]; then DENIES=$((DENIES + 1)); else CONTROLS=$((CONTROLS + 1)); fi
 }
+DENIES=0; CONTROLS=0
 TRIG="create trigger g3_acl_probe before insert on public.brand_memberships for each row execute function pg_catalog.g3_acl_probe_no_such_function()"
 # REFERENCES is checked in the catalog only (E1): a temp table may not reference a permanent one (42P16), and a permanent probe table would
 # need CREATE on a schema, i.e. a privilege this evidence must not add.
@@ -134,7 +136,8 @@ probe authenticator "$TRIG" 42501 "$super"
 probe "$owner" "$TRIG" 42883
 [[ "$(matrix)" == "$AFTER" ]] || fail "E2 the probes changed the catalog"
 [[ "$(val -c "select count(*) from pg_trigger where tgrelid = 'public.brand_memberships'::regclass and tgname = 'g3_acl_probe'")" == "0" ]] || fail "E2 a probe left a trigger"
-echo "PASS E2 every probe refused with 42501 after the candidate; the owner control stops at 42883 (privilege passed, no such function); nothing changed"
+[[ "$DENIES" == 17 && "$CONTROLS" == 1 ]] || fail "E2 probe count: $DENIES denials + $CONTROLS controls (expected 17 + 1)"
+echo "PASS E2 $((DENIES + CONTROLS)) probes = $DENIES denials (42501) after the candidate + $CONTROLS owner control (42883: privilege passed, no such function); nothing changed"
 
 section "E3 what stays after the candidate (catalog only, never exercised)"
 echo "  authenticated / kb_cal_auth_child: SELECT (RLS self-select) + MAINTAIN (PG17: VACUUM / ANALYZE / LOCK / REINDEX / CLUSTER)"
