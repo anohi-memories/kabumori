@@ -33,7 +33,9 @@ test('FINDING G2-U1 (P3): the draft lives only in the screen state — a remount
   assert.equal(remounted.draft, '');
   assert.equal(remounted.accountId, null);
   const screen = read('src/app/manual-publish.tsx');
-  assert.doesNotMatch(screen, /draft[^\n]{0,40}(AsyncStorage|attemptStore\.save|persist)/u, 'the draft text is not persisted anywhere');
+  // Any draft persistence in the screen (a store, AsyncStorage or a restore step) means G2-U1 was addressed: flip this test.
+  assert.doesNotMatch(screen, /draftStore|loadDraftForRestore|draft_restored|AsyncStorage|draft[^\n]{0,40}persist/u, 'the draft text is not persisted anywhere');
+  assert.equal(existsSync(resolve(root, 'src/features/manual-publish/manual-publish-draft-store.ts')), false, 'no draft store module');
 });
 
 test('no mixing: a URL can never pre-fill the text or choose the account — the screen reads no route params', () => {
