@@ -1,0 +1,48 @@
+// G2 limited re-QA probe for G1 PR #410 (in-flight take-over after a session-mark change). Built from
+// g2-postfix-baseline.test.mjs by appending the cases below; run on the #410 tree only (it is expected to fail on #400).
+const ADDED = `
+
+// ---- #410 limited re-QA (appended by the probe) ----
+async function takeOver(answer) {
+  const p = scriptedPort();
+  const app = await createApp({ port: p.port });
+  await app.auth(session('UA', T1));
+  await app.open();
+  await app.sendText('送信中の本文');
+  await app.auth(session('UA', T2, 'rig-at-2'));
+  const during = { phase: app.state().phase, retry: app.button('同じ内容・同じ送信IDで確認し直す') !== null, sameId: app.lines().includes(SAME_ID_LINE), unconfirmed: app.lines().some((l) => l.includes('通信できず')) };
+  p.sends[0].resolve({ ...answer, targetId: p.sends[0].target.targetId });
+  await app.sync();
+  await app.sync();
+  return { p, app, during };
+}
+test('PR410-A: while the first request is out, the re-created screen is "sending", shows no "unconfirmed" and offers no re-ask', async () => {
+  const { during, p } = await takeOver({ kind: 'published', providerPostId: '1850000000000000001', marks: { simulated: false, afterFreeze: false } });
+  assert.deepEqual(during, { phase: 'sending', retry: false, sameId: false, unconfirmed: false });
+  assert.equal(p.sends.length, 1);
+});
+test('PR410-B: the real "published" answer reaches the re-created screen (posted, with the id)', async () => {
+  const { app } = await takeOver({ kind: 'published', providerPostId: '1850000000000000001', marks: { simulated: false, afterFreeze: false } });
+  assert.ok(app.lines().some((l) => l.includes('Xが投稿を受け付けました')));
+  assert.ok(app.lines().some((l) => l.includes('1850000000000000001')));
+});
+test('PR410-C: a real "unavailable" answer then shows "unconfirmed" with a same-id re-ask (only AFTER the answer), and the re-ask reuses the id', async () => {
+  const { app, p } = await takeOver({ kind: 'unavailable', code: 'TRANSPORT_FAILED' });
+  assert.equal(app.state().unresolved?.kind, 'unconfirmed');
+  assert.ok(await app.press('同じ内容・同じ送信IDで確認し直す'));
+  await app.tick();
+  const go = app.button('Xに投稿する');
+  go.props.onPress();
+  await app.sync();
+  assert.equal(p.sends.length, 2);
+  assert.equal(p.sends[1].target.targetId, p.sends[0].target.targetId);
+});
+test('PR410-D: "uncertain" stays uncertain (no re-ask), never posted', async () => {
+  const { app } = await takeOver({ kind: 'uncertain', code: 'X_TIMEOUT', marks: { simulated: false, afterFreeze: false } });
+  assert.equal(app.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assert.ok(!app.lines().some((l) => l.includes('Xが投稿を受け付けました')));
+});
+`;
+import { readFile, writeFile } from 'node:fs/promises';
+const [, , from, to] = process.argv;
+await writeFile(to, (await readFile(from, 'utf8')) + ADDED);
