@@ -1,0 +1,16 @@
+# node --test tests/*.test.mjs  (whole app suite on the same tree)
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (178.69175ms)
+ℹ tests 304
+ℹ suites 0
+ℹ pass 303
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+✖ failing tests:
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (178.69175ms)
+
+# G4 tests/threads-manual-publish.test.mjs
+ℹ tests 18
+ℹ pass 18
+ℹ fail 0
