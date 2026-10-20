@@ -118,20 +118,25 @@ async function agree(p: Person, label: string, app = 'postona', feature = 'x_pub
 const why = (v: Record<string, unknown>) => `${v.decision}:${v.reason}`;
 
 // =============================================================================================================================================
-test_('install: three STABLE definer functions with an empty search path; R1 authenticated only, W2 service_role only, W1 no API role; a second install is refused; rollback and re-install', async () => {
+test_('install: four STABLE definer functions with an empty search path; R1 authenticated only, W2 service_role only, W1 and the coverage helper no API role; a second install is refused; rollback and re-install', async () => {
   const acl = (fn: string) => sql(`select array_to_string(proacl::text[], ',') from pg_proc where oid = ${lit(fn)}::regprocedure`);
   assert.equal(await acl('public.common_account_authorization_verdict(text,text,text)'), `${owner}=X/${owner},authenticated=X/${owner}`);
   assert.equal(await acl('public.common_account_worker_brand_verdict(text,text,bigint,bigint)'), `${owner}=X/${owner},service_role=X/${owner}`);
   assert.equal(await acl('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'), `${owner}=X/${owner}`);
-  assert.equal(await sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict')
-    and provolatile = 's' and prosecdef and proconfig @> array['search_path=""'] and proowner = (select oid from pg_roles where rolname = current_user)`), '3');
+  assert.equal(await acl('private.account_lifecycle_generation_covered()'), `${owner}=X/${owner}`);
+  assert.equal(await sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict', 'account_lifecycle_generation_covered')
+    and provolatile = 's' and prosecdef and proconfig @> array['search_path=""'] and proowner = (select oid from pg_roles where rolname = current_user)`), '4');
   assert.ok(/AUTH_VERDICT_ALREADY_APPLIED/u.test((await run(owner, ['-f', candidate()])).error));
   assert.ok((await run(owner, ['-f', rollback()])).ok);
-  assert.equal(await sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict')`), '0');
+  assert.equal(await sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict', 'account_lifecycle_generation_covered')`), '0');
   assert.ok((await run(owner, ['-f', candidate()])).ok, 'the install works again');
   for (const role of ['anon', 'service_role']) {
     const r = await psql(`begin; set local role ${role}; select ${R1}('postona', 'x_publish', 'u_x'); commit`);
     assert.ok(!r.ok && /permission denied/u.test(r.error), `${role} cannot call R1`);
+  }
+  for (const role of ['anon', 'authenticated', 'service_role']) {
+    const r = await psql(`begin; set local role ${role}; select private.account_lifecycle_generation_covered(); commit`);
+    assert.ok(!r.ok && /permission denied/u.test(r.error), `${role} cannot call the coverage helper`);
   }
   for (const [role, fn] of [['authenticated', 'public.common_account_worker_brand_verdict'], ['anon', 'public.common_account_worker_brand_verdict'],
     ['authenticated', 'private.account_lifecycle_worker_brand_verdict'], ['service_role', 'private.account_lifecycle_worker_brand_verdict']] as const) {
@@ -302,7 +307,8 @@ async function worker(p: Person, key: string, epoch: number | null, lifecycle: n
   const got = await W2(p.brand, key, epoch === null ? 'null' : String(epoch), lifecycle === null ? 'null' : String(lifecycle));
   const facts = JSON.parse(await sql(`select json_build_object('serviceState', public.common_account_brand_service_state(${lit(p.brand)}, 'x_autopost'),
     'ownerEpoch', private.account_lifecycle_brand_owner_epoch(${lit(p.brand)}),
-    'ownerLifecycleVersion', (select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(${lit(p.brand)})))`));
+    'ownerLifecycleVersion', (select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(${lit(p.brand)})),
+    'generationCovered', private.account_lifecycle_generation_covered())`));
   const model = workerBrandVerdict(facts, { serviceKey: key, expectedOwnerEpoch: epoch, expectedLifecycleVersion: lifecycle });
   assert.equal(got, model, `${label}: W2 equals the reference`);
   return got;
@@ -399,8 +405,8 @@ test_('the old reservation sends 0: a binding from the real R1 allow token, then
   assert.equal(sends, 1, 'the old reservation sent nothing after the restart');
 });
 
-test_('the install refuses, and leaves nothing, when a precondition or the role graph is unsafe: API-role TRIGGER, forced RLS, a VOLATILE helper, a disabled lifecycle trigger, anon in authenticated, authenticated in service_role', async () => {
-  const gone = () => sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict')`);
+test_('the install refuses, and leaves nothing, when a precondition or the role graph is unsafe: API-role TRIGGER, forced RLS, a VOLATILE helper, anon in authenticated, authenticated in service_role', async () => {
+  const gone = () => sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict', 'account_lifecycle_generation_covered')`);
   const attempt = async (label: string, before: () => Promise<unknown>, after: () => Promise<unknown>, code: RegExp) => {
     assert.ok((await run(owner, ['-f', rollback()])).ok);
     await before();
@@ -418,10 +424,6 @@ test_('the install refuses, and leaves nothing, when a precondition or the role 
     () => sql(`alter table public.service_entitlements no force row level security`), /AUTH_VERDICT_PRECONDITION_RLS_FORCED/u);
   await attempt('a VOLATILE helper', () => sql(`alter function private.account_lifecycle_brand_owner(text) volatile`),
     () => sql(`alter function private.account_lifecycle_brand_owner(text) stable`), /AUTH_VERDICT_PRECONDITION_HELPER_SHAPE/u);
-  await attempt('the service-generation trigger disabled', () => sql(`alter table public.service_entitlements disable trigger account_lifecycle_touch_entitlement`),
-    () => sql(`alter table public.service_entitlements enable trigger account_lifecycle_touch_entitlement`), /AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS/u);
-  await attempt('the account-version trigger disabled', () => sql(`alter table public.common_accounts disable trigger account_lifecycle_touch_account`),
-    () => sql(`alter table public.common_accounts enable trigger account_lifecycle_touch_account`), /AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS/u);
   await attempt('anon a member of authenticated', () => psqlSuper(`grant authenticated to anon`), () => psqlSuper(`revoke authenticated from anon`),
     /AUTH_VERDICT_POSTCONDITION_API_ROLE_REACHES|AUTH_VERDICT_PRECONDITION/u);
   await attempt('authenticated a member of service_role', () => psqlSuper(`grant service_role to authenticated`), () => psqlSuper(`revoke service_role from authenticated`),
@@ -436,7 +438,103 @@ test_('the install refuses, and leaves nothing, when a precondition or the role 
   } finally {
     await sql(`alter default privileges in schema public revoke execute on functions from anon, service_role`);
   }
-  assert.equal(await gone(), '3', 'installed again at the end');
+  assert.equal(await gone(), '4', 'installed again at the end');
+});
+
+// ---- G5-05 (H1 C1 P2 on PR #358): the lifecycle triggers must be EXACTLY F5 P1's -------------------------------------------------------
+const ENT = 'public.service_entitlements';
+const ACC = 'public.common_accounts';
+const EXACT_ENT = `create or replace trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} for each row execute function private.account_lifecycle_touch_entitlement()`;
+const EXACT_ACC = `create or replace trigger account_lifecycle_touch_account before update on ${ACC} for each row execute function private.account_lifecycle_touch_account()`;
+async function restoreLifecycle() {
+  await sql(`drop trigger if exists account_lifecycle_touch_entitlement on ${ENT}; drop trigger if exists account_lifecycle_touch_account on ${ACC};
+    drop trigger if exists zz_g505_revert on ${ACC}; drop rule if exists g505_rule on ${ACC}; drop rule if exists g505_rule on ${ENT};
+    ${EXACT_ENT}; ${EXACT_ACC}`);
+}
+const covered = () => sql(`select private.account_lifecycle_generation_covered()::text`);
+/** Every drift: same names (and, where possible, same function OIDs and enabled), yet the counter would not move as P1 moves it. */
+const DRIFTS: [string, string][] = [
+  ['entitlement trigger WHEN (false)', `create or replace trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} for each row when (false) execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger UPDATE OF status only', `create or replace trigger account_lifecycle_touch_entitlement after insert or update of status or delete on ${ENT} for each row execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger BEFORE (wrong timing)', `create or replace trigger account_lifecycle_touch_entitlement before insert or update or delete on ${ENT} for each row execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger without UPDATE (wrong events)', `create or replace trigger account_lifecycle_touch_entitlement after insert or delete on ${ENT} for each row execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger FOR EACH STATEMENT', `create or replace trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} for each statement execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger as a deferred constraint trigger', `drop trigger account_lifecycle_touch_entitlement on ${ENT}; create constraint trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} deferrable initially deferred for each row execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger as a NON-deferrable constraint trigger (same tgtype 29)', `drop trigger account_lifecycle_touch_entitlement on ${ENT}; create constraint trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} not deferrable for each row execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger with a transition table', `drop trigger account_lifecycle_touch_entitlement on ${ENT}; create trigger account_lifecycle_touch_entitlement after update on ${ENT} referencing new table as g505_new for each row execute function private.account_lifecycle_touch_entitlement()`],
+  ['entitlement trigger with arguments', `create or replace trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} for each row execute function private.account_lifecycle_touch_entitlement('x')`],
+  ['entitlement trigger disabled', `alter table ${ENT} disable trigger account_lifecycle_touch_entitlement`],
+  ['entitlement trigger replica-only', `alter table ${ENT} enable replica trigger account_lifecycle_touch_entitlement`],
+  ['entitlement trigger bound to another function', `create or replace trigger account_lifecycle_touch_entitlement after insert or update or delete on ${ENT} for each row execute function private.account_lifecycle_guard_entitlement_identity()`],
+  ['entitlement trigger missing', `drop trigger account_lifecycle_touch_entitlement on ${ENT}`],
+  ['account trigger WHEN (false)', `create or replace trigger account_lifecycle_touch_account before update on ${ACC} for each row when (false) execute function private.account_lifecycle_touch_account()`],
+  ['account trigger UPDATE OF status only', `create or replace trigger account_lifecycle_touch_account before update of status on ${ACC} for each row execute function private.account_lifecycle_touch_account()`],
+  ['account trigger AFTER (wrong timing)', `create or replace trigger account_lifecycle_touch_account after update on ${ACC} for each row execute function private.account_lifecycle_touch_account()`],
+  ['account trigger missing', `drop trigger account_lifecycle_touch_account on ${ACC}`],
+  ['another BEFORE UPDATE row trigger on accounts that puts lifecycle_version back', `create trigger zz_g505_revert before update on ${ACC} for each row execute function private.g505_revert()`],
+  ['a rule on accounts', `create rule g505_rule as on update to ${ACC} do also notify g505`],
+  ['a rule on entitlements', `create rule g505_rule as on update to ${ENT} do also notify g505`],
+];
+
+test_('G5-05: the lifecycle triggers are EXACTLY F5 P1\'s -- every drift (WHEN false, UPDATE OF, timing, events, level, constraint / deferred, transition table, arguments, disabled, replica-only, another function, missing, a reverting BEFORE trigger, a rule) refuses the install and leaves nothing', async () => {
+  await sql(`create or replace function private.g505_revert() returns trigger language plpgsql as $f$ begin new.lifecycle_version := old.lifecycle_version; return new; end $f$`);
+  const gone = () => sql(`select count(*) from pg_proc where proname in ('common_account_authorization_verdict', 'account_lifecycle_worker_brand_verdict', 'common_account_worker_brand_verdict', 'account_lifecycle_generation_covered')`);
+  try {
+    for (const [label, ddl] of DRIFTS) {
+      assert.ok((await run(owner, ['-f', rollback()])).ok, `${label}: rollback`);
+      await sql(ddl);
+      try {
+        const r = await run(owner, ['-f', candidate()]);
+        assert.ok(!r.ok && /AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS/u.test(r.error), `${label}: refused (${r.error.split('\n').find((l) => l.includes('ERROR')) ?? r.error})`);
+        assert.equal(await gone(), '0', `${label}: nothing half-installed`);
+      } finally {
+        await restoreLifecycle();
+      }
+    }
+    // the exact P1 triggers (re-created exactly) install
+    assert.ok((await run(owner, ['-f', rollback()])).ok);
+    assert.ok((await run(owner, ['-f', candidate()])).ok, 'the exact triggers install');
+    assert.equal(await gone(), '4');
+    assert.equal(await covered(), 'true');
+  } finally {
+    await sql(`drop function if exists private.g505_revert()`);
+  }
+});
+
+test_('G5-05: after the install, a drift makes W1 / W2 refuse on every call (SERVICE_GENERATION_UNAVAILABLE) -- the review\'s WHEN (false) attack sends 0 -- and the exact triggers restore it', async () => {
+  await sql(`create or replace function private.g505_revert() returns trigger language plpgsql as $f$ begin new.lifecycle_version := old.lifecycle_version; return new; end $f$`);
+  try {
+    for (const [label, ddl] of DRIFTS) {
+      const p = await person();
+      const bind = await bindNow(p);
+      await sql(ddl);
+      try {
+        assert.equal(await covered(), 'false', `${label}: not covered`);
+        assert.equal(await worker(p, 'x_autopost', bind.epoch, bind.lifecycle, label), 'SERVICE_GENERATION_UNAVAILABLE');
+      } finally {
+        await restoreLifecycle();
+      }
+      assert.equal(await worker(p, 'x_autopost', bind.epoch, bind.lifecycle, `${label} restored`), 'active');
+    }
+    // the review's attack end to end: WHEN (false) -> bind -> real end -> real restart -> the counter did NOT move, yet nothing is sent
+    const a = await person();
+    const bind = await bindNow(a);
+    await sql(DRIFTS[0][1]);
+    let sends = 0;
+    try {
+      await sql(`begin; ${endSql(a)} commit`);
+      await sql(`begin; ${restartSql(a)} commit`);
+      assert.equal(await sql(`select lifecycle_version from public.common_accounts where user_id = '${a.user}'`), String(bind.lifecycle), 'the drifted trigger really did not move the counter');
+      const verdict = await worker(a, 'x_autopost', bind.epoch, bind.lifecycle, 'WHEN (false) attack');
+      if (verdict === 'active') sends += 1;
+      assert.equal(verdict, 'SERVICE_GENERATION_UNAVAILABLE');
+    } finally {
+      await restoreLifecycle();
+    }
+    assert.equal(sends, 0, 'the old reservation sent nothing');
+  } finally {
+    await sql(`drop function if exists private.g505_revert()`);
+  }
 });
 
 test_('no network: the model made no request', () => {

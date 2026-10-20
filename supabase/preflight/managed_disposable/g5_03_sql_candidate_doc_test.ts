@@ -36,7 +36,7 @@ test('the document has its sections, the gates and the invariant table', () => {
   }
 });
 
-test('the candidate is a candidate: outside the migration path, wired nowhere, one transaction, a rollback that drops only its three functions', () => {
+test('the candidate is a candidate: outside the migration path, wired nowhere, one transaction, a rollback that drops only its four functions', () => {
   for (const entry of Deno.readDirSync(new URL('supabase/migrations/', root))) {
     assert.ok(!read(`supabase/migrations/${entry.name}`).includes('common_account_authorization_verdict'), `${entry.name} names the RPC`);
   }
@@ -48,7 +48,7 @@ test('the candidate is a candidate: outside the migration path, wired nowhere, o
   assert.match(code, /^begin;$/mu);
   assert.match(code, /^commit;$/mu);
   const rb = read(RB).split('\n').map((l) => l.replace(/--.*$/u, '')).join('\n');
-  assert.equal((rb.match(/drop function if exists/gu) ?? []).length, 3);
+  assert.equal((rb.match(/drop function if exists/gu) ?? []).length, 4);
   assert.ok(!/drop table|delete from|truncate|grant |revoke /iu.test(rb), 'the rollback drops functions only');
 });
 
@@ -67,6 +67,12 @@ test('the shape: three STABLE definer functions with an empty search path; R1 to
   const w1 = code.slice(code.indexOf('create function private.account_lifecycle_worker_brand_verdict'), code.indexOf('create function public.common_account_worker_brand_verdict'));
   assert.ok(!/timestamp|activated_at|now\(|clock_/iu.test(w1), 'W1 compares no time');
   assert.ok(w1.includes('if v_lifecycle is distinct from p_expected_lifecycle_version then') && w1.includes('if v_epoch <> p_expected_owner_epoch then'));
+  // G5-05: the generation is checked for exact P1 triggers before / after the install and on every W1 call
+  assert.ok(code.includes('create function private.account_lifecycle_generation_covered()\nreturns boolean language sql stable security definer set search_path = \'\' as $$'));
+  for (const piece of ['t.tgqual is null', 'pg_catalog.cardinality(t.tgattr::int2[]) = 0', 't.tgconstraint = 0', 'not t.tgdeferrable', 'not t.tginitdeferred', 't.tgnargs = 0',
+    't.tgoldtable is null', 't.tgnewtable is null', "t.tgtype = 29", "t.tgtype = 19", 'pg_catalog.pg_rewrite', "t.tgname <> 'account_lifecycle_touch_account'"]) assert.ok(code.includes(piece), piece);
+  assert.ok(w1.includes('private.account_lifecycle_generation_covered()') && w1.includes("return 'SERVICE_GENERATION_UNAVAILABLE';"));
+  assert.ok(code.includes("raise exception 'AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS';") && code.includes("raise exception 'AUTH_VERDICT_POSTCONDITION_LIFECYCLE_TRIGGERS';"));
 });
 
 test('the SQL agrees with the reference on the feature list, the codes and the token', () => {
@@ -75,7 +81,7 @@ test('the SQL agrees with the reference on the feature list, the codes and the t
   for (const reason of ['FEATURE_NOT_ENABLED', 'BRAND_REQUIRED', 'AUTH_REQUIRED', 'SESSION_REVOKED', 'SESSION_EXPIRED', 'ACCOUNT_NOT_FOUND', 'ACCOUNT_UNREADABLE',
     'ACCOUNT_DELETION_IN_PROGRESS', 'ACCOUNT_LOCKED', 'ACCOUNT_STATE_UNKNOWN', 'SERVICE_NOT_REGISTERED', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_PROVISIONING',
     'SERVICE_SUSPENDED', 'SERVICE_NOT_ACTIVE', 'SERVICE_STATE_UNKNOWN', 'BRAND_ACCESS_DENIED', 'ROLE_NOT_ALLOWED', 'WORKSPACE_KIND_UNSUPPORTED',
-    'WORKSPACE_OWNER_UNKNOWN', 'OWNER_EPOCH_UNAVAILABLE', 'EXPECTED_OWNER_EPOCH_REQUIRED', 'EXPECTED_LIFECYCLE_VERSION_REQUIRED', 'OWNER_EPOCH_CHANGED', 'SERVICE_GENERATION_CHANGED']) {
+    'WORKSPACE_OWNER_UNKNOWN', 'OWNER_EPOCH_UNAVAILABLE', 'EXPECTED_OWNER_EPOCH_REQUIRED', 'EXPECTED_LIFECYCLE_VERSION_REQUIRED', 'OWNER_EPOCH_CHANGED', 'SERVICE_GENERATION_CHANGED', 'SERVICE_GENERATION_UNAVAILABLE']) {
     assert.ok(code.includes(`'${reason}'`), reason);
   }
   assert.ok(code.includes("'g5oe:' || f_epoch::text || ':' || f_lifecycle::text"));

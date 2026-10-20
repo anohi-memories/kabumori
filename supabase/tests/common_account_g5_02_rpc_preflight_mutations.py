@@ -47,6 +47,8 @@ M = [
     ('the worker accepts no bound generation', R, "if (!positive(bound.expectedLifecycleVersion)) return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED';", ''),
     ('the worker turns an unknown state into a known code', R, "return P5_REFUSALS.includes(facts.serviceState) ? facts.serviceState : 'SERVICE_STATE_UNKNOWN';", "return facts.serviceState;"),
     ('the worker accepts a NULL epoch', R, "if (!positive(facts.ownerEpoch)) return 'OWNER_EPOCH_UNAVAILABLE';", ''),
+    ('the worker ignores a drifted generation counter (G5-05)', R, "  if (facts.generationCovered !== true) return 'SERVICE_GENERATION_UNAVAILABLE';\n", ''),
+    ('the worker treats a missing coverage fact as covered', R, "if (facts.generationCovered !== true) return", "if (facts.generationCovered === false) return"),
     ('the worker ignores an owner change (A -> B -> A)', R, "if (facts.ownerEpoch !== bound.expectedOwnerEpoch) return 'OWNER_EPOCH_CHANGED';", ''),
     ('the worker ignores a new service generation (stop -> restart ABA)', R, "if (facts.ownerLifecycleVersion !== bound.expectedLifecycleVersion) return 'SERVICE_GENERATION_CHANGED';", ''),
     ('the worker only refuses a LATER generation (a one-sided compare)', R, "if (facts.ownerLifecycleVersion !== bound.expectedLifecycleVersion) return 'SERVICE_GENERATION_CHANGED';",

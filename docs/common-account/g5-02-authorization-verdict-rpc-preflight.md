@@ -77,7 +77,8 @@ For jobs with no person session: the brand_post dispatcher, a Threads dispatcher
 - **W2** `public.common_account_worker_brand_verdict(...same...) returns text` — W1 with `EXECUTE` to **`service_role` only**, for an Edge worker's last check
   right before the provider.
 - Answer: `'active'`, or P5's code (`WORKSPACE_OWNER_UNKNOWN`, `ACCOUNT_DELETION_IN_PROGRESS`, `SERVICE_DELETION_IN_PROGRESS`, `SERVICE_NOT_ACTIVE`, ...), or
-  `OWNER_EPOCH_UNAVAILABLE`, `OWNER_EPOCH_CHANGED`, `SERVICE_GENERATION_CHANGED`, `EXPECTED_OWNER_EPOCH_REQUIRED`, `EXPECTED_LIFECYCLE_VERSION_REQUIRED`,
+  `OWNER_EPOCH_UNAVAILABLE`, `SERVICE_GENERATION_UNAVAILABLE`, `OWNER_EPOCH_CHANGED`, `SERVICE_GENERATION_CHANGED`, `EXPECTED_OWNER_EPOCH_REQUIRED`,
+  `EXPECTED_LIFECYCLE_VERSION_REQUIRED`,
   `ACCOUNT_LIFECYCLE_SERVICE_INVALID`, `SERVICE_STATE_UNKNOWN`, `FACTS_UNAVAILABLE`.
 - **ABA for workers (revised by G5-04 after H1 C1 P2 on PR #351).** The reservation / attestation stores TWO monotonic counters taken from R1's allow
   token `g5oe:<epoch>:<lifecycle_version>`: the F5 owner epoch (a `bigint`, never PR #282's stand-in 0) and the owner's `lifecycle_version` -- the service
@@ -86,6 +87,11 @@ For jobs with no person session: the brand_post dispatcher, a Threads dispatcher
   is not a fence: the re-activation RPC writes `now()` = the transaction's START, so a long transaction or a bind -> end -> restart inside one transaction
   made an old reservation pass (reproduced on PG17 against PR #351: `active`). No clock is compared any more. Trade-off: any change of the owner's account
   (e.g. starting Kabumori) also moves the generation, so such reservations are refused (fail closed) and need a fresh confirmation (G3's UX).
+- **The counter must really be P1's (G5-05, after H1 C1 P2 on PR #358).** The generation is a fence only while the two P1 triggers are exactly
+  P1's: a same-named trigger with `WHEN (false)`, `UPDATE OF`, other timing / events / level, a deferred constraint trigger, a transition table,
+  arguments, another function, disabled / replica-only, a reverting BEFORE UPDATE trigger on `common_accounts` or a rule would leave the counter
+  still while the service ends and re-starts. The install refuses on any of them, and W1 answers `SERVICE_GENERATION_UNAVAILABLE` on every call
+  while one is present (`private.account_lifecycle_generation_covered()`).
 - **Service key.** `x_autopost` for X and Threads posting (section 1). Any other key is `ACCOUNT_LIFECYCLE_SERVICE_INVALID`.
 
 ## 5. Consumers: where the recheck must sit (matched against the code paths)
@@ -166,7 +172,7 @@ created (the PG17 suite only reads catalogs, calls existing functions and runs t
 | --- | --- | --- | --- |
 | 1 | the model suite (no network permission) | `deno test --no-config --no-check supabase/tests/common_account_g5_02_rpc_preflight_test.ts` | **11 tests** passed, 0 failed |
 | 2 | the PG17 precondition suite on the real F5 chain + the PR #303 candidate | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_g5_02_rpc_preconditions_pg_run.sh` | **5 tests** passed, 0 failed (three consecutive runs) |
-| 3 | mutation check of the model | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, **35/35 detected**, 0 invalid (32 at PR #344; 33 at PR #351; G5-04 rewrote the worker mutants for the generation pair) |
+| 3 | mutation check of the model | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, **37/37 detected**, 0 invalid (32 at PR #344; 33 at PR #351; 35 at PR #358; G5-05 added the generation-coverage fact) |
 | 4 | regression of the stack | G5-01 pure (13) + PG17 (10); owner-epoch suite (19) | all passed |
 | 5 | the whole harness incl. this document's test | `deno test --no-config --no-check --allow-read --allow-env supabase/preflight/managed_disposable/` | **194 passed**, 0 failed (189 of PR #340 + 5 new) |
 | 6 | type-check, lint, shell | `deno check --no-config` on the model and the new tests; `deno lint --no-config` on them and the harness; `bash -n` on the runner | no error; `Checked 50 files`; syntax OK |

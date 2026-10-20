@@ -65,8 +65,22 @@ M = [
      "                    and p.prosecdef and p.proconfig @> array['search_path=\"\"'] and p.proowner = v_owner) then"),
     ('the exposure precondition is skipped', C, "  if private.account_lifecycle_owner_epoch_exposure() is not null then\n    raise exception 'AUTH_VERDICT_PRECONDITION_%', private.account_lifecycle_owner_epoch_exposure();",
      "  if false then\n    raise exception 'AUTH_VERDICT_PRECONDITION_%', private.account_lifecycle_owner_epoch_exposure();"),
-    ('the lifecycle triggers are not checked', C, "                  and g.tgenabled in ('O', 'A') and g.tgtype = 29 and g.tgfoid = 'private.account_lifecycle_touch_entitlement()'::regprocedure)",
-     "                  )"),
+    # ---- G5-05: the generation coverage (H1 C1 P2 on PR #358)
+    ('GC: a WHEN clause is accepted', C, "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0", "             and pg_catalog.cardinality(t.tgattr::int2[]) = 0"),
+    ('GC: a column list is accepted', C, "and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0", "and t.tgconstraint = 0"),
+    ('GC: a constraint trigger is accepted', C, "and t.tgconstraint = 0 and not t.tgdeferrable", "and not t.tgdeferrable"),
+    ('GC: arguments are accepted', C, "             and t.tgnargs = 0 and t.tgoldtable is null", "             and t.tgoldtable is null"),
+    # (no mutant for the transition-table condition: PostgreSQL refuses transition tables on a trigger with more than one event and on a BEFORE
+    #  trigger, so no trigger with tgtype 29 or 19 can carry one -- the condition is kept as defence and cannot be told apart by any fixture)
+    ('GC: the entitlement trigger timing / events by bits only', C, "t.tgname = 'account_lifecycle_touch_entitlement' and t.tgtype = 29", "t.tgname = 'account_lifecycle_touch_entitlement' and t.tgtype & 29 = 29"),
+    ('GC: the account trigger timing is not checked', C, "t.tgname = 'account_lifecycle_touch_account' and t.tgtype = 19", "t.tgname = 'account_lifecycle_touch_account'"),
+    ('GC: another function is accepted', C, "\n                   and t.tgfoid = 'private.account_lifecycle_touch_entitlement()'::regprocedure)", ")"),
+    ('GC: a disabled or replica-only trigger counts', C, "           where not t.tgisinternal and t.tgenabled in ('O', 'A')\n             and t.tgqual is null", "           where not t.tgisinternal\n             and t.tgqual is null"),
+    ('GC: one trigger is enough', C, "                   and t.tgfoid = 'private.account_lifecycle_touch_account()'::regprocedure))) = 2", "                   and t.tgfoid = 'private.account_lifecycle_touch_account()'::regprocedure))) >= 1"),
+    ('GC: a reverting BEFORE UPDATE trigger on accounts is accepted', C, "                        and t.tgname <> 'account_lifecycle_touch_account')", "                        and false)"),
+    ('GC: rules are accepted', C, "     and not exists (select 1 from pg_catalog.pg_rewrite r where r.ev_class in ('public.common_accounts'::regclass, 'public.service_entitlements'::regclass))", ""),
+    ('GC: not checked before the install', C, "  if not private.account_lifecycle_generation_covered() then\n    raise exception 'AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS';", "  if false then\n    raise exception 'AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS';"),
+    ('GC: W1 does not check it on every call', C, "  if v_covered is not true then\n    return 'SERVICE_GENERATION_UNAVAILABLE';\n  end if;", ''),
     ('an API role reaching an allowed role is accepted', C, "                where a.rolname in ('anon', 'authenticated', 'service_role')\n                  and a.rolname is distinct from v_allowed",
      "                where a.rolname in ('anon', 'authenticated', 'service_role')\n                  and false"),
 ]
