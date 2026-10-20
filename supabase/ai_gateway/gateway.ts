@@ -6,7 +6,7 @@
 //
 // Order of one call (each step refuses before anything costs money or leaves the process):
 //   request shape -> authority verdict (G5's, an INPUT here) -> app feature policy -> cost bound -> call key and
-//   claim (idempotency) -> [per attempt] ledger reserve -> authority RECHECK -> claim still held -> ledger mark sent ->
+//   claim (idempotency) -> [per attempt] ledger reserve -> claim still held -> authority RECHECK -> ledger mark sent ->
 //   ONE provider request -> ledger settle | unknown -> app output check -> record the outcome -> answer.
 //
 // 2026-10-19 (PR289 GAP-1..3): a revocation before ANY attempt is AUTH_REVOKED_BEFORE_SEND (not a quota); a ledger
@@ -314,16 +314,30 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   }
   if (claim.kind !== "acquired") return fail("UNKNOWN");
 
-  // 7. Before EACH attempt: the ledger reserves, then the authority is asked again; a changed answer stops the send
-  //    (the reservation is released, nothing leaves). Then the claim must still be held (G6-07): recovery may have
-  //    closed the row while this process was stalled. It closes a row only when the ledger has no open attempt, and
-  //    this attempt's reservation is open from reserve on, so asking AFTER reserve leaves no gap; a closed or
-  //    unreadable claim sends nothing more. After the last check a call in flight cannot be stopped.
+  // 7. Before EACH attempt: the ledger reserves; then the claim must still be held (G6-07): recovery may have closed
+  //    the row while this process was stalled. It closes a row only when the ledger has no open attempt, and this
+  //    attempt's reservation is open from reserve on, so asking AFTER reserve leaves no gap; a closed or unreadable
+  //    claim sends nothing more. "busy" is not proof that THIS process owns the row (a deleted and re-created row is
+  //    busy too; G6-08 R1): the ledger's (call key, attempt) key still allows each attempt number one send only.
+  //    Then the authority is asked again, LAST before mark_sent (G6-09 R2: no other await between the recheck and
+  //    mark_sent); a changed answer stops the send (the reservation is released, nothing leaves). A change after the
+  //    recheck is not seen, and after mark_sent a call in flight cannot be stopped.
   let revoked = false;
   let fenced = false;
   const budget: BudgetGuard = {
     reserve: (c, cost) => deps.budget.reserve(c, cost),
     markSent: async (r) => {
+      // The row stays "acquired" (busy for a second claim) until this call completes it or recovery closes it.
+      let held: CallClaim;
+      try {
+        held = await deps.store.claim(identity, claimContext);
+      } catch {
+        held = { kind: "conflict" };
+      }
+      if (held.kind !== "busy") {
+        fenced = true;
+        throw new Error("CLAIM_NOT_HELD");
+      }
       let again: AuthVerdict;
       try {
         again = await deps.authority.recheck(verdict);
@@ -335,17 +349,6 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
         JSON.stringify(again.subject) !== JSON.stringify(verdict.subject)) {
         revoked = true;
         throw new Error("REVOKED");
-      }
-      // The row stays "acquired" (busy for a second claim) until this call completes it or recovery closes it.
-      let held: CallClaim;
-      try {
-        held = await deps.store.claim(identity, claimContext);
-      } catch {
-        held = { kind: "conflict" };
-      }
-      if (held.kind !== "busy") {
-        fenced = true;
-        throw new Error("CLAIM_NOT_HELD");
       }
       await deps.budget.markSent?.(r);
     },
@@ -364,9 +367,19 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   };
   // The claim was no longer held: the row's own outcome (recovery's tombstone) is the answer; nothing is recorded over it.
   if (fenced) return fail("UNKNOWN", audit);
+  // G6-09 (R1): the ledger refused an attempt number that another process may have used. ATTEMPT_FINALIZED (that
+  // attempt was already sent, settled or released) and SEND_NOT_CONFIRMED (the shared guard folds ATTEMPT_IN_FLIGHT
+  // into it, together with a mark_sent that failed or was refused, which may itself have committed "sent") cannot be
+  // told apart from a send by someone else. Nothing here proves "not sent": record nothing (no NOT_SENT, no
+  // no_request, no 0 USD) and answer UNKNOWN; the row stays acquired and recovery closes it with an audit built from
+  // the ledger (the source of truth). A revocation found by this process's own recheck is not such a refusal.
+  if (!result.ok && !revoked && result.errorCode === "BUDGET_DENIED" && (result.detail === "ATTEMPT_FINALIZED" || result.detail === "SEND_NOT_CONFIRMED")) {
+    return fail("UNKNOWN", null);
+  }
   // Why the call stopped without (another) send, decided in this order: a possibly billed attempt is UNKNOWN whatever
   // else happened; then a revocation (GAP-1: also after an earlier refused attempt); then the ledger: a budget limit
-  // is a quota, any other refusal or failure is LEDGER_UNAVAILABLE (GAP-2). Both stop reasons are stored as
+  // is a quota, any other refusal or failure before the send (the guard unreachable, an invalid amount) is
+  // LEDGER_UNAVAILABLE (GAP-2; the possibly-sent refusals are answered above). Both stop reasons are stored as
   // POLICY_DENIED (nothing more was sent; the store has no other code for it) and replay as NOT_SENT.
   let stop: "revoked" | "ledger" | null = null;
   let outcome: Readonly<{ ok: true; data: unknown } | { ok: false; code: StoredCode }>;

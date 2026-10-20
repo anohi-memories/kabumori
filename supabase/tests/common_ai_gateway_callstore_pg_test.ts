@@ -288,32 +288,36 @@ Deno.test({ name: "GAP-1 fixed (real SQL, both providers): revoked before the se
   }
 });
 
-Deno.test({ name: "GAP-2 fixed (real SQL): the ledger unreachable -> LEDGER_UNAVAILABLE, nothing sent, no reservation; same operation NOT_SENT after recovery; a new operation goes through", ...opts }, async () => {
+// G6-09 (R1): a mark_sent that fails (it may have committed "sent") is UNKNOWN with nothing recorded; a reserve that
+// fails gives no permit at all and stays LEDGER_UNAVAILABLE / NOT_SENT.
+Deno.test({ name: "GAP-2 fixed (real SQL): the ledger unreachable at reserve -> LEDGER_UNAVAILABLE, nothing sent, no reservation, same operation NOT_SENT; at mark_sent -> UNKNOWN, nothing recorded, same operation IN_PROGRESS (G6-09); a new operation goes through", ...opts }, async () => {
   for (const rpcName of ["ai_ledger_reserve", "ai_ledger_mark_sent"]) {
     Object.assign(ledgerFault, { rpc: rpcName, mode: "down", count: 1 });
     const w = world();
     const op = `op-gap2-${rpcName.slice(10, 16)}1`;
     const r = await w.run("jwt-a", ideas({ operationId: op }));
-    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, w.net.calls.length], [false, "LEDGER_UNAVAILABLE", "no_request", 0], rpcName);
-    const k = r.audit!.callKey;
-    assert.equal(await rows(`select coalesce(string_agg(status, ','), '-') from ai_ledger.reservations where request_id = '${k}'`), rpcName === "ai_ledger_reserve" ? "-" : "released", rpcName);
-    assert.equal(await rows(`select result ->> 'code' from ai_calls.consumer_calls where call_key = '${k}'`), "POLICY_DENIED");
+    const atReserve = rpcName === "ai_ledger_reserve";
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, w.net.calls.length], [false, atReserve ? "LEDGER_UNAVAILABLE" : "UNKNOWN", atReserve ? "no_request" : undefined, 0], rpcName);
+    const k = await rows(`select call_key from ai_calls.consumer_calls order by created_at desc limit 1`);
+    assert.equal(await rows(`select coalesce(string_agg(status, ','), '-') from ai_ledger.reservations where request_id = '${k}'`), atReserve ? "-" : "released", rpcName);
+    assert.equal(await rows(`select state || ':' || coalesce(result ->> 'code', '-') from ai_calls.consumer_calls where call_key = '${k}'`), atReserve ? "complete:POLICY_DENIED" : "acquired:-");
     const again = await w.run("jwt-a", ideas({ operationId: op }));
-    assert.deepEqual([again.ok, !again.ok && again.code, w.net.calls.length], [false, "NOT_SENT", 0], rpcName);
+    assert.deepEqual([again.ok, !again.ok && again.code, w.net.calls.length], [false, atReserve ? "NOT_SENT" : "IN_PROGRESS", 0], rpcName);
     const fresh = await w.run("jwt-a", ideas({ operationId: `${op}-new` }));
     assert.deepEqual([fresh.ok, w.net.calls.length], [true, 1], rpcName);
   }
 });
 
-Deno.test({ name: "GAP-2 / GAP-4 (real SQL): mark_sent COMMITTED but its answer lost -> nothing sent, LEDGER_UNAVAILABLE; the ledger keeps the attempt 'sent' (release refused) for recovery at the upper bound: the ledger may over-count, never under-count", ...opts }, async () => {
+Deno.test({ name: "GAP-2 / GAP-4 (real SQL): mark_sent COMMITTED but its answer lost -> nothing sent, UNKNOWN and nothing recorded (G6-09: no not-sent answer over a ledger 'sent'); the ledger keeps the attempt 'sent' (release refused) for recovery at the upper bound: the ledger may over-count, never under-count", ...opts }, async () => {
   Object.assign(ledgerFault, { rpc: "ai_ledger_mark_sent", mode: "lost", count: 1 });
   const w = world();
   const r = await w.run("jwt-a", ideas({ operationId: "op-gap2-lostms1" }));
-  assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, w.net.calls.length], [false, "LEDGER_UNAVAILABLE", "no_request", 0]);
-  const k = r.audit!.callKey;
+  assert.deepEqual([r.ok, !r.ok && r.code, r.audit, w.net.calls.length], [false, "UNKNOWN", null, 0]);
+  const k = await rows(`select call_key from ai_calls.consumer_calls order by created_at desc limit 1`);
   assert.equal(await rows(`select status from ai_ledger.reservations where request_id = '${k}'`), "sent");
   assert.equal(await rows(`select count(*) from ai_ledger.usage_events where request_id = '${k}'`), "0");
-  assert.equal(await rows(`select result ->> 'code' from ai_calls.consumer_calls where call_key = '${k}'`), "POLICY_DENIED");
+  // Before G6-09 the row said POLICY_DENIED / no_request over a ledger 'sent'; now recovery writes it from the ledger.
+  assert.equal(await rows(`select state || ':' || coalesce(result ->> 'code', '-') from ai_calls.consumer_calls where call_key = '${k}'`), "acquired:-");
 });
 
 Deno.test({ name: "real SQL: one operation = one ai_calls row + one ledger reservation under the same key, for both providers; a new gateway instance replays without sending", ...opts }, async () => {

@@ -4,7 +4,8 @@
 // measured, "busy" not being an ownership proof (row deleted and re-acquired) and the ledger attempt key as the second
 // fence, the check failing closed (lost answer, timeout behind a held lock, an orphan row), an identity-bound check, a
 // retry after the sent grace, the authority window after the last check, and a 4-way race over many interleavings.
-// Two tests pin a RESIDUAL behaviour on purpose (named "RESIDUAL"): they assert what happens today, for the reviewer.
+// G6-09: the R1 reproduction, the forget_user precondition and the R2 window moved to
+// common_ai_gateway_r1_r2_corrective_pg_test.ts (their expected behaviour changed with the G6-09 fix).
 // Run by common_ai_gateway_restart_race_pg_run.sh common_ai_gateway_fence_review_pg_test.ts.
 import assert from "node:assert/strict";
 import {
@@ -121,52 +122,13 @@ Deno.test({ name: "busy is not an ownership proof: after recovery and forget_use
   assert.equal(await rows(`select count(*) from g6r_fake.events where worker = '${a.name}' and point = 'start:ai_ledger_mark_sent#1'`), "1", "passed the check");
   await resume(restart);
   const second = await answer(restart);
-  // The restart's reserve finds attempt 1 finalised (released): no attempt number can authorise a second send.
-  assert.deepEqual([codeOf(original), codeOf(second), await sends(op), await ledger(k), await state(k)], ["UNKNOWN", "LEDGER_UNAVAILABLE", 0, "released", "complete"]);
+  // The restart's reserve finds attempt 1 finalised (released): no attempt number can authorise a second send. Since G6-09
+  // (R1) neither process records "not sent": both answer UNKNOWN and recovery closes the row from the ledger.
+  assert.deepEqual([codeOf(original), codeOf(second), await sends(op), await ledger(k), await state(k)], ["UNKNOWN", "UNKNOWN", 0, "released", "acquired"]);
+  await age(k, 1900);
+  const closed = (await recover()).candidates.find((c) => c.callKey === k);
+  assert.deepEqual([closed?.classification, closed?.outcome], ["NOT_SENT_PROVEN", "ABANDONED"]);
   await auditMatchesLedger(k, "re-acquired row");
-});
-
-Deno.test({ name: "RESIDUAL (needs shared SQL): stalled BEFORE its reserve, recovery + forget_user, a restart holds the new row: the stalled process passes the check and sends; the restart is told NOT_SENT while the ledger has the charge", ...opts }, async () => {
-  const op = "op-g608-residual-busy";
-  const k = await keyC(op);
-  const a = gateway(op, { ...asC, pauseAt: "after:ai_calls_claim" });
-  await paused(a, "after:ai_calls_claim");
-  await age(k, 1900);
-  assert.equal((await recover()).candidates.find((c) => c.callKey === k)?.classification, "NOT_SENT_PROVEN");
-  assert.equal((await forgetUser(USER_C)).forgotten, true, "forget_user ran while C is still authorised (its documented precondition is NOT met)");
-  const restart = gateway(op, { ...asC, pauseAt: "after:ai_calls_claim" });
-  await paused(restart, "after:ai_calls_claim");
-  await resume(a);
-  const original = await answer(a);
-  await resume(restart);
-  const second = await answer(restart);
-  // What happens today: one send (by the process whose claim was closed and deleted), the charge in the ledger, and
-  // the live row records "not sent" with no attempt.
-  assert.deepEqual([codeOf(original), codeOf(second), await sends(op), await ledger(k), await state(k)], ["UNKNOWN", "LEDGER_UNAVAILABLE", 1, "settled", "complete"]);
-  const row = await audit(k);
-  assert.deepEqual([row.attempts, row.costBasis, await rows(`select result ->> 'code' from ai_calls.consumer_calls where call_key = '${k}'`)], [0, "no_request", "POLICY_DENIED"]);
-  assert.equal(Number(await rows(`select count(*) from ai_ledger.usage_events where request_id = '${k}' and cost_basis = 'measured'`)), 1, "never double: the ledger allowed attempt 1 once");
-  assert.equal(codeOf(await answer(gateway(op, asC))), "NOT_SENT", "the person is told it was not sent");
-});
-
-Deno.test({ name: "with forget_user's precondition met (the person can no longer be authorised), the stalled process is stopped by the recheck before the check, and no restart can start", ...opts }, async () => {
-  const op = "op-g608-precondition-met";
-  const k = await keyC(op);
-  const a = gateway(op, { ...asC, pauseAt: "after:ai_calls_claim", trace: true });
-  await paused(a, "after:ai_calls_claim");
-  await age(k, 1900);
-  assert.equal((await recover()).candidates.find((c) => c.callKey === k)?.outcome, "ABANDONED");
-  await rows(`update g6r_fake.sessions set state = 'revoked' where jwt = '${JWT_C1}'`);
-  try {
-    assert.equal((await forgetUser(USER_C)).forgotten, true);
-    assert.equal(codeOf(await answer(gateway(op, asC))), "AUTH_DENIED");
-    await resume(a);
-    // Stopped at the recheck (the check never ran); its record then fails on the deleted row, hence UNKNOWN.
-    assert.deepEqual([codeOf(await answer(a)), await sends(op), await ledger(k), await state(k)], ["UNKNOWN", 0, "released", "-"]);
-    assert.equal(await rows(`select count(*) from g6r_fake.events where worker = '${a.name}' and point = 'start:ai_calls_claim#2'`), "0");
-  } finally {
-    await rows(`update g6r_fake.sessions set state = 'active' where jwt = '${JWT_C1}'`);
-  }
 });
 
 Deno.test({ name: "the check fails closed: its answer lost after the statement ran; slower than the RPC timeout behind a lock another session holds; a lost answer that CREATED a row after deletion leaves an orphan that recovery closes", ...opts }, async () => {
@@ -256,18 +218,6 @@ Deno.test({ name: "why the check comes AFTER reserve: stopped right after the ch
   await resume(a);
   assert.deepEqual([codeOf(await answer(a)), await sends(op), await state(k)], ["OK", 1, "complete"]);
   await auditMatchesLedger(k, "after the check");
-});
-
-Deno.test({ name: "RESIDUAL (window): an owner-epoch change after the recheck (between the check and mark_sent) is not seen: the send goes out", ...opts }, async () => {
-  const op = "op-g608-epoch-window";
-  const k = await keyOf(op, { brand: "brand_w" });
-  const a = gateway(op, { brand: "brand_w", pauseAt: "after:ai_calls_claim#2" });
-  await paused(a, "after:ai_calls_claim#2");
-  await rows(`update g6r_fake.brands set owner_epoch = owner_epoch + 1 where slug = 'brand_w'`);
-  await resume(a);
-  assert.deepEqual([codeOf(await answer(a)), await sends(op), await ledger(k)], ["OK", 1, "settled"]);
-  // A restart under the new epoch replays the stored answer (same person, same brand), nothing more is sent.
-  assert.deepEqual([codeOf(await answer(gateway(op, { brand: "brand_w" }))), await sends(op)], ["OK", 1]);
 });
 
 Deno.test({ name: "4-way race over many interleavings: a stalled original resumes while a restart and two recovery processes run; at most one send, nothing left open, every row true to the ledger", ...opts }, async () => {

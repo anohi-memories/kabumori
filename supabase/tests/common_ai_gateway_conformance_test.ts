@@ -403,18 +403,21 @@ Deno.test("real ledger guard: a revoked recheck never reaches mark_sent; the res
   }
 });
 
-Deno.test("GAP-2 fixed (real ledger guard): unreachable / failing / not confirming ledger -> LEDGER_UNAVAILABLE (not a quota); nothing sent; the same operation never resends; a new operation works after recovery", async () => {
-  const cases: Array<[string, FakeLedgerRest["fault"], string[]]> = [
-    ["reserve network", { ai_ledger_reserve: "network" }, ["reserve"]],
-    ["reserve 500", { ai_ledger_reserve: 500 }, ["reserve"]],
-    ["reserve refused: attempt already final", { ai_ledger_reserve: "deny:ATTEMPT_FINALIZED" }, ["reserve"]],
-    ["reserve refused: unknown reason", { ai_ledger_reserve: "deny:SOMETHING_NEW" }, ["reserve"]],
-    ["mark_sent network", { ai_ledger_mark_sent: "network" }, ["reserve", "mark_sent", "release"]],
-    ["mark_sent 503", { ai_ledger_mark_sent: 503 }, ["reserve", "mark_sent", "release"]],
-    ["mark_sent refused (no permit)", { ai_ledger_mark_sent: "refuse" }, ["reserve", "mark_sent", "release"]],
+// G6-09 (R1): a refusal that another process may have sent under (ATTEMPT_FINALIZED; SEND_NOT_CONFIRMED, into which the
+// shared guard folds ATTEMPT_IN_FLIGHT and a failed / refused mark_sent) is UNKNOWN, recorded by nobody but recovery.
+Deno.test("GAP-2 fixed (real ledger guard): unreachable / failing ledger before any permit -> LEDGER_UNAVAILABLE (not a quota); a refusal someone else may have sent under -> UNKNOWN, nothing recorded (G6-09); nothing sent; the same operation never resends; a new operation works after recovery", async () => {
+  const cases: Array<[string, FakeLedgerRest["fault"], string[], "not_sent" | "unknown"]> = [
+    ["reserve network", { ai_ledger_reserve: "network" }, ["reserve"], "not_sent"],
+    ["reserve 500", { ai_ledger_reserve: 500 }, ["reserve"], "not_sent"],
+    ["reserve refused: attempt already final", { ai_ledger_reserve: "deny:ATTEMPT_FINALIZED" }, ["reserve"], "unknown"],
+    ["reserve refused: attempt in flight elsewhere", { ai_ledger_reserve: "deny:ATTEMPT_IN_FLIGHT" }, ["reserve"], "unknown"],
+    ["reserve refused: unknown reason", { ai_ledger_reserve: "deny:SOMETHING_NEW" }, ["reserve"], "not_sent"],
+    ["mark_sent network", { ai_ledger_mark_sent: "network" }, ["reserve", "mark_sent", "release"], "unknown"],
+    ["mark_sent 503", { ai_ledger_mark_sent: 503 }, ["reserve", "mark_sent", "release"], "unknown"],
+    ["mark_sent refused (no permit)", { ai_ledger_mark_sent: "refuse" }, ["reserve", "mark_sent", "release"], "unknown"],
   ];
   for (const p of PROVIDERS) {
-    for (const [label, fault, calls] of cases) {
+    for (const [label, fault, calls, kind] of cases) {
       const rest = new FakeLedgerRest();
       rest.fault = fault;
       const net = recordingFetch(ok("どうぞ")[p]);
@@ -423,12 +426,18 @@ Deno.test("GAP-2 fixed (real ledger guard): unreachable / failing / not confirmi
       const r = await gatewayExecute(d, "jwt-a", ideas());
       assert.equal(net.calls.length, 0, `${p} ${label}: nothing sent`);
       assert.deepEqual(rest.calls, calls, `${p} ${label}`);
-      assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis], [false, "LEDGER_UNAVAILABLE", "no_request"], `${p} ${label}`);
       const [row] = [...store.rows.values()];
-      assert.equal(row.outcome?.ok === false && row.outcome.code, "POLICY_DENIED", `${p} ${label}: stored as not sent`);
       rest.fault = {};
       const again = await gatewayExecute(d, "jwt-a", ideas());
-      assert.deepEqual([again.ok, !again.ok && again.code, net.calls.length], [false, "NOT_SENT", 0], `${p} ${label}: the same operation is final, never resent`);
+      if (kind === "not_sent") {
+        assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis], [false, "LEDGER_UNAVAILABLE", "no_request"], `${p} ${label}`);
+        assert.equal(row.outcome?.ok === false && row.outcome.code, "POLICY_DENIED", `${p} ${label}: stored as not sent`);
+        assert.deepEqual([again.ok, !again.ok && again.code, net.calls.length], [false, "NOT_SENT", 0], `${p} ${label}: the same operation is final, never resent`);
+      } else {
+        assert.deepEqual([r.ok, !r.ok && r.code, r.audit], [false, "UNKNOWN", null], `${p} ${label}: no "not sent", no 0 USD`);
+        assert.equal(row.outcome, null, `${p} ${label}: nothing recorded (left for recovery, which builds the audit from the ledger)`);
+        assert.deepEqual([again.ok, !again.ok && again.code, net.calls.length], [false, "IN_PROGRESS", 0], `${p} ${label}: the same operation waits for recovery, never resent`);
+      }
       const fresh = await gatewayExecute(d, "jwt-a", ideas("op-conformance-2"));
       assert.deepEqual([fresh.ok, net.calls.length], [true, 1], `${p} ${label}: a new operation works after recovery`);
     }

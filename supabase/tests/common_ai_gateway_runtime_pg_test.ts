@@ -180,7 +180,7 @@ Deno.test({ name: "runtime: the ledger's daily limit -> QUOTA_EXCEEDED with no r
   assert.equal(code(await world().run("jwt-a", ideas("op-gwr-revoke1"))), "NOT_SENT");
 });
 
-Deno.test({ name: "runtime: ledger unreachable -> LEDGER_UNAVAILABLE, nothing sent; mark_sent committed but lost -> nothing sent, the ledger keeps 'sent' (over-counts, never under-counts); settle lost -> answer OK, ledger 'sent' for recovery", ...opts }, async () => {
+Deno.test({ name: "runtime: ledger unreachable -> LEDGER_UNAVAILABLE, nothing sent; mark_sent committed but lost -> nothing sent, UNKNOWN and nothing recorded (G6-09), the ledger keeps 'sent' (over-counts, never under-counts); settle lost -> answer OK, ledger 'sent' for recovery", ...opts }, async () => {
   Object.assign(fault, { rpc: "ai_ledger_reserve", mode: "down", count: 1 });
   const d = world();
   assert.deepEqual([code(await d.run("jwt-a", ideas("op-gwr-ldown1"))), d.provider.calls.length], ["LEDGER_UNAVAILABLE", 0]);
@@ -188,8 +188,11 @@ Deno.test({ name: "runtime: ledger unreachable -> LEDGER_UNAVAILABLE, nothing se
   Object.assign(fault, { rpc: "ai_ledger_mark_sent", mode: "lost", count: 1 });
   const m = world();
   const lost = await m.run("jwt-a", ideas("op-gwr-msent1"));
-  assert.deepEqual([code(lost), m.provider.calls.length], ["LEDGER_UNAVAILABLE", 0]);
-  assert.equal(await rows(`select status from ai_ledger.reservations where request_id = '${lost.audit!.callKey}'`), "sent");
+  // G6-09 (R1): mark_sent may have committed "sent", so nothing proves "not sent": UNKNOWN, no audit, the row left for recovery.
+  assert.deepEqual([code(lost), lost.audit, m.provider.calls.length], ["UNKNOWN", null, 0]);
+  const lostKey = await rows(`select call_key from ai_calls.consumer_calls order by created_at desc limit 1`);
+  assert.equal(await rows(`select status from ai_ledger.reservations where request_id = '${lostKey}'`), "sent");
+  assert.equal(await rows(`select state from ai_calls.consumer_calls where call_key = '${lostKey}'`), "acquired");
   Object.assign(fault, { rpc: "ai_ledger_settle", mode: "down", count: 1 });
   const s = world();
   const ok = await s.run("jwt-a", ideas("op-gwr-settle1"));
