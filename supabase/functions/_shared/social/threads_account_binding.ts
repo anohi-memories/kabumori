@@ -17,8 +17,10 @@
 //   who started the connect is the person signed in now; the receipt came back before the OAuth state expired; exactly
 //   one Threads row with that id, in the brand the connect was for, identity_verified with a credential and a
 //   well-formed Threads user id; on a reconnect, the same Threads user as before; bound by this person; G5 says
-//   allow for this principal, brand and service with an owner/admin role and a known owner epoch; and the owner epoch
-//   recorded when the account was bound equals the current one (owner A -> B -> A never revives a binding).
+//   allow for this principal, brand and service with an owner/admin role and a well-formed owner-epoch token; and BOTH
+//   numbers recorded when the account was bound equal the token's (G4-08): the owner epoch (owner A -> B -> A never
+//   revives a binding) and the owner's lifecycle_version, G5's service generation (a service ended and restarted since
+//   the binding is a new period: G5-04 PR #358, no clock is compared). Both stay decimal text (g5_owner_epoch_token.ts).
 //
 // What it is NOT: an authority for a credential. The receipt is a receipt (threads_connect_publish_integration.ts);
 // the credential port still needs ONE database statement that re-decides all of this together with the token and the
@@ -26,6 +28,7 @@
 // change (G4 SQL + G5 decision, separate tasks) a real binding always answers BIND_EPOCH_UNRECORDED or
 // SERVICE_KEY_UNDECIDED. It never writes: a duplicate or replayed receipt gets the same verdict and changes nothing
 // (the single-use state and code are the database's and H5's).
+import { g5Decimal, parseG5OwnerEpochToken } from "./g5_owner_epoch_token.ts";
 import { acceptableServiceKey, THREADS_POSTING_SERVICE_KEY } from "./threads_send_port.ts";
 
 export const THREADS_ACCOUNT_BINDING_ENABLED = false;
@@ -52,6 +55,7 @@ export const THREADS_BINDING_REFUSALS = [
   "OWNER_EPOCH_UNKNOWN",
   "BIND_EPOCH_UNRECORDED",
   "OWNER_EPOCH_CHANGED",
+  "SERVICE_GENERATION_CHANGED", // G4-08: the owner's lifecycle_version moved since the binding (ended and restarted)
 ] as const;
 export type ThreadsBindingRefusal = (typeof THREADS_BINDING_REFUSALS)[number];
 
@@ -75,8 +79,9 @@ export type ThreadsAccountRow = Readonly<{
   connectionStatus: string;
   hasAccessCredential: boolean;
   boundByPrincipalId: string | null;
-  /** The brand owner epoch when this binding was made; PR #124 does not record it yet. */
-  bindOwnerEpoch: number | null;
+  /** The two numbers of the R1 allow this binding was made under, as decimal text; PR #124 records neither yet. */
+  bindOwnerEpoch: string | null;
+  bindLifecycleVersion: string | null;
 }>;
 
 /** G5's verdict (G5-01 defines it; not implemented). */
@@ -87,7 +92,8 @@ export type G5PrincipalVerdict = Readonly<{
   verdict: "allow" | "deny";
   role: "owner" | "admin" | "member" | null;
   entitlementVersion: string;
-  ownerEpoch: number | null;
+  /** R1's owner_epoch: "g5oe:<epoch>:<lifecycle_version>" on allow, else null. */
+  ownerEpochToken: string | null;
 }>;
 
 export type ThreadsBindingPorts = Readonly<{
@@ -101,7 +107,9 @@ export type ThreadsAccountBinding = Readonly<{
   threadsUserId: string;
   principalId: string;
   serviceKey: string;
-  ownerEpoch: number;
+  /** Decimal text (bigint range), never a JS number. */
+  ownerEpoch: string;
+  lifecycleVersion: string;
   entitlementVersion: string;
 }>;
 export type ThreadsBindingVerdict =
@@ -130,7 +138,8 @@ function accountRow(answer: unknown): ThreadsAccountRow | "none" | "many" | null
   if (rows.length > 1) return "many";
   const r = rows[0] as Record<string, unknown>;
   if (typeof r !== "object" || r === null) return null;
-  const okEpoch = r.bindOwnerEpoch === null || (Number.isSafeInteger(r.bindOwnerEpoch) && (r.bindOwnerEpoch as number) >= 0);
+  const okEpoch = (r.bindOwnerEpoch === null || typeof r.bindOwnerEpoch === "string") &&
+    (r.bindLifecycleVersion === null || typeof r.bindLifecycleVersion === "string");
   if (
     typeof r.socialAccountId !== "string" || typeof r.brandId !== "string" || typeof r.platform !== "string" ||
     !(r.platformUserId === null || typeof r.platformUserId === "string") || typeof r.connectionStatus !== "string" ||
@@ -147,7 +156,7 @@ function principalVerdict(answer: unknown): G5PrincipalVerdict | null {
     (v.verdict !== "allow" && v.verdict !== "deny") ||
     !(v.role === null || v.role === "owner" || v.role === "admin" || v.role === "member") ||
     typeof v.entitlementVersion !== "string" || !VERSION.test(v.entitlementVersion) ||
-    !(v.ownerEpoch === null || Number.isSafeInteger(v.ownerEpoch))
+    !(v.ownerEpochToken === null || typeof v.ownerEpochToken === "string")
   ) return null;
   return v as unknown as G5PrincipalVerdict;
 }
@@ -208,9 +217,13 @@ export async function decideThreadsAccountBinding(
   }
   if (verdict.verdict !== "allow") return refuse("SERVICE_NOT_ACTIVE");
   if (verdict.role !== "owner" && verdict.role !== "admin") return refuse("ROLE_INSUFFICIENT");
-  if (verdict.ownerEpoch === null || verdict.ownerEpoch < 1) return refuse("OWNER_EPOCH_UNKNOWN");
-  if (row.bindOwnerEpoch === null || row.bindOwnerEpoch < 1) return refuse("BIND_EPOCH_UNRECORDED");
-  if (row.bindOwnerEpoch !== verdict.ownerEpoch) return refuse("OWNER_EPOCH_CHANGED");
+  const generation = parseG5OwnerEpochToken(verdict.ownerEpochToken);
+  if (generation === null) return refuse("OWNER_EPOCH_UNKNOWN");
+  const boundEpoch = g5Decimal(row.bindOwnerEpoch);
+  const boundLifecycle = g5Decimal(row.bindLifecycleVersion);
+  if (boundEpoch === null || boundLifecycle === null) return refuse("BIND_EPOCH_UNRECORDED");
+  if (boundEpoch !== generation.ownerEpoch) return refuse("OWNER_EPOCH_CHANGED");
+  if (boundLifecycle !== generation.lifecycleVersion) return refuse("SERVICE_GENERATION_CHANGED");
 
   return Object.freeze({
     ok: true,
@@ -220,7 +233,8 @@ export async function decideThreadsAccountBinding(
       threadsUserId: row.platformUserId,
       principalId: principal,
       serviceKey,
-      ownerEpoch: verdict.ownerEpoch,
+      ownerEpoch: generation.ownerEpoch,
+      lifecycleVersion: generation.lifecycleVersion,
       entitlementVersion: verdict.entitlementVersion,
     }),
   });

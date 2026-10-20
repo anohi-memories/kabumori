@@ -27,6 +27,7 @@ import {
   type ThreadsBindingVerdict,
   type ThreadsConnectFlowContext,
 } from "./threads_account_binding.ts";
+import { g5Decimal } from "./g5_owner_epoch_token.ts";
 import { checkThreadsText, type FetchLike } from "./threads_publish_contract.ts";
 import {
   acceptableServiceKey,
@@ -45,24 +46,34 @@ import {
 export const THREADS_VERTICAL_PATH_ENABLED = false;
 
 /**
- * G5's worker verdict (G5-02 W2 `common_account_worker_brand_verdict`, service_role only; not implemented): 'active'
- * or one of G5's codes. Any other answer is not 'active'.
+ * G5's worker verdict (G5-04 PR #358 W2 `common_account_worker_brand_verdict(p_brand_id, p_service_key,
+ * p_expected_owner_epoch bigint, p_expected_lifecycle_version bigint)`, service_role only; not implemented): 'active' or
+ * one of G5's codes. Any other answer is not 'active'. G4-08: the two expected numbers are the binding's, as decimal
+ * text (the transport passes them as bigint); there is no clock argument any more.
  */
-export type ThreadsWorkerVerdictPort = (brandId: string, serviceKey: string, expectedOwnerEpoch: number, boundAtMs: number) => Promise<unknown>;
+export type ThreadsWorkerVerdictPort = (
+  brandId: string,
+  serviceKey: string,
+  expectedOwnerEpoch: string,
+  expectedLifecycleVersion: string,
+) => Promise<unknown>;
 
+/** Exactly what W1 (PR #358 @ 4f4ece89) can answer besides 'active'. The pre-G5-04 names are not accepted. */
 export const G5_WORKER_VERDICT_CODES = [
   "WORKSPACE_OWNER_UNKNOWN",
+  "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
   "ACCOUNT_DELETION_IN_PROGRESS",
+  "ACCOUNT_LOCKED",
+  "SERVICE_NOT_REGISTERED",
   "SERVICE_DELETION_IN_PROGRESS",
   "SERVICE_NOT_ACTIVE",
-  "OWNER_EPOCH_UNAVAILABLE",
-  "OWNER_EPOCH_CHANGED",
-  "SERVICE_REACTIVATED_SINCE_BIND",
-  "EXPECTED_OWNER_EPOCH_REQUIRED",
-  "BOUND_AT_REQUIRED",
   "ACCOUNT_LIFECYCLE_SERVICE_INVALID",
   "SERVICE_STATE_UNKNOWN",
-  "FACTS_UNAVAILABLE",
+  "EXPECTED_OWNER_EPOCH_REQUIRED",
+  "EXPECTED_LIFECYCLE_VERSION_REQUIRED",
+  "OWNER_EPOCH_UNAVAILABLE",
+  "OWNER_EPOCH_CHANGED",
+  "SERVICE_GENERATION_CHANGED",
 ] as const;
 
 export const THREADS_VERTICAL_REFUSALS = [
@@ -70,7 +81,7 @@ export const THREADS_VERTICAL_REFUSALS = [
   "SERVICE_KEY_UNDECIDED",
   "BINDING_INVALID", // not a binding of this path (shape, service key, generation format)
   "OWNER_EPOCH_MISSING",
-  "BOUND_AT_REQUIRED",
+  "LIFECYCLE_VERSION_MISSING",
   "TEXT_INVALID",
   "WORKER_VERDICT_UNAVAILABLE", // no G5 worker verdict wired, or it failed
   "WORKER_VERDICT_UNKNOWN", // it answered something that is neither 'active' nor a G5 code
@@ -82,9 +93,8 @@ export const THREADS_VERTICAL_REFUSALS = [
 export type ThreadsVerticalRefusal = (typeof THREADS_VERTICAL_REFUSALS)[number];
 
 export type ThreadsPostRequest = Readonly<{
+  /** Carries the two G5 numbers it was made under; they are passed on unchanged, never re-read here (G5-04). */
   binding: ThreadsAccountBinding;
-  /** When the binding was made (G3's reservation keeps it with the owner epoch, per G5-02). */
-  boundAtMs: number;
   /** The generation G3's preflight answered, or null when the caller has none. */
   expectedGeneration: string | null;
   text: string;
@@ -125,7 +135,8 @@ function bindingProblem(b: unknown, serviceKey: string): ThreadsVerticalRefusal 
     typeof r.threadsUserId !== "string" || !THREADS_USER.test(r.threadsUserId) || typeof r.principalId !== "string" ||
     !UUID.test(r.principalId) || r.serviceKey !== serviceKey || typeof r.entitlementVersion !== "string"
   ) return "BINDING_INVALID";
-  if (!Number.isSafeInteger(r.ownerEpoch) || (r.ownerEpoch as number) < 1) return "OWNER_EPOCH_MISSING";
+  if (g5Decimal(r.ownerEpoch) === null) return "OWNER_EPOCH_MISSING";
+  if (g5Decimal(r.lifecycleVersion) === null) return "LIFECYCLE_VERSION_MISSING";
   return null;
 }
 
@@ -142,7 +153,6 @@ export function createGatedThreadsVerticalPath(enabled: boolean, serviceKey: str
     const problem = bindingProblem(request?.binding, serviceKey as string);
     if (problem) return refused(problem);
     const binding = request.binding;
-    if (!Number.isSafeInteger(request.boundAtMs) || request.boundAtMs <= 0) return refused("BOUND_AT_REQUIRED");
     if (request.expectedGeneration !== null && (typeof request.expectedGeneration !== "string" || !GENERATION.test(request.expectedGeneration))) {
       return refused("BINDING_INVALID");
     }
@@ -156,10 +166,11 @@ export function createGatedThreadsVerticalPath(enabled: boolean, serviceKey: str
     if (credential.threadsUserId !== binding.threadsUserId) return refused("CREDENTIAL_IDENTITY_CHANGED");
     if (request.expectedGeneration !== null && credential.generation !== request.expectedGeneration) return refused("GENERATION_CHANGED");
 
-    // The last check before the provider (G5-02 W2): owner epoch at binding, bind time, service period.
+    // The last check before the provider (G5-04 W2): the owner epoch AND the service generation (lifecycle_version) the
+    // binding was made under, unchanged; G5 compares them with the current ones in one statement.
     let answer: unknown;
     try {
-      answer = await workerVerdict(binding.brandId, serviceKey as string, binding.ownerEpoch, request.boundAtMs);
+      answer = await workerVerdict(binding.brandId, serviceKey as string, binding.ownerEpoch, binding.lifecycleVersion);
     } catch {
       return refused("WORKER_VERDICT_UNAVAILABLE");
     }
@@ -173,7 +184,7 @@ export function createGatedThreadsVerticalPath(enabled: boolean, serviceKey: str
     const outcome = await sender.send({ threadsUserId: credential.threadsUserId, accessToken: credential.accessToken }, request.text, {
       async beforePublish() {
         try {
-          return (await workerVerdict(binding.brandId, serviceKey as string, binding.ownerEpoch, request.boundAtMs)) === "active";
+          return (await workerVerdict(binding.brandId, serviceKey as string, binding.ownerEpoch, binding.lifecycleVersion)) === "active";
         } catch {
           return false;
         }
