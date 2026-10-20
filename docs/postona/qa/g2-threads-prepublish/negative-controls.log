@@ -1,0 +1,8 @@
+# G2 gen7 negative controls (G4 source mutated temporarily and restored after each run; G3 mutated only in a temp copy)
+KILLED   7 passed | 6 failed | G4: publish even when the hook refuses
+SURVIVED 13 passed | 0 failed | G4: a throwing hook counts as allowed (unreachable through G3: its hook never throws; covered by G4 unit tests)
+KILLED   12 passed | 1 failed | G3: re-check ignores the generation
+KILLED   11 passed | 2 failed | G3: unreadable/late re-check treated as OK
+KILLED   12 passed | 1 failed | G3: same row twice in one run is sent twice
+KILLED   10 passed | 3 failed | G3: unknown read-back recorded as published
+# result 5/6 detected
