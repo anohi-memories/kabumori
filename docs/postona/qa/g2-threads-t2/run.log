@@ -1,0 +1,16 @@
+# node --test tests/g2-threads-t2-crosslayer.test.mjs  (G4 PR #381 HEAD 8eefb3b63f4efba0727e99de980e0d56733d1d8e + this G2 test; node v24.19.0)
+✔ G2-T2-OK (guard for the fix): the person's only account was this Threads one -- after a READY reload the list is truly empty and "解除しました" is right (53.10425ms)
+✔ FINDING G2-T2-F (P3, owner G4): the reload FAILS (unavailable / blocked) -- the list is empty because nothing was read, yet the card says "解除しました" and keeps saying it (24.72225ms)
+✔ G2-T2-S: the READY reload still lists the account (the server answered, the read shows it) -- no success is claimed; it keeps "checking" (no further read) (9.39325ms)
+✔ FINDING G2-T2-M (P3, owner G4): two Threads accounts -- after A is removed the same card shows B's button next to a result line that does not say WHICH account was removed (10.937375ms)
+✔ FINDING G2-T2-P (P3, owner G4): another person signs in while the card is "checking" -- their list has no such account, and THEY are told "解除しました" (9.520334ms)
+✔ G2-T2-L: the data layer drops a read that finishes after a newer reload (no older list can come back), and `accounts` is [] unless the status is ready -- the rules the stand-in follows (1.036625ms)
+✔ negative control: "verified only when the list is not empty" (a naive fix) stops the false success after a failed reload, and G2-T2-OK catches that it never confirms a truly empty list (17.726041ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.458625
