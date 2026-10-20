@@ -77,7 +77,7 @@ Deno.test("H1 create over HTTP -> 200; the same request -> the same row (created
   assert.deepEqual((await create(t, 61, "H1 別の本文", first.id, first.at)).body, { ok: false, code: "IDEMPOTENCY_CONFLICT" });
   assert.deepEqual((await create(t, 61, "H1 Threads 予約", first.id, inMinutes(30))).body, { ok: false, code: "IDEMPOTENCY_CONFLICT" });
   const r = await receipt(t, 61, first.id);
-  assert.deepEqual(r.body, { ok: true, reservationId: first.body.reservationId, state: "pending", simulated: true, afterFreeze: false });
+  assert.deepEqual(r.body, { ok: true, reservationId: first.body.reservationId, state: "pending", simulated: true, afterFreeze: false, action: "none" });
   assert.ok(!JSON.stringify(r.body).includes("H1 Threads"));
 });
 
@@ -101,8 +101,8 @@ Deno.test("H3 fail-closed at create (nothing written): G4 not verified, switch O
   const cases: [number, string, string, string][] = [
     [64, "delete from t_threads.verified where social_account_id = $1", "insert into t_threads.verified values ($1)", "ACCOUNT_NOT_VERIFIED"],
     [65, "update public.social_accounts set publish_enabled = false where id = $1", "update public.social_accounts set publish_enabled = true where id = $1", "PUBLISH_DISABLED"],
-    [66, "update t_threads.entitlement set status = 'ended' where user_id = (select user_id from t_ids.people where threads_account = $1)",
-      "update t_threads.entitlement set status = 'active' where user_id = (select user_id from t_ids.people where threads_account = $1)", "SERVICE_NOT_ACTIVE"],
+    [66, "update public.service_entitlements set status = 'ended', ended_at = now() where service_key = 'x_autopost' and user_id = (select user_id from t_ids.people where threads_account = $1)",
+      "update public.service_entitlements set status = 'active', ended_at = null where service_key = 'x_autopost' and user_id = (select user_id from t_ids.people where threads_account = $1)", "SERVICE_NOT_ACTIVE"],
     [67, "update public.common_accounts set status = 'deleting' where user_id = (select user_id from t_ids.people where threads_account = $1)",
       "update public.common_accounts set status = 'active' where user_id = (select user_id from t_ids.people where threads_account = $1)", "SERVICE_NOT_ACTIVE"],
   ];
@@ -162,8 +162,8 @@ Deno.test("W1 worker: one due reservation is published once (hook re-check passe
 
 Deno.test("W2 TOCTOU in the container wait: without the hook (PR #337 today) a freeze still publishes; with the hook -> 0 publish requests", async () => {
   const t = tokenOf(72);
-  const freeze = () => owner("update t_threads.entitlement set status = 'ended' where user_id = $1::uuid", [P(72).user]).then(() => undefined);
-  const thaw = () => owner("update t_threads.entitlement set status = 'active' where user_id = $1::uuid", [P(72).user]);
+  const freeze = () => owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = $1::uuid and service_key = 'x_autopost'", [P(72).user]).then(() => undefined);
+  const thaw = () => owner("update public.service_entitlements set status = 'active', ended_at = null where user_id = $1::uuid and service_key = 'x_autopost'", [P(72).user]);
   const before = await create(t, 72, "W2 フックなし");
   await due(String(before.body.reservationId));
   const noHook = await runWorker({ honourHook: false, duringWait: freeze });
@@ -175,7 +175,7 @@ Deno.test("W2 TOCTOU in the container wait: without the hook (PR #337 today) a f
   const hooked = await runWorker({ duringWait: freeze });
   await thaw();
   assert.deepEqual([hooked.log.publishes, hooked.rechecks], [0, 1]);
-  assert.deepEqual(await status(String(after.body.reservationId)), ["failed", "NOT_PUBLISHABLE_AT_SEND"]);
+  assert.deepEqual(await status(String(after.body.reservationId)), ["failed", "SERVICE_NOT_ACTIVE"]);
   assert.equal((await receipt(t, 72, after.id)).body.state, "failed");
 });
 
@@ -231,4 +231,30 @@ Deno.test("W4 PR #337's deployable ports (OFF) claim nothing; a 32-hex generatio
   const [a, b] = await Promise.all([runWorker({ worker: "wa" }), runWorker({ worker: "wb" })]);
   assert.equal(a.log.publishes + b.log.publishes, 6);
   for (const id of ids) assert.equal((await status(id))[0], "published");
+});
+
+Deno.test("H6 G5 service generation (TASK 7/50): a reservation made before a restart is stopped at the claim; the receipt asks to reconfirm; the same id never re-arms; a NEW id works", async () => {
+  const t = tokenOf(79);
+  const old = await create(t, 79, "H6 再開前の予約");
+  const rid = String(old.body.reservationId);
+  await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = $1::uuid and service_key = 'x_autopost'", [P(79).user]);
+  await owner("update public.service_entitlements set status = 'active', ended_at = null where user_id = $1::uuid and service_key = 'x_autopost'", [P(79).user]);
+  await due(rid);
+  const run = await runWorker();
+  assert.equal(run.log.publishes, 0);
+  assert.deepEqual(await status(rid), ["failed", "SERVICE_GENERATION_CHANGED"]);
+  const r = await receipt(t, 79, old.id);
+  assert.deepEqual([r.body.state, r.body.code, r.body.action], ["failed", "SERVICE_GENERATION_CHANGED", "reconfirm_and_create_new"]);
+  // the same request again (at the row's stored time -- the test moved it to make it due): the stopped row, never re-armed
+  const storedAt = new Date(String((await owner<[string]>("select scheduled_at::text from postona_threads_resv.reservations where id = $1::uuid", [rid]))[0][0])).toISOString();
+  const again = await req(t, { op: "create", socialAccountId: P(79).threads, clientRequestId: old.id, text: "H6 再開前の予約", scheduledAt: storedAt, consent: { confirmed: true, contentSha256: sha("H6 再開前の予約") } });
+  // create validates the schedule before it looks the id up, so a repeat after the stored time is 422 SCHEDULE_INVALID; either way
+  // the stopped row stays as it is and no second row exists (the receipt is the way to read it).
+  assert.ok(again.status === 422 || (again.status === 200 && again.body.reservationId === rid && again.body.status === "failed" && again.body.created === false), JSON.stringify(again));
+  assert.equal(Number((await owner<[bigint]>("select count(*) from postona_threads_resv.reservations where client_request_id = $1::uuid", [old.id]))[0][0]), 1);
+  assert.deepEqual(await status(rid), ["failed", "SERVICE_GENERATION_CHANGED"], "nothing is re-armed");
+  assert.equal((await runWorker()).log.publishes, 0, "never resent automatically");
+  const fresh = await create(t, 79, "H6 再開後の新しい予約");
+  await due(String(fresh.body.reservationId));
+  assert.equal((await runWorker()).log.publishes, 1, "the person's NEW reservation is sent once");
 });

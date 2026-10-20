@@ -80,7 +80,7 @@ test("create: the verified caller and exactly the request travel; refusals keep 
 test("receipt: text-free; one constant 404 for another person / another account / unknown id; simulated unless exactly false; never the text", async () => {
   const sent = await call(createThreadsReservationHttpFixture({ enabled: true, verify, store: fakeStore({ receipt: rows({ reservation_id: RID, state: "sent", provider_post_id: "18000000000000001", outcome_code: "PUBLISHED", after_freeze: true, simulated: false, body: "本文" }) }).store }),
     { op: "receipt", socialAccountId: "th_61", clientRequestId: REQ });
-  assert.deepEqual(sent.body, { ok: true, reservationId: RID, state: "sent", xPostId: "18000000000000001", code: "PUBLISHED", simulated: false, afterFreeze: true });
+  assert.deepEqual(sent.body, { ok: true, reservationId: RID, state: "sent", xPostId: "18000000000000001", code: "PUBLISHED", simulated: false, afterFreeze: true, action: "none" });
   assert.ok(!JSON.stringify(sent.body).includes("本文"), "a stray body column is never passed on");
   const answers: string[] = [];
   for (const store of [fakeStore({ receipt: refuse("POSTONA_THREADS_RESV_NOT_FOUND") }).store, fakeStore({ receipt: rows() }).store]) {
@@ -111,4 +111,15 @@ test("cancel: cancelled / not cancellable / not found; the source has no network
   const source = await Deno.readTextFile(new URL("../fixture/threads_reservation_http_fixture.ts", import.meta.url));
   for (const banned of ["fetch(", "Deno.env", "console.", "Deno.serve", "service_role"]) assert.ok(!source.includes(banned), banned);
   assert.equal(net, 0);
+});
+
+test("receipt action (TASK 7/50): a row stopped by G5's service generation asks the person to reconfirm and make a NEW reservation; nothing else does", async () => {
+  for (const [state, code, action] of [["failed", "SERVICE_GENERATION_CHANGED", "reconfirm_and_create_new"], ["failed", "OWNER_EPOCH_CHANGED", "reconfirm_and_create_new"],
+    ["failed", "EXPECTED_OWNER_EPOCH_REQUIRED", "reconfirm_and_create_new"], ["failed", "EXPECTED_LIFECYCLE_VERSION_REQUIRED", "reconfirm_and_create_new"],
+    ["failed", "SERVICE_NOT_ACTIVE", "none"], ["failed", "CREDENTIAL_CHANGED", "none"], ["uncertain", "SERVICE_GENERATION_CHANGED", "none"],
+    ["pending", null, "none"], ["sent", "PUBLISHED", "none"]] as const) {
+    const r = await call(createThreadsReservationHttpFixture({ enabled: true, verify, store: fakeStore({ receipt: rows({ reservation_id: RID, state, provider_post_id: state === "sent" ? "18000000000000001" : null, outcome_code: code, simulated: false }) }).store }),
+      { op: "receipt", socialAccountId: "th_61", clientRequestId: REQ });
+    assert.equal(r.body.action, action, `${state}/${code}`);
+  }
 });

@@ -19,6 +19,11 @@
  *     503 NOT_AVAILABLE (gate OFF) / AUTH_UNAVAILABLE / STORE_UNAVAILABLE
  *   receipt: one constant 404 RECEIPT_NOT_FOUND for another person's id, another account and an unknown id (no
  *   existence oracle); it never writes, re-arms or sends.
+ *   receipt.action (2026-10-20, TASK 7/50): "reconfirm_and_create_new" when the row stopped because G5's service generation
+ *   moved after it was made (service restarted, owner changed, or ANY change of the owner's services -- e.g. Kabumori started:
+ *   G5's documented cost) or it was made before the generation rule; the person re-reads the text and makes a NEW reservation
+ *   (a new clientRequestId). Repeating the same clientRequestId returns the same stopped row: nothing is re-armed or resent.
+ *   Every other state: "none".
  */
 
 export const THREADS_RESERVATION_HTTP_FIXTURE = true as const;
@@ -63,6 +68,11 @@ const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 const fail = (status: number, code: string) => json(status, { ok: false, code });
 const RECEIPT_NOT_FOUND = () => fail(404, "RECEIPT_NOT_FOUND");
+/** Stopped by G5's service generation: only the person can decide again (a new reservation). Never an automatic retry. */
+export const RECONFIRM_CODES: ReadonlySet<string> = new Set(["SERVICE_GENERATION_CHANGED", "OWNER_EPOCH_CHANGED", "EXPECTED_OWNER_EPOCH_REQUIRED", "EXPECTED_LIFECYCLE_VERSION_REQUIRED"]);
+export function receiptActionOf(state: string, code: string | null): "reconfirm_and_create_new" | "none" {
+  return state === "failed" && code !== null && RECONFIRM_CODES.has(code) ? "reconfirm_and_create_new" : "none";
+}
 
 type Parsed =
   | { op: "create"; socialAccountId: string; clientRequestId: string; text: string; scheduledAt: string; contentSha256: string }
@@ -148,11 +158,11 @@ export function createThreadsReservationHttpFixture(deps: ThreadsReservationHttp
       }
       const state = ["pending", "sent", "failed", "uncertain", "cancelled"].includes(String(row.state)) ? String(row.state) : "uncertain";
       const postId = typeof row.provider_post_id === "string" && POST_ID_RE.test(row.provider_post_id) ? row.provider_post_id : null;
-      if (state === "sent" && !postId) return json(200, { ok: true, reservationId: row.reservation_id, state: "uncertain", code: "RECEIPT_POST_ID_MISSING", simulated: true, afterFreeze: row.after_freeze === true });
+      if (state === "sent" && !postId) return json(200, { ok: true, reservationId: row.reservation_id, state: "uncertain", code: "RECEIPT_POST_ID_MISSING", simulated: true, afterFreeze: row.after_freeze === true, action: "none" });
+      const code = typeof row.outcome_code === "string" && CODE_RE.test(row.outcome_code) ? row.outcome_code : null;
       return json(200, {
-        ok: true, reservationId: row.reservation_id, state, ...(postId ? { xPostId: postId } : {}),
-        ...(typeof row.outcome_code === "string" && CODE_RE.test(row.outcome_code) ? { code: row.outcome_code } : {}),
-        simulated: row.simulated !== false, afterFreeze: row.after_freeze === true,
+        ok: true, reservationId: row.reservation_id, state, ...(postId ? { xPostId: postId } : {}), ...(code ? { code } : {}),
+        simulated: row.simulated !== false, afterFreeze: row.after_freeze === true, action: receiptActionOf(state, code),
       });
     }
 

@@ -106,6 +106,8 @@ xfp() { val -c "select md5(coalesce(string_agg(p.oid::regprocedure::text || ':' 
 FPX="$(xfp)"
 echo "BASELINE_001_006_READY"
 
+# G5 R1 / W1 TEST DOUBLE (007 requires them; the counters must see every later change).
+own "$db" -f "$t/g5_verdict_test_double.sql" >/dev/null
 # P: 007 needs Threads rows to be possible.
 if own "$db" -f "$candidate" >"$tmp/p0" 2>&1; then fail "007 applied on an X-only social_accounts"; fi
 grep -q POSTONA_THREADS_RESV_PRECONDITION_MULTI_PROVIDER "$tmp/p0" || fail "P wrong refusal: $(grep ERROR "$tmp/p0" | head -1)"
@@ -127,6 +129,14 @@ own "$plain" -f "$resv/test_fixture.sql" >/dev/null
 own "$plain" -f "$resv/001_postona_x_reservations.sql" >/dev/null
 if own "$plain" -f "$candidate" >"$tmp/s0" 2>&1; then fail "007 applied without 002-006"; fi
 grep -q POSTONA_THREADS_RESV_PRECONDITION_001_006_MISSING "$tmp/s0" || fail "S0 wrong refusal: $(tail -1 "$tmp/s0")"
+own "$db" -c "alter function private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint) rename to account_lifecycle_worker_brand_verdict_off" >/dev/null
+if own "$db" -f "$candidate" >"$tmp/s0" 2>&1; then fail "007 applied without G5 W1"; fi
+own "$db" -c "alter function private.account_lifecycle_worker_brand_verdict_off(text, text, bigint, bigint) rename to account_lifecycle_worker_brand_verdict" >/dev/null
+grep -q POSTONA_THREADS_RESV_PRECONDITION_G5_VERDICT "$tmp/s0" || fail "S0 G5 W1: $(grep ERROR "$tmp/s0" | head -1)"
+own "$db" -c "grant execute on function private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint) to postona_resv_worker" >/dev/null
+if own "$db" -f "$candidate" >"$tmp/s0" 2>&1; then fail "007 applied with W1 reachable by the worker role"; fi
+own "$db" -c "revoke execute on function private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint) from postona_resv_worker" >/dev/null
+grep -q POSTONA_THREADS_RESV_PRECONDITION_G5_VERDICT "$tmp/s0" || fail "S0 G5 W1 grant: $(grep ERROR "$tmp/s0" | head -1)"
 own "$db" -c "alter function private.account_lifecycle_brand_owner(text) rename to account_lifecycle_brand_owner_off" >/dev/null
 if own "$db" -f "$candidate" >"$tmp/s0" 2>&1; then fail "007 applied without F5 brand owner"; fi
 own "$db" -c "alter function private.account_lifecycle_brand_owner_off(text) rename to account_lifecycle_brand_owner" >/dev/null
@@ -151,16 +161,19 @@ echo "S0_REFUSALS_ATOMIC_REAPPLY_X_UNCHANGED_SHIPPED_DENY_PASS"
 own "$db" -f "$t/g4_g5_test_doubles.sql" >/dev/null
 own "$db" -f "$t/behavior.sql" >"$tmp/b" 2>&1 || { cat "$tmp/b"; fail "behaviour"; }
 for marker in L1_ACL_PASS L2_CREATE_REFUSALS_PASS L3_IDEMPOTENCY_PASS L4_CLAIM_PREFLIGHT_RECORD_RECEIPT_PASS L5_CHANGE_AFTER_CLAIM_REFUSED_PASS \
-              L6_RECORD_AFTER_FREEZE_UNCERTAIN_PASS L7_RELEASE_CANCEL_RECEIPT_PASS L8_PROFILE_DEFENCE_IN_DEPTH_PASS POSTONA_THREADS_RESV_BEHAVIOR_PASS; do
+              L6_RECORD_AFTER_FREEZE_UNCERTAIN_PASS L7_RELEASE_CANCEL_RECEIPT_PASS L8_PROFILE_DEFENCE_IN_DEPTH_PASS L9_SERVICE_GENERATION_ABA_PASS \
+              POSTONA_THREADS_RESV_BEHAVIOR_PASS; do
   grep -q "$marker" "$tmp/b" || { cat "$tmp/b"; fail "missing $marker"; }
   echo "$marker"
 done
 
 # R: two dispatcher transactions at once.
-R1="$(val -c "insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at)
-  select user_id, brand, threads_account, gen_random_uuid(), 'R1', encode(sha256(convert_to('R1', 'UTF8')), 'hex'), now() - interval '2 seconds' from t_ids.people where n = 98 returning id")"
-R2="$(val -c "insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at)
-  select user_id, brand, threads_account, gen_random_uuid(), 'R2', encode(sha256(convert_to('R2', 'UTF8')), 'hex'), now() - interval '1 second' from t_ids.people where n = 98 returning id")"
+R1="$(val -c "insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at, bound_owner_epoch, bound_lifecycle_version)
+  select p.user_id, p.brand, p.threads_account, gen_random_uuid(), 'R1', encode(sha256(convert_to('R1', 'UTF8')), 'hex'), now() - interval '2 seconds',
+    (select e.v from t_g5.owner_epoch e where e.brand_id = p.brand), (select l.v from t_g5.lifecycle l where l.user_id = p.user_id) from t_ids.people p where p.n = 98 returning id")"
+R2="$(val -c "insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at, bound_owner_epoch, bound_lifecycle_version)
+  select p.user_id, p.brand, p.threads_account, gen_random_uuid(), 'R2', encode(sha256(convert_to('R2', 'UTF8')), 'hex'), now() - interval '1 second',
+    (select e.v from t_g5.owner_epoch e where e.brand_id = p.brand), (select l.v from t_g5.lifecycle l where l.user_id = p.user_id) from t_ids.people p where p.n = 98 returning id")"
 wk() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$wklogin" -d "$db" "$@"; }
 wk -c "begin" -c "set local role postona_resv_worker" -c "select reservation_id from postona_threads_resv.claim_due('ra', 60, 1)" -c "select pg_sleep(2)" -c "commit" >"$tmp/ra" & h=$!
 for i in $(seq 1 100); do [[ "$("${S[@]}" -d "$db" -A -t -c "select (count(*) > 0)::text from pg_stat_activity where state = 'active' and query like 'select pg_sleep(2)%'")" == true ]] && break; sleep 0.05; done

@@ -97,6 +97,8 @@ xfp() { val -c "select md5(coalesce(string_agg(p.oid::regprocedure::text || ':' 
 FPX="$(xfp)"
 echo "BASELINE_001_006_READY"
 
+# G5 R1 / W1 TEST DOUBLE (007 requires them; the counters must see every later change).
+own "$db" -f "$t/g5_verdict_test_double.sql" >/dev/null
 # P: 007 needs Threads rows to be possible.
 if own "$db" -f "$candidate" >"$tmp/p0" 2>&1; then fail "007 applied on an X-only social_accounts"; fi
 grep -q POSTONA_THREADS_RESV_PRECONDITION_MULTI_PROVIDER "$tmp/p0" || fail "P wrong refusal: $(grep ERROR "$tmp/p0" | head -1)"
