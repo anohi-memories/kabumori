@@ -18,11 +18,15 @@
 --         writer of another owner, inside its statement.
 --   W2  public.common_account_worker_brand_verdict(...same...) -> text                                            EXECUTE: service_role ONLY
 --         W1 for an Edge worker's last check right before the provider. Never callable by a person.
+--   GC  private.account_lifecycle_generation_covered() -> boolean                                                 owner-only
+--         whether the service generation (the owner's lifecycle_version) is moved by EXACTLY F5 P1's two triggers (G5-05, H1 C1 P2 on PR #358);
+--         checked before and after the install and by W1 on every call (W1 answers SERVICE_GENERATION_UNAVAILABLE otherwise).
 --
--- All three are STABLE, SECURITY DEFINER, empty search_path, owned by the lifecycle owner, read-only: no write, no row lock, no table, no grant
+-- All four are STABLE, SECURITY DEFINER, empty search_path, owned by the lifecycle owner, read-only: no write, no row lock, no table, no grant
 -- beyond the two above. The install refuses unless the F5 chain (P1..P10) and the owner-epoch candidate (PR #303) are installed, every helper is
--- STABLE / definer / owner-owned, no relation read has RLS FORCED, and PR #303's exposure check is clean (no API role reaches the owner, a
--- superuser, TRIGGER, session_replication_role, ...). Its postconditions check the ACL over the role graph (direct and indirect membership).
+-- STABLE / definer / owner-owned, no relation read has RLS FORCED, PR #303's exposure check is clean (no API role reaches the owner, a
+-- superuser, TRIGGER, session_replication_role, ...) and GC is true. Its postconditions check the ACL over the role graph (direct and indirect
+-- membership) and GC again.
 begin;
 
 set local lock_timeout = '5s';
@@ -38,7 +42,8 @@ begin
   end if;
   if to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is not null
      or to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)') is not null
-     or to_regprocedure('public.common_account_worker_brand_verdict(text,text,bigint,bigint)') is not null then
+     or to_regprocedure('public.common_account_worker_brand_verdict(text,text,bigint,bigint)') is not null
+     or to_regprocedure('private.account_lifecycle_generation_covered()') is not null then
     raise exception 'AUTH_VERDICT_ALREADY_APPLIED';
   end if;
   -- the helpers this file calls: present, STABLE, definer with an empty search path, owned by this owner
@@ -70,16 +75,43 @@ begin
          or (a.attname = 'not_after' and a.atttypid = 'timestamptz'::regtype))) <> 3 then
     raise exception 'AUTH_VERDICT_PRECONDITION_SESSIONS_SHAPE';
   end if;
-  -- the service generation W1 compares: F5 P1's lifecycle_version triggers, present, enabled and pointing at their functions
-  if not exists (select 1 from pg_catalog.pg_trigger g where g.tgrelid = 'public.service_entitlements'::regclass and g.tgname = 'account_lifecycle_touch_entitlement'
-                  and g.tgenabled in ('O', 'A') and g.tgtype = 29 and g.tgfoid = 'private.account_lifecycle_touch_entitlement()'::regprocedure)
-     or not exists (select 1 from pg_catalog.pg_trigger g where g.tgrelid = 'public.common_accounts'::regclass and g.tgname = 'account_lifecycle_touch_account'
-                  and g.tgenabled in ('O', 'A') and g.tgfoid = 'private.account_lifecycle_touch_account()'::regprocedure) then
-    raise exception 'AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS';
-  end if;
   -- PR #303's exposure check: no API role reaches the owner, a superuser, TRIGGER, session_replication_role or a membership write
   if private.account_lifecycle_owner_epoch_exposure() is not null then
     raise exception 'AUTH_VERDICT_PRECONDITION_%', private.account_lifecycle_owner_epoch_exposure();
+  end if;
+end $$;
+
+-- The service generation W1 compares is the owner's lifecycle_version, moved only by F5 P1's two triggers. They count only when they are EXACTLY
+-- the P1 triggers (H1 C1 P2 on PR #358): the entitlement trigger AFTER INSERT OR UPDATE OR DELETE FOR EACH ROW (tgtype 29), the account trigger
+-- BEFORE UPDATE FOR EACH ROW (tgtype 19), each enabled, not internal, no WHEN clause, no column list, not a constraint / deferrable trigger, no
+-- arguments, no transition tables, bound to its P1 function (owned by the table owner, definer, empty search path); no OTHER BEFORE ROW UPDATE
+-- trigger on public.common_accounts (one firing after it could put lifecycle_version back), no rule on either table (a DO INSTEAD rule would swallow
+-- the bump), and this session honours triggers. Used by the install (pre and post) and by W1 on every call.
+create function private.account_lifecycle_generation_covered()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select pg_catalog.current_setting('session_replication_role') = 'origin'
+     and (select pg_catalog.count(*) from pg_catalog.pg_trigger t join pg_catalog.pg_proc f on f.oid = t.tgfoid
+           where not t.tgisinternal and t.tgenabled in ('O', 'A')
+             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and not t.tgdeferrable and not t.tginitdeferred
+             and t.tgnargs = 0 and t.tgoldtable is null and t.tgnewtable is null
+             and f.proowner = (select c.relowner from pg_catalog.pg_class c where c.oid = t.tgrelid)
+             and f.prosecdef and f.proconfig @> array['search_path=""']
+             and ((t.tgrelid = 'public.service_entitlements'::regclass and t.tgname = 'account_lifecycle_touch_entitlement' and t.tgtype = 29
+                   and t.tgfoid = 'private.account_lifecycle_touch_entitlement()'::regprocedure)
+               or (t.tgrelid = 'public.common_accounts'::regclass and t.tgname = 'account_lifecycle_touch_account' and t.tgtype = 19
+                   and t.tgfoid = 'private.account_lifecycle_touch_account()'::regprocedure))) = 2
+     and not exists (select 1 from pg_catalog.pg_trigger t
+                      where t.tgrelid = 'public.common_accounts'::regclass and not t.tgisinternal and t.tgenabled <> 'D'
+                        and t.tgtype & 1 = 1 and t.tgtype & 2 = 2 and t.tgtype & 16 = 16
+                        and t.tgname <> 'account_lifecycle_touch_account')
+     and not exists (select 1 from pg_catalog.pg_rewrite r where r.ev_class in ('public.common_accounts'::regclass, 'public.service_entitlements'::regclass))
+$$;
+revoke all on function private.account_lifecycle_generation_covered() from public, anon, authenticated, service_role;
+
+do $$
+begin
+  if not private.account_lifecycle_generation_covered() then
+    raise exception 'AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS';
   end if;
 end $$;
 
@@ -252,6 +284,7 @@ declare
   v_state text;
   v_epoch bigint;
   v_lifecycle bigint;
+  v_covered boolean;
 begin
   if p_service_key is distinct from 'x_autopost' then
     return 'ACCOUNT_LIFECYCLE_SERVICE_INVALID';
@@ -262,11 +295,12 @@ begin
   if p_expected_lifecycle_version is null or p_expected_lifecycle_version < 1 then
     return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED';
   end if;
-  -- one statement: F5 P5's state, the owner epoch and the owner's lifecycle_version (the service generation)
+  -- one statement: F5 P5's state, the owner epoch, the owner's lifecycle_version (the service generation) and whether that counter is covered
   select public.common_account_brand_service_state(p_brand_id, p_service_key),
          private.account_lifecycle_brand_owner_epoch(p_brand_id),
-         (select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(p_brand_id))
-    into v_state, v_epoch, v_lifecycle;
+         (select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(p_brand_id)),
+         private.account_lifecycle_generation_covered()
+    into v_state, v_epoch, v_lifecycle, v_covered;
   if v_state is distinct from 'active' then
     return case when v_state in ('WORKSPACE_OWNER_UNKNOWN', 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND', 'ACCOUNT_DELETION_IN_PROGRESS', 'ACCOUNT_LOCKED',
                                  'SERVICE_NOT_REGISTERED', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_NOT_ACTIVE', 'ACCOUNT_LIFECYCLE_SERVICE_INVALID')
@@ -274,6 +308,10 @@ begin
   end if;
   if v_epoch is null or v_epoch < 1 then
     return 'OWNER_EPOCH_UNAVAILABLE';
+  end if;
+  -- the generation is only a fence while its triggers are exactly P1's (checked on every call, not only at install)
+  if v_covered is not true then
+    return 'SERVICE_GENERATION_UNAVAILABLE';
   end if;
   if v_epoch <> p_expected_owner_epoch then
     return 'OWNER_EPOCH_CHANGED';
@@ -293,7 +331,8 @@ $$;
 
 revoke all on function public.common_account_authorization_verdict(text, text, text),
   private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint),
-  public.common_account_worker_brand_verdict(text, text, bigint, bigint) from public, anon, authenticated, service_role;
+  public.common_account_worker_brand_verdict(text, text, bigint, bigint), private.account_lifecycle_generation_covered()
+  from public, anon, authenticated, service_role;
 grant execute on function public.common_account_authorization_verdict(text, text, text) to authenticated;
 grant execute on function public.common_account_worker_brand_verdict(text, text, bigint, bigint) to service_role;
 
@@ -305,15 +344,17 @@ declare
   v_r1 regprocedure := 'public.common_account_authorization_verdict(text,text,text)'::regprocedure;
   v_w1 regprocedure := 'private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure;
   v_w2 regprocedure := 'public.common_account_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure;
+  v_gc regprocedure := 'private.account_lifecycle_generation_covered()'::regprocedure;
   v_fn regprocedure;
   v_allowed text;
 begin
   if (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_r1) is distinct from format('%s=X/%s,authenticated=X/%s', v_owner, v_owner, v_owner)
      or (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_w2) is distinct from format('%s=X/%s,service_role=X/%s', v_owner, v_owner, v_owner)
-     or (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_w1) is distinct from format('%s=X/%s', v_owner, v_owner) then
+     or (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_w1) is distinct from format('%s=X/%s', v_owner, v_owner)
+     or (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_gc) is distinct from format('%s=X/%s', v_owner, v_owner) then
     raise exception 'AUTH_VERDICT_POSTCONDITION_ACL';
   end if;
-  foreach v_fn in array array[v_r1, v_w1, v_w2] loop
+  foreach v_fn in array array[v_r1, v_w1, v_w2, v_gc] loop
     if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.provolatile = 's' and p.prosecdef and p.proconfig @> array['search_path=""']
                     and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)) then
       raise exception 'AUTH_VERDICT_POSTCONDITION_SHAPE %', v_fn;
@@ -333,6 +374,9 @@ begin
   end loop;
   if private.account_lifecycle_owner_epoch_exposure() is not null then
     raise exception 'AUTH_VERDICT_POSTCONDITION_EXPOSURE';
+  end if;
+  if not private.account_lifecycle_generation_covered() then
+    raise exception 'AUTH_VERDICT_POSTCONDITION_LIFECYCLE_TRIGGERS';
   end if;
 end $$;
 

@@ -44,7 +44,8 @@ Evidence labels: **[D]** derived by a test of this task, **[C]** candidate in th
 - **ACL** — `revoke all ... from public, anon, authenticated, service_role`, then R1 to `authenticated`, W2 to `service_role`. **Postconditions**: the exact
   `proacl` strings, STABLE / definer / empty `search_path` / owner; no API role other than the allowed one is a MEMBER (direct or indirect, INHERIT or not,
   SET or not, ADMIN-only) of a role holding EXECUTE; `authenticator` may reach only the API roles; the exposure check still clean.
-- **Rollback** — drops the three functions (no data, nothing else).
+- **GC** (G5-05) — `private.account_lifecycle_generation_covered()`, owner-only: the P1 lifecycle triggers are exactly P1's (section 11).
+- **Rollback** — drops the four functions (no data, nothing else).
 
 ## 3. Invariants -> tests (`common_account_authorization_verdict_pg_test.ts`)
 
@@ -112,17 +113,17 @@ deno test --no-config --no-check --allow-read --allow-env supabase/preflight/man
 
 ## 9. What was executed for this document
 
-Re-run by G5-04 (section 10) in `/Users/yuya/Developer/kabumori-g5-04` (a clean worktree stacked on PR #351); first run by G5-03 in `/Users/yuya/Developer/kabumori-g5-03` (stacked on PR #344) against a throw-away local PostgreSQL 17.11 (`listen_addresses`
+Re-run by G5-05 (section 11) in `/Users/yuya/Developer/kabumori-g5-05` (a clean worktree stacked on PR #358); before that by G5-04 in `/Users/yuya/Developer/kabumori-g5-04` (stacked on PR #351); first run by G5-03 in `/Users/yuya/Developer/kabumori-g5-03` (stacked on PR #344) against a throw-away local PostgreSQL 17.11 (`listen_addresses`
 empty, a Unix socket under `/private/tmp`, fake data, deleted at the end; every runner refuses a host that is not a `/tmp` socket directory). The candidate
 was installed only there. No managed or production system, no credential, no network request.
 
 | # | Check | Command | Result |
 | --- | --- | --- | --- |
-| 1 | the PG17 suite (install, ACL, oracle, subject, nothing read first, no leak, one snapshot, worker forms, unsafe installs) | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_authorization_verdict_pg_run.sh` | **13 tests** passed, 0 failed (three consecutive runs; 10 at PR #351) |
-| 2 | mutation check of the SQL | `python3 supabase/tests/common_account_authorization_verdict_mutations.py <repository root>` | control PASS, **39/39 detected**, 0 invalid (36 at PR #351; the worker mutants rewritten for the generation pair) |
+| 1 | the PG17 suite (install, ACL, oracle, subject, nothing read first, no leak, one snapshot, worker forms, unsafe installs) | `CAL_PGHOST=<tmp socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/common_account_authorization_verdict_pg_run.sh` | **15 tests** passed, 0 failed (three consecutive runs; 10 at PR #351, 13 at PR #358) |
+| 2 | mutation check of the SQL | `python3 supabase/tests/common_account_authorization_verdict_mutations.py <repository root>` | control PASS, **51/51 detected**, 0 invalid (36 at PR #351, 39 at PR #358; G5-05 added the generation-coverage mutants; the transition-table condition has no mutant -- see section 11) |
 | 3 | G6 cross-check (scratch, not committed) | G6's `g5_rpc_transport.ts` + `authority_port.ts` from PR #345 (`529153f4ceab2a37a49fed82edd23102fe8d4293`) reading answers captured from the real R1 | 1 scratch test passed: allow accepted; foreign brand, suspended, revoked session refused at the recheck; the same answer keeps the generation |
 | 4 | regression of the stack | G5-01 pure (13) + G5-02 model (11); G5-01 PG17 (10); G5-02 PG17 (5); owner-epoch suite (19) | all passed |
-| 5 | the G5-02 model (per-claim `is_anonymous`; the generation pair) | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, 35/35 detected |
+| 5 | the G5-02 model (per-claim `is_anonymous`; the generation pair) | `python3 supabase/tests/common_account_g5_02_rpc_preflight_mutations.py <repository root>` | control PASS, 37/37 detected |
 | 6 | the whole harness incl. the document tests | `deno test --no-config --no-check --allow-read --allow-env supabase/preflight/managed_disposable/` | **200 passed**, 0 failed (194 of PR #344 + 6 new) |
 | 7 | type-check, lint, shell | `deno check --no-config` (models, the new suite, the harness); `deno lint --no-config`; `bash -n` on the runner | no error; `Checked 51 files`; syntax OK |
 
@@ -158,3 +159,31 @@ PR #351 head `59d3dff0ad23a492e9e397d8c6c5f379d0f120a9`.
 - **Not in this fix.** G4's question (Issue #320 comment 6279536652): R1 needs `p_brand_id`, but the first X connection creates the workspace in its begin
   RPC, so there is no brand to name yet. Recommendation for a G5 decision in a later TASK: a brand-less person verdict for the connect features only
   (account, entitlement, deletion, freeze, session; no owner epoch), with the brand verdict required again at the callback once the workspace exists.
+
+## 11. G5-05: the H1 C1 P2 fix on PR #358 — the generation triggers must be exactly F5 P1's
+
+TASK `common-account-g5-pr358-lifecycle-trigger-authenticity-p2-source-fix-20261020` (Issue #320, task 5). Review: H1 #306 (C1, `CHANGES_REQUIRED /
+P2×1`) on PR #358 head `4f4ece89af51a345c0e71cb3876278789a4f3896`.
+
+- **Finding (confirmed).** The install checked the two P1 lifecycle triggers by name, enabled flag, function OID (and `tgtype` for one of them) only.
+  A same-named trigger `... FOR EACH ROW WHEN (false) EXECUTE FUNCTION private.account_lifecycle_touch_entitlement()` passed. Reproduced on PG17
+  against the PR #358 SQL: the install succeeded, the real end + `reactivate_x_autopost_service` left `lifecycle_version` unchanged, and W2 answered
+  **`active`** for the old reservation.
+- **Fix.** New owner-only STABLE definer `private.account_lifecycle_generation_covered()`: this session honours triggers; exactly two triggers count —
+  `account_lifecycle_touch_entitlement` on `public.service_entitlements` with `tgtype = 29` (AFTER INSERT OR UPDATE OR DELETE, ROW) bound to
+  `private.account_lifecycle_touch_entitlement()`, and `account_lifecycle_touch_account` on `public.common_accounts` with `tgtype = 19` (BEFORE UPDATE,
+  ROW) bound to `private.account_lifecycle_touch_account()` — each enabled (`O` / `A`), not internal, `tgqual` NULL, no column list, `tgconstraint = 0`,
+  not deferrable / initially deferred, no arguments, no transition tables, its function owned by the table's owner, definer, empty `search_path`; no
+  other BEFORE UPDATE ROW trigger on `public.common_accounts` (one firing after P1's could put `lifecycle_version` back; any enabled state but `D`
+  counts); no rule on either table. Used by the install precondition (`AUTH_VERDICT_PRECONDITION_LIFECYCLE_TRIGGERS`), the postcondition and **W1 on
+  every call** (`SERVICE_GENERATION_UNAVAILABLE`, checked after the owner epoch's own coverage). R1 is unchanged.
+- **Proofs added** (`common_account_authorization_verdict_pg_test.ts`, real PG17 fixtures): 20 drifts — WHEN (false), UPDATE OF, wrong timing, wrong
+  events, statement level, deferred constraint trigger, non-deferrable constraint trigger (same `tgtype` 29), transition table, arguments, disabled,
+  replica-only, another function, missing (entitlement side); WHEN (false), UPDATE OF, wrong timing, missing (account side); a reverting BEFORE UPDATE trigger; a rule on each table — each refuses the
+  install and leaves nothing; the exact P1 triggers install. After the install each drift makes W1 / W2 answer `SERVICE_GENERATION_UNAVAILABLE` and the
+  exact triggers restore `active`; the review's WHEN (false) attack end to end (bind, real end, real restart, counter unchanged) sends 0. The earlier
+  P2 proofs (long transaction, same transaction, old reservation sends 0, owner A -> B -> A) still pass.
+- **Transition tables.** PostgreSQL itself refuses a transition table on a trigger with more than one event and on a BEFORE trigger, so no trigger with
+  `tgtype` 29 or 19 can carry one; the condition stays as defence, and its mutant is recorded as equivalent in the mutation script rather than run.
+- **Limit (unchanged L-6 class).** A table owner or superuser can still change the function bodies or write with `session_replication_role = replica`;
+  the coverage check sees catalog shape, not behaviour of a privileged writer. R1's token does not consult this coverage (W1 does).

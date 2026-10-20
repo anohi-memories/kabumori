@@ -170,7 +170,8 @@ export function aclViolation(input: Readonly<{
 // GENERATION: F5 P1 moves it on every entitlement insert / update / delete and every account status change, and never lowers it). Both must be
 // EQUAL now. No timestamp is compared: a service ended and re-started after the bind is a new generation even inside one transaction or a long one,
 // where now() is the transaction's start (H1 C1 P2 of PR #351).
-export type WorkerFacts = Readonly<{ serviceState: string; ownerEpoch: number | null; ownerLifecycleVersion: number | null }>;
+/** generationCovered: the SQL's private.account_lifecycle_generation_covered() -- the counter is moved by exactly F5 P1's triggers (G5-05). */
+export type WorkerFacts = Readonly<{ serviceState: string; ownerEpoch: number | null; ownerLifecycleVersion: number | null; generationCovered: boolean }>;
 export type WorkerBinding = Readonly<{ serviceKey: string; expectedOwnerEpoch: number | null; expectedLifecycleVersion: number | null }>;
 export const P5_REFUSALS = Object.freeze(['WORKSPACE_OWNER_UNKNOWN', 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND', 'ACCOUNT_DELETION_IN_PROGRESS', 'ACCOUNT_LOCKED',
   'SERVICE_NOT_REGISTERED', 'SERVICE_DELETION_IN_PROGRESS', 'SERVICE_NOT_ACTIVE', 'ACCOUNT_LIFECYCLE_SERVICE_INVALID']);
@@ -201,6 +202,8 @@ export function workerBrandVerdict(facts: WorkerFacts | undefined, bound: Worker
   if (!facts) return 'FACTS_UNAVAILABLE';
   if (facts.serviceState !== 'active') return P5_REFUSALS.includes(facts.serviceState) ? facts.serviceState : 'SERVICE_STATE_UNKNOWN';
   if (!positive(facts.ownerEpoch)) return 'OWNER_EPOCH_UNAVAILABLE';
+  // the generation is a fence only while its triggers are exactly P1's (H1 C1 P2 on PR #358)
+  if (facts.generationCovered !== true) return 'SERVICE_GENERATION_UNAVAILABLE';
   if (facts.ownerEpoch !== bound.expectedOwnerEpoch) return 'OWNER_EPOCH_CHANGED';
   // an unreadable generation is a changed one (as the SQL's null-safe `is distinct from`)
   if (facts.ownerLifecycleVersion !== bound.expectedLifecycleVersion) return 'SERVICE_GENERATION_CHANGED';

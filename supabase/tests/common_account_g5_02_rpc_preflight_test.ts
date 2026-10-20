@@ -154,7 +154,7 @@ test('R1-1 / W2-1 the ACL postcondition over the role graph: R1 = authenticated 
 });
 
 test('W-3 the worker answer: P5 state, owner epoch AND owner lifecycle_version equal to the bound pair (no clock compared); the Threads posting service key is x_autopost', async () => {
-  const facts = (over: Partial<WorkerFacts> = {}): WorkerFacts => ({ serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3, ...over });
+  const facts = (over: Partial<WorkerFacts> = {}): WorkerFacts => ({ serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3, generationCovered: true, ...over });
   const bound = (over: Partial<{ serviceKey: string; expectedOwnerEpoch: number | null; expectedLifecycleVersion: number | null }> = {}) =>
     ({ serviceKey: POSTONA_POSTING_SERVICE_KEY, expectedOwnerEpoch: 5, expectedLifecycleVersion: 3, ...over });
   assert.equal(POSTONA_POSTING_SERVICE_KEY, 'x_autopost');
@@ -165,6 +165,9 @@ test('W-3 the worker answer: P5 state, owner epoch AND owner lifecycle_version e
   assert.equal(workerBrandVerdict(facts({ serviceState: 'ACTIVE' }), bound()), 'SERVICE_STATE_UNKNOWN');
   assert.equal(workerBrandVerdict(facts({ ownerEpoch: null }), bound()), 'OWNER_EPOCH_UNAVAILABLE');
   assert.equal(workerBrandVerdict(facts({ ownerEpoch: 7 }), bound()), 'OWNER_EPOCH_CHANGED', 'A -> B -> A after the bind');
+  // a generation counter whose triggers drifted (WHEN false, UPDATE OF, ...) is no fence: refused even when the pair still matches (G5-05)
+  assert.equal(workerBrandVerdict(facts({ generationCovered: false }), bound()), 'SERVICE_GENERATION_UNAVAILABLE');
+  assert.equal(workerBrandVerdict(facts({ generationCovered: undefined as unknown as boolean }), bound()), 'SERVICE_GENERATION_UNAVAILABLE');
   // ended and re-started after the bind moves lifecycle_version by >= 2, whatever the clocks say (H1 C1 P2)
   assert.equal(workerBrandVerdict(facts({ ownerLifecycleVersion: 5 }), bound()), 'SERVICE_GENERATION_CHANGED', 'ended and re-started after the bind');
   assert.equal(workerBrandVerdict(facts({ ownerLifecycleVersion: 2 }), bound()), 'SERVICE_GENERATION_CHANGED', 'a binding from the future is not this generation either');
@@ -236,15 +239,16 @@ test('flow 2 (G3): a scheduled post binds the owner epoch and lifecycle_version 
     if (verdict === 'active') sends += 1;
     return { verdict, sends };
   };
-  assert.deepEqual(dispatch({ serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3 }), { verdict: 'active', sends: 1 });
+  assert.deepEqual(dispatch({ serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3, generationCovered: true }), { verdict: 'active', sends: 1 });
   const changed: [string, WorkerFacts | undefined, string][] = [
-    ['owner A -> B -> A after the reservation', { serviceState: 'active', ownerEpoch: 9, ownerLifecycleVersion: 3 }, 'OWNER_EPOCH_CHANGED'],
-    ['POSTONA ended and re-started after the reservation (any transaction shape)', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 5 }, 'SERVICE_GENERATION_CHANGED'],
-    ['an unrelated account change (e.g. Kabumori started) also moves the generation: refused, fail closed', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 4 }, 'SERVICE_GENERATION_CHANGED'],
-    ['service-end freeze', { serviceState: 'SERVICE_DELETION_IN_PROGRESS', ownerEpoch: 5, ownerLifecycleVersion: 4 }, 'SERVICE_DELETION_IN_PROGRESS'],
-    ['退会', { serviceState: 'ACCOUNT_DELETION_IN_PROGRESS', ownerEpoch: 5, ownerLifecycleVersion: 4 }, 'ACCOUNT_DELETION_IN_PROGRESS'],
-    ['two owners', { serviceState: 'WORKSPACE_OWNER_UNKNOWN', ownerEpoch: null, ownerLifecycleVersion: 3 }, 'WORKSPACE_OWNER_UNKNOWN'],
-    ['epoch coverage broken', { serviceState: 'active', ownerEpoch: null, ownerLifecycleVersion: 3 }, 'OWNER_EPOCH_UNAVAILABLE'],
+    ['owner A -> B -> A after the reservation', { serviceState: 'active', ownerEpoch: 9, ownerLifecycleVersion: 3, generationCovered: true }, 'OWNER_EPOCH_CHANGED'],
+    ['POSTONA ended and re-started after the reservation (any transaction shape)', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 5, generationCovered: true }, 'SERVICE_GENERATION_CHANGED'],
+    ['an unrelated account change (e.g. Kabumori started) also moves the generation: refused, fail closed', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 4, generationCovered: true }, 'SERVICE_GENERATION_CHANGED'],
+    ['service-end freeze', { serviceState: 'SERVICE_DELETION_IN_PROGRESS', ownerEpoch: 5, ownerLifecycleVersion: 4, generationCovered: true }, 'SERVICE_DELETION_IN_PROGRESS'],
+    ['退会', { serviceState: 'ACCOUNT_DELETION_IN_PROGRESS', ownerEpoch: 5, ownerLifecycleVersion: 4, generationCovered: true }, 'ACCOUNT_DELETION_IN_PROGRESS'],
+    ['two owners', { serviceState: 'WORKSPACE_OWNER_UNKNOWN', ownerEpoch: null, ownerLifecycleVersion: 3, generationCovered: true }, 'WORKSPACE_OWNER_UNKNOWN'],
+    ['epoch coverage broken', { serviceState: 'active', ownerEpoch: null, ownerLifecycleVersion: 3, generationCovered: true }, 'OWNER_EPOCH_UNAVAILABLE'],
+    ['the lifecycle triggers drifted (e.g. WHEN false): the pair still matches but is no fence', { serviceState: 'active', ownerEpoch: 5, ownerLifecycleVersion: 3, generationCovered: false }, 'SERVICE_GENERATION_UNAVAILABLE'],
     ['G5 down', undefined, 'FACTS_UNAVAILABLE'],
   ];
   for (const [label, now, code] of changed) assert.deepEqual(dispatch(now), { verdict: code, sends: 0 }, label);
