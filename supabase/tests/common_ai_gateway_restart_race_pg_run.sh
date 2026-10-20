@@ -11,7 +11,8 @@
 # common_ai_gateway_lost_reserve_pg_test.ts (G6-10: an ambiguous reserve failure) or
 # common_ai_gateway_owner_held_contract_pg_test.ts (G6-11: the candidate non-creating owner-held check, created by
 # that test in this scratch database only) or one of the G6-12 isolation files
-# (common_ai_gateway_owner_held_isolation_{baseline,guard,fence}_pg_test.ts); nothing else is accepted.
+# (common_ai_gateway_owner_held_isolation_{baseline,guard,fence}_pg_test.ts) or the G6-13 migration file
+# (common_ai_gateway_owner_held_rc_guard_migration_pg_test.ts, the REAL migration); nothing else is accepted.
 #
 # The host must be a local socket directory under /tmp (anything else is refused) and the server must have no TCP
 # listener. One scratch database is created and dropped; no role is created (the three Supabase API roles are
@@ -30,8 +31,11 @@ unset PGHOST PGHOSTADDR PGPORT PGDATABASE PGUSER PGPASSWORD PGSERVICE PGSERVICEF
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TEST="${1:-common_ai_gateway_restart_race_pg_test.ts}"
+# G6-13: the owner-held contract file runs against the TEST-ONLY candidate (fixture, default) or the real migration.
+SOURCE="${2:-fixture}"
+case "$SOURCE" in fixture|migration) ;; *) echo "refusing source '$SOURCE'" >&2; exit 2 ;; esac
 case "$TEST" in
-  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts|common_ai_gateway_lost_reserve_pg_test.ts|common_ai_gateway_owner_held_contract_pg_test.ts|common_ai_gateway_owner_held_isolation_baseline_pg_test.ts|common_ai_gateway_owner_held_isolation_guard_pg_test.ts|common_ai_gateway_owner_held_isolation_fence_pg_test.ts) ;;
+  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts|common_ai_gateway_lost_reserve_pg_test.ts|common_ai_gateway_owner_held_contract_pg_test.ts|common_ai_gateway_owner_held_isolation_baseline_pg_test.ts|common_ai_gateway_owner_held_isolation_guard_pg_test.ts|common_ai_gateway_owner_held_isolation_fence_pg_test.ts|common_ai_gateway_owner_held_rc_guard_migration_pg_test.ts) ;;
   *) echo "refusing test file '$TEST'" >&2; exit 2 ;;
 esac
 LEDGER="$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql"
@@ -86,14 +90,16 @@ SQL
 
 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u ANTHROPIC_WEBHOOK_SIGNING_KEY \
     -u ANTHROPIC_CUSTOM_HEADERS -u OPENAI_API_KEY \
-    GRR_PGHOST="$HOST" GRR_PGPORT="$PORT" GRR_PGSUPER="$SUPER" GRR_DB="$DB" GRR_DENO_CONFIG="$CONFIG" \
+    GRR_PGHOST="$HOST" GRR_PGPORT="$PORT" GRR_PGSUPER="$SUPER" GRR_DB="$DB" GRR_DENO_CONFIG="$CONFIG" GRR_OWNER_HELD_SOURCE="$SOURCE" \
   deno test --cached-only --frozen --config "$CONFIG" \
     --deny-net --deny-write --allow-run=psql,deno \
-    --allow-env=GRR_PGHOST,GRR_PGPORT,GRR_PGSUPER,GRR_DB,GRR_DENO_CONFIG \
+    --allow-env=GRR_PGHOST,GRR_PGPORT,GRR_PGSUPER,GRR_DB,GRR_DENO_CONFIG,GRR_OWNER_HELD_SOURCE \
     "$HERE/$TEST" >"$WORK/test.log" 2>&1 \
   || { cat "$WORK/test.log" >&2; fail "gateway restart / concurrent recovery ($TEST)"; }
 if grep -q "[1-9][0-9]* ignored" "$WORK/test.log"; then cat "$WORK/test.log" >&2; fail "tests were ignored (environment not passed)"; fi
 grep -Eq '[1-9][0-9]* passed' "$WORK/test.log" || { cat "$WORK/test.log" >&2; fail "no test ran"; }
 # Measured distributions the tests print (e.g. the G6-08 4-way race orders).
 sed 's/\x1b\[[0-9;]*m//g' "$WORK/test.log" | grep -a -E '^G6-[0-9]+ ' || true
-echo "PASS restart / concurrent recovery across processes x real ledger + ai_calls ($TEST): $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/test.log" | grep -Eo '[0-9]+ passed \| [0-9]+ failed' | tail -1)"
+LABEL="$TEST"
+[ "$TEST" = common_ai_gateway_owner_held_contract_pg_test.ts ] && LABEL="$TEST, source=$SOURCE"
+echo "PASS restart / concurrent recovery across processes x real ledger + ai_calls ($LABEL): $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/test.log" | grep -Eo '[0-9]+ passed \| [0-9]+ failed' | tail -1)"
