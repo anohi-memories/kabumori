@@ -3,6 +3,10 @@
 Status: **design + pure reference model + offline tests only.** No SQL, no RPC, no migration, no grant, no change to R1 / W1 / W2, to G3's 007 or to any
 Edge. The SQL this proposes is a later G5 TASK behind a focused **Codex Sol (high)** review; G3's fix is a later G3 TASK. Production is **NO_GO**.
 
+> **G5-10 update (Issue #320 task 10):** the interface of section 4 now exists as an isolated SQL candidate,
+> `supabase/candidates/common_account_authorization_verdict/003_session_verdict.sql` (not applied, not wired), with its PG17 proofs in
+> `docs/common-account/g5-10-session-verdict-sql-candidate.md`. The API is unchanged.
+
 - TASK `common-account-g5-g3-cancel-receipt-session-verdict-interface-contract-20261021` (Issue #320, G5-01 generation, task 9, completion K5).
 - The question: G3's COORDINATION on Issue #320 (comment 6292793871), from G3 PR #392 (head `f34aab9714f5d4f11388609262d5f64cdcce5ed9`, tests only):
   007's `cancel_reservation` and `receipt` decide the person with `auth.uid()` alone, so a signed-out, expired, another person's, unknown or
