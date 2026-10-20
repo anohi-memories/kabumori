@@ -1,0 +1,13 @@
+# G2 N2 test on #398 HEAD 2919d2b2c18bcb656a97b9d827b825b641aa05f5 (BEFORE #400)
+✖ G2-N2a: the data reloads (loading) while a REAL send is out and the answer is "unavailable" -- the same-id re-ask cannot send and asks no readiness while loading; once ready again it sends with the SAME id (71.671125ms)
+✔ G2-N2b: a TRUE "published" that arrives while the data is loading (or blocked) is still shown as posted, with its post id (51.370334ms)
+✖ G2-N2c: demo data, ready port: up to the confirmation and the consent nothing claims a post or a server-side "ready" -- the demo reason is shown, the port is never asked (21.553209ms)
+✔ OBSERVATION G2-N2-ENV (owner of the app / release config): EXPO_PUBLIC_DATA_SOURCE unset or empty selects the DEMO data -- a build that only forgets it shows demo accounts to a real signed-in person (sending stays impossible since #400) (0.250416ms)
+✖ negative controls: the pre-#400 gate lets demo data say "ready" and send; asking the readiness without the data check asks it while loading (1.913125ms)
+ℹ tests 5
+ℹ pass 2
+ℹ fail 3
+✖ G2-N2a: the data reloads (loading) while a REAL send is out and the answer is "unavailable" -- the same-id re-ask cannot send and asks no readiness while loading; once ready again it sends with the SAME id (71.671125ms)
+✖ G2-N2c: demo data, ready port: up to the confirmation and the consent nothing claims a post or a server-side "ready" -- the demo reason is shown, the port is never asked (21.553209ms)
+✖ negative controls: the pre-#400 gate lets demo data say "ready" and send; asking the readiness without the data check asks it while loading (1.913125ms)
+  AssertionError [ERR_ASSERTION]: target once:   if (input.dataStatus === 'mock_preview') return block('dem
