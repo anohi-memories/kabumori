@@ -3,7 +3,10 @@
 # (supabase/tests/common_ai_gateway_restart_race_worker.ts) against the real ledger (20261010050613), call store
 # (20261017120000) and maintenance (20261017150000) migrations. Never touches Supabase, never uses the network.
 #
-#   GRR_PGHOST=/private/tmp/<socket dir> GRR_PGPORT=54991 GRR_PGSUPER=<superuser> bash supabase/tests/common_ai_gateway_restart_race_pg_run.sh
+#   GRR_PGHOST=/private/tmp/<socket dir> GRR_PGPORT=54991 GRR_PGSUPER=<superuser> bash supabase/tests/common_ai_gateway_restart_race_pg_run.sh [test file]
+#
+# The test file is common_ai_gateway_restart_race_pg_test.ts (G6-07, the default) or
+# common_ai_gateway_fence_review_pg_test.ts (G6-08: the pre-send claim check under review); nothing else is accepted.
 #
 # The host must be a local socket directory under /tmp (anything else is refused) and the server must have no TCP
 # listener. One scratch database is created and dropped; no role is created (the three Supabase API roles are
@@ -21,6 +24,11 @@ esac
 unset PGHOST PGHOSTADDR PGPORT PGDATABASE PGUSER PGPASSWORD PGSERVICE PGSERVICEFILE PGPASSFILE
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+TEST="${1:-common_ai_gateway_restart_race_pg_test.ts}"
+case "$TEST" in
+  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts) ;;
+  *) echo "refusing test file '$TEST'" >&2; exit 2 ;;
+esac
 LEDGER="$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql"
 STORE="$HERE/../migrations/20261017120000_ai_consumer_call_store.sql"
 MAINTENANCE="$HERE/../migrations/20261017150000_ai_ledger_user_erasure.sql"
@@ -77,8 +85,10 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u ANTHRO
   deno test --cached-only --frozen --config "$CONFIG" \
     --deny-net --deny-write --allow-run=psql,deno \
     --allow-env=GRR_PGHOST,GRR_PGPORT,GRR_PGSUPER,GRR_DB,GRR_DENO_CONFIG \
-    "$HERE/common_ai_gateway_restart_race_pg_test.ts" >"$WORK/test.log" 2>&1 \
-  || { cat "$WORK/test.log" >&2; fail "gateway restart / concurrent recovery"; }
+    "$HERE/$TEST" >"$WORK/test.log" 2>&1 \
+  || { cat "$WORK/test.log" >&2; fail "gateway restart / concurrent recovery ($TEST)"; }
 if grep -q "[1-9][0-9]* ignored" "$WORK/test.log"; then cat "$WORK/test.log" >&2; fail "tests were ignored (environment not passed)"; fi
 grep -Eq '[1-9][0-9]* passed' "$WORK/test.log" || { cat "$WORK/test.log" >&2; fail "no test ran"; }
-echo "PASS restart / concurrent recovery across processes x real ledger + ai_calls: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/test.log" | grep -Eo '[0-9]+ passed \| [0-9]+ failed' | tail -1)"
+# Measured distributions the tests print (e.g. the G6-08 4-way race orders).
+sed 's/\x1b\[[0-9;]*m//g' "$WORK/test.log" | grep -a '^G6-08 ' || true
+echo "PASS restart / concurrent recovery across processes x real ledger + ai_calls ($TEST): $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/test.log" | grep -Eo '[0-9]+ passed \| [0-9]+ failed' | tail -1)"

@@ -34,8 +34,19 @@ export type GatewayJob = Readonly<{
   feature: string;
   operationId: string;
   brand: string | null;
-  /** "before:<rpc>" | "after:<rpc>" (the RPC committed) | "provider" (the provider has the request, no answer yet). */
+  /**
+   * "before:<rpc>" | "after:<rpc>" (the RPC committed) | "provider" (the provider has the request, no answer yet);
+   * "<when>:<rpc>#<n>" names the n-th call of that RPC (G6-08: the second ai_calls_claim is the pre-send check).
+   */
   pauseAt: string | null;
+  /** G6-08: "<rpc>#<n>" -> "lost" (the RPC commits, the answer never arrives: a network error). */
+  faults?: Readonly<Record<string, "lost">>;
+  /** G6-08: the provider's answer per request, in order ("ok" or an HTTP status); default always "ok". */
+  providerReplies?: readonly string[];
+  /** G6-08: the runtime's per-RPC timeout (the fake transport honours the abort signal). */
+  rpcTimeoutMs?: number;
+  /** G6-08: write "start:<rpc>#<n>" / "end:<rpc>#<n>" events (with the clock) around every ledger / ai_calls RPC. */
+  trace?: boolean;
 }>;
 export type RecoverJob = Readonly<{ role: "recover"; name: string; revision: string; apps: "all" | "postona"; mode: "advise" | "apply"; abandonAfterSeconds: number }>;
 
@@ -132,25 +143,47 @@ function jobWire(app: string, feature: string) {
 
 async function runGateway(job: GatewayJob): Promise<unknown> {
   const set = policySet(job.revision, "all");
-  const pauseIf = async (point: string) => {
-    if (job.pauseAt === point) await pause(job.name, point);
+  const pauseIf = async (point: string, n?: number) => {
+    if (job.pauseAt === point || (n !== undefined && job.pauseAt === `${point}#${n}`)) await pause(job.name, job.pauseAt);
   };
+  const event = (point: string) => rows(`insert into g6r_fake.events (worker, point) values (${literal(job.name)}, ${literal(point)})`);
+  const counts = new Map<string, number>();
+  let providerCalls = 0;
   const route: FetchLike = async (input, init) => {
     const url = String(input);
     if (url === `${SUPABASE}/rest/v1/rpc/${G5_VERDICT_RPC}`) return await fakeG5(init);
     const rpc = url.match(/^http:\/\/127\.0\.0\.1:54321\/rest\/v1\/rpc\/(ai_(?:ledger|calls)_[a-z_]+)$/u)?.[1];
     if (rpc) {
       if (new Headers(init?.headers).get("apikey") !== SERVICE_KEY) return jsonResponse(401, { code: "PGRST301" });
-      await pauseIf(`before:${rpc}`);
-      const r = await serviceRpc(rpc, (JSON.parse(String(init?.body)) as { p: unknown }).p);
-      await pauseIf(`after:${rpc}`);
+      const n = (counts.get(rpc) ?? 0) + 1;
+      counts.set(rpc, n);
+      await pauseIf(`before:${rpc}`, n);
+      if (job.trace) await event(`start:${rpc}#${n}`);
+      // The database keeps running a statement whose caller gave up (as PostgREST would); the caller sees the abort.
+      const running = serviceRpc(rpc, (JSON.parse(String(init?.body)) as { p: unknown }).p);
+      // (The listener is removed afterwards: a pending abort listener would keep the timeout's timer, and the process, alive.)
+      const signal = init?.signal;
+      let onAbort = () => {};
+      const aborted = new Promise<never>((_, reject) => onAbort = () => reject(new DOMException("timeout", "AbortError")));
+      signal?.addEventListener("abort", onAbort, { once: true });
+      let r: Awaited<typeof running>;
+      try {
+        r = await Promise.race([running, aborted]);
+      } finally {
+        signal?.removeEventListener("abort", onAbort);
+      }
+      if (job.trace) await event(`end:${rpc}#${n}`);
+      await pauseIf(`after:${rpc}`, n);
+      if (job.faults?.[`${rpc}#${n}`] === "lost") throw new TypeError("connection lost after the statement ran");
       return r.ok ? jsonResponse(200, r.answer) : jsonResponse(400, { code: r.code });
     }
     // The providers: every request that reaches one is written down first (it survives a SIGKILL), then answered.
     const provider = url.startsWith("https://api.openai.com/") ? "openai" : url.startsWith("https://api.anthropic.com/") ? "anthropic" : null;
     if (!provider) return jsonResponse(404, {});
     await rows(`insert into g6r_fake.provider_requests (worker, operation_id, provider) values (${literal(job.name)}, ${literal(job.operationId)}, '${provider}')`);
-    await pauseIf("provider");
+    await pauseIf("provider", providerCalls + 1);
+    const reply = job.providerReplies?.[providerCalls++] ?? "ok";
+    if (reply !== "ok") return jsonResponse(Number(reply), { error: { type: "rate_limit_error", code: "rate_limit_exceeded", message: "slow down" } });
     return provider === "openai"
       ? jsonResponse(200, openAiBody({ reply: "ok" }, { model: "gpt-6-luna" }))
       : jsonResponse(200, anthropicBody({ reply: "ok" }, { model: "claude-haiku-5-5" }));
@@ -164,6 +197,7 @@ async function runGateway(job: GatewayJob): Promise<unknown> {
     policies: set.registry,
     fetch: route,
     holdSeconds: 30,
+    rpcTimeoutMs: job.rpcTimeoutMs,
     retryTiming: { baseDelayMs: 1, maxDelayMs: 1, maxRetryAfterMs: 10, minAttemptMs: 1 },
     sleep: () => Promise.resolve(),
     random: () => 0,
