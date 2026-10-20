@@ -49,6 +49,9 @@ function fakeThreads(steps: Step[]) {
   return { fetch, calls, bodies, left: () => queue.length };
 }
 const sleeps: number[] = [];
+/** G3's hook as G3 PR #356 hands it: here it always allows and counts its calls. */
+let hookCalls = 0;
+const ALLOW = { beforePublish: () => (hookCalls += 1, Promise.resolve(true)) };
 const port = (fetch: FetchLike, checks = 3) =>
   createGatedThreadsSendPort(true, "simulated", fetch, {
     containerChecks: checks,
@@ -65,7 +68,7 @@ const R = "GET /v1.0/222";
 
 async function run(steps: Step[], expected: ThreadsSendOutcome, calls: string[], text = "hello threads") {
   const fake = fakeThreads(steps);
-  const outcome = await port(fake.fetch).send(CRED, text);
+  const outcome = await port(fake.fetch).send(CRED, text, ALLOW);
   assert.deepEqual(outcome, expected);
   assert.deepEqual(fake.calls, calls);
   assert.equal(fake.left(), 0, "every scripted answer was used");
@@ -131,7 +134,7 @@ test("bad input is refused before any request", async () => {
     [CRED, "a\rb"],
   ] as const) {
     const fake = fakeThreads([]);
-    const outcome = await port(fake.fetch).send(cred as typeof CRED, text);
+    const outcome = await port(fake.fetch).send(cred as typeof CRED, text, ALLOW);
     assert.deepEqual(outcome, { kind: "not_written", stage: "container", code: "THREADS_REQUEST_INVALID" });
     assert.deepEqual(fake.calls, []);
   }
@@ -181,7 +184,7 @@ test("read-back: another owner or id is a mismatch, a failed read is unknown; th
 test("send never throws: a failing sleep after the container is an unknown publish, not a failure", async () => {
   const fake = fakeThreads([CONTAINER_OK, STATUS("IN_PROGRESS")]);
   const p = createGatedThreadsSendPort(true, "simulated", fake.fetch, { sleep: () => Promise.reject(new Error("killed")) });
-  assert.deepEqual(await p.send(CRED, "hello"), { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" });
+  assert.deepEqual(await p.send(CRED, "hello", ALLOW), { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" });
   assert.deepEqual(fake.calls, [C, S]);
 });
 
@@ -286,4 +289,112 @@ test("isolation: the module imports only the existing transport; only its test a
     "supabase/functions/_shared/social/threads_connect_to_send.ts", // G4-04 composes the same ports
     "supabase/functions/_shared/social/threads_send_port_test.ts",
   ]);
+});
+
+// ---- G4-07: the pre-publish hook (G3 #318 contract, Issue #319 comment 6279580056; G3 PR #356) ----------------------
+
+test("hook: a send without beforePublish is refused before anything is created", async () => {
+  for (const hooks of [undefined, null, {}, { beforePublish: true }, { beforePublish: "yes" }]) {
+    const fake = fakeThreads([]);
+    const outcome = await port(fake.fetch).send(CRED, "hello", hooks as never);
+    assert.deepEqual(outcome, { kind: "not_written", stage: "container", code: "THREADS_PREPUBLISH_HOOK_REQUIRED" });
+    assert.deepEqual(fake.calls, []);
+  }
+});
+
+test("hook: anything but true -> no publish request, not_written publish THREADS_PREPUBLISH_REFUSED", async () => {
+  const answers: Array<() => Promise<unknown>> = [
+    () => Promise.resolve(false),
+    () => Promise.reject(new Error(`store down ${TOKEN}`)),
+    () => Promise.resolve("true"),
+    () => Promise.resolve(1),
+    () => Promise.resolve({ ok: true }),
+    () => Promise.resolve(undefined),
+    () => {
+      throw new Error("sync throw");
+    },
+  ];
+  for (const answer of answers) {
+    let calls = 0;
+    const fake = fakeThreads([CONTAINER_OK, STATUS("FINISHED")]);
+    const outcome = await port(fake.fetch).send(CRED, "hello", { beforePublish: () => (calls += 1, answer() as Promise<boolean>) });
+    assert.deepEqual(outcome, { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" });
+    assert.deepEqual(fake.calls, [C, S]);
+    assert.equal(calls, 1);
+    assert.equal(JSON.stringify(outcome).includes(TOKEN), false);
+  }
+});
+
+test("hook: awaited exactly once, after the container is FINISHED and before the publish request", async () => {
+  const order: string[] = [];
+  const fake = fakeThreads([CONTAINER_OK, STATUS("IN_PROGRESS"), STATUS("FINISHED"), PUBLISH_OK, READBACK_OK]);
+  const logged: FetchLike = (input, init) => (order.push(`${init?.method ?? "GET"} ${new URL(input).pathname}`), fake.fetch(input, init));
+  const outcome = await port(logged).send(CRED, "hello", {
+    beforePublish: async () => {
+      order.push("hook start");
+      await new Promise((r) => setTimeout(r, 15)); // a slow hook: G4 adds no bound of its own
+      order.push("hook true");
+      return true;
+    },
+  });
+  assert.deepEqual(outcome, { kind: "published", mediaId: "222", readBack: "confirmed" });
+  assert.deepEqual(order, [C, S, S, "hook start", "hook true", P, R]);
+});
+
+test("hook: not asked when no publish could follow (container refused / unknown / ERROR / not ready / unreadable / PUBLISHED)", async () => {
+  const scripts: Step[][] = [
+    [() => graphError(400, 100)],
+    [() => new Error("reset")],
+    [CONTAINER_OK, STATUS("ERROR")],
+    [CONTAINER_OK, STATUS("IN_PROGRESS"), STATUS("IN_PROGRESS"), STATUS("IN_PROGRESS")],
+    [CONTAINER_OK, () => new Error("reset")],
+    [CONTAINER_OK, STATUS("PUBLISHED")],
+  ];
+  for (const steps of scripts) {
+    let calls = 0;
+    const fake = fakeThreads(steps);
+    await port(fake.fetch).send(CRED, "hello", { beforePublish: () => (calls += 1, Promise.resolve(true)) });
+    assert.equal(calls, 0);
+    assert.equal(fake.calls.includes(P), false);
+  }
+});
+
+test("hook: what changes during the container wait is what the hook sees; every change stops the publish", async () => {
+  // A synthetic world standing in for G3's store preflight (owner, deletion, service, generation, G4 verification).
+  const changes: Array<[string, (w: Record<string, unknown>) => void]> = [
+    ["owner changed", (w) => (w.owner = "someone-else")],
+    ["account deletion started", (w) => (w.deleting = true)],
+    ["service ended", (w) => (w.service = "ended")],
+    ["service ended and restarted (new period)", (w) => (w.servicePeriod = 2)],
+    ["credential generation changed", (w) => (w.generation = "b".repeat(64))],
+    ["G4 verification revoked", (w) => (w.verified = false)],
+    ["publish switch off", (w) => (w.publishEnabled = false)],
+  ];
+  for (const [label, change] of changes) {
+    const world: Record<string, unknown> = { owner: "alice", deleting: false, service: "active", servicePeriod: 1, generation: "a".repeat(64), verified: true, publishEnabled: true };
+    const before = JSON.stringify(world);
+    const fake = fakeThreads([CONTAINER_OK, () => (change(world), json(200, { id: "111", status: "FINISHED" }))]);
+    const outcome = await port(fake.fetch).send(CRED, "hello", { beforePublish: () => Promise.resolve(JSON.stringify(world) === before) });
+    assert.deepEqual(outcome, { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" }, label);
+    assert.equal(fake.calls.includes(P), false, label);
+  }
+});
+
+test("hook: a closed hook (G3 answers false after its send returned) stops a duplicate / replayed send", async () => {
+  let open = true;
+  const hooks = { beforePublish: () => Promise.resolve(open) };
+  const first = fakeThreads([CONTAINER_OK, STATUS("FINISHED"), PUBLISH_OK, READBACK_OK]);
+  assert.equal((await port(first.fetch).send(CRED, "hello", hooks)).kind, "published");
+  open = false;
+  const again = fakeThreads([CONTAINER_OK, STATUS("FINISHED")]);
+  assert.deepEqual(await port(again.fetch).send(CRED, "hello", hooks), { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" });
+  assert.equal(again.calls.includes(P), false);
+});
+
+test("hook: never called again after send returns", async () => {
+  let calls = 0;
+  const fake = fakeThreads([CONTAINER_OK, STATUS("FINISHED"), PUBLISH_OK, () => new Error("reset")]);
+  await port(fake.fetch).send(CRED, "hello", { beforePublish: () => (calls += 1, Promise.resolve(true)) });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(calls, 1);
 });

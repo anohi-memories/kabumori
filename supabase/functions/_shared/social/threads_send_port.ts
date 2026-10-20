@@ -25,10 +25,14 @@
 //     `unknown readback` is not produced: once the publish answered a media id the outcome is `published` with the
 //     read-back state, which G3 maps to the same `uncertain`.
 //
-// Not closed here, and not claimed: G3's preflight runs once before send; the container wait (default up to 3 status
-// reads, 3 s apart) sits between that preflight and the publish request, and nothing re-checks the lifecycle in
-// between (the manual flow re-releases before every step). Proposed to G3, not implemented: a re-check hook before
-// the publish request.
+// The pre-publish hook (G4-07, G3 #318 contract: Issue #319 comment 6279580056, G3 PR #356): the container wait
+// (default up to 3 status reads, 3 s apart) sits between G3's preflight and the publish request, so send REQUIRES
+// { beforePublish } and awaits it exactly once, after the container is FINISHED and before the publish request. Only
+// `true` publishes; false, a throw or any other value -> no publish request, not_written publish
+// THREADS_PREPUBLISH_REFUSED. A send without the hook is refused before anything is created (not_written container
+// THREADS_PREPUBLISH_HOOK_REQUIRED): this port has no hook-less path (the manual flow is a different module that
+// re-releases before every step). The bound on the hook is G3's (default 5 s, at most 30 s); G4 adds none, keeps no
+// reference to the hook after send returns, and never calls it twice.
 //
 // The service key a Threads post is entitled under is G5's decision and is not made: THREADS_POSTING_SERVICE_KEY is
 // null, so the credential port is unavailable; `x_autopost` (X) and `kabumori` (the app) are refused, never reused.
@@ -66,10 +70,13 @@ export type ThreadsSendOutcome =
   | { kind: "published"; mediaId: string; readBack: "confirmed" | "unknown" | "mismatch" }
   | { kind: "not_written"; stage: "container" | "publish"; code: string }
   | { kind: "unknown"; stage: ThreadsSendStage; code: string };
+/** G3's hook (G3 PR #356 ThreadsSendHooks): true only when the reservation may still be published right now. */
+export type ThreadsSendHooks = { beforePublish(): Promise<boolean> };
 export type ThreadsSendPort = {
   readonly available: boolean;
   readonly transport: "threads" | "simulated";
-  send(credential: Readonly<{ threadsUserId: string; accessToken: string }>, text: string): Promise<ThreadsSendOutcome>;
+  /** `hooks` is required by this port (the type keeps G3's optional shape; a missing hook is refused at run time). */
+  send(credential: Readonly<{ threadsUserId: string; accessToken: string }>, text: string, hooks?: ThreadsSendHooks): Promise<ThreadsSendOutcome>;
 };
 
 // ---- credential port --------------------------------------------------------------------------------------------
@@ -150,6 +157,7 @@ async function sendOnce(
   fetchImpl: FetchLike,
   credential: Readonly<{ threadsUserId: string; accessToken: string }>,
   text: string,
+  beforePublish: () => Promise<boolean>,
   options: ThreadsSendOptions,
 ): Promise<ThreadsSendOutcome> {
   const cred = { threadsUserId: credential?.threadsUserId, accessToken: credential?.accessToken };
@@ -180,6 +188,15 @@ async function sendOnce(
     ready = status === "finished";
   }
   if (!ready) return { kind: "not_written", stage: "publish", code: "THREADS_CONTAINER_NOT_READY" };
+
+  // The pre-publish re-check: awaited exactly once, here, and nothing but `true` lets the publish request out.
+  let allowed: unknown;
+  try {
+    allowed = await beforePublish();
+  } catch {
+    allowed = false;
+  }
+  if (allowed !== true) return { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" };
 
   let mediaId: string;
   try {
@@ -213,10 +230,16 @@ export function createGatedThreadsSendPort(
   return Object.freeze({
     available,
     transport: transport === "threads" ? "threads" : "simulated",
-    async send(credential: Readonly<{ threadsUserId: string; accessToken: string }>, text: string): Promise<ThreadsSendOutcome> {
+    async send(
+      credential: Readonly<{ threadsUserId: string; accessToken: string }>,
+      text: string,
+      hooks?: ThreadsSendHooks,
+    ): Promise<ThreadsSendOutcome> {
       if (!available) return { kind: "not_written", stage: "container", code: "THREADS_SEND_DISABLED" };
+      const beforePublish = hooks?.beforePublish;
+      if (typeof beforePublish !== "function") return { kind: "not_written", stage: "container", code: "THREADS_PREPUBLISH_HOOK_REQUIRED" };
       try {
-        return await sendOnce(fetchImpl, credential, text, options);
+        return await sendOnce(fetchImpl, credential, text, () => beforePublish.call(hooks), options);
       } catch {
         // Unreachable by construction (every step catches); if it ever happens a write may have occurred.
         return { kind: "unknown", stage: "publish", code: "THREADS_UNAVAILABLE" };
