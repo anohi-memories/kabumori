@@ -1,8 +1,8 @@
 -- G4-09 behavior proof of supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql, run by
 -- postona_threads_binding_epoch_run.sh as the non-superuser table owner on a disposable PG17 database (the real G5/F5
 -- lifecycle + F5's owner epoch candidate + PR #124 + 001). Calls go through the owner channel with the person's JWT claims
--- (as H5's owner transport would); every value is fake. Each "connect" runs PR #124's complete and 001's attest_binding in
--- ONE subtransaction, so a refusal rolls both back.
+-- (as H5's owner transport would); every value is fake. Each "connect" is ONE call of 001's complete_and_attest_binding
+-- (G4-14: PR #124's complete and the binding inside one entry), so a refusal rolls both back.
 \set ON_ERROR_STOP 1
 set timezone = 'UTC';
 
@@ -64,21 +64,44 @@ exception when others then return 'ERR:' || sqlerrm; end $$;
 create function tb.record(p_actor uuid, p_tag text, p_epoch bigint, p_lifecycle bigint) returns text language sql as $$
   select tb.try(format('select postona_threads_binding.record_state_generation(%L::uuid, %L::uuid, %s, %s)',
                        p_actor, tb.state(p_tag), coalesce(p_epoch::text, 'null'), coalesce(p_lifecycle::text, 'null'))) $$;
--- complete (as the person) and attest_binding (owner channel) in ONE subtransaction: 'OK' or 'ERR:...' with both undone.
-create function tb.connect(p_user uuid, p_tag text, p_puid text, p_attest_actor uuid default null, p_attest_puid text default null)
+-- The Threads callback as the owner transport makes it: ONE call of complete_and_attest_binding under the claims of p_as
+-- (default: the person who began the state). 'OK' or 'ERR:...' with everything undone.
+create function tb.connect(p_user uuid, p_tag text, p_puid text, p_as uuid default null)
 returns text language plpgsql as $$
-declare v_state uuid := tb.state(p_tag);
+declare v_state uuid := tb.state(p_tag); v_as uuid := coalesce(p_as, p_user);
 begin
-  perform tb.claims(p_user, tb.session(p_user));
-  perform public.complete_social_mobile_threads_oauth_connection(v_state, p_puid, 'h' || p_puid, tb.token(p_tag),
-                                                                 tb.attest(v_state, p_puid, 'h' || p_puid, tb.token(p_tag)));
+  perform tb.claims(v_as, tb.session(v_as));
+  perform postona_threads_binding.complete_and_attest_binding(v_state, p_puid, 'h' || p_puid, tb.token(p_tag),
+                                                              tb.attest(v_state, p_puid, 'h' || p_puid, tb.token(p_tag)));
   perform tb.claims(null, null);
-  perform postona_threads_binding.attest_binding(coalesce(p_attest_actor, p_user), v_state, coalesce(p_attest_puid, p_puid));
   return 'OK';
 exception when others then
   perform tb.claims(null, null);
   return 'ERR:' || sqlerrm;
 end $$;
+-- PR #124's complete called ON ITS OWN (outside the entry), as the person: 'OK' or 'ERR:...'.
+create function tb.complete_alone(p_user uuid, p_tag text, p_puid text) returns text language sql as $$
+  select case when r like 'ERR:%' then r else 'OK' end
+    from (select tb.as_person(p_user, format('select public.complete_social_mobile_threads_oauth_connection(%L::uuid, %L, %L, %L, %L)::text',
+            tb.state(p_tag), p_puid, 'h' || p_puid, tb.token(p_tag), tb.attest(tb.state(p_tag), p_puid, 'h' || p_puid, tb.token(p_tag))))) x(r) $$;
+-- PR #124's complete on its own and then the entry, in ONE subtransaction: 'OK' or 'ERR:...' with both undone.
+create function tb.complete_then_connect(p_user uuid, p_tag text, p_puid text) returns text language plpgsql as $$
+declare v_state uuid := tb.state(p_tag);
+begin
+  perform tb.claims(p_user, tb.session(p_user));
+  perform public.complete_social_mobile_threads_oauth_connection(v_state, p_puid, 'h' || p_puid, tb.token(p_tag),
+                                                                 tb.attest(v_state, p_puid, 'h' || p_puid, tb.token(p_tag)));
+  perform postona_threads_binding.complete_and_attest_binding(v_state, p_puid, 'h' || p_puid, tb.token(p_tag),
+                                                              tb.attest(v_state, p_puid, 'h' || p_puid, tb.token(p_tag)));
+  perform tb.claims(null, null);
+  return 'OK';
+exception when others then
+  perform tb.claims(null, null);
+  return 'ERR:' || sqlerrm;
+end $$;
+create function tb.unbound(p_tag text) returns boolean language sql stable as $$
+  select not exists (select 1 from postona_threads_binding.bindings b where b.oauth_state_id = tb.state(p_tag))
+     and (select g.attested_at is null from postona_threads_binding.state_generations g where g.oauth_state_id = tb.state(p_tag)) $$;
 create function tb.snap() returns text language sql stable set timezone = 'UTC' as $$
   select md5(concat_ws('|',
     (select string_agg(t::text, ',' order by t.id) from public.social_accounts t),
@@ -101,7 +124,7 @@ begin
   foreach r in array array['anon', 'authenticated', 'service_role'] loop
     foreach s in array array[
       'select postona_threads_binding.record_state_generation(gen_random_uuid(), gen_random_uuid(), 1, 1)',
-      'select postona_threads_binding.attest_binding(gen_random_uuid(), gen_random_uuid(), ''1'')',
+      'select postona_threads_binding.complete_and_attest_binding(gen_random_uuid(), ''1'', null, ''t'', ''a'')',
       'select * from postona_threads_binding.binding_row(''sa_x'')',
       'select 1 from postona_threads_binding.bindings', 'select 1 from postona_threads_binding.state_generations'] loop
       begin
@@ -115,6 +138,12 @@ begin
     end loop;
   end loop;
 end $$;
+
+-- 0b. G4-14: there is no separate attest. The schema holds exactly the three entries.
+select tb.check(to_regprocedure('postona_threads_binding.attest_binding(uuid,uuid,text)') is null, '0b no attest_binding');
+select tb.check((select string_agg(p.proname, ',' order by p.proname) from pg_proc p
+                  where p.pronamespace = 'postona_threads_binding'::regnamespace) = 'binding_row,complete_and_attest_binding,record_state_generation',
+                '0b exactly three functions');
 
 -- 1. The normal connect: begin, record the numbers of the allow, complete + attest; the binding row carries them as text.
 select tb.enroll(1) as a \gset
@@ -188,17 +217,15 @@ select tb.enroll(7) as g \gset
 select tb.begin(:'g', 'g1') as acct_g \gset
 select tb.check(tb.record(:'g', 'g1', tb.epoch(:'g'), tb.lifecycle(:'g')) = 'OK', '6 record');
 select tb.snap() as s \gset
-select tb.refused(tb.connect(:'g', 'g1', '17841400000000007', :'a'), 'THREADS_BINDING_NOT_INITIATOR', :'s', '6 another actor attests');
-select tb.refused(tb.connect(:'g', 'g1', '17841400000000007', null, '17841400000000999'), 'THREADS_BINDING_ACCOUNT_MISMATCH', :'s', '6 another Threads user');
-select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'g', tb.state('g1'), '17841400000000007')),
-                  'THREADS_BINDING_STATE_NOT_COMPLETED', :'s', '6 attest before complete');
-select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'g', tb.state('g1'), '0')),
-                  'THREADS_BINDING_INPUT_INVALID', :'s', '6 malformed Threads user id');
+select tb.refused(tb.connect(:'g', 'g1', '17841400000000007', :'a'), 'THREADS_OAUTH_STATE_NOT_CONSUMABLE', :'s', '6 another person completes G''s state');
+select tb.refused(tb.connect(:'g', 'g1', '0'), 'THREADS_BINDING_INPUT_INVALID', :'s', '6 malformed Threads user id');
+select tb.refused(tb.try(format('select postona_threads_binding.complete_and_attest_binding(%L::uuid, %L, %L, %L, %L)', tb.state('g1'),
+                  '17841400000000007', 'h17841400000000007', tb.token('g1'), tb.attest(tb.state('g1'), '17841400000000007', 'h17841400000000007', tb.token('g1')))),
+                  'THREADS_BINDING_INPUT_INVALID', :'s', '6 no JWT claims: no actor');
+select tb.refused(tb.connect(:'g', 'g1', '17841400000000007', '00000000-0000-4000-8000-000000000777'), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED', :'s', '6 claims of a person with no login: G5 T13 refuses first');
 select tb.check(tb.connect(:'g', 'g1', '17841400000000007') = 'OK', '6 connect');
 select tb.snap() as s \gset
-select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'g', tb.state('g1'), '17841400000000007')),
-                  'THREADS_BINDING_ALREADY_ATTESTED', :'s', '6 replayed attest of the same state');
-select tb.check(tb.connect(:'g', 'g1', '17841400000000007') like 'ERR:THREADS_OAUTH_STATE_NOT_CONSUMABLE%', '6 replayed callback refused by PR #124 first');
+select tb.refused(tb.connect(:'g', 'g1', '17841400000000007'), 'THREADS_OAUTH_STATE_NOT_CONSUMABLE', :'s', '6 replayed callback refused by PR #124 first');
 -- two owners between record and attest: no single owner
 select tb.enroll(8) as h \gset
 select tb.begin(:'g', 'g2') as ignore \gset
@@ -214,26 +241,59 @@ select tb.check(tb.record(:'a', 'a2', tb.epoch(:'a'), tb.lifecycle(:'a')) = 'OK'
 select tb.check((select b.oauth_state_id = tb.state('a2') from postona_threads_binding.bindings b where b.social_account_id = :'acct_a'), '7 the binding is the new state''s');
 select tb.check((select count(*) = 1 from postona_threads_binding.bindings b where b.social_account_id = :'acct_a'), '7 one binding per account');
 
--- 7b. G4-13 (H2 #329): S1 -> S2 -> S1. After the reconnect above (a1 then a2), the old state a1 is never attested again --
---     not through the helper, not in any later transaction; the binding stays a2's.
+-- 7b. G4-13 (H2 #329): S1 -> S2 -> S1. After the reconnect above (a1 then a2), the old state a1 is never attested again;
+--     the binding stays a2's. The callback itself is refused by PR #124 (consumed). Even if some defect elsewhere freed the
+--     consumed state again (SYNTHETIC: consumed_at reset), the entry refuses it once-only, with nothing changed.
 select tb.snap() as s \gset
-select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'a', tb.state('a1'), '17841400000000001')),
-                  'THREADS_BINDING_ALREADY_ATTESTED', :'s', '7b S1 re-attested after S2');
+select tb.refused(tb.connect(:'a', 'a1', '17841400000000001'), 'THREADS_OAUTH_STATE_NOT_CONSUMABLE', :'s', '7b S1 callback after S2');
+update public.social_account_oauth_states set consumed_at = null where id = tb.state('a1'); -- SYNTHETIC: a freed state
+select tb.snap() as s \gset
+select tb.refused(tb.connect(:'a', 'a1', '17841400000000001'), 'THREADS_BINDING_ALREADY_ATTESTED', :'s', '7b S1 re-attested after S2 (state freed)');
+update public.social_account_oauth_states set consumed_at = now() where id = tb.state('a1');
 select tb.check((select b.oauth_state_id = tb.state('a2') from postona_threads_binding.bindings b where b.social_account_id = :'acct_a'), '7b the binding is still S2''s');
 select tb.check((select count(*) = 2 from postona_threads_binding.state_generations g where g.oauth_state_id in (tb.state('a1'), tb.state('a2')) and g.attested_at is not null),
                 '7b both states recorded as attested once');
 
--- 7c. G4-13: attest only in the transaction whose complete consumed the state. A complete committed alone, then an attest
---     in a later transaction, is refused (H5's owner transport must run complete + attest atomically).
+-- 7c. G4-14 (H2 #329 C2): no attest outside the completing call. There is no attest entry to call directly; a PR #124
+--     complete on its own -- committed earlier, or earlier in the same transaction -- leaves a state the entry refuses.
 select tb.enroll(10) as k \gset
 select tb.begin(:'k', 'k1') as acct_k \gset
 select tb.check(tb.record(:'k', 'k1', tb.epoch(:'k'), tb.lifecycle(:'k')) = 'OK', '7c record');
-select tb.check(tb.as_person(:'k', format('select public.complete_social_mobile_threads_oauth_connection(%L::uuid, %L, %L, %L, %L)::text',
-                tb.state('k1'), '17841400000000010', 'h17841400000000010', tb.token('k1'),
-                tb.attest(tb.state('k1'), '17841400000000010', 'h17841400000000010', tb.token('k1')))) not like 'ERR:%', '7c complete alone');
+select tb.check(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'k', tb.state('k1'), '17841400000000010'))
+                like 'ERR:function postona_threads_binding.attest_binding(uuid, uuid, unknown) does not exist%', '7c no direct attest entry');
+select tb.check(tb.complete_alone(:'k', 'k1', '17841400000000010') = 'OK', '7c complete alone, committed');
 select tb.snap() as s \gset
-select tb.refused(tb.try(format('select postona_threads_binding.attest_binding(%L::uuid, %L::uuid, %L)', :'k', tb.state('k1'), '17841400000000010')),
-                  'THREADS_BINDING_NOT_IN_COMPLETE_TRANSACTION', :'s', '7c attest in a later transaction');
+select tb.refused(tb.connect(:'k', 'k1', '17841400000000010'), 'THREADS_OAUTH_STATE_NOT_CONSUMABLE', :'s', '7c the entry in a later transaction');
+select tb.check(tb.unbound('k1'), '7c never bound, never attested');
+select tb.begin(:'k', 'k2') as ignore \gset
+select tb.check(tb.record(:'k', 'k2', tb.epoch(:'k'), tb.lifecycle(:'k')) = 'OK', '7c record k2');
+select tb.snap() as s \gset
+select tb.refused(tb.complete_then_connect(:'k', 'k2', '17841400000000010'), 'THREADS_OAUTH_STATE_NOT_CONSUMABLE', :'s', '7c complete then the entry, same transaction');
+select tb.check(tb.unbound('k2') and (select s.consumed_at is null from public.social_account_oauth_states s where s.id = tb.state('k2')),
+                '7c both undone: k2 unconsumed, unbound');
+
+-- 7d. G4-14: the claim and the binding are one unit. A savepoint rolled back, or the whole transaction rolled back, after a
+--     successful entry call undoes PR #124's complete too: no consumed state, no stored credential, no binding.
+select tb.enroll(11) as m \gset
+select tb.begin(:'m', 'm1') as acct_m \gset
+select tb.check(tb.record(:'m', 'm1', tb.epoch(:'m'), tb.lifecycle(:'m')) = 'OK', '7d record');
+select tb.snap() as s \gset
+begin;
+savepoint g4_14;
+select tb.check(tb.connect(:'m', 'm1', '17841400000000011') = 'OK', '7d connect inside a savepoint');
+rollback to savepoint g4_14;
+commit;
+select tb.check(tb.snap() = :'s', '7d savepoint rollback undid complete and binding together');
+begin;
+select tb.check(tb.connect(:'m', 'm1', '17841400000000011') = 'OK', '7d connect inside a transaction');
+rollback;
+select tb.check(tb.snap() = :'s', '7d transaction rollback undid complete and binding together');
+select tb.check(tb.unbound('m1')
+                and (select s.consumed_at is null from public.social_account_oauth_states s where s.id = tb.state('m1'))
+                and (select sa.vault_access_token_secret_id is null from public.social_accounts sa where sa.id = :'acct_m'),
+                '7d unconsumed, no credential reference, unbound');
+select tb.check(tb.connect(:'m', 'm1', '17841400000000011') = 'OK', '7d the same state connects afterwards, committed');
+select tb.check(not tb.unbound('m1'), '7d bound');
 
 -- 8. The binding row: none, an account that no longer carries the bound identity, a disconnected account.
 select tb.check(tb.row(:'acct_b') like '%,,,)', '8 no binding: bind columns null: ' || tb.row(:'acct_b'));
@@ -255,5 +315,23 @@ select count(*) as before_n from postona_threads_binding.state_generations \gset
 delete from public.social_account_oauth_states where id = tb.state('b2');
 delete from public.social_account_oauth_states where id = tb.state('b1');
 select tb.check((select count(*) from postona_threads_binding.state_generations) = :'before_n'::bigint - 1, '10 a recorded state row goes with its state');
+
+-- 11. G4-14: the entry calls only the reviewed PR #124 complete, owner-only. Exposed (granted to an API role), turned
+--     SECURITY INVOKER, or any change of its body: the entry refuses before anything is claimed. (Last: it changes PR #124.)
+select tb.enroll(12) as n \gset
+select tb.begin(:'n', 'n1') as acct_n \gset
+select tb.check(tb.record(:'n', 'n1', tb.epoch(:'n'), tb.lifecycle(:'n')) = 'OK', '11 record');
+grant execute on function public.complete_social_mobile_threads_oauth_connection(uuid, text, text, text, text) to authenticated;
+select tb.snap() as s \gset
+select tb.refused(tb.connect(:'n', 'n1', '17841400000000012'), 'THREADS_BINDING_COMPLETE_UNPINNED', :'s', '11 complete exposed to authenticated');
+revoke execute on function public.complete_social_mobile_threads_oauth_connection(uuid, text, text, text, text) from authenticated;
+alter function public.complete_social_mobile_threads_oauth_connection(uuid, text, text, text, text) security invoker;
+select tb.refused(tb.connect(:'n', 'n1', '17841400000000012'), 'THREADS_BINDING_COMPLETE_UNPINNED', :'s', '11 complete turned security invoker');
+alter function public.complete_social_mobile_threads_oauth_connection(uuid, text, text, text, text) security definer;
+do $$ begin
+  execute format('create or replace function public.complete_social_mobile_threads_oauth_connection(p_oauth_state_id uuid, p_platform_user_id text, p_handle text, p_access_token text, p_attestation text) returns void language plpgsql volatile security definer set search_path = '''' as %L',
+                 (select p.prosrc from pg_proc p where p.oid = 'public.complete_social_mobile_threads_oauth_connection(uuid,text,text,text,text)'::regprocedure) || '-- drift');
+end $$;
+select tb.refused(tb.connect(:'n', 'n1', '17841400000000012'), 'THREADS_BINDING_COMPLETE_UNPINNED', :'s', '11 complete body changed');
 
 select 'POSTONA_THREADS_BINDING_EPOCH_BEHAVIOR_PASS' as result;
