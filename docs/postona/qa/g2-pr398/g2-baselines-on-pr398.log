@@ -1,0 +1,53 @@
+# new = 2919d2b2c18bcb656a97b9d827b825b641aa05f5
+## tests/g2-draft-session-boundary.test.mjs (copied from the G2 PR, unchanged)
+✔ G2-S1 token-only refresh (MOCK: same last_sign_in_at): the draft and the account come back, nothing is removed (54.795625ms)
+✔ G2-S2 sign-out then a new sign-in of the same person: nothing comes back and the old text is removed from the device (19.668834ms)
+✔ G2-S3 a new sign-in of the same person without a SIGNED_OUT in between (screen closed): nothing comes back, removed (19.655708ms)
+✔ G2-S4 another person signs in while the screen is open: a fresh screen, nothing of A is shown or written under B; A keeps its own record (13.982167ms)
+✔ G2-S5 app restart with the stored session (INITIAL_SESSION / recovered SIGNED_IN, user object as stored): restored (26.592083ms)
+✔ G2-S6 ABA: a restore read that answers after a NEW sign-in of the same person is not applied; the record is removed (13.047209ms)
+✔ G2-S7 ABA: a restore read that answers after ANOTHER person signed in (or after sign-out) shows nothing (28.780041ms)
+✔ G2-S8 a last_sign_in_at that cannot be a mark (not a string, longer than 64) is never restored -- fail closed (22.208958ms)
+✖ FINDING G2-SM1 (P3, owner G1 route / G5 auth): with no last_sign_in_at the mark is "" for every session, so a NEW sign-in of the same person gets the old draft back (11.806708ms)
+✔ FINDING G2-SM2 (P3, MOCK server semantics): the same person signing in on ANOTHER device makes this device lose its draft at the next refresh / restart (31.811709ms)
+✖ FINDING G2-SM3 (P3, owner G1): a new sign-in of the same person while the screen stays mounted keeps the open text and re-saves it under the NEW mark (12.343625ms)
+✔ FINDING G2-SM4 (P3, owner G1 / G5): signing out leaves the text on the device, and "24 hours" is only checked when the same person reads it again (10.736375ms)
+✖ negative controls: route without the per-user key, a constant mark, a restore without its cancel check, and a store that ignores the mark each LEAK the old text in the very scenario that passes unmutated (0.27425ms)
+ℹ tests 13
+ℹ pass 10
+ℹ fail 3
+✖ FINDING G2-SM1 (P3, owner G1 route / G5 auth): with no last_sign_in_at the mark is "" for every session, so a NEW sign-in of the same person gets the old draft back (11.806708ms)
+✖ FINDING G2-SM3 (P3, owner G1): a new sign-in of the same person while the screen stays mounted keeps the open text and re-saves it under the NEW mark (12.343625ms)
+✖ negative controls: route without the per-user key, a constant mark, a restore without its cancel check, and a store that ignores the mark each LEAK the old text in the very scenario that passes unmutated (0.27425ms)
+  AssertionError [ERR_ASSERTION]: the mutation target occurs exactly once: key={userId ?? 'signed-out'}
+## tests/g2-draft-time-lifecycle.test.mjs (copied from the G2 PR, unchanged)
+✔ G2-L1 24-hour boundary after the last edit: 23:59:59 and 24:00:00 come back; 24:00:01 is discarded and removed (108.223542ms)
+✔ G2-L2 only looking at a restored draft does not extend it; editing does (24 hours count from the last edit) (29.12625ms)
+✔ G2-L3 clock moved back or far forward: within 5 minutes back it is kept; more than that, or a year ahead, is discarded and removed (fail closed) (62.902583ms)
+✔ G2-L4 app restart: after 23 hours stopped it comes back; after 48 hours it is discarded and removed when the screen opens (41.370292ms)
+✔ KNOWN SM4 (not re-reported): nothing removes an expired draft at start-up -- after 48 hours stopped it is still on the device until the screen is opened (19.070292ms)
+✔ G2-L5 a visit of B reads, writes and removes only B's key; A's stored bytes are untouched (14.161292ms)
+✔ G2-L6 late INITIAL_SESSION: a screen opened before the session is known touches no draft, and restores once the session arrives (18.548333ms)
+✔ G2-L7 TOKEN_REFRESHED (same mark) while the restore read is pending: no second read, nothing removed, restored (17.081792ms)
+✔ G2-L8 an old restore that is left pending when the screen is closed, then the screen is opened again: restored exactly once, by the new screen (11.116166ms)
+✔ G2-L9 an old restore that answered FIRST, then another person / sign-out: nothing of A is shown afterwards; A's next new session discards it (22.143167ms)
+✔ G2-L10 while A's old read is pending, B signs in and opens: B's read is only issued after A's answered, and B sees nothing of A (12.121959ms)
+✔ G2-L11 a day: A types, signs out; B types, signs out; A signs in the next day (new session): A gets nothing and A's text is removed (10.994083ms)
+✔ FINDING G2-SM4-D (P3, new condition, owner G1/G5): account deletion forgets "per-user state" but not the draft, and a deleted person never reads it again -- so it stays for good (20.693917ms)
+✔ negative controls: ">=" at 24h, no future check, a restore that re-saves, and a key without the user are each caught by the scenarios above (89.306042ms)
+ℹ tests 14
+ℹ pass 14
+ℹ fail 0
+## tests/g2-x-manual-result-gate.test.mjs (copied from the G2 PR, unchanged)
+✔ control (this build): with the unconnected port nothing is sent and nothing says it was -- the send button stays disabled even after the consent (52.975625ms)
+✖ FINDING G2-X1 (P3, owner G1): during the FIRST send of a new text the confirmation already says "前回と同じ内容・同じ送信IDで確認します" -- there was no earlier attempt (21.225875ms)
+✔ G2-X2: another person signs in while A's send is still out -- B gets a fresh screen with nothing of A, and A's late "published" never reaches B (19.781792ms)
+✔ G2-X3: the chosen account disappears while the send is out and the answer is "pending" / "unavailable" -- the same-id retry is not offered for a missing account and nothing is sent again (29.664792ms)
+✔ G2-X4: after an "uncertain" answer and the explicit "Xで確認しました", the editor is EMPTY (no old text to re-send by mistake), and a new send gets a NEW id (15.390958ms)
+✖ negative controls: a route without the per-user key lets B see A's send; showing the same-id line only on a retry flips G2-X1 (0.321458ms)
+ℹ tests 6
+ℹ pass 4
+ℹ fail 2
+✖ FINDING G2-X1 (P3, owner G1): during the FIRST send of a new text the confirmation already says "前回と同じ内容・同じ送信IDで確認します" -- there was no earlier attempt (21.225875ms)
+✖ negative controls: a route without the per-user key lets B see A's send; showing the same-id line only on a retry flips G2-X1 (0.321458ms)
+  AssertionError [ERR_ASSERTION]: target once: key={userId ?? 'signed-out'}

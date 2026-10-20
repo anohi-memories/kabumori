@@ -1,0 +1,24 @@
+# node --test tests/g2-pr398-regression.test.mjs  (G1 PR #398 HEAD 2919d2b2c18bcb656a97b9d827b825b641aa05f5 + this G2 test; node v24.19.0)
+✔ G2-R1: a token refresh that KEEPS the mark does not re-create the open screen -- the text and the chosen account stay, the record keeps its mark, and it comes back after leaving (53.313542ms)
+✔ G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not (88.239958ms)
+✔ FINDING G2-SM3R (P3, owner G1 / G5; MOCK of G2-SM2): a refresh whose user carries a NEW last_sign_in_at re-creates the open screen -- the typed text is gone at once and its record is discarded on the next look (13.732958ms)
+✔ G2-SM3R-C: the same change while confirming drops the confirmation and the consent (nothing can be sent with them) (14.112292ms)
+✔ G2-SM3R-S: the same change WHILE a send is out -- the new screen shows the attempt as unresolved, never as sent, and a retry re-uses the SAME id (no second post) (16.372083ms)
+✔ negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id") (28.90975ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 416.800084
+
+# whole app suite on the same tree
+ℹ tests 506
+ℹ suites 0
+ℹ pass 505
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0

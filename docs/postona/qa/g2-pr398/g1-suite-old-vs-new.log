@@ -1,0 +1,20 @@
+# old = 44ab2e6bb812f3484c85f847574de103757e3dfc: whole app suite (G1's own tests only)
+ℹ tests 491
+ℹ pass 490
+ℹ fail 0
+ℹ skipped 1
+# manual-publish-*.test.mjs
+ℹ tests 214
+ℹ pass 213
+ℹ fail 0
+ℹ skipped 1
+# new = 2919d2b2c18bcb656a97b9d827b825b641aa05f5: whole app suite (G1's own tests only)
+ℹ tests 500
+ℹ pass 499
+ℹ fail 0
+ℹ skipped 1
+# manual-publish-*.test.mjs
+ℹ tests 223
+ℹ pass 222
+ℹ fail 0
+ℹ skipped 1
