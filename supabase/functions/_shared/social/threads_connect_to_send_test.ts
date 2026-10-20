@@ -19,8 +19,8 @@ const BRAND = "brand_alice_personal";
 const USER = "17841400000000001";
 const TOKEN = "THfaketoken0123456789abcdef";
 const GEN = "a".repeat(64);
-/** Synthetic, tests only: G5-02 names x_autopost, which G4 has not adopted (see the doc). */
-const TEST_KEY = "postona_threads_test";
+/** G5's common POSTONA key, adopted in G4-10. */
+const TEST_KEY = "x_autopost";
 const NOW = 1_760_800_000_000;
 const PERMALINK = "https://www.threads.net/@postona_tester/post/AbC_123";
 
@@ -127,14 +127,14 @@ test("the deployable path is closed: no account read, no G5, no token read, no r
   assert.deepEqual(w.log, []);
 });
 
-test("an undecided key, or x_autopost before G4 adopts it, closes bind and post before any port", async () => {
-  for (const key of [null, "x_autopost", "kabumori"]) {
+test("any key but the common POSTONA one closes bind and post before any port", async () => {
+  for (const key of [null, "kabumori", "postona_threads_test", "X_AUTOPOST"]) {
     const w = world();
     const p = createGatedThreadsVerticalPath(true, key, w.deps);
     assert.equal(p.available, false);
-    assert.deepEqual(await p.bind(receipt, flow()), { ok: false, code: "SERVICE_KEY_UNDECIDED" });
+    assert.deepEqual(await p.bind(receipt, flow()), { ok: false, code: "SERVICE_KEY_INVALID" });
     const forged = Object.freeze({ socialAccountId: ACCOUNT, brandId: BRAND, threadsUserId: USER, principalId: ALICE, serviceKey: key, ownerEpoch: "3", lifecycleVersion: "2", entitlementVersion: "v" });
-    assert.deepEqual(await p.postOnce(post(forged as ThreadsAccountBinding)), { kind: "refused", code: "SERVICE_KEY_UNDECIDED" });
+    assert.deepEqual(await p.postOnce(post(forged as ThreadsAccountBinding)), { kind: "refused", code: "SERVICE_KEY_INVALID" });
     assert.deepEqual(w.log, [], String(key));
   }
 });
@@ -186,7 +186,7 @@ test("forged or incomplete bindings are refused before any port (owner epoch mis
   w.log.length = 0;
   const cases: [unknown, string][] = [
     [{ ...good }, "BINDING_INVALID"], // not frozen: not produced by bind
-    [Object.freeze({ ...good, serviceKey: "x_autopost" }), "BINDING_INVALID"],
+    [Object.freeze({ ...good, serviceKey: "kabumori" }), "BINDING_INVALID"],
     [Object.freeze({ ...good, threadsUserId: "0" }), "BINDING_INVALID"],
     [Object.freeze({ ...good, socialAccountId: "nope" }), "BINDING_INVALID"],
     [Object.freeze({ ...good, ownerEpoch: null }), "OWNER_EPOCH_MISSING"],

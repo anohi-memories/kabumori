@@ -13,9 +13,8 @@
 //
 // Fail-closed today, by construction:
 //   * THREADS_VERTICAL_PATH_ENABLED and the three gates it composes are false;
-//   * THREADS_POSTING_SERVICE_KEY is null. G5's contract (G5-02, PR #344) names `x_autopost` for Threads posting; G4's
-//     rule (G4-02 acceptableServiceKey) still refuses it. Adopting it is G4's decision, not made here (proposed as the
-//     minimal interface change in the G4-04 doc). A synthetic key is used in tests only;
+//   * the service key is G5's common POSTONA key `x_autopost` (G4-10); any other key refuses before any port, and the
+//     key opens nothing by itself;
 //   * PR #124 records no owner epoch at binding, so a real row answers BIND_EPOCH_UNRECORDED at bind;
 //   * no credential statement and no worker verdict exist (G4 SQL / G5 W1-W2: separate, reviewed tasks).
 // With any of those missing: no account read, no G5 call, no token read, no request.
@@ -78,7 +77,7 @@ export const G5_WORKER_VERDICT_CODES = [
 
 export const THREADS_VERTICAL_REFUSALS = [
   "PATH_DISABLED",
-  "SERVICE_KEY_UNDECIDED",
+  "SERVICE_KEY_INVALID",
   "BINDING_INVALID", // not a binding of this path (shape, service key, generation format)
   "OWNER_EPOCH_MISSING",
   "LIFECYCLE_VERSION_MISSING",
@@ -149,7 +148,7 @@ export function createGatedThreadsVerticalPath(enabled: boolean, serviceKey: str
 
   async function postOnce(request: ThreadsPostRequest): Promise<ThreadsVerticalPostResult> {
     if (!enabled) return refused("PATH_DISABLED");
-    if (!keyOk) return refused("SERVICE_KEY_UNDECIDED");
+    if (!keyOk) return refused("SERVICE_KEY_INVALID");
     const problem = bindingProblem(request?.binding, serviceKey as string);
     if (problem) return refused(problem);
     const binding = request.binding;
@@ -203,7 +202,7 @@ export function createGatedThreadsVerticalPath(enabled: boolean, serviceKey: str
   });
 }
 
-/** The deployable path: closed while any of the four gates is false or the service key is undecided. */
+/** The deployable path: closed while any of the four gates is false (the common key alone opens nothing). */
 export function createThreadsVerticalPath(deps: ThreadsVerticalDeps): ThreadsVerticalPath {
   const enabled = THREADS_VERTICAL_PATH_ENABLED && THREADS_ACCOUNT_BINDING_ENABLED && THREADS_CREDENTIAL_PORT_ENABLED &&
     THREADS_SEND_PORT_ENABLED;

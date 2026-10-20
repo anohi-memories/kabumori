@@ -8,7 +8,7 @@
 //     | null. The decision, the token and the reservation schema's generation (64 lowercase hex) must come from ONE
 //     database statement (as X PR #282 003). That statement does NOT exist (a later SQL task; G3 owns the generation
 //     function, G5 the entitlement). This adapter takes exactly one call per lookup and refuses every row it cannot
-//     prove is this account's; with no call, an undecided service key, or the gate closed, it answers null.
+//     prove is this account's; with no call, a key other than POSTONA's common one, or the gate closed, it answers null.
 //   ThreadsSendPort.send(credential, text) -> ThreadsSendOutcome. ONE two-step text publish composed from the existing
 //     transport in threads_publish_contract.ts (no new request code): create container -> wait for FINISHED -> publish
 //     -> read back. Every step is one request, nothing is retried, an unknown is never turned into "not written":
@@ -34,8 +34,11 @@
 // re-releases before every step). The bound on the hook is G3's (default 5 s, at most 30 s); G4 adds none, keeps no
 // reference to the hook after send returns, and never calls it twice.
 //
-// The service key a Threads post is entitled under is G5's decision and is not made: THREADS_POSTING_SERVICE_KEY is
-// null, so the credential port is unavailable; `x_autopost` (X) and `kabumori` (the app) are refused, never reused.
+// The service key (G4-10): G5's contract (Issue #319 comment 6267736897, G5-02 PR #344) is that POSTONA posting -- X and
+// Threads alike -- is entitled under ONE common key, `x_autopost` (service_entitlements allows only `kabumori` and
+// `x_autopost`). It is the only key accepted here: `kabumori` (the app), any other key, another spelling or case are
+// refused. Adopting the key opens nothing: every gate stays false, no credential statement exists, and whether a person
+// may post is still decided per call by G5 (R1 / W1 / W2) with the stored owner epoch and lifecycle_version.
 import {
   createThreadsTextContainer,
   type FetchLike,
@@ -48,9 +51,10 @@ import {
 
 export const THREADS_CREDENTIAL_PORT_ENABLED = false;
 export const THREADS_SEND_PORT_ENABLED = false;
-/** G5 decides. Until then no Threads credential is handed to a scheduled post. */
-export const THREADS_POSTING_SERVICE_KEY: string | null = null;
-const REFUSED_SERVICE_KEYS: ReadonlySet<string> = new Set(["x_autopost", "kabumori"]);
+/** G5's common POSTONA entitlement key (X and Threads). */
+export const POSTONA_POSTING_SERVICE_KEY = "x_autopost" as const;
+/** The key a Threads post is entitled under: the common one (G4-10). */
+export const THREADS_POSTING_SERVICE_KEY: string = POSTONA_POSTING_SERVICE_KEY;
 
 // ---- types (structurally identical to G3's declarations in threads_dispatch.ts) --------------------------------
 
@@ -92,8 +96,9 @@ const GENERATION = /^[0-9a-f]{64}$/u;
 const TOKEN = /^[A-Za-z0-9._|-]{16,4096}$/u;
 const ROW_KEYS = "access_token,generation,social_account_id,threads_user_id";
 
+/** Only G5's common POSTONA key, exactly. */
 export function acceptableServiceKey(key: string | null): key is string {
-  return typeof key === "string" && /^[a-z][a-z0-9_]{2,62}$/u.test(key) && !REFUSED_SERVICE_KEYS.has(key);
+  return key === POSTONA_POSTING_SERVICE_KEY;
 }
 
 /** The row of exactly this account, or null. A list must hold exactly one row; unknown or missing columns refuse. */
@@ -114,7 +119,7 @@ export function parseThreadsCredentialRow(requestedAccountId: string, answer: un
   });
 }
 
-/** Fail-closed: closed gate, undecided or reused service key, or no statement -> unavailable, always null. */
+/** Fail-closed: closed gate, a key other than the common POSTONA one, or no statement -> unavailable, always null. */
 export function createGatedThreadsCredentialPort(
   enabled: boolean,
   serviceKey: string | null,
@@ -135,7 +140,7 @@ export function createGatedThreadsCredentialPort(
   });
 }
 
-/** The deployable credential port: closed (gate false, service key undecided, no statement exists). */
+/** The deployable credential port: closed (the gate is false and no statement exists), whatever the key. */
 export function createThreadsCredentialPort(statement: ThreadsCredentialStatement | null = null): ThreadsCredentialPort {
   return createGatedThreadsCredentialPort(THREADS_CREDENTIAL_PORT_ENABLED, THREADS_POSTING_SERVICE_KEY, statement);
 }

@@ -16,7 +16,7 @@ const ALICE = "0b6a8c1e-2d3f-4a5b-8c7d-9e0f1a2b3c4d";
 const BOB = "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e5f";
 const ACCOUNT = "3f6c1b8e-5d2a-4c7f-9e1b-0a2b3c4d5e6f";
 const BRAND = "brand_alice_personal";
-const KEY = "postona_threads";
+const KEY = "x_autopost"; // G5's common POSTONA key (G4-10)
 const NOW = 1_760_800_000_000;
 
 const receipt = (over: Record<string, unknown> = {}) => ({
@@ -85,10 +85,10 @@ test("the static gate is closed; the deployable form refuses before touching any
   assert.deepEqual(calls, []);
 });
 
-test("an undecided, X's, or the app's service key refuses before touching anything", async () => {
+test("any key but the common POSTONA one refuses before touching anything", async () => {
   const { p, calls } = ports();
-  for (const key of [null, "x_autopost", "kabumori", "", "Bad Key"]) {
-    assert.deepEqual(await decideThreadsAccountBinding(true, key, p, receipt(), flow()), { ok: false, code: "SERVICE_KEY_UNDECIDED" });
+  for (const key of [null, "kabumori", "", "Bad Key", "postona_threads", "X_AUTOPOST", "x_autopost "]) {
+    assert.deepEqual(await decideThreadsAccountBinding(true, key, p, receipt(), flow()), { ok: false, code: "SERVICE_KEY_INVALID" });
   }
   assert.deepEqual(calls, []);
 });
@@ -201,7 +201,7 @@ test("G5: unreadable, about someone else, denied, wrong role, unknown or moved o
     [row(), verdict({ ownerEpochToken: 3 }), "ENTITLEMENT_UNAVAILABLE"],
     [row(), verdict({ principalId: BOB }), "VERDICT_MISMATCH"],
     [row(), verdict({ brandId: "brand_bob" }), "VERDICT_MISMATCH"],
-    [row(), verdict({ serviceKey: "x_autopost" }), "VERDICT_MISMATCH"],
+    [row(), verdict({ serviceKey: "kabumori" }), "VERDICT_MISMATCH"],
     [row(), verdict({ verdict: "deny" }), "SERVICE_NOT_ACTIVE"],
     [row(), verdict({ role: "member" }), "ROLE_INSUFFICIENT"],
     [row(), verdict({ role: null }), "ROLE_INSUFFICIENT"],

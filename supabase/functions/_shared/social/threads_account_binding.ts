@@ -13,7 +13,8 @@
 // What was missing is the step between the last two: when may a just-connected account be treated as BOUND for this
 // person, this brand and this service, so the screen can say so and a later credential statement can rely on the same
 // conditions? This module states those conditions as code:
-//   gate open; a decided service key (G5; X's and the app's keys refused); a well-formed "connected" receipt; the person
+//   gate open; G5's common POSTONA service key `x_autopost` (G4-10; any other key refused); a well-formed "connected"
+//   receipt; the person
 //   who started the connect is the person signed in now; the receipt came back before the OAuth state expired; exactly
 //   one Threads row with that id, in the brand the connect was for, identity_verified with a credential and a
 //   well-formed Threads user id; on a reconnect, the same Threads user as before; bound by this person; G5 says
@@ -24,9 +25,9 @@
 //
 // What it is NOT: an authority for a credential. The receipt is a receipt (threads_connect_publish_integration.ts);
 // the credential port still needs ONE database statement that re-decides all of this together with the token and the
-// generation (G4-02). PR #124 records no owner epoch at binding and checks the service key `x_autopost`: until both
-// change (G4 SQL + G5 decision, separate tasks) a real binding always answers BIND_EPOCH_UNRECORDED or
-// SERVICE_KEY_UNDECIDED. It never writes: a duplicate or replayed receipt gets the same verdict and changes nothing
+// generation (G4-02). PR #124 checks the same common key `x_autopost` (G4-10: that is G5's contract, not a borrowed X
+// key) but records no owner epoch / lifecycle_version at binding: until the G4-09 SQL candidate (PR #367, unreviewed,
+// not applied) is wired, a real binding always answers BIND_EPOCH_UNRECORDED. It never writes: a duplicate or replayed receipt gets the same verdict and changes nothing
 // (the single-use state and code are the database's and H5's).
 import { g5Decimal, parseG5OwnerEpochToken } from "./g5_owner_epoch_token.ts";
 import { acceptableServiceKey, THREADS_POSTING_SERVICE_KEY } from "./threads_send_port.ts";
@@ -35,7 +36,7 @@ export const THREADS_ACCOUNT_BINDING_ENABLED = false;
 
 export const THREADS_BINDING_REFUSALS = [
   "BINDING_DISABLED",
-  "SERVICE_KEY_UNDECIDED",
+  "SERVICE_KEY_INVALID", // not G5's common POSTONA key (G4-10)
   "RECEIPT_INVALID", // not a "connected" receipt of the wire contract (a refused / uncertain connect is not a binding)
   "AUTH_REQUIRED",
   "PRINCIPAL_CHANGED", // signed in as someone else than the person who started the connect
@@ -174,7 +175,7 @@ export async function decideThreadsAccountBinding(
   flow: ThreadsConnectFlowContext,
 ): Promise<ThreadsBindingVerdict> {
   if (!enabled) return refuse("BINDING_DISABLED");
-  if (!acceptableServiceKey(serviceKey)) return refuse("SERVICE_KEY_UNDECIDED");
+  if (!acceptableServiceKey(serviceKey)) return refuse("SERVICE_KEY_INVALID");
   const accountId = connectedReceiptAccountId(receipt);
   if (accountId === null) return refuse("RECEIPT_INVALID");
   if (!flow || !UUID.test(flow.startedByPrincipalId) || !BRAND.test(flow.brandId)) return refuse("RECEIPT_INVALID");
@@ -240,7 +241,7 @@ export async function decideThreadsAccountBinding(
   });
 }
 
-/** The deployable form: closed by THREADS_ACCOUNT_BINDING_ENABLED and by the undecided service key. */
+/** The deployable form: closed by THREADS_ACCOUNT_BINDING_ENABLED (the key alone opens nothing). */
 export function createThreadsAccountBinding(ports: ThreadsBindingPorts) {
   return (receipt: unknown, flow: ThreadsConnectFlowContext) =>
     decideThreadsAccountBinding(THREADS_ACCOUNT_BINDING_ENABLED, THREADS_POSTING_SERVICE_KEY, ports, receipt, flow);
