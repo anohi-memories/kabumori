@@ -297,7 +297,8 @@ Deno.test("the authority port: expired, denied, unreachable, revoked at recheck,
     w.authority.recheckAnswer = answer;
     const r = await w.run("jwt-a", ideas());
     assert.deepEqual([code(r), w.provider.calls.length], ["AUTH_REVOKED_BEFORE_SEND", 0], label);
-    assert.deepEqual(w.supabase.calls, ["claim", "reserve", "release", "complete"], label);
+    // G6-09 (R2): the claim check comes before the recheck, so the recheck is the last step before mark_sent.
+    assert.deepEqual(w.supabase.calls, ["claim", "reserve", "claim", "release", "complete"], label);
     assert.deepEqual([...w.supabase.reservations.values()], ["released"], label);
   }
 });
@@ -336,8 +337,13 @@ Deno.test("the ledger: a budget limit is QUOTA_EXCEEDED, an outage LEDGER_UNAVAI
   }
   const m = world();
   m.supabase.fault = { ai_ledger_mark_sent: "lost" };
-  assert.deepEqual([code(await m.run("jwt-a", ideas())), m.provider.calls.length], ["LEDGER_UNAVAILABLE", 0]);
+  // G6-09 (R1): mark_sent may have committed "sent": nothing proves "not sent", so UNKNOWN and nothing is recorded.
+  const lost = await m.run("jwt-a", ideas());
+  assert.deepEqual([code(lost), lost.audit, m.provider.calls.length], ["UNKNOWN", null, 0]);
   assert.deepEqual([...m.supabase.reservations.values()], ["released"], "the fake applies release; the real ledger refuses it on a sent row (PG test)");
+  assert.deepEqual([...m.supabase.rows.values()].map((row) => row.state), ["acquired"], "left for recovery");
+  m.supabase.fault = {};
+  assert.deepEqual([code(await m.run("jwt-a", ideas())), m.provider.calls.length], ["IN_PROGRESS", 0], "never resent");
   const s = world();
   s.supabase.fault = { ai_ledger_settle: 500 };
   const r = await s.run("jwt-a", ideas());
@@ -430,4 +436,36 @@ Deno.test("G6-07: the claim must still be held right before each send: closed by
   const u = await unreadable.run("jwt-a", ideas());
   assert.deepEqual([code(u), unreadable.provider.calls.length, unreadable.supabase.calls, [...unreadable.supabase.reservations.values()]], ["UNKNOWN", 0, ["claim", "reserve", "claim", "release"], ["released"]]);
   assert.deepEqual([...unreadable.supabase.rows.values()].map((row) => row.state), ["acquired"], "left for recovery (NOT_SENT_PROVEN)");
+});
+
+Deno.test("G6-09 (R1): a ledger refusal someone else may have sent under -> UNKNOWN, no audit, nothing recorded, never resent; also on the second attempt after a refused first one", async () => {
+  // The fake answers the ledger's own reasons; the real guard keeps ATTEMPT_FINALIZED and folds ATTEMPT_IN_FLIGHT into SEND_NOT_CONFIRMED.
+  for (const reason of ["ATTEMPT_FINALIZED", "ATTEMPT_IN_FLIGHT"]) {
+    const w = world();
+    w.supabase.fault = { ai_ledger_reserve: `deny:${reason}` };
+    const r = await w.run("jwt-a", ideas());
+    assert.deepEqual([code(r), r.audit, w.provider.calls.length, w.supabase.calls], ["UNKNOWN", null, 0, ["claim", "reserve"]], reason);
+    assert.deepEqual([...w.supabase.rows.values()].map((row) => [row.state, row.result]), [["acquired", null]], `${reason}: no NOT_SENT, no no_request, no 0 USD recorded`);
+    w.supabase.fault = {};
+    assert.deepEqual([code(await w.run("jwt-a", ideas())), w.provider.calls.length], ["IN_PROGRESS", 0], `${reason}: never resent`);
+  }
+  // Attempt 1 is refused by the provider (429, nothing billed); attempt 2's reservation finds the number used elsewhere.
+  const second = world({ respond: (call, i) => i === 0 ? jsonResponse(429, { error: { type: "rate_limit_error" } }) : reply("どうぞ")(call) });
+  second.supabase.after = { ai_ledger_settle: () => second.supabase.fault = { ai_ledger_reserve: "deny:ATTEMPT_FINALIZED" } };
+  const s = await second.run("jwt-a", { app: "postona", feature: "retry", operationId: "op-retry-g609", input: "x", brand: BRAND_A });
+  assert.deepEqual([code(s), s.audit, second.provider.calls.length], ["UNKNOWN", null, 1]);
+  assert.deepEqual(second.supabase.calls, ["claim", "reserve", "claim", "mark_sent", "settle", "reserve"]);
+  assert.deepEqual([...second.supabase.rows.values()].map((row) => row.state), ["acquired"]);
+});
+
+Deno.test("G6-09 (R2): the authority recheck is the last step before mark_sent (after reserve and the claim check); a change it sees stops the send", async () => {
+  const w = world();
+  const seen: string[][] = [];
+  w.authority.recheckAnswer = (prior) => {
+    seen.push([...w.supabase.calls]);
+    return prior;
+  };
+  assert.equal(code(await w.run("jwt-a", ideas())), "OK");
+  assert.deepEqual(seen, [["claim", "reserve", "claim"]], "recheck after the claim check, before mark_sent");
+  assert.deepEqual(w.supabase.calls, ["claim", "reserve", "claim", "mark_sent", "settle", "complete"]);
 });

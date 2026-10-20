@@ -6,7 +6,8 @@
 #   GRR_PGHOST=/private/tmp/<socket dir> GRR_PGPORT=54991 GRR_PGSUPER=<superuser> bash supabase/tests/common_ai_gateway_restart_race_pg_run.sh [test file]
 #
 # The test file is common_ai_gateway_restart_race_pg_test.ts (G6-07, the default) or
-# common_ai_gateway_fence_review_pg_test.ts (G6-08: the pre-send claim check under review); nothing else is accepted.
+# common_ai_gateway_fence_review_pg_test.ts (G6-08: the pre-send claim check under review) or
+# common_ai_gateway_r1_r2_corrective_pg_test.ts (G6-09: the R1 / R2 corrective); nothing else is accepted.
 #
 # The host must be a local socket directory under /tmp (anything else is refused) and the server must have no TCP
 # listener. One scratch database is created and dropped; no role is created (the three Supabase API roles are
@@ -26,7 +27,7 @@ unset PGHOST PGHOSTADDR PGPORT PGDATABASE PGUSER PGPASSWORD PGSERVICE PGSERVICEF
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TEST="${1:-common_ai_gateway_restart_race_pg_test.ts}"
 case "$TEST" in
-  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts) ;;
+  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts) ;;
   *) echo "refusing test file '$TEST'" >&2; exit 2 ;;
 esac
 LEDGER="$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql"

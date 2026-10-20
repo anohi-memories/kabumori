@@ -36,7 +36,8 @@ export type GatewayJob = Readonly<{
   brand: string | null;
   /**
    * "before:<rpc>" | "after:<rpc>" (the RPC committed) | "provider" (the provider has the request, no answer yet);
-   * "<when>:<rpc>#<n>" names the n-th call of that RPC (G6-08: the second ai_calls_claim is the pre-send check).
+   * "<when>:<rpc>#<n>" names the n-th call of that RPC (G6-08: the second ai_calls_claim is the pre-send check);
+   * "after:g5_verdict#<n>" the n-th answer of the fake G5 (G6-09: #2 is the first recheck).
    */
   pauseAt: string | null;
   /** G6-08: "<rpc>#<n>" -> "lost" (the RPC commits, the answer never arrives: a network error). */
@@ -151,7 +152,14 @@ async function runGateway(job: GatewayJob): Promise<unknown> {
   let providerCalls = 0;
   const route: FetchLike = async (input, init) => {
     const url = String(input);
-    if (url === `${SUPABASE}/rest/v1/rpc/${G5_VERDICT_RPC}`) return await fakeG5(init);
+    if (url === `${SUPABASE}/rest/v1/rpc/${G5_VERDICT_RPC}`) {
+      // G6-09: the n-th G5 question ("after:g5_verdict#2" = after the first recheck's answer).
+      const n = (counts.get("g5_verdict") ?? 0) + 1;
+      counts.set("g5_verdict", n);
+      const answer = await fakeG5(init);
+      await pauseIf("after:g5_verdict", n);
+      return answer;
+    }
     const rpc = url.match(/^http:\/\/127\.0\.0\.1:54321\/rest\/v1\/rpc\/(ai_(?:ledger|calls)_[a-z_]+)$/u)?.[1];
     if (rpc) {
       if (new Headers(init?.headers).get("apikey") !== SERVICE_KEY) return jsonResponse(401, { code: "PGRST301" });

@@ -324,7 +324,8 @@ Deno.test("E2E recheck (G5 changes right before the send): session revoked, owne
     const w = world({ g5, supabase });
     const r = await w.run("jwt-a", consult());
     assert.deepEqual([code(r), r.audit?.costBasis, w.provider.calls.length], ["AUTH_REVOKED_BEFORE_SEND", "no_request", 0], label);
-    assert.deepEqual(supabase.calls, ["claim", "reserve", "release", "complete"], label);
+    // G6-09 (R2): the claim check comes before the recheck, so the recheck is the last step before mark_sent.
+    assert.deepEqual(supabase.calls, ["claim", "reserve", "claim", "release", "complete"], label);
     assert.deepEqual([...supabase.reservations.values()], ["released"], label);
     g5.down = false;
     g5.hang = false;
