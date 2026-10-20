@@ -225,4 +225,64 @@ select tc.cred(:'acct_c') as ignore \gset
 select tc.cred(:'acct_a', 'kabumori') as ignore \gset
 select tc.check(tc.snap() = :'s1', '13 credential_row writes nothing');
 
+-- 14. G4-15 (H2 #329 C2 R1 on PR #377): the expiry is judged by the clock at retrieval, not the transaction start.
+select tc.fresh(16, '17841400000000016') as acct_r \gset
+-- just before: expires 2 s from now -> a row; just after: expired 1 ms ago -> none; recorded as "now" -> none afterwards
+update public.threads_account_credential_custody set expires_at = clock_timestamp() + interval '2 seconds' where social_account_id = :'acct_r';
+select tc.check(tc.cred(:'acct_r') like :'acct_r' || '|%', '14 expires in 2 s: a row');
+update public.threads_account_credential_custody set expires_at = clock_timestamp() - interval '1 millisecond' where social_account_id = :'acct_r';
+select tc.check(tc.cred(:'acct_r') = '<none>', '14 expired 1 ms ago: none');
+update public.threads_account_credential_custody set expires_at = clock_timestamp() where social_account_id = :'acct_r';
+select tc.check(tc.cred(:'acct_r') = '<none>', '14 expiry = the clock when recorded: none afterwards (equal is expired)');
+-- H2's reproduction: the expiry passes INSIDE a transaction opened before it. now() still says "future"; no row.
+update public.threads_account_credential_custody set expires_at = clock_timestamp() + interval '1 second' where social_account_id = :'acct_r';
+begin;
+select tc.check(tc.cred(:'acct_r') like :'acct_r' || '|%', '14 long transaction: a row before the expiry');
+select pg_sleep(1.3);
+select tc.check((select c.expires_at < clock_timestamp() and c.expires_at > now() from public.threads_account_credential_custody c
+                  where c.social_account_id = :'acct_r'), '14 long transaction: expired by the clock, "future" by now()');
+select tc.check(tc.cred(:'acct_r') = '<none>', '14 long transaction: no row once the clock passed the expiry');
+commit;
+-- the same within ONE statement block (one transaction, now() fixed): row, wait past the expiry, none
+update public.threads_account_credential_custody set expires_at = clock_timestamp() + interval '1 second' where social_account_id = :'acct_r';
+do $$
+declare v_acct text := (select id from public.social_accounts where platform_user_id = '17841400000000016');
+begin
+  perform tc.check(tc.cred(v_acct) like v_acct || '|%', '14 one block: a row first');
+  perform pg_sleep(1.3);
+  perform tc.check(tc.cred(v_acct) = '<none>', '14 one block: none after the expiry');
+end $$;
+-- a fresh expiry brings the same credential back (nothing was written by the reads)
+update public.threads_account_credential_custody set expires_at = now() + interval '30 days' where social_account_id = :'acct_r';
+select tc.check(tc.cred(:'acct_r') like :'acct_r' || '|17841400000000016|%', '14 a future expiry again: a row');
+
+-- 15. G4-15: only under READ COMMITTED (a fresh snapshot per retrieval). REPEATABLE READ / SERIALIZABLE: no row.
+begin isolation level repeatable read;
+select tc.check(tc.cred(:'acct_r') = '<none>', '15 repeatable read: none');
+commit;
+begin isolation level serializable;
+select tc.check(tc.cred(:'acct_r') = '<none>', '15 serializable: none');
+commit;
+begin isolation level read committed;
+select tc.check(tc.cred(:'acct_r') like :'acct_r' || '|%', '15 read committed (explicit): a row');
+commit;
+
+-- 16. G4-15: a dependency changed after the install is checked in the statement (H2's STABLE -> VOLATILE drift): no row
+--     while any dependency is VOLATILE; the same credential again once it is STABLE.
+alter function postona_threads_resv.threads_credential_generation(text) volatile;
+select tc.check(tc.cred(:'acct_r') = '<none>', '16 G3 generation turned VOLATILE: none');
+alter function postona_threads_resv.threads_credential_generation(text) stable;
+alter function private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint) volatile;
+select tc.check(tc.cred(:'acct_r') = '<none>', '16 W1 turned VOLATILE: none');
+alter function private.account_lifecycle_worker_brand_verdict(text, text, bigint, bigint) stable;
+alter function public.threads_account_credential_expires_at(text) volatile;
+select tc.check(tc.cred(:'acct_r') = '<none>', '16 custody reader turned VOLATILE: none');
+alter function public.threads_account_credential_expires_at(text) stable;
+alter function private.account_lifecycle_brand_owner(text) volatile;
+select tc.check(tc.cred(:'acct_r') = '<none>', '16 brand owner turned VOLATILE: none');
+alter function private.account_lifecycle_brand_owner(text) stable;
+select tc.check(tc.cred(:'acct_r') like :'acct_r' || '|17841400000000016|%', '16 all STABLE again: a row');
+select tc.check((select p.provolatile = 'v' from pg_proc p where p.oid = 'postona_threads_credential.credential_row(text,text)'::regprocedure),
+                '16 credential_row is VOLATILE (it reads the clock)');
+
 select 'POSTONA_THREADS_CREDENTIAL_ATOMIC_BEHAVIOR_PASS' as result;
