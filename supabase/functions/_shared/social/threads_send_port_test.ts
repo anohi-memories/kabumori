@@ -79,10 +79,10 @@ async function run(steps: Step[], expected: ThreadsSendOutcome, calls: string[],
 
 // ---- gates ------------------------------------------------------------------------------------------------------
 
-test("the static gates are closed and no service key is decided", () => {
+test("the static gates are closed; the key is G5's common POSTONA key (G4-10)", () => {
   assert.equal(THREADS_SEND_PORT_ENABLED, false);
   assert.equal(THREADS_CREDENTIAL_PORT_ENABLED, false);
-  assert.equal(THREADS_POSTING_SERVICE_KEY, null);
+  assert.equal(THREADS_POSTING_SERVICE_KEY, "x_autopost");
 });
 
 test("the deployable send port is unavailable, declares the real transport, and sends nothing", async () => {
@@ -209,23 +209,24 @@ test("the deployable credential port is unavailable and never calls the statemen
   assert.deepEqual(s.calls, []);
 });
 
-test("service key: undecided, X's, the app's or malformed keys leave the port unavailable", async () => {
-  for (const key of [null, "x_autopost", "kabumori", "", "Threads", "a"]) {
+test("service key: only the common POSTONA key; the app's, unknown, other spellings or none leave the port unavailable", async () => {
+  for (const key of [null, "kabumori", "", "Threads", "a", "postona_threads", "X_AUTOPOST", " x_autopost", "x_autopost ", "x_autopost\n"]) {
     const s = statement([ROW]);
     const p = createGatedThreadsCredentialPort(true, key, s.fn);
     assert.equal(p.available, false, String(key));
     assert.equal(await p.credentialFor(ACCOUNT), null);
     assert.deepEqual(s.calls, []);
   }
-  assert.equal(acceptableServiceKey("postona_threads"), true);
-  assert.equal(createGatedThreadsCredentialPort(true, "postona_threads", null).available, false);
-  assert.equal(createGatedThreadsCredentialPort(false, "postona_threads", statement([]).fn).available, false);
+  assert.equal(acceptableServiceKey("x_autopost"), true);
+  assert.equal(acceptableServiceKey("postona_threads"), false);
+  assert.equal(createGatedThreadsCredentialPort(true, "x_autopost", null).available, false);
+  assert.equal(createGatedThreadsCredentialPort(false, "x_autopost", statement([]).fn).available, false);
 });
 
 test("one statement per lookup, nothing cached: an owner change or a newer generation is what the next call says", async () => {
   const newer = { ...ROW, access_token: `${TOKEN}2`, generation: "b".repeat(64) };
   const s = statement([ROW, newer, null, [ROW]]);
-  const p = createGatedThreadsCredentialPort(true, "postona_threads", s.fn);
+  const p = createGatedThreadsCredentialPort(true, "x_autopost", s.fn);
   assert.equal(p.available, true);
   const first = await p.credentialFor(ACCOUNT);
   assert.deepEqual(first, { socialAccountId: ACCOUNT, threadsUserId: USER, accessToken: TOKEN, generation: GEN });
@@ -233,7 +234,7 @@ test("one statement per lookup, nothing cached: an owner change or a newer gener
   assert.equal((await p.credentialFor(ACCOUNT))?.generation, "b".repeat(64));
   assert.equal(await p.credentialFor(ACCOUNT), null); // owner changed / credential stale: the statement refuses
   assert.equal((await p.credentialFor(ACCOUNT))?.generation, GEN);
-  assert.deepEqual(s.calls, Array(4).fill(`${ACCOUNT} postona_threads`));
+  assert.deepEqual(s.calls, Array(4).fill(`${ACCOUNT} x_autopost`));
 });
 
 test("rows that are not provably this account's current credential are refused", async () => {
@@ -254,13 +255,13 @@ test("rows that are not provably this account's current credential are refused",
   ];
   for (const answer of bad) {
     assert.equal(parseThreadsCredentialRow(ACCOUNT, answer), null, JSON.stringify(answer));
-    const p = createGatedThreadsCredentialPort(true, "postona_threads", statement([answer]).fn);
+    const p = createGatedThreadsCredentialPort(true, "x_autopost", statement([answer]).fn);
     assert.equal(await p.credentialFor(ACCOUNT), null);
   }
-  const failing = createGatedThreadsCredentialPort(true, "postona_threads", statement([new Error(`db ${TOKEN}`)]).fn);
+  const failing = createGatedThreadsCredentialPort(true, "x_autopost", statement([new Error(`db ${TOKEN}`)]).fn);
   assert.equal(await failing.credentialFor(ACCOUNT), null);
   const s = statement([ROW]);
-  const p = createGatedThreadsCredentialPort(true, "postona_threads", s.fn);
+  const p = createGatedThreadsCredentialPort(true, "x_autopost", s.fn);
   assert.equal(await p.credentialFor("not-a-uuid"), null);
   assert.equal(await p.credentialFor(ACCOUNT.toUpperCase()), null);
   assert.deepEqual(s.calls, []);
