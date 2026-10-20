@@ -1,6 +1,6 @@
 # G3｜Threads 予約を G5 の本物の SQL 候補の上で流す（2026-10-20、Issue #318 TASK 10/50）
 
-- task_id: `postona-g3-threads-g5-real-sql-isolated-integration-20261020`
+- task_id: `postona-g3-threads-g5-sql-isolated-integration-20261020`
 - 返却先: POSTONA G3のちゃ
 - 完了コード: K3
 - 判定: **SOURCE_ONLY（テスト・ランナー・文書だけ。使い捨て PG17・deny-net・偽の Threads Graph）／本番 NO_GO**
