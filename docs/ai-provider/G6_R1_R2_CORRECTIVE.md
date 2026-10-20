@@ -111,6 +111,8 @@ G6-08 の資料にあった「system の行でも同じことが起きうる」�
 
 ## 5. 根本の解決（提案だけ。SQL・migration・RPC・権限は作っていない）
 
+**G6-11 で更新**: この案を、隔離 PG の試験の中だけで作った候補で検証した（行を作らない、元のトークンとの完全一致、ロックの順番、ACL、別プロセスでの ABA で送信 0）。`G6_OWNER_HELD_RPC_CONTRACT.md` を参照。migration はまだ無い。
+
 `ai_calls_claim` を呼び直して `busy` を持ち主の証明とみなすことが、R1 の根本。代わりに、**読み取りだけで行を作らない** RPC の契約を提案する。
 
 - 名前の例: `public.ai_calls_claim_held(p jsonb)`。既にある RPC ではない。
