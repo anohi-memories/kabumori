@@ -1,0 +1,7 @@
+# G2 gen6 negative controls (product source mutated temporarily, restored after each run)
+KILLED   ℹ fail 1 src/domain/threads-connect.ts | autoVerify/VIEW no longer required
+KILLED   ℹ fail 2 src/domain/threads-connect.ts | scheme/host not compared
+KILLED   ℹ fail 1 src/domain/threads-connect.ts | path not compared
+KILLED   ℹ fail 1 src/domain/threads-connect.ts | forward accepts other origins
+KILLED   ℹ fail 1 src/features/threads-connect/threads-connect-starter.ts | app-link listener never removed
+# result 5/5 detected
