@@ -155,6 +155,7 @@ if ! THREADS_XO_API_URL="postgres://$apilogin@127.0.0.1:$port/$db" THREADS_XO_WO
   "$t/g4_credential_sql_e2e_test.ts" >"$tmp/e2e" 2>&1; then
   cat "$tmp/e2e"; fail "G4 credential e2e"
 fi
+sed $'s/\x1b\[[0-9;]*m//g' "$tmp/e2e" | grep -E "^U[0-9]+ " || true
 grep -E "passed|failed" "$tmp/e2e" | tail -1
 [[ "$(xfp)" == "$FPX" ]] || fail "the run changed postona_x_resv"
 echo "E2E_THREADS_G4_CREDENTIAL_PG_PASS"

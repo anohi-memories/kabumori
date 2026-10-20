@@ -207,16 +207,23 @@ Deno.test("K2 one reservation: credential_row's ONE statement gives the token an
   assert.equal((await credentialRow(P(102).threads, "x_autopost") as { generation: string }[])[0].generation, gen, "the statement's generation is 007's");
 });
 
-Deno.test("K3 U2: G4's SHIPPED gated port refuses the real 'sa_' id before its statement (the statement itself has the row) -> failed THREADS_CREDENTIALS_UNAVAILABLE, 0 Graph", async () => {
+Deno.test("K3 U2: G4's SHIPPED gated port over the same statement: unfixed -> refuses the real 'sa_' id before the statement (0 Graph); fixed (G4-12) -> the whole flow publishes once", async () => {
   const id = await reserve(103, "K3 U2");
   let calls = 0;
   const counted: Statement = (a, k) => { calls += 1; return credentialRow(a, k); };
   const shipped = G4.createGatedThreadsCredentialPort(true, "x_autopost", counted);
   assert.equal(shipped.available, G4.THREADS_POSTING_SERVICE_KEY === "x_autopost", "U1");
   assert.ok(G4.parseThreadsCredentialRow(P(103).threads, await credentialRow(P(103).threads, "x_autopost")) !== null, "the row exists");
+  const u2Fixed = shipped.available && (await shipped.credentialFor(P(103).threads)) !== null;
+  console.log(`U2 G4's shipped port accepts a real 'sa_' id: ${u2Fixed}`);
+  calls = 0;
   const g = fakeGraph();
   const r = await deliver(g4Sender(g), { creds: shipped });
-  if (shipped.available) {
+  if (shipped.available && u2Fixed) {
+    assert.deepEqual([r.claimed, calls, g.publishes(), r.published], [1, 1, 1, 1], "G4's shipped port + G4's statement + G3's dispatcher: one publish");
+    assert.deepEqual([...g.tokens], [P(103).token]);
+    assert.deepEqual((await row(id)).slice(0, 2), ["published", "PUBLISHED"]);
+  } else if (shipped.available) {
     assert.deepEqual([r.claimed, calls, g.events.length], [1, 0, 0], "the statement is never called for a non-UUID id");
     assert.deepEqual((await row(id)).slice(0, 2), ["failed", "THREADS_CREDENTIALS_UNAVAILABLE"]);
   } else {
