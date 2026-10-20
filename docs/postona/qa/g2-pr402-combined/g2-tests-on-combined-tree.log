@@ -1,0 +1,96 @@
+# combined tree = origin/main 0c42933c + #400 39b9818b + #369 6c363afe (local, not pushed) + #402's contract test; G2 test files copied unchanged from their PRs
+## tests/g2-external-url-negative.test.mjs (#361)
+✔ FINDING G2-U1 (P3, owner G1/app): both return routes replace the current screen with Home — nothing keeps the open draft (1.134708ms)
+✖ FINDING G2-U1 (P3): the draft lives only in the screen state — a remounted screen starts with an empty draft and no account (1.274958ms)
+✔ no mixing: a URL can never pre-fill the text or choose the account — the screen reads no route params (0.205709ms)
+✔ no mixing: after an account / workspace switch the chosen account is dropped unless it is still in the list (0.085459ms)
+✖ FINDING G2-U2 (P3, owner G1/app): the app has no not-found route, so expo-router's default Unmatched screen is used (0.35875ms)
+✔ FINDING G2-U2 (P3): the default Unmatched screen is English, prints the received link and links to the route sitemap (0.4465ms)
+✔ token-like or identity-like query parameters on a return are refused outright (0 exchanges) (0.45875ms)
+✔ percent-encoding tricks do not create a second credential or another flow (0 exchanges) (0.780041ms)
+✔ valid return for the flow this device started: exactly one exchange; duplicate shares it; wrong flow refused before exchange (0.279917ms)
+ℹ tests 9
+ℹ pass 7
+ℹ fail 2
+ℹ skipped 0
+## tests/g2-draft-session-boundary.test.mjs (#380)
+✔ G2-S1 token-only refresh (MOCK: same last_sign_in_at): the draft and the account come back, nothing is removed (60.805125ms)
+✔ G2-S2 sign-out then a new sign-in of the same person: nothing comes back and the old text is removed from the device (21.583792ms)
+✔ G2-S3 a new sign-in of the same person without a SIGNED_OUT in between (screen closed): nothing comes back, removed (19.183792ms)
+✔ G2-S4 another person signs in while the screen is open: a fresh screen, nothing of A is shown or written under B; A keeps its own record (14.297875ms)
+✔ G2-S5 app restart with the stored session (INITIAL_SESSION / recovered SIGNED_IN, user object as stored): restored (28.624375ms)
+✔ G2-S6 ABA: a restore read that answers after a NEW sign-in of the same person is not applied; the record is removed (12.508291ms)
+✔ G2-S7 ABA: a restore read that answers after ANOTHER person signed in (or after sign-out) shows nothing (35.032167ms)
+✔ G2-S8 a last_sign_in_at that cannot be a mark (not a string, longer than 64) is never restored -- fail closed (31.115791ms)
+✖ FINDING G2-SM1 (P3, owner G1 route / G5 auth): with no last_sign_in_at the mark is "" for every session, so a NEW sign-in of the same person gets the old draft back (15.522ms)
+✔ FINDING G2-SM2 (P3, MOCK server semantics): the same person signing in on ANOTHER device makes this device lose its draft at the next refresh / restart (38.389375ms)
+✖ FINDING G2-SM3 (P3, owner G1): a new sign-in of the same person while the screen stays mounted keeps the open text and re-saves it under the NEW mark (12.972416ms)
+✔ FINDING G2-SM4 (P3, owner G1 / G5): signing out leaves the text on the device, and "24 hours" is only checked when the same person reads it again (13.89375ms)
+✖ negative controls: route without the per-user key, a constant mark, a restore without its cancel check, and a store that ignores the mark each LEAK the old text in the very scenario that passes unmutated (0.299375ms)
+ℹ tests 13
+ℹ pass 10
+ℹ fail 3
+ℹ skipped 0
+  AssertionError [ERR_ASSERTION]: the mutation target occurs exactly once: key={userId ?? 'signed-out'}
+## tests/g2-draft-time-lifecycle.test.mjs (#385)
+✔ G2-L1 24-hour boundary after the last edit: 23:59:59 and 24:00:00 come back; 24:00:01 is discarded and removed (129.55875ms)
+✔ G2-L2 only looking at a restored draft does not extend it; editing does (24 hours count from the last edit) (33.902875ms)
+✔ G2-L3 clock moved back or far forward: within 5 minutes back it is kept; more than that, or a year ahead, is discarded and removed (fail closed) (66.545417ms)
+✔ G2-L4 app restart: after 23 hours stopped it comes back; after 48 hours it is discarded and removed when the screen opens (41.924542ms)
+✔ KNOWN SM4 (not re-reported): nothing removes an expired draft at start-up -- after 48 hours stopped it is still on the device until the screen is opened (30.736042ms)
+✔ G2-L5 a visit of B reads, writes and removes only B's key; A's stored bytes are untouched (58.1545ms)
+✔ G2-L6 late INITIAL_SESSION: a screen opened before the session is known touches no draft, and restores once the session arrives (30.975791ms)
+✔ G2-L7 TOKEN_REFRESHED (same mark) while the restore read is pending: no second read, nothing removed, restored (22.466292ms)
+✔ G2-L8 an old restore that is left pending when the screen is closed, then the screen is opened again: restored exactly once, by the new screen (12.3355ms)
+✔ G2-L9 an old restore that answered FIRST, then another person / sign-out: nothing of A is shown afterwards; A's next new session discards it (25.367416ms)
+✔ G2-L10 while A's old read is pending, B signs in and opens: B's read is only issued after A's answered, and B sees nothing of A (12.23725ms)
+✔ G2-L11 a day: A types, signs out; B types, signs out; A signs in the next day (new session): A gets nothing and A's text is removed (11.949125ms)
+✔ FINDING G2-SM4-D (P3, new condition, owner G1/G5): account deletion forgets "per-user state" but not the draft, and a deleted person never reads it again -- so it stays for good (34.234625ms)
+✔ negative controls: ">=" at 24h, no future check, a restore that re-saves, and a key without the user are each caught by the scenarios above (102.5985ms)
+ℹ tests 14
+ℹ pass 14
+ℹ fail 0
+ℹ skipped 0
+## tests/g2-x-manual-result-gate.test.mjs (#394)
+✔ control (this build): with the unconnected port nothing is sent and nothing says it was -- the send button stays disabled even after the consent (62.48125ms)
+✖ FINDING G2-X1 (P3, owner G1): during the FIRST send of a new text the confirmation already says "前回と同じ内容・同じ送信IDで確認します" -- there was no earlier attempt (22.604417ms)
+✔ G2-X2: another person signs in while A's send is still out -- B gets a fresh screen with nothing of A, and A's late "published" never reaches B (23.348875ms)
+✔ G2-X3: the chosen account disappears while the send is out and the answer is "pending" / "unavailable" -- the same-id retry is not offered for a missing account and nothing is sent again (36.775583ms)
+✔ G2-X4: after an "uncertain" answer and the explicit "Xで確認しました", the editor is EMPTY (no old text to re-send by mistake), and a new send gets a NEW id (19.994334ms)
+✖ negative controls: a route without the per-user key lets B see A's send; showing the same-id line only on a retry flips G2-X1 (0.75925ms)
+ℹ tests 6
+ℹ pass 4
+ℹ fail 2
+ℹ skipped 0
+  AssertionError [ERR_ASSERTION]: target once: key={userId ?? 'signed-out'}
+## tests/g2-pr398-regression.test.mjs (#403)
+✔ G2-R1: a token refresh that KEEPS the mark does not re-create the open screen -- the text and the chosen account stay, the record keeps its mark, and it comes back after leaving (53.634625ms)
+✔ G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not (40.242334ms)
+✔ FINDING G2-SM3R (P3, owner G1 / G5; MOCK of G2-SM2): a refresh whose user carries a NEW last_sign_in_at re-creates the open screen -- the typed text is gone at once and its record is discarded on the next look (15.468417ms)
+✔ G2-SM3R-C: the same change while confirming drops the confirmation and the consent (nothing can be sent with them) (16.719417ms)
+✔ G2-SM3R-S: the same change WHILE a send is out -- the new screen shows the attempt as unresolved, never as sent, and a retry re-uses the SAME id (no second post) (17.194333ms)
+✔ negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id") (29.785459ms)
+ℹ tests 6
+ℹ pass 6
+ℹ fail 0
+ℹ skipped 0
+## tests/g2-pr400-n2-regression.test.mjs (#404)
+✔ G2-N2a: the data reloads (loading) while a REAL send is out and the answer is "unavailable" -- the same-id re-ask cannot send and asks no readiness while loading; once ready again it sends with the SAME id (56.1335ms)
+✔ G2-N2b: a TRUE "published" that arrives while the data is loading (or blocked) is still shown as posted, with its post id (40.570125ms)
+✔ G2-N2c: demo data, ready port: up to the confirmation and the consent nothing claims a post or a server-side "ready" -- the demo reason is shown, the port is never asked (15.1875ms)
+✔ OBSERVATION G2-N2-ENV (owner of the app / release config): EXPO_PUBLIC_DATA_SOURCE unset or empty selects the DEMO data -- a build that only forgets it shows demo accounts to a real signed-in person (sending stays impossible since #400) (0.138792ms)
+✔ negative controls: the pre-#400 gate lets demo data say "ready" and send; asking the readiness without the data check asks it while loading (34.670334ms)
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+ℹ skipped 0
+## tests/g1-combined-stack-contract.test.mjs (#402-G1)
+✔ combined routes: expo-router resolves BOTH the manual-post screen and OUR not-found screen, and the existing routes are intact (3.798041ms)
+✔ combined send contract: the send port of this build is the unconnected one, so no send can ever be offered (48.402542ms)
+✔ the two features do not know each other: the not-found screen shares nothing with the post screen, the post screen reads no link (63.209833ms)
+✔ no source of either feature can reach the network, a Supabase client, an Edge Function or a credential (41.715708ms)
+✔ the device storage is reached from ONE file, and only the two short-lived records of the post screen use it (0.558208ms)
+ℹ tests 5
+ℹ pass 5
+ℹ fail 0
+ℹ skipped 0
