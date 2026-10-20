@@ -1,0 +1,30 @@
+# PR #410 limited re-QA on 99adbca172bc0c485939bfadf44cda23a441ce72: g2-postfix-baseline + the probe cases PR410-A..D
+✔ FIXED-SM1: with no usable last_sign_in_at nothing is kept and a new session gets nothing back
+✔ FIXED-SM3: a new sign-in of the same person while the screen is open re-creates it -- the old text is neither shown nor saved under the new mark
+✔ FIXED-X1: a first send does not say "same content, same id"
+✔ FIXED-HOLD: sign-out + sign-in gets nothing back; a refresh that keeps the mark keeps the open text; an account removed during a pending restore is not restored
+✔ FINDING-SM2 (MOCK): the same person signing in elsewhere changes the mark on refresh -- this device's stored draft is discarded
+✔ FINDING-SM3R-T (since #398, MOCK): a refresh with a changed mark re-creates the OPEN screen and the typed text is gone at once
+✖ FINDING-SM3R-S (since #398, MOCK): the same change while a send is out shows the attempt as "unconfirmed" and offers a same-id re-ask before the first answer
+✔ FINDING-SM4: sign-out leaves the text on the device and 24 hours are only checked when the same person reads it again
+✔ FINDING-SM4-D (static): the account-deletion clean-up removes the onboarding state but nothing of the manual post
+✔ NC-1: the route keyed by the user only (AST) carries the text into a new sign-in
+✔ NC-2: a constant session mark (AST) brings the old text back after sign-out + sign-in
+✔ NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+✔ NC-4: the restore without its cancel check (AST) restores a draft whose account was removed meanwhile
+✔ NC-5: a draft store whose decideRestore ignores the session mark (AST) brings the old text back after sign-out + sign-in
+✔ PR410-A: while the first request is out, the re-created screen is "sending", shows no "unconfirmed" and offers no re-ask
+✔ PR410-B: the real "published" answer reaches the re-created screen (posted, with the id)
+✔ PR410-C: a real "unavailable" answer then shows "unconfirmed" with a same-id re-ask (only AFTER the answer), and the re-ask reuses the id
+✔ PR410-D: "uncertain" stays uncertain (no re-ask), never posted
+ℹ tests 18
+ℹ pass 17
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+
+# G1 whole suite on #410 (G1's own tests only, no G2 file present)
+ℹ tests 521
+ℹ pass 520
+ℹ fail 0
+ℹ skipped 1
