@@ -1,0 +1,29 @@
+# node --test tests/g2-pr400-n2-regression.test.mjs  (G1 PR #400 HEAD 39b9818b40fc7d10a8b9e70cd68fd02692874585 + this G2 test; node v24.19.0)
+✔ G2-N2a: the data reloads (loading) while a REAL send is out and the answer is "unavailable" -- the same-id re-ask cannot send and asks no readiness while loading; once ready again it sends with the SAME id (167.351125ms)
+✔ G2-N2b: a TRUE "published" that arrives while the data is loading (or blocked) is still shown as posted, with its post id (118.740833ms)
+✔ G2-N2c: demo data, ready port: up to the confirmation and the consent nothing claims a post or a server-side "ready" -- the demo reason is shown, the port is never asked (55.853042ms)
+✔ OBSERVATION G2-N2-ENV (owner of the app / release config): EXPO_PUBLIC_DATA_SOURCE unset or empty selects the DEMO data -- a build that only forgets it shows demo accounts to a real signed-in person (sending stays impossible since #400) (0.595625ms)
+✔ negative controls: the pre-#400 gate lets demo data say "ready" and send; asking the readiness without the data check asks it while loading (105.332459ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 695.6815
+
+# whole app suite on the same tree
+ℹ tests 512
+ℹ suites 0
+ℹ pass 511
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+
+# G1 manual-publish suites
+ℹ tests 230
+ℹ pass 229
+ℹ fail 0
+ℹ skipped 1
