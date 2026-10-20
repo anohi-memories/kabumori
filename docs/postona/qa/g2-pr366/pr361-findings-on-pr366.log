@@ -1,0 +1,14 @@
+# PR #361 g2-external-url-negative.test.mjs @44a04fc0 run on PR #366 HEAD 44ab2e6b (fix) — an intentional FINDING flip, not a product-suite failure
+ℹ fail 1
+ℹ pass 8
+ℹ tests 9
+✔ FINDING G2-U1 (P3, owner G1/app): both return routes replace the current screen with Home — nothing keeps the open draft (11.289083ms)
+✔ FINDING G2-U2 (P3): the default Unmatched screen is English, prints the received link and links to the route sitemap (0.800208ms)
+✔ FINDING G2-U2 (P3, owner G1/app): the app has no not-found route, so expo-router's default Unmatched screen is used (0.463542ms)
+✔ no mixing: a URL can never pre-fill the text or choose the account — the screen reads no route params (0.634834ms)
+✔ no mixing: after an account / workspace switch the chosen account is dropped unless it is still in the list (0.131167ms)
+✔ percent-encoding tricks do not create a second credential or another flow (0 exchanges) (1.511334ms)
+✔ token-like or identity-like query parameters on a return are refused outright (0 exchanges) (1.489125ms)
+✔ valid return for the flow this device started: exactly one exchange; duplicate shares it; wrong flow refused before exchange (0.957458ms)
+✖ FINDING G2-U1 (P3): the draft lives only in the screen state — a remounted screen starts with an empty draft and no account (7.323875ms)
+✖ failing tests:

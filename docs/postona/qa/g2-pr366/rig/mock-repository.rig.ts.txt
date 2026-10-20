@@ -1,0 +1,10 @@
+// G2 QA RIG ONLY (never committed): the mock preview plus a second connected X account (POSTONA検証用サブ). With
+// EXPO_PUBLIC_G2_XSUB=off that account is shown as not connected; =gone removes it (disconnected / deleted cases).
+import { mockRepository as original } from '../src/data/mock-repository';
+
+const mode = process.env.EXPO_PUBLIC_G2_XSUB ?? 'on';
+const voice = { tone: '丁寧', language: '日本語', avoid: [] as string[] };
+const sub = { id: 'account-x-sub', platform: 'x', profile: { displayName: 'POSTONA検証用サブ', handle: '@postona_qa_sub', avatarColor: '#0F766E', voice }, connectionStatus: mode === 'off' ? 'not_connected' : 'connected', postingState: 'active' };
+const extra = mode === 'gone' ? [] : [sub];
+console.log(`[G2QA] xsub=${mode}`);
+export const mockRepository = { ...original, getAccounts: () => [...original.getAccounts(), ...extra] } as typeof original;

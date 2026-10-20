@@ -1,0 +1,31 @@
+// G2 QA RIG ONLY (2026-10-20, never committed): a fixed fake session chosen at bundle time (EXPO_PUBLIC_G2_SESSION), to
+// observe how the manual X post draft reacts to a token refresh, a new sign-in and another person. No network, no token.
+//   A1  person A, signed in at T1                (the baseline)
+//   A1R person A, signed in at T1, NEW access token (what a token refresh changes)
+//   A2  person A, signed in again at T2          (a new sign-in session)
+//   B   person B
+import type { PropsWithChildren } from 'react';
+
+const A = '00000000-0000-4000-8000-0000000002a1';
+const B = '00000000-0000-4000-8000-0000000002b2';
+const T1 = '2026-10-20T08:00:00.000000Z';
+const T2 = '2026-10-20T09:30:00.000000Z';
+const variant = process.env.EXPO_PUBLIC_G2_SESSION ?? 'A1';
+const SESSIONS: Record<string, { id: string; at: string; token: string }> = {
+  A1: { id: A, at: T1, token: 'g2-rig-token-1' },
+  A1R: { id: A, at: T1, token: 'g2-rig-token-2' },
+  A2: { id: A, at: T2, token: 'g2-rig-token-3' },
+  B: { id: B, at: T1, token: 'g2-rig-token-4' },
+};
+const chosen = SESSIONS[variant] ?? SESSIONS.A1;
+console.log(`[G2QA] session variant=${variant} user=${chosen.id.slice(-3)} last_sign_in_at=${chosen.at}`);
+const RIG_SESSION = Object.freeze({ user: Object.freeze({ id: chosen.id, last_sign_in_at: chosen.at }), access_token: chosen.token });
+const notAvailable = async () => ({ ok: false, message: 'QA rig: not available' });
+const RIG_AUTH = Object.freeze({
+  loading: false, session: RIG_SESSION, recoveryMode: false, error: null, email: null, readiness: null, releaseReport: null, settings: null,
+  signOut: notAvailable, signInWithProvider: notAvailable, linkProvider: notAvailable, requestPasswordReset: notAvailable,
+  completePasswordRecovery: notAvailable, accountDeletion: { available: false }, deletionNotice: null, dismissDeletionNotice: () => {},
+  reauthenticate: notAvailable, previewDeletion: notAvailable, deleteAccount: notAvailable,
+});
+export function AuthProvider({ children }: PropsWithChildren) { return <>{children}</>; }
+export function useAuth() { return RIG_AUTH as never; }
