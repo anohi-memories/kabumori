@@ -355,7 +355,7 @@ Deno.test("E2E separation and misuse: same operation id across person / brand / 
   assert.deepEqual(spend(), before, "none of them reached the ledger, the call store or a provider");
 });
 
-Deno.test("E2E money: parallel duplicates send once; 504 is UNKNOWN at the upper bound and never resent; the ledger down is LEDGER_UNAVAILABLE; a lost settlement keeps the ledger 'sent' (source of truth)", async () => {
+Deno.test("E2E money: parallel duplicates send once; 504 is UNKNOWN at the upper bound and never resent; the ledger down is UNKNOWN, nothing sent (G6-10); a lost settlement keeps the ledger 'sent' (source of truth)", async () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => release = resolve);
   const p = world({ respond: async (call) => (await gate, reply(call)) });
@@ -370,7 +370,8 @@ Deno.test("E2E money: parallel duplicates send once; 504 is UNKNOWN at the upper
   assert.deepEqual([code(await u.run("jwt-a", consult())), u.provider.calls.length], ["UNKNOWN", 1]);
   const l = world();
   l.supabase.fault = { ai_ledger_reserve: "network" };
-  assert.deepEqual([code(await l.run("jwt-a", consult())), l.provider.calls.length], ["LEDGER_UNAVAILABLE", 0]);
+  // G6-10: an unreachable ledger does not prove the operation unsent (another process may have sent it): UNKNOWN.
+  assert.deepEqual([code(await l.run("jwt-a", consult())), l.provider.calls.length], ["UNKNOWN", 0]);
   const s = world();
   s.supabase.fault = { ai_ledger_settle: 500 };
   assert.deepEqual([code(await s.run("jwt-a", consult())), [...s.supabase.reservations.values()]], ["OK", ["sent"]]);

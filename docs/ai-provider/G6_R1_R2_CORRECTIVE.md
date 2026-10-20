@@ -32,11 +32,11 @@ H2 の再現では、別のプロセスが同じ番号で送り、実額が台�
 次の場合は、これまでどおり。
 
 - 自分の権限の再確認で止めた場合: `AUTH_REVOKED_BEFORE_SEND`。
-- 予約の RPC に届かない・知らない理由の場合（許可が一度も出ていない）: `LEDGER_UNAVAILABLE` / `NOT_SENT`。
+- 予約の RPC に届かない・知らない理由の場合（許可が一度も出ていない）: `LEDGER_UNAVAILABLE` / `NOT_SENT`。**G6-10 で変更**: 予約の答えの喪失がこれと区別できない（H3 の指摘）ため、UNKNOWN・記録なしにした。`G6_LOST_RESERVE_UNKNOWN.md` を参照。
 
 | 台帳の答え | 直す前 | 直した後 |
 | --- | --- | --- |
-| 予約に届かない（`GUARD_UNAVAILABLE`） | LEDGER_UNAVAILABLE・記録 POLICY_DENIED・頼み直すと NOT_SENT | **同じ** |
+| 予約に届かない（`GUARD_UNAVAILABLE`） | LEDGER_UNAVAILABLE・記録 POLICY_DENIED・頼み直すと NOT_SENT | G6-09 では同じ。**G6-10 で UNKNOWN・記録なし**（答えの喪失を含むため） |
 | 予約: `ATTEMPT_FINALIZED` | LEDGER_UNAVAILABLE・記録 POLICY_DENIED / `no_request` | **UNKNOWN・記録なし・頼み直すと IN_PROGRESS → 復旧の後 UNKNOWN** |
 | 予約: `ATTEMPT_IN_FLIGHT` | 同上 | 同上 |
 | 送信の確定: 届かない・答えの喪失（commit 済みもある）・拒否 | LEDGER_UNAVAILABLE・記録 POLICY_DENIED / `no_request`（台帳が `sent` でも） | 同上（台帳の `sent` は、復旧が上限額の不明として控えに書く） |

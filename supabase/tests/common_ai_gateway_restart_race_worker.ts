@@ -40,8 +40,11 @@ export type GatewayJob = Readonly<{
    * "after:g5_verdict#<n>" the n-th answer of the fake G5 (G6-09: #2 is the first recheck).
    */
   pauseAt: string | null;
-  /** G6-08: "<rpc>#<n>" -> "lost" (the RPC commits, the answer never arrives: a network error). */
-  faults?: Readonly<Record<string, "lost">>;
+  /**
+   * G6-08: "<rpc>#<n>" -> "lost" (the RPC commits, the answer never arrives: a network error);
+   * G6-10: -> "down" (the statement never reaches the database: a network error, nothing ran).
+   */
+  faults?: Readonly<Record<string, "lost" | "down">>;
   /** G6-08: the provider's answer per request, in order ("ok" or an HTTP status); default always "ok". */
   providerReplies?: readonly string[];
   /** G6-08: the runtime's per-RPC timeout (the fake transport honours the abort signal). */
@@ -166,6 +169,7 @@ async function runGateway(job: GatewayJob): Promise<unknown> {
       const n = (counts.get(rpc) ?? 0) + 1;
       counts.set(rpc, n);
       await pauseIf(`before:${rpc}`, n);
+      if (job.faults?.[`${rpc}#${n}`] === "down") throw new TypeError("unreachable: the statement never ran");
       if (job.trace) await event(`start:${rpc}#${n}`);
       // The database keeps running a statement whose caller gave up (as PostgREST would); the caller sees the abort.
       const running = serviceRpc(rpc, (JSON.parse(String(init?.body)) as { p: unknown }).p);

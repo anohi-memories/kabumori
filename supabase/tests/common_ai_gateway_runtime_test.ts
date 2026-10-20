@@ -323,16 +323,18 @@ Deno.test("call store failures: claim unreachable / failing / answering nonsense
   }
 });
 
-Deno.test("the ledger: a budget limit is QUOTA_EXCEEDED, an outage LEDGER_UNAVAILABLE (nothing sent either way); a failed settle keeps the ledger 'sent' (it stays the source of truth)", async () => {
+Deno.test("the ledger: a budget limit is QUOTA_EXCEEDED, an outage UNKNOWN with nothing recorded (G6-10) (nothing sent either way); a failed settle keeps the ledger 'sent' (it stays the source of truth)", async () => {
   const q = world();
   q.supabase.fault = { ai_ledger_reserve: "deny:CALL_LIMIT" };
   assert.deepEqual([code(await q.run("jwt-a", ideas())), q.provider.calls.length], ["QUOTA_EXCEEDED", 0]);
   for (const fault of ["network", 503] as const) {
     const w = world();
     w.supabase.fault = { ai_ledger_reserve: fault };
-    assert.deepEqual([code(await w.run("jwt-a", ideas())), w.provider.calls.length], ["LEDGER_UNAVAILABLE", 0], String(fault));
+    // G6-10: the reserve may have committed (or another process may have sent this operation): not provably unsent.
+    assert.deepEqual([code(await w.run("jwt-a", ideas())), w.provider.calls.length], ["UNKNOWN", 0], String(fault));
+    assert.deepEqual([...w.supabase.rows.values()].map((row) => row.state), ["acquired"], `${fault}: left for recovery`);
     w.supabase.fault = {};
-    assert.deepEqual([code(await w.run("jwt-a", ideas())), w.provider.calls.length], ["NOT_SENT", 0], `${fault}: the same operation never sends`);
+    assert.deepEqual([code(await w.run("jwt-a", ideas())), w.provider.calls.length], ["IN_PROGRESS", 0], `${fault}: the same operation never sends`);
     assert.deepEqual([code(await w.run("jwt-a", ideas({ operationId: "op-runtime-0003" }))), w.provider.calls.length], ["OK", 1], `${fault}: a new one does`);
   }
   const m = world();
@@ -468,4 +470,19 @@ Deno.test("G6-09 (R2): the authority recheck is the last step before mark_sent (
   assert.equal(code(await w.run("jwt-a", ideas())), "OK");
   assert.deepEqual(seen, [["claim", "reserve", "claim"]], "recheck after the claim check, before mark_sent");
   assert.deepEqual(w.supabase.calls, ["claim", "reserve", "claim", "mark_sent", "settle", "complete"]);
+});
+
+Deno.test("G6-10 (H3 P2): every reserve failure (lost answer after commit, unreachable, HTTP 5xx, an unknown reason) is UNKNOWN with nothing recorded; a budget limit the ledger answered stays QUOTA_EXCEEDED", async () => {
+  for (const fault of ["lost", "network", 500, "deny:SOMETHING_NEW"] as const) {
+    const w = world();
+    w.supabase.fault = { ai_ledger_reserve: fault };
+    const r = await w.run("jwt-a", ideas());
+    assert.deepEqual([code(r), r.audit, w.provider.calls.length, w.supabase.calls], ["UNKNOWN", null, 0, ["claim", "reserve"]], String(fault));
+    assert.deepEqual([...w.supabase.rows.values()].map((row) => [row.state, row.result]), [["acquired", null]], `${fault}: no NOT_SENT, no no_request, no 0 USD recorded`);
+    w.supabase.fault = {};
+    assert.deepEqual([code(await w.run("jwt-a", ideas())), w.provider.calls.length], ["IN_PROGRESS", 0], `${fault}: never resent`);
+  }
+  const q = world();
+  q.supabase.fault = { ai_ledger_reserve: "deny:COST_LIMIT" };
+  assert.deepEqual([code(await q.run("jwt-a", ideas())), q.provider.calls.length, [...q.supabase.rows.values()].map((row) => row.state)], ["QUOTA_EXCEEDED", 0, ["complete"]]);
 });

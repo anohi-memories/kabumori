@@ -403,15 +403,17 @@ Deno.test("real ledger guard: a revoked recheck never reaches mark_sent; the res
   }
 });
 
-// G6-09 (R1): a refusal that another process may have sent under (ATTEMPT_FINALIZED; SEND_NOT_CONFIRMED, into which the
-// shared guard folds ATTEMPT_IN_FLIGHT and a failed / refused mark_sent) is UNKNOWN, recorded by nobody but recovery.
-Deno.test("GAP-2 fixed (real ledger guard): unreachable / failing ledger before any permit -> LEDGER_UNAVAILABLE (not a quota); a refusal someone else may have sent under -> UNKNOWN, nothing recorded (G6-09); nothing sent; the same operation never resends; a new operation works after recovery", async () => {
+// G6-09 / G6-10 (R1): a refusal that another process may have sent under (ATTEMPT_FINALIZED; SEND_NOT_CONFIRMED, into
+// which the shared guard folds ATTEMPT_IN_FLIGHT and a failed / refused mark_sent; GUARD_UNAVAILABLE, into which
+// execute.ts folds every reserve failure and the guard an unknown ledger reason) is UNKNOWN, recorded by nobody but
+// recovery. No ledger refusal of this kind is left that proves "not sent".
+Deno.test("GAP-2 fixed (real ledger guard): an unreachable / failing ledger or a refusal someone else may have sent under -> UNKNOWN, nothing recorded (G6-09 / G6-10), not a quota; nothing sent; the same operation never resends; a new operation works after recovery", async () => {
   const cases: Array<[string, FakeLedgerRest["fault"], string[], "not_sent" | "unknown"]> = [
-    ["reserve network", { ai_ledger_reserve: "network" }, ["reserve"], "not_sent"],
-    ["reserve 500", { ai_ledger_reserve: 500 }, ["reserve"], "not_sent"],
+    ["reserve network", { ai_ledger_reserve: "network" }, ["reserve"], "unknown"],
+    ["reserve 500", { ai_ledger_reserve: 500 }, ["reserve"], "unknown"],
     ["reserve refused: attempt already final", { ai_ledger_reserve: "deny:ATTEMPT_FINALIZED" }, ["reserve"], "unknown"],
     ["reserve refused: attempt in flight elsewhere", { ai_ledger_reserve: "deny:ATTEMPT_IN_FLIGHT" }, ["reserve"], "unknown"],
-    ["reserve refused: unknown reason", { ai_ledger_reserve: "deny:SOMETHING_NEW" }, ["reserve"], "not_sent"],
+    ["reserve refused: unknown reason", { ai_ledger_reserve: "deny:SOMETHING_NEW" }, ["reserve"], "unknown"],
     ["mark_sent network", { ai_ledger_mark_sent: "network" }, ["reserve", "mark_sent", "release"], "unknown"],
     ["mark_sent 503", { ai_ledger_mark_sent: 503 }, ["reserve", "mark_sent", "release"], "unknown"],
     ["mark_sent refused (no permit)", { ai_ledger_mark_sent: "refuse" }, ["reserve", "mark_sent", "release"], "unknown"],
@@ -444,7 +446,7 @@ Deno.test("GAP-2 fixed (real ledger guard): unreachable / failing ledger before 
   }
 });
 
-Deno.test("GAP-2 fixed (real ledger guard): only a budget limit is QUOTA_EXCEEDED; the ledger failing on the SECOND attempt after a refused first one is LEDGER_UNAVAILABLE", async () => {
+Deno.test("GAP-2 fixed (real ledger guard): only a budget limit is QUOTA_EXCEEDED; the ledger failing on the SECOND attempt after a refused first one is UNKNOWN, nothing recorded (G6-10)", async () => {
   for (const p of PROVIDERS) {
     for (const reason of ["CALL_LIMIT", "COST_LIMIT", "PER_CALL_LIMIT", "NO_MATCHING_POLICY"]) {
       const rest = new FakeLedgerRest();
@@ -461,8 +463,10 @@ Deno.test("GAP-2 fixed (real ledger guard): only a budget limit is QUOTA_EXCEEDE
       rest.fault = { ai_ledger_reserve: "network" }; // the ledger goes away after the first request
       return refused429(p)(c, i, init);
     });
-    const r = await gatewayExecute(deps(net.fetch, realGuard(rest), new Authority(), new Store(), policy(p, { maxAttempts: 2 })), "jwt-a", ideas());
-    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.attempts, net.calls.length], [false, "LEDGER_UNAVAILABLE", 1, 1], p);
+    const second = new Store();
+    const r = await gatewayExecute(deps(net.fetch, realGuard(rest), new Authority(), second, policy(p, { maxAttempts: 2 })), "jwt-a", ideas());
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit, net.calls.length], [false, "UNKNOWN", null, 1], p);
+    assert.equal([...second.rows.values()][0].outcome, null, `${p}: nothing recorded`);
     assert.deepEqual(rest.calls, ["reserve", "mark_sent", "settle", "reserve"], p);
   }
 });

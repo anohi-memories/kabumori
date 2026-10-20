@@ -367,19 +367,26 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   };
   // The claim was no longer held: the row's own outcome (recovery's tombstone) is the answer; nothing is recorded over it.
   if (fenced) return fail("UNKNOWN", audit);
-  // G6-09 (R1): the ledger refused an attempt number that another process may have used. ATTEMPT_FINALIZED (that
-  // attempt was already sent, settled or released) and SEND_NOT_CONFIRMED (the shared guard folds ATTEMPT_IN_FLIGHT
-  // into it, together with a mark_sent that failed or was refused, which may itself have committed "sent") cannot be
-  // told apart from a send by someone else. Nothing here proves "not sent": record nothing (no NOT_SENT, no
-  // no_request, no 0 USD) and answer UNKNOWN; the row stays acquired and recovery closes it with an audit built from
-  // the ledger (the source of truth). A revocation found by this process's own recheck is not such a refusal.
-  if (!result.ok && !revoked && result.errorCode === "BUDGET_DENIED" && (result.detail === "ATTEMPT_FINALIZED" || result.detail === "SEND_NOT_CONFIRMED")) {
+  // G6-09 / G6-10 (R1): the ledger refused, or could not answer, in a way that does not prove the operation unsent.
+  //   ATTEMPT_FINALIZED: that attempt was already sent, settled or released (by another process, maybe).
+  //   SEND_NOT_CONFIRMED: the shared guard folds ATTEMPT_IN_FLIGHT into it, with a mark_sent that failed or was
+  //     refused (which may itself have committed "sent").
+  //   GUARD_UNAVAILABLE (G6-10, H3 P2): the shared execute.ts folds EVERY reserve failure into it (network, HTTP 5xx,
+  //     a timeout, an answer lost after the statement committed, which may have been ATTEMPT_FINALIZED) and the guard
+  //     maps an unknown ledger reason to it. The ledger may know of another process's send under this key.
+  // None of them proves "not sent": record nothing (no NOT_SENT, no no_request, no 0 USD) and answer UNKNOWN; the row
+  // stays acquired and recovery closes it with an audit built from the ledger (the source of truth). The cost: a
+  // ledger that was really unreachable also waits for recovery (IN_PROGRESS) instead of answering NOT_SENT at once.
+  // Not here: a revocation found by this process's own recheck; a budget limit (the ledger answered after finding no
+  // such attempt); INVALID_AMOUNT (decided locally, before any ledger call).
+  const AMBIGUOUS_LEDGER: readonly string[] = ["ATTEMPT_FINALIZED", "SEND_NOT_CONFIRMED", "GUARD_UNAVAILABLE"];
+  if (!result.ok && !revoked && result.errorCode === "BUDGET_DENIED" && AMBIGUOUS_LEDGER.includes(String(result.detail))) {
     return fail("UNKNOWN", null);
   }
   // Why the call stopped without (another) send, decided in this order: a possibly billed attempt is UNKNOWN whatever
   // else happened; then a revocation (GAP-1: also after an earlier refused attempt); then the ledger: a budget limit
-  // is a quota, any other refusal or failure before the send (the guard unreachable, an invalid amount) is
-  // LEDGER_UNAVAILABLE (GAP-2; the possibly-sent refusals are answered above). Both stop reasons are stored as
+  // is a quota, any other refusal before the send (an invalid amount) is LEDGER_UNAVAILABLE (GAP-2; every refusal that
+  // does not prove "not sent", an unreachable ledger included, is answered above since G6-10). Both stop reasons are stored as
   // POLICY_DENIED (nothing more was sent; the store has no other code for it) and replay as NOT_SENT.
   let stop: "revoked" | "ledger" | null = null;
   let outcome: Readonly<{ ok: true; data: unknown } | { ok: false; code: StoredCode }>;

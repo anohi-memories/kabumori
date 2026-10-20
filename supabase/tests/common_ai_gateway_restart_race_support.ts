@@ -46,7 +46,7 @@ export type Gw = {
   feature?: string;
   brand?: string | null;
   pauseAt?: string | null;
-  faults?: Record<string, "lost">;
+  faults?: Record<string, "lost" | "down">;
   providerReplies?: string[];
   rpcTimeoutMs?: number;
   trace?: boolean;
