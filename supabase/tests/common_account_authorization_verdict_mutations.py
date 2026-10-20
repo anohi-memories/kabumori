@@ -60,7 +60,7 @@ M = [
     ('the worker reads the generation of another account', C, "(select a.lifecycle_version from public.common_accounts a where a.user_id = private.account_lifecycle_brand_owner(p_brand_id))",
      "(select pg_catalog.min(a.lifecycle_version) from public.common_accounts a)"),
     # ---- the install
-    ('forced RLS is accepted', C, "    if (select c.relforcerowsecurity from pg_catalog.pg_class c where c.oid = to_regclass(v_rel)) then", "    if false then"),
+    ('forced RLS is accepted', C, "    if v_forced then\n      raise exception 'AUTH_VERDICT_PRECONDITION_RLS_FORCED %'", "    if false then\n      raise exception 'AUTH_VERDICT_PRECONDITION_RLS_FORCED %'"),
     ('a VOLATILE helper is accepted', C, "                    and p.provolatile = 's' and p.prosecdef and p.proconfig @> array['search_path=\"\"'] and p.proowner = v_owner) then",
      "                    and p.prosecdef and p.proconfig @> array['search_path=\"\"'] and p.proowner = v_owner) then"),
     ('the exposure precondition is skipped', C, "  if private.account_lifecycle_owner_epoch_exposure() is not null then\n    raise exception 'AUTH_VERDICT_PRECONDITION_%', private.account_lifecycle_owner_epoch_exposure();",

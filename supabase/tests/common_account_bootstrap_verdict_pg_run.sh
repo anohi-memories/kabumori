@@ -12,7 +12,7 @@ case "$host" in /private/tmp/*|/tmp/*) ;; *) echo "Refusing: CAL_PGHOST must be 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="${BV_REPO_ROOT:-$(git -C "$here" rev-parse --show-toplevel)}"
 m="$repo/supabase/migrations"; t="$repo/supabase/tests"
-n="$$"; owner="kb_bv_owner_$n"; prefix="kabumori_bv_$n"; db="${prefix}_main"
+n="$$"; owner="kb_bv_owner_$n"; other="kb_bv_other_$n"; prefix="kabumori_bv_$n"; db="${prefix}_main"
 S=(psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 cleanup() {
   local d
@@ -20,6 +20,7 @@ cleanup() {
     "${S[@]}" -d postgres -c "drop database if exists $d with (force)" >/dev/null 2>&1 || true
   done
   "${S[@]}" -d postgres -c "drop role if exists $owner" >/dev/null 2>&1 || true
+  "${S[@]}" -d postgres -c "drop role if exists $other" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -35,6 +36,8 @@ end \$\$;
 grant service_role to kb_cal_svc_child;
 grant authenticated to kb_cal_auth_child;
 create role $owner login nosuperuser nocreatedb createrole;
+-- G5-08: a second owner for the hostile-RLS layouts (H1 C1 P2 on PR #383); it never logs in
+create role $other nologin;
 grant anon, authenticated, service_role, kb_cal_svc_child, kb_cal_auth_child to $owner;
 create database $db owner $owner;
 SQL
@@ -66,5 +69,6 @@ own -f "$cand/001_authorization_verdict.sql" >/dev/null
 own -f "$cand/002_bootstrap_verdict.sql" >/dev/null
 
 ( cd "$repo" && CAL_E2E=1 BV_CANDIDATE="$cand/002_bootstrap_verdict.sql" BV_ROLLBACK="$cand/002_bootstrap_verdict_rollback.sql" PGSUPER="$super" \
+    BV_R1_CANDIDATE="$cand/001_authorization_verdict.sql" BV_R1_ROLLBACK="$cand/001_authorization_verdict_rollback.sql" BV_OTHER="$other" \
     PGHOST="$host" PGPORT="$port" PGUSER="$owner" PGDATABASE="$db" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$t/common_account_bootstrap_verdict_pg_test.ts" )

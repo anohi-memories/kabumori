@@ -14,6 +14,7 @@ TREES = ['supabase/migrations', 'supabase/tests', 'supabase/candidates/common_ac
          'supabase/candidates/common_account_authorization_verdict']
 RUNNER = 'supabase/tests/common_account_bootstrap_verdict_pg_run.sh'
 C = 'supabase/candidates/common_account_authorization_verdict/002_bootstrap_verdict.sql'
+C1 = 'supabase/candidates/common_account_authorization_verdict/001_authorization_verdict.sql'
 
 M = [
     # ---- the question
@@ -51,7 +52,21 @@ M = [
      "  v_session_ref := 's:' || v_session_id::text;"),
     ('another app\'s entitlement is listed', C, "'owner_epoch', null, 'entitlements', '[\"postona:x_autopost\"]'::jsonb);", "'owner_epoch', null, 'entitlements', '[\"kabumori:kabumori\", \"postona:x_autopost\"]'::jsonb);"),
     # ---- the install
-    ('forced RLS is accepted', C, "    if (select c.relforcerowsecurity from pg_catalog.pg_class c where c.oid = to_regclass(v_rel)) then", "    if false then"),
+    ('forced RLS is accepted', C, "    if v_forced then\n      raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_RLS_FORCED %'", "    if false then\n      raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_RLS_FORCED %'"),
+    # ---- G5-08: every row visible (H1 C1 P2 on PR #383), at the install and on every call -- R0 (002) and R1 / W1 (001)
+    ('RLS that hides rows is accepted (H1 P2)', C, "    if v_rls and not (select r.rolbypassrls", "    if false and v_rls and not (select r.rolbypassrls"),
+    ('a view stands in for a table', C, "    if not found or v_kind not in ('r', 'p') or not pg_catalog.has_table_privilege(v_owner, v_rel, 'SELECT') then",
+     "    if not found or not pg_catalog.has_table_privilege(v_owner, v_rel, 'SELECT') then"),
+    ('BYPASSRLS is not honoured', C, "    if v_rls and not (select r.rolbypassrls from pg_catalog.pg_roles r where r.oid = v_owner) and not", "    if v_rls and not"),
+    ('the table owner by inheritance is not honoured', C, "and not pg_catalog.pg_has_role(v_owner, v_relowner, 'USAGE') then", "and v_owner <> v_relowner then"),
+    ('a SET-only (NOINHERIT) membership counts as the table owner', C, "pg_catalog.pg_has_role(v_owner, v_relowner, 'USAGE')", "pg_catalog.pg_has_role(v_owner, v_relowner, 'MEMBER')"),
+    ('R0 runs with ordinary row security', C, "returns jsonb language plpgsql stable security definer set search_path = '' set row_security = off as $$",
+     "returns jsonb language plpgsql stable security definer set search_path = '' as $$"),
+    ('R1 install: RLS that hides rows is accepted', C1, "    if v_rls and not (select r.rolbypassrls", "    if false and v_rls and not (select r.rolbypassrls"),
+    ('R1 runs with ordinary row security', C1, "returns jsonb language plpgsql stable security definer set search_path = '' set row_security = off as $$",
+     "returns jsonb language plpgsql stable security definer set search_path = '' as $$"),
+    ('W1 runs with ordinary row security', C1, "returns text language plpgsql stable security definer set search_path = '' set row_security = off as $$",
+     "returns text language plpgsql stable security definer set search_path = '' as $$"),
     ('another workspace derivation is accepted', C, "     or public.social_mobile_account_deletion_workspace('00000000-0000-4000-8000-000000000001'::uuid)\n        is distinct from 'u_' || pg_catalog.substr(pg_catalog.md5('00000000-0000-4000-8000-000000000001'), 1, 24) then",
      " then"),
     ('the exposure precondition is skipped', C, "  if private.account_lifecycle_owner_epoch_exposure() is not null then\n    raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_%'", "  if false then\n    raise exception 'BOOTSTRAP_VERDICT_PRECONDITION_%'"),
