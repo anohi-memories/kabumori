@@ -357,7 +357,7 @@ test('gate: the first failing condition names the reason (in a fixed order)', ()
   assert.equal(gateOf(ready, { account: account('X_A', { connectionStatus: 'not_connected' }) }).reason, 'account_not_connected');
   assert.equal(gateOf(start(ready)).reason, 'sending');
   for (const reason of Object.keys(m.SEND_BLOCK_MESSAGES)) assert.ok(m.SEND_BLOCK_MESSAGES[reason].length > 0, reason);
-  assert.equal(Object.keys(m.SEND_BLOCK_MESSAGES).length, 20);
+  assert.equal(Object.keys(m.SEND_BLOCK_MESSAGES).length, 21);
 });
 
 test('gate: draft problems block the send even with a ready port and a consent', () => {
@@ -386,7 +386,7 @@ test('gate: a cached "connected" value never allows a send -- only a fresh, same
   assert.equal(gateOf(base, { account: connectedAccount }).reason, 'readiness_unchecked');
   const notConnected = apply(base, { type: 'readiness_received', record: { accountId: 'X_A', checkedAt: 1_000, result: { kind: 'not_connected' } } });
   assert.equal(gateOf(notConnected, { account: connectedAccount }).reason, 'port_not_connected');
-  assert.equal(gateOf(notConnected, { account: connectedAccount, dataStatus: 'mock_preview' }).reason, 'port_not_connected', 'the local demo is no exception');
+  assert.equal(gateOf(notConnected, { account: connectedAccount, dataStatus: 'mock_preview' }).reason, 'demo_data', 'the local demo is never sendable (checked before the port answer)');
   const unavailable = apply(base, { type: 'readiness_received', record: { accountId: 'X_A', checkedAt: 1_000, result: { kind: 'unavailable', code: 'E' } } });
   assert.equal(gateOf(unavailable, { account: connectedAccount }).reason, 'port_unavailable');
   const ready = apply(base, { type: 'readiness_received', record: READY('X_A', 1_000) });
@@ -457,4 +457,26 @@ test('N1: `retrying` is true only while a send RE-ASKS an unresolved attempt (sa
   assert.equal(done.retrying, false);
   assert.equal(m.createInitialState().retrying, false);
   assert.equal(m.createInitialState({ accountId: 'X_A', requestId: ID(9), contentSha256: 'a'.repeat(64), text: null, kind: 'pending' }).retrying, false);
+});
+
+// ---- N2: only strictly `ready` data can lead to a send ---------------------------------------------------------------------------------------
+
+test('N2: with a fresh, ready, consented confirmation only dataStatus === "ready" opens the gate; demo data never does', () => {
+  const ready = consented();
+  assert.deepEqual(gateOf(ready), { allowed: true });
+  assert.deepEqual(gateOf(ready, { dataStatus: 'ready' }), { allowed: true });
+  assert.deepEqual(gateOf(ready, { dataStatus: 'mock_preview' }), { allowed: false, reason: 'demo_data' }, 'a ready port answer does not make demo data sendable');
+  for (const dataStatus of ['loading', 'blocked', 'unavailable']) assert.deepEqual(gateOf(ready, { dataStatus }), { allowed: false, reason: 'data_not_ready' }, dataStatus);
+  // Values this code does not know are not ready either (strict equality, not a list of bad values).
+  for (const dataStatus of ['error', 'errored', 'READY', 'Ready', ' ready', 'ready ', 'mock', 'preview', '', undefined, null, 0, 1, true, {}, []]) {
+    assert.deepEqual(gateOf(ready, { dataStatus }), { allowed: false, reason: 'data_not_ready' }, String(dataStatus));
+  }
+  assert.ok(m.SEND_BLOCK_MESSAGES.demo_data.includes('デモ'));
+});
+
+test('N2: demo data can still be typed into and previewed (only the SEND is gated)', () => {
+  const init = m.createInitialState();
+  const surface = (dataStatus) => m.surfaceOf({ dataStatus, xAccountCount: 1, account: account('X_A'), state: init });
+  assert.equal(surface('mock_preview'), 'ready_to_preview');
+  assert.equal(apply(init, { type: 'account_selected', accountId: 'X_A' }, { type: 'draft_changed', text: 'hi' }, { type: 'confirm_opened' }).phase, 'confirming');
 });

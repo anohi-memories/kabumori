@@ -203,15 +203,16 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   }, [state.phase, state.accountId, state.store.kind, suggestedId, xIdsKey]);
 
   // Opening the confirmation asks the send port -- never the cached connection value -- whether THIS account can send now.
+  // Not for demo (mock_preview) or unloaded data: its accounts are not real, so the server is not asked about them.
   useEffect(() => {
-    if (state.phase !== 'confirming' || state.accountId === null) return undefined;
+    if (state.phase !== 'confirming' || state.accountId === null || dataStatus !== 'ready') return undefined;
     const accountId = state.accountId;
     let cancelled = false;
     void runReadinessCheck(deps, accountId).then((record) => {
       if (!cancelled) dispatch({ type: 'readiness_received', record });
     });
     return () => { cancelled = true; };
-  }, [state.phase, state.accountId, deps, recheck]);
+  }, [state.phase, state.accountId, dataStatus, deps, recheck]);
 
   const draft = checkDraft(state.draft);
   const gate = sendGate({ now: now(), signedIn: userId !== null, dataStatus, account, state });
