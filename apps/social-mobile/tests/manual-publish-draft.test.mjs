@@ -160,7 +160,7 @@ test('decideRestore: every doubt is a discard -- empty, expired, from the future
   assert.equal(reason(RECORD({ savedAt: NOW + 6 * 60 * 1000 })), 'future');
   assert.equal(draft.decideRestore(RECORD({ savedAt: NOW + 60 * 1000 }), NOWARGS()).kind, 'restore', 'a small clock skew is tolerated');
   assert.equal(reason(RECORD({ sessionMark: 'S0' })), 'other_session');
-  assert.equal(reason(RECORD({ sessionMark: '' }), NOWARGS({ sessionMark: 'S1' })), 'other_session');
+  assert.equal(reason(RECORD({ sessionMark: 'S2' }), NOWARGS({ sessionMark: 'S1' })), 'other_session');
   assert.equal(reason(RECORD({ accountId: 'X_Z' })), 'account_missing');
   assert.equal(reason(RECORD(), NOWARGS({ xAccounts: [] })), 'account_missing');
   assert.equal(reason(RECORD({ accountId: 'T_1' }), NOWARGS({ xAccounts: [account('T_1', { platform: 'threads' })] })), 'account_missing');
@@ -257,4 +257,48 @@ test('draft_restored: its own guards hold even for a state that should not exist
 
 test('no network entry point was touched by any step', () => {
   assert.equal(trapped, 0);
+});
+
+// ---- G2 SM1: without a usable session mark nothing is kept and nothing is restored ------------------------------------------------------
+
+const BAD_MARKS = ['', undefined, null, 5, {}, [], 'm'.repeat(65)];
+
+test('SM1: a usable session mark is a non-empty string of at most 64 characters -- nothing else', () => {
+  assert.equal(draft.isUsableSessionMark('S1'), true);
+  assert.equal(draft.isUsableSessionMark('2026-10-20T01:00:00.123456Z'), true);
+  assert.equal(draft.isUsableSessionMark('m'.repeat(64)), true);
+  for (const mark of BAD_MARKS) assert.equal(draft.isUsableSessionMark(mark), false, String(mark));
+});
+
+test('SM1: two EMPTY marks are not "the same session" -- a draft is never restored without a usable mark on either side', () => {
+  for (const mark of BAD_MARKS) {
+    assert.deepEqual(draft.decideRestore(RECORD({ sessionMark: '' }), NOWARGS({ sessionMark: '' })), { kind: 'discard', reason: 'no_session_mark' }, 'both empty');
+    assert.deepEqual(draft.decideRestore(RECORD(), NOWARGS({ sessionMark: mark })), { kind: 'discard', reason: 'no_session_mark' }, `now ${String(mark)}`);
+    assert.deepEqual(draft.decideRestore(RECORD({ sessionMark: mark }), NOWARGS()), { kind: 'discard', reason: 'no_session_mark' }, `record ${String(mark)}`);
+  }
+  // A genuinely different usable mark is still "another session"; the same usable mark restores.
+  assert.equal(draft.decideRestore(RECORD({ sessionMark: 'S2' }), NOWARGS()).reason, 'other_session');
+  assert.equal(draft.decideRestore(RECORD(), NOWARGS()).kind, 'restore');
+});
+
+test('SM1: the store refuses to write a record without a usable mark (nothing reaches the device)', async () => {
+  for (const mark of BAD_MARKS) {
+    const kv = fakeKV();
+    const s = draft.createDraftStore(kv);
+    assert.equal(await s.write('U1', RECORD({ sessionMark: mark })), false, String(mark));
+    assert.equal(kv.data.size, 0, String(mark));
+    assert.equal(kv.log.length, 0, 'not even an attempt to write');
+  }
+});
+
+test('SM1: a record that an earlier build wrote with an empty mark is discarded and removed on the first look', async () => {
+  const kv = fakeKV();
+  kv.data.set(KEY(), stored({ sessionMark: '' }));
+  const result = await draft.loadDraftForRestore(draft.createDraftStore(kv), 'U1', NOWARGS());
+  assert.deepEqual(result, { kind: 'discard', reason: 'no_session_mark' });
+  assert.equal(kv.data.has(KEY()), false);
+  // And with no usable mark NOW, a record of a real session is not restored either (and is removed: the session is unknown).
+  kv.data.set(KEY(), stored());
+  assert.deepEqual(await draft.loadDraftForRestore(draft.createDraftStore(kv), 'U1', NOWARGS({ sessionMark: '' })), { kind: 'discard', reason: 'no_session_mark' });
+  assert.equal(kv.data.has(KEY()), false);
 });

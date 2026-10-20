@@ -175,6 +175,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
     if (userId === null || !storeReady || draftRestore !== 'done') return;
     const sendingOrUnresolved = state.phase === 'sending' || state.unresolved !== null;
     const text = state.draft;
+    // (Without a usable session mark the draft store itself refuses to write and the restore removes what it finds.)
     if (sendingOrUnresolved || (state.phase === 'editing' && (text.trim() === '' || text.length > DRAFT_MAX_TEXT_UNITS))) {
       if (draftOnDevice.current !== DRAFT_ON_DEVICE_NONE) {
         draftOnDevice.current = DRAFT_ON_DEVICE_NONE;
@@ -401,7 +402,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
               <Text accessibilityLabel="送信する本文" style={{ color: colors.ink, fontSize: 15, lineHeight: 22 }}>{draft.kind === 'ok' ? draft.text : ''}</Text>
               <Text style={styles.muted}>{draft.kind === 'ok' ? `${draft.used} / ${draft.limit}` : ''}</Text>
               <Text style={{ color: colors.warning, fontWeight: '700' }}>送信するとXに公開されます。この画面から取り消すことはできません。</Text>
-              {state.unresolved !== null ? (
+              {(state.phase === 'confirming' && state.unresolved !== null) || (state.phase === 'sending' && state.retrying) ? (
                 <Text style={styles.muted}>前回と同じ内容・同じ送信IDで確認します。同じ送信IDは、サーバーが2回送ることはありません。</Text>
               ) : null}
             </Card>
@@ -528,5 +529,8 @@ export default function ManualPublishRoute() {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
   // A different signed-in user (or sign-out) gets a fresh screen: no draft, selection or result carries over.
-  return <ManualPublishScreen key={userId ?? 'signed-out'} userId={userId} sessionMark={session?.user.last_sign_in_at ?? ''} />;
+  // The screen is re-created when the person OR the sign-in session changes -- also without a sign-out in between (a
+  // new sign-in of the same person) -- so text typed in one session is never carried into the next (G2 SM3).
+  const sessionMark = session?.user.last_sign_in_at ?? '';
+  return <ManualPublishScreen key={userId === null ? 'signed-out' : `${userId}:${sessionMark}`} userId={userId} sessionMark={sessionMark} />;
 }

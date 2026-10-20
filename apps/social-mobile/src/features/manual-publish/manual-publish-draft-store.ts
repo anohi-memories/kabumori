@@ -11,6 +11,8 @@
 // Fail closed, every doubt means "no draft" (and the record is removed):
 //   - one record per signed-in user (another user never reads it);
 //   - it belongs to ONE sign-in session: after signing out and in again (a new session mark) it is discarded;
+//   - WITHOUT a usable session mark (missing, empty, too long) nothing is kept and nothing is restored: a draft that
+//     cannot be tied to a session could be put back into a different one (G2 SM1);
 //   - it expires 24 hours after the last edit (and a time in the future is not believed);
 //   - the chosen account must still be one of the current X accounts and still connected, otherwise the whole draft
 //     is discarded; a corrupt / unknown-version / unreadable record is discarded, never trusted;
@@ -40,6 +42,11 @@ export interface DraftStore {
   read(userId: string): Promise<DraftRead>;
   write(userId: string, record: DraftRecord): Promise<boolean>;
   clear(userId: string): Promise<boolean>;
+}
+
+/** A session mark is usable only if it is a non-empty string of at most 64 characters. Anything else means "unknown session". */
+export function isUsableSessionMark(mark: unknown): mark is string {
+  return typeof mark === 'string' && mark.length >= 1 && mark.length <= 64;
 }
 
 export const draftKeyOf = (userId: string) => `postona.manual-publish.draft.v${DRAFT_VERSION}:${userId}`;
@@ -95,7 +102,7 @@ export function createDraftStore(storage: KeyValueStorage): DraftStore {
       return parseDraft(raw);
     }),
     write: (userId, record) => inOrder(async () => {
-      if (!USER_RE.test(userId)) return false;
+      if (!USER_RE.test(userId) || !isUsableSessionMark(record.sessionMark)) return false;
       try {
         await storage.setItem(draftKeyOf(userId), serialize(record));
         return true;
@@ -115,7 +122,7 @@ export function createDraftStore(storage: KeyValueStorage): DraftStore {
   };
 }
 
-export type DraftDiscardReason = 'empty' | 'expired' | 'future' | 'other_session' | 'account_missing' | 'account_disconnected' | 'unreadable';
+export type DraftDiscardReason = 'empty' | 'expired' | 'future' | 'no_session_mark' | 'other_session' | 'account_missing' | 'account_disconnected' | 'unreadable';
 
 export type RestoreDecision =
   | Readonly<{ kind: 'restore'; text: string; accountId: string | null }>
@@ -127,6 +134,8 @@ export function decideRestore(
   now: { at: number; sessionMark: string; xAccounts: readonly SocialAccount[] },
 ): RestoreDecision {
   if (record.text.trim() === '') return { kind: 'discard', reason: 'empty' };
+  // Either side without a usable mark: the session is unknown, so the draft is not put back (two empty marks are NOT "equal").
+  if (!isUsableSessionMark(now.sessionMark) || !isUsableSessionMark(record.sessionMark)) return { kind: 'discard', reason: 'no_session_mark' };
   if (record.savedAt > now.at + FUTURE_TOLERANCE_MS) return { kind: 'discard', reason: 'future' };
   if (now.at - record.savedAt > DRAFT_MAX_AGE_MS) return { kind: 'discard', reason: 'expired' };
   if (record.sessionMark !== now.sessionMark) return { kind: 'discard', reason: 'other_session' };

@@ -437,3 +437,24 @@ test('surface: one label for the situation; "sent" needs a published result', ()
     assert.equal(surface({ state: settle(start(consented()), { targetId: ID(1), ...outcome }) }), label, label);
   }
 });
+
+// ---- N1: the "same attempt again" sentence belongs to a real re-ask only ------------------------------------------------------------------
+
+test('N1: `retrying` is true only while a send RE-ASKS an unresolved attempt (same id); a first send is not a retry', () => {
+  const first = start(consented('hello'));
+  assert.equal(first.phase, 'sending');
+  assert.equal(first.unresolved.kind, 'in_flight', 'a first send is in flight too');
+  assert.equal(first.retrying, false);
+  const pending = settle(first, { kind: 'pending', targetId: ID(1), code: null, marks: REAL });
+  assert.equal(pending.retrying, false, 'settled');
+  const retry = apply(pending, { type: 'retry_requested' }, { type: 'readiness_received', record: READY('X_A', 1_000) }, { type: 'consent_changed', checked: true });
+  assert.equal(retry.retrying, false, 'confirming the retry is not yet sending');
+  const again = start(retry, ID(1));
+  assert.equal(again.phase, 'sending');
+  assert.equal(again.retrying, true);
+  assert.equal(again.unresolved.kind, 'in_flight');
+  const done = settle(again, { kind: 'published', targetId: ID(1), providerPostId: '1', marks: REAL });
+  assert.equal(done.retrying, false);
+  assert.equal(m.createInitialState().retrying, false);
+  assert.equal(m.createInitialState({ accountId: 'X_A', requestId: ID(9), contentSha256: 'a'.repeat(64), text: null, kind: 'pending' }).retrying, false);
+});
