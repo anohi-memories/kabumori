@@ -1,0 +1,24 @@
+# node --test tests/g2-expo-identifiers.test.mjs  (origin/main 0c42933ca5030ab31a56267529430d0473d9b155 + this G2 test; node v24.19.0)
+✔ FINDING G2-ID1 (owner of the native config, undecided): the tracked config fixes neither id, and the locked Expo CLI derives them from the OTHER platform, the machine's Expo login, or "anonymous" -- three different iOS ids were generated (0.592834ms)
+✔ FINDING G2-ID5 (owner of the native config / auth): the app's own release gate for the iOS bundle id reads app.json -- an uncommitted local prebuild silently clears it with a machine-dependent id (0.439666ms)
+✔ G2-ID2: none of the generated ids can collide with the Kabumori app's bundle id, and both apps keep different display names (0.086125ms)
+✔ G2-ID3: the two apps register different URL schemes, each app's sources use only its own, and neither claims https links (no associated domains / verified App Links) (24.221959ms)
+✔ G2-ID4: the sign-in and X-connect returns are built from the fixed scheme, not from the bundle id -- a drifting id does not move them (native Apple sign-in is the part that depends on the id) (0.224042ms)
+✔ negative controls: each condition above turns false for the fixed / broken variant it guards against (10.49625ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 122.619792
+
+# whole app suite on the same tree
+ℹ tests 283
+ℹ suites 0
+ℹ pass 283
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0

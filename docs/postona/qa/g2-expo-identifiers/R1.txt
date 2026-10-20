@@ -1,0 +1,34 @@
+# R1: the current Expo login of this Mac, EXPO_OFFLINE=1, origin/main 0c42933ca5030ab31a56267529430d0473d9b155
+## before
+## tracked files (git diff --stat / app.json ids / package.json scripts)
+  app.json ios.bundleIdentifier= undefined android.package= undefined
+  package.json scripts.ios= "expo start --ios" scripts.android= "expo start --android"
+  [prebuild] Skipping Android package name reservation validation in offline-mode.
+  [prebuild] › Android package name: com.anohimemories.kabumorisocialmobile
+  [prebuild] Skipping Apple bundle identifier reservation validation in offline-mode.
+  [prebuild] › Apple bundle identifier: com.anohimemories.kabumorisocialmobile
+  [prebuild] ✔ Created native directories
+  [prebuild] - Updating package.json
+  [prebuild] ✔ Updated package.json
+  [prebuild] ✔ Finished prebuild
+## after
+## tracked files (git diff --stat / app.json ids / package.json scripts)
+   apps/social-mobile/app.json     | 6 +++++-
+   apps/social-mobile/package.json | 4 ++--
+   2 files changed, 7 insertions(+), 3 deletions(-)
+  app.json ios.bundleIdentifier= "com.anohimemories.kabumorisocialmobile" android.package= "com.anohimemories.kabumorisocialmobile"
+  package.json scripts.ios= "expo run:ios" scripts.android= "expo run:android"
+## iOS
+  PRODUCT_BUNDLE_IDENTIFIER: PRODUCT_BUNDLE_IDENTIFIER = "com.anohimemories.kabumorisocialmobile" 
+  CFBundleDisplayName: Social Operations
+  CFBundleShortVersionString: 0.1.0  CFBundleVersion: 1
+  CFBundleURLSchemes:  kabumori-social com.anohimemories.kabumorisocialmobile 
+  UIApplicationSceneManifest: Print: Entry, ":UIApplicationSceneManifest", Does Not Exist
+  entitlements keys:  com.apple.developer.applesignin 
+## Android
+  build.gradle:  namespace 'com.anohimemories.kabumorisocialmobile' applicationId 'com.anohimemories.kabumorisocialmobile' versionCode 1 versionName "0.1.0" 
+  app_name: Social Operations
+  intent-filters (scheme/host/autoVerify):
+    <data android:scheme="https"/>
+    <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize|assetsPaths" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true" android:screenOrientation="portrait">
+    <data android:scheme="kabumori-social"/>

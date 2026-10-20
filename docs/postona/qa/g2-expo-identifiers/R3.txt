@@ -1,0 +1,8 @@
+# R3: current login, iOS first (--platform ios), then Android (--platform android)
+  [prebuild] Skipping Apple bundle identifier reservation validation in offline-mode.
+  [prebuild] › Apple bundle identifier: com.anohi-memories.kabumori-social-mobile
+  [prebuild] › Android package name: com.anohimemories.kabumorisocialmobile
+  app.json ios.bundleIdentifier= "com.anohi-memories.kabumori-social-mobile" android.package= "com.anohimemories.kabumorisocialmobile"
+  PRODUCT_BUNDLE_IDENTIFIER: PRODUCT_BUNDLE_IDENTIFIER = "com.anohi-memories.kabumori-social-mobile" 
+  CFBundleURLSchemes:  kabumori-social com.anohi-memories.kabumori-social-mobile 
+  build.gradle:  namespace 'com.anohimemories.kabumorisocialmobile' applicationId 'com.anohimemories.kabumorisocialmobile' versionCode 1 versionName "0.1.0" 
