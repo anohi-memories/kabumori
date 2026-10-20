@@ -297,6 +297,87 @@ test('demo (mock_preview) data gets the same gate: no readiness, no send', async
   assert.equal(fp.calls.send.length, 0);
 });
 
+// ---- N2: demo data is never sendable, even when the send port says "ready" -------------------------------------------------------------------
+
+const NO_NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
+const savedNetwork = new Map();
+let networkTouches = 0;
+test.before(() => {
+  for (const name of NO_NETWORK) {
+    savedNetwork.set(name, globalThis[name]);
+    globalThis[name] = function forbidden() { networkTouches += 1; throw new Error(`network entry point ${name} must not be used`); };
+  }
+});
+test.after(() => {
+  for (const name of NO_NETWORK) {
+    if (savedNetwork.get(name) === undefined) delete globalThis[name];
+    else globalThis[name] = savedNetwork.get(name);
+  }
+});
+
+test('N2: demo (mock_preview) data with a READY send port still cannot send -- the server is not even asked about the demo accounts', async () => {
+  const fp = fakePort(); // readiness: ready, send: would answer
+  const ui = await mount({ status: 'mock_preview', port: fp });
+  await ui.typeText('デモの本文');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  assert.equal(ui.state().phase, 'confirming');
+  assert.equal(fp.calls.check.length, 0, 'no readiness request for made-up accounts');
+  assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.demo_data));
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0, 'a forced press sends nothing');
+  assert.equal(ui.state().phase, 'confirming');
+  assertNoSentClaim(ui);
+});
+
+test('N2: every data status other than "ready" blocks a send that was open a moment ago -- also values this code does not know', async () => {
+  for (const status of ['mock_preview', 'loading', 'blocked', 'unavailable', 'error', 'READY', '', undefined, null]) {
+    const { ui, fp } = await readyConfirmation();
+    assert.equal(ui.button('Xに投稿する').props.disabled, false, 'open with ready data');
+    ui.world.status = status;
+    await ui.flush();
+    assert.equal(ui.button('Xに投稿する').props.disabled, true, String(status));
+    await ui.pressIgnoringDisabled('Xに投稿する');
+    assert.equal(fp.calls.send.length, 0, `${String(status)}: nothing sent`);
+    assert.equal(ui.state().phase, 'confirming');
+    // And coming back to ready data does not send by itself: the person still has to press.
+    ui.world.status = 'ready';
+    await ui.flush();
+    assert.equal(fp.calls.send.length, 0);
+  }
+});
+
+test('N2: re-asking an unresolved attempt is blocked on demo data too (same id, same text, but never on made-up accounts)', async () => {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(9), contentSha256: sha('earlier text'), text: 'earlier text', kind: 'pending' });
+  const fp = fakePort();
+  const ui = await mount({ memory, port: fp, status: 'mock_preview' });
+  await ui.press('同じ内容・同じ送信IDで確認し直す');
+  await ui.tick();
+  assert.equal(fp.calls.check.length, 0);
+  assert.equal(ui.button('Xに投稿する').props.disabled, true);
+  assert.ok(ui.text().includes(model.SEND_BLOCK_MESSAGES.demo_data));
+  await ui.pressIgnoringDisabled('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0);
+  assert.equal(memory.get('U1').requestId, ID(9), 'the unresolved attempt is untouched');
+});
+
+test('N2: readiness is asked only for real data -- real data still asks exactly the chosen account', async () => {
+  const { fp } = await readyConfirmation();
+  assert.deepEqual(fp.calls.check, ['X_A']);
+  const demo = fakePort();
+  const ui = await mount({ status: 'mock_preview', port: demo });
+  await ui.typeText('x');
+  await ui.press('内容を確認する');
+  assert.deepEqual(demo.calls.check, []);
+});
+
+test('N2: no network entry point was touched by the demo-data steps', () => {
+  assert.equal(networkTouches, 0);
+});
+
 test('signed out: the send is blocked even with a ready port', async () => {
   const fp = fakePort();
   const ui = await mount({ port: fp, userId: null });

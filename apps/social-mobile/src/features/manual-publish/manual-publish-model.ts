@@ -406,6 +406,7 @@ export type DataStatus = 'mock_preview' | 'loading' | 'ready' | 'blocked' | 'una
 export type SendBlockReason =
   | 'not_signed_in'
   | 'data_not_ready'
+  | 'demo_data'
   | 'no_account'
   | 'account_id_invalid'
   | 'sending'
@@ -430,6 +431,7 @@ export type SendGate = Readonly<{ allowed: true }> | Readonly<{ allowed: false; 
 export const SEND_BLOCK_MESSAGES: Readonly<Record<SendBlockReason, string>> = Object.freeze({
   not_signed_in: 'ログインを確認できないため、送信できません。',
   data_not_ready: 'アカウント情報を確認できないため、送信できません。',
+  demo_data: 'デモ用（ローカルプレビュー）のデータのため、送信できません。',
   no_account: '投稿先のXアカウントを選んでください。',
   account_id_invalid: 'このアカウントのIDを送信できる形式で確認できないため、送信できません。',
   sending: '送信中です。結果が出るまでお待ちください。',
@@ -469,7 +471,11 @@ export function sendGate(input: SendGateInput): SendGate {
   if (!input.signedIn) return block('not_signed_in');
   if (state.store.kind === 'loading') return block('store_loading');
   if (state.store.kind === 'unreadable') return block('store_unreadable');
-  if (input.dataStatus !== 'ready' && input.dataStatus !== 'mock_preview') return block('data_not_ready');
+  // Only real, loaded data can ever lead to a send. Demo (mock_preview) data has made-up accounts: it may be typed into and
+  // previewed, but never sent -- whatever the send port says. Any other value (loading, blocked, unavailable, or one this
+  // code does not know) is "not ready" too: the test is strict equality with `ready`, not a list of bad values.
+  if (input.dataStatus === 'mock_preview') return block('demo_data');
+  if (input.dataStatus !== 'ready') return block('data_not_ready');
   if (input.account === null || input.account.platform !== 'x' || state.accountId !== input.account.id) return block('no_account');
   if (!ACCOUNT_RE.test(input.account.id)) return block('account_id_invalid');
   if (state.phase === 'sending') return block('sending');
