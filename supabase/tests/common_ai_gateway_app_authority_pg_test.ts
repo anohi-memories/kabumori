@@ -146,7 +146,7 @@ Deno.test({ name: "E2E real SQL: session revoked at the recheck -> reservation r
   assert.equal(code(await world().run("jwt-a", consult("op-gwa-revoke1"))), "NOT_SENT");
 });
 
-Deno.test({ name: "E2E real SQL: parallel duplicates send once; the ledger unreachable is LEDGER_UNAVAILABLE with no reservation; 504 is UNKNOWN at the upper bound in both stores", ...opts }, async () => {
+Deno.test({ name: "E2E real SQL: parallel duplicates send once; the ledger unreachable is UNKNOWN (G6-10) with no reservation; 504 is UNKNOWN at the upper bound in both stores", ...opts }, async () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => release = resolve);
   const p = world({ respond: async (call) => (await gate, reply(call)) });
@@ -158,8 +158,10 @@ Deno.test({ name: "E2E real SQL: parallel duplicates send once; the ledger unrea
   Object.assign(down, { rpc: "ai_ledger_reserve", count: 1 });
   const l = world();
   const ledgerDown = await l.run("jwt-a", consult("op-gwa-ldown01"));
-  assert.deepEqual([code(ledgerDown), l.provider.calls.length], ["LEDGER_UNAVAILABLE", 0]);
-  assert.equal(await rows(`select count(*) from ai_ledger.reservations where request_id = '${ledgerDown.audit!.callKey}'`), "0");
+  assert.deepEqual([code(ledgerDown), ledgerDown.audit, l.provider.calls.length], ["UNKNOWN", null, 0]);
+  const downKey = await rows(`select call_key from ai_calls.consumer_calls order by created_at desc limit 1`);
+  assert.equal(await rows(`select count(*) from ai_ledger.reservations where request_id = '${downKey}'`), "0");
+  assert.equal(await rows(`select state from ai_calls.consumer_calls where call_key = '${downKey}'`), "acquired");
   const u = world({ respond: () => jsonResponse(504, { error: { type: "timeout" } }) });
   const unknown = await u.run("jwt-a", consult("op-gwa-504-001"));
   assert.deepEqual([code(unknown), unknown.audit?.costBasis], ["UNKNOWN", "includes_upper_bound"]);

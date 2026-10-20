@@ -288,21 +288,21 @@ Deno.test({ name: "GAP-1 fixed (real SQL, both providers): revoked before the se
   }
 });
 
-// G6-09 (R1): a mark_sent that fails (it may have committed "sent") is UNKNOWN with nothing recorded; a reserve that
-// fails gives no permit at all and stays LEDGER_UNAVAILABLE / NOT_SENT.
-Deno.test({ name: "GAP-2 fixed (real SQL): the ledger unreachable at reserve -> LEDGER_UNAVAILABLE, nothing sent, no reservation, same operation NOT_SENT; at mark_sent -> UNKNOWN, nothing recorded, same operation IN_PROGRESS (G6-09); a new operation goes through", ...opts }, async () => {
+// G6-09 / G6-10 (R1): a mark_sent that fails (it may have committed "sent") and a reserve that fails (it may have
+// committed, or found another process's attempt) are both UNKNOWN with nothing recorded.
+Deno.test({ name: "GAP-2 fixed (real SQL): the ledger unreachable at reserve (no reservation) or at mark_sent -> UNKNOWN, nothing sent, nothing recorded, same operation IN_PROGRESS (G6-09 / G6-10); a new operation goes through", ...opts }, async () => {
   for (const rpcName of ["ai_ledger_reserve", "ai_ledger_mark_sent"]) {
     Object.assign(ledgerFault, { rpc: rpcName, mode: "down", count: 1 });
     const w = world();
     const op = `op-gap2-${rpcName.slice(10, 16)}1`;
     const r = await w.run("jwt-a", ideas({ operationId: op }));
     const atReserve = rpcName === "ai_ledger_reserve";
-    assert.deepEqual([r.ok, !r.ok && r.code, r.audit?.costBasis, w.net.calls.length], [false, atReserve ? "LEDGER_UNAVAILABLE" : "UNKNOWN", atReserve ? "no_request" : undefined, 0], rpcName);
+    assert.deepEqual([r.ok, !r.ok && r.code, r.audit, w.net.calls.length], [false, "UNKNOWN", null, 0], rpcName);
     const k = await rows(`select call_key from ai_calls.consumer_calls order by created_at desc limit 1`);
     assert.equal(await rows(`select coalesce(string_agg(status, ','), '-') from ai_ledger.reservations where request_id = '${k}'`), atReserve ? "-" : "released", rpcName);
-    assert.equal(await rows(`select state || ':' || coalesce(result ->> 'code', '-') from ai_calls.consumer_calls where call_key = '${k}'`), atReserve ? "complete:POLICY_DENIED" : "acquired:-");
+    assert.equal(await rows(`select state || ':' || coalesce(result ->> 'code', '-') from ai_calls.consumer_calls where call_key = '${k}'`), "acquired:-");
     const again = await w.run("jwt-a", ideas({ operationId: op }));
-    assert.deepEqual([again.ok, !again.ok && again.code, w.net.calls.length], [false, atReserve ? "NOT_SENT" : "IN_PROGRESS", 0], rpcName);
+    assert.deepEqual([again.ok, !again.ok && again.code, w.net.calls.length], [false, "IN_PROGRESS", 0], rpcName);
     const fresh = await w.run("jwt-a", ideas({ operationId: `${op}-new` }));
     assert.deepEqual([fresh.ok, w.net.calls.length], [true, 1], rpcName);
   }

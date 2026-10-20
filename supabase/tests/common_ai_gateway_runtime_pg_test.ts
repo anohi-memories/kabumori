@@ -180,11 +180,12 @@ Deno.test({ name: "runtime: the ledger's daily limit -> QUOTA_EXCEEDED with no r
   assert.equal(code(await world().run("jwt-a", ideas("op-gwr-revoke1"))), "NOT_SENT");
 });
 
-Deno.test({ name: "runtime: ledger unreachable -> LEDGER_UNAVAILABLE, nothing sent; mark_sent committed but lost -> nothing sent, UNKNOWN and nothing recorded (G6-09), the ledger keeps 'sent' (over-counts, never under-counts); settle lost -> answer OK, ledger 'sent' for recovery", ...opts }, async () => {
+Deno.test({ name: "runtime: ledger unreachable -> UNKNOWN, nothing sent, nothing recorded (G6-10); mark_sent committed but lost -> nothing sent, UNKNOWN and nothing recorded (G6-09), the ledger keeps 'sent' (over-counts, never under-counts); settle lost -> answer OK, ledger 'sent' for recovery", ...opts }, async () => {
   Object.assign(fault, { rpc: "ai_ledger_reserve", mode: "down", count: 1 });
   const d = world();
-  assert.deepEqual([code(await d.run("jwt-a", ideas("op-gwr-ldown1"))), d.provider.calls.length], ["LEDGER_UNAVAILABLE", 0]);
-  assert.deepEqual([code(await d.run("jwt-a", ideas("op-gwr-ldown1"))), code(await d.run("jwt-a", ideas("op-gwr-ldown2"))), d.provider.calls.length], ["NOT_SENT", "OK", 1]);
+  // G6-10: the ledger unreachable does not prove the operation unsent: UNKNOWN, the row left for recovery.
+  assert.deepEqual([code(await d.run("jwt-a", ideas("op-gwr-ldown1"))), d.provider.calls.length], ["UNKNOWN", 0]);
+  assert.deepEqual([code(await d.run("jwt-a", ideas("op-gwr-ldown1"))), code(await d.run("jwt-a", ideas("op-gwr-ldown2"))), d.provider.calls.length], ["IN_PROGRESS", "OK", 1]);
   Object.assign(fault, { rpc: "ai_ledger_mark_sent", mode: "lost", count: 1 });
   const m = world();
   const lost = await m.run("jwt-a", ideas("op-gwr-msent1"));

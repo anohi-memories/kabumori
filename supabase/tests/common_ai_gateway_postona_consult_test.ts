@@ -276,7 +276,7 @@ Deno.test("idempotency is per person, brand and content: same key for another pe
   assert.deepEqual([second.status, second.body.error, second.body.retryable, (await first).status, p.openai.calls.length], [409, "CONSULT_IN_PROGRESS", true, 200, 1]);
 });
 
-Deno.test("money and failures: 504 -> CONSULT_AI_UNKNOWN (never resent, upper bound in the ledger); provider 400 -> CONSULT_AI_FAILED; ledger down -> CONSULT_NOT_SENT; a schema-breaking answer -> CONSULT_AI_MALFORMED", async () => {
+Deno.test("money and failures: 504 -> CONSULT_AI_UNKNOWN (never resent, upper bound in the ledger); provider 400 -> CONSULT_AI_FAILED; ledger down -> CONSULT_AI_UNKNOWN (G6-10: not provably unsent); a schema-breaking answer -> CONSULT_AI_MALFORMED", async () => {
   const u = world({ respond: () => jsonResponse(504, { error: { type: "timeout" } }) });
   const unknown = await u.send(JWT.a, ask());
   assert.deepEqual([unknown.status, unknown.body.error, unknown.body.retryable, [...u.supabase.reservations.values()]], [502, "CONSULT_AI_UNKNOWN", false, ["unknown"]]);
@@ -286,7 +286,7 @@ Deno.test("money and failures: 504 -> CONSULT_AI_UNKNOWN (never resent, upper bo
   const l = world();
   l.supabase.ledgerDown = true;
   const down = await l.send(JWT.a, ask());
-  assert.deepEqual([down.status, down.body.error, down.body.retryable, l.openai.calls.length], [503, "CONSULT_NOT_SENT", false, 0]);
+  assert.deepEqual([down.status, down.body.error, down.body.retryable, l.openai.calls.length], [502, "CONSULT_AI_UNKNOWN", false, 0]);
   l.supabase.ledgerDown = false;
   assert.equal((await l.send(JWT.a, ask(), "consult-op-0002")).status, 200, "a new key works after recovery");
   const bad = world({ respond: openAiOk({ ...answer(), kind: "post_now" }) });
