@@ -1,0 +1,13 @@
+# Public npm registry, read-only (2026-10-20 JST)
+expo-template-bare-minimum sdk-57 dist-tag / latest 57.x: expo-template-bare-minimum@57.0.32 '57.0.32'
+expo dist-tag sdk-57: 57.0.30  latest: 58.0.16
+installed / locked expo: "version":"57.0.23"
+
+# expo 57.0.23 (installed) vs 57.0.30 (sdk-57 tag): ios/AppDelegates
+identical (diff -rq: no differences)
+
+# UIApplicationSceneManifest handled by the config tooling? (files under build/ that mention it)
+@expo/config-plugins "version":"57.0.9" -> 0
+@expo/prebuild-config "version":"57.0.16" -> 0
+expo-router "version":"57.0.21" -> 0
+expo 57.0.30 build/ + config-plugins.js -> 0
