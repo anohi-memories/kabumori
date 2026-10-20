@@ -1,0 +1,33 @@
+--- standard-prebuild/AppDelegate.swift
++++ sketch-prebuild/AppDelegate.swift
+@@ -3,7 +3,7 @@
+ import ReactAppDependencyProvider
+ 
+ @main
+-class AppDelegate: ExpoAppDelegate {
++class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
+   var window: UIWindow?
+ 
+   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
+@@ -20,13 +20,6 @@
+     reactNativeDelegate = delegate
+     reactNativeFactory = factory
+ 
+-#if os(iOS) || os(tvOS)
+-    window = UIWindow(frame: UIScreen.main.bounds)
+-    factory.startReactNative(
+-      withModuleName: "main",
+-      in: window,
+-      launchOptions: launchOptions)
+-#endif
+ 
+     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+   }
+@@ -67,3 +60,7 @@
+ #endif
+   }
+ }
++
++// The window and React Native are started by the scene (iOS 27 SDK requires the scene life cycle).
++@objc(SceneDelegate)
++class SceneDelegate: ExpoAppSceneDelegate {}
