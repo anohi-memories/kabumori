@@ -1,0 +1,8 @@
+# G2 gen5 negative controls (product source mutated temporarily, restored after each run)
+KILLED   ℹ fail 1 src/app/oauth-callback.tsx | simulated fix: return route no longer replaces with Home
+KILLED   ℹ fail 1 src/features/manual-publish/manual-publish-model.ts | accounts_changed keeps a vanished account
+KILLED   ℹ fail 1 src/domain/auth-flows.ts | unknown/token-like fields accepted
+KILLED   ℹ fail 1 src/domain/auth-flows.ts | wrong flow accepted
+KILLED   ℹ fail 1 src/domain/auth-flows.ts | duplicate exchanges twice
+KILLED   ℹ fail 1 src/app/+not-found.tsx | simulated fix: not-found route added
+# result 6/6 detected
