@@ -126,28 +126,72 @@ async function person(options: { x?: boolean; workspace?: boolean; notAfter?: st
 const derived = (user: string) => sql(`select public.social_mobile_account_deletion_workspace('${user}'::uuid)`);
 const r1 = async (p: Person, c: Claims) => JSON.parse(await sql(inTx(c, `select public.common_account_authorization_verdict('postona', 'read_workspace', ${lit(await derived(p.user))})::text`, 'authenticated')));
 
-// The TEST-ONLY consumer: what G3's 007 receipt / cancel would do -- the verdict FIRST, then the caller's own row (owner = the lifecycle owner).
+// The TEST-ONLY consumers (not G3's code). `receipt` / `cancel` follow the G5-11 consumer contract (docs/common-account/g5-11-session-verdict-
+// consumer-contract.md): VOLATILE, READ COMMITTED only, the verdict FIRST (no row touched otherwise), and the read / write re-authorized INSIDE its own
+// statement (the same snapshot as the row it reads or changes). The three `*_anti` functions each break ONE rule, to show its stale-snapshot answer.
+// `sv.test_pause` (a TEST-ONLY knob) sleeps between the first check and the write.
+const GUARD = `if pg_catalog.current_setting('transaction_isolation') <> 'read committed' then
+        raise exception 'POSTONA_RESV_ISOLATION_UNSUPPORTED' using errcode = '0A000'; end if`;
+const FIRST = `if ${SV}() is distinct from 'active' then raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = '42501'; end if`;
+const PAUSE = `perform pg_catalog.pg_sleep(coalesce(nullif(pg_catalog.current_setting('sv.test_pause', true), '')::float8, 0))`;
 async function consumer() {
   await sql(`create schema if not exists sv_consumer;
     create table if not exists sv_consumer.reservations (id uuid primary key, user_id uuid not null, status text not null);
-    create or replace function sv_consumer.receipt(p_id uuid) returns text language plpgsql stable security definer set search_path = '' as $f$
+    create or replace function sv_consumer.receipt(p_id uuid) returns text language plpgsql volatile security definer set search_path = '' as $f$
     declare v text;
     begin
-      if ${SV}() is distinct from 'active' then raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = '42501'; end if;
-      select r.status into v from sv_consumer.reservations r where r.id = p_id and r.user_id = auth.uid();
-      if v is null then raise exception 'POSTONA_RESV_NOT_FOUND'; end if;
+      ${GUARD};
+      ${FIRST};
+      select r.status into v from sv_consumer.reservations r where r.id = p_id and r.user_id = auth.uid() and ${SV}() = 'active';
+      if v is null then
+        ${FIRST};
+        raise exception 'POSTONA_RESV_NOT_FOUND';
+      end if;
       return v;
     end $f$;
     create or replace function sv_consumer.cancel(p_id uuid) returns text language plpgsql volatile security definer set search_path = '' as $f$
     begin
-      if ${SV}() is distinct from 'active' then raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = '42501'; end if;
+      ${GUARD};
+      ${FIRST};
+      ${PAUSE};
+      update sv_consumer.reservations r set status = 'cancelled' where r.id = p_id and r.user_id = auth.uid() and r.status = 'planned' and ${SV}() = 'active';
+      if not found then
+        ${FIRST};
+        raise exception 'POSTONA_RESV_NOT_FOUND_OR_NOT_CANCELLABLE';
+      end if;
+      return 'cancelled';
+    end $f$;
+    -- anti 1: STABLE (its statements see the CALLING statement's snapshot)
+    create or replace function sv_consumer.receipt_stable_anti(p_id uuid) returns text language plpgsql stable security definer set search_path = '' as $f$
+    declare v text;
+    begin
+      ${FIRST};
+      select r.status into v from sv_consumer.reservations r where r.id = p_id and r.user_id = auth.uid();
+      return v;
+    end $f$;
+    -- anti 2: no isolation guard (under REPEATABLE READ / SERIALIZABLE every statement sees the transaction's first snapshot)
+    create or replace function sv_consumer.receipt_noguard_anti(p_id uuid) returns text language plpgsql volatile security definer set search_path = '' as $f$
+    declare v text;
+    begin
+      ${FIRST};
+      select r.status into v from sv_consumer.reservations r where r.id = p_id and r.user_id = auth.uid() and ${SV}() = 'active';
+      return v;
+    end $f$;
+    -- anti 3: the first check only (the write is authorized by an EARLIER statement's snapshot)
+    create or replace function sv_consumer.cancel_precheck_anti(p_id uuid) returns text language plpgsql volatile security definer set search_path = '' as $f$
+    begin
+      ${GUARD};
+      ${FIRST};
+      ${PAUSE};
       update sv_consumer.reservations r set status = 'cancelled' where r.id = p_id and r.user_id = auth.uid() and r.status = 'planned';
       if not found then raise exception 'POSTONA_RESV_NOT_FOUND_OR_NOT_CANCELLABLE'; end if;
       return 'cancelled';
     end $f$;
-    revoke all on function sv_consumer.receipt(uuid), sv_consumer.cancel(uuid) from public;
+    revoke all on function sv_consumer.receipt(uuid), sv_consumer.cancel(uuid), sv_consumer.receipt_stable_anti(uuid), sv_consumer.receipt_noguard_anti(uuid),
+      sv_consumer.cancel_precheck_anti(uuid) from public;
     grant usage on schema sv_consumer to ${apiRole()};
-    grant execute on function sv_consumer.receipt(uuid), sv_consumer.cancel(uuid) to ${apiRole()}`);
+    grant execute on function sv_consumer.receipt(uuid), sv_consumer.cancel(uuid), sv_consumer.receipt_stable_anti(uuid), sv_consumer.receipt_noguard_anti(uuid),
+      sv_consumer.cancel_precheck_anti(uuid) to ${apiRole()}`);
 }
 const reserve = async (p: Person, status = 'planned') => {
   const id = randomUUID();
@@ -427,6 +471,115 @@ test_('the install refuses, and leaves nothing, on an unsafe layout; the legitim
     () => sql(`alter default privileges in schema private revoke execute on functions from ${apiRole()}`), /SESSION_VERDICT_POSTCONDITION_ACL/u);
   assert.ok((await run(owner, ['-f', candidate()])).ok);
   assert.equal(await gone(), '1', 'installed again at the end');
+});
+
+// ---- G5-11 (H1 C1 P3-1..P3-4 on PR #408) ----------------------------------------------------------------------------------------------------
+const spawnApi = (c: Claims, statement: string) => spawn(inTx(c, statement, apiRole()));
+async function finish(child: Deno.ChildProcess): Promise<Psql> {
+  const out = await child.output();
+  return { ok: out.success, out: decoder.decode(out.stdout).trim(), error: decoder.decode(out.stderr).trim() };
+}
+
+test_('P3-1 the consumer contract: a STABLE consumer, a missing isolation guard and a first-check-only write each act on a signed-out session; the contract consumer refuses all three', async () => {
+  await consumer();
+  // anti 1 vs the contract: a statement that STARTED before the sign-out calls the consumer after it
+  for (const [fn, expectStale] of [['receipt_stable_anti', true], ['receipt', false]] as const) {
+    const a = await person();
+    const id = await reserve(a);
+    const marker = `sv-p31-${fn}`;
+    const child = spawnApi(jsonClaims(a), `select pg_sleep(2)::text || '|' || coalesce(sv_consumer.${fn}('${id}'), 'none') /* ${marker} */`);
+    await untilSleeping(marker);
+    await sql(`delete from auth.sessions where id = '${a.session}'`);
+    const r = await finish(child);
+    if (expectStale) assert.ok(r.ok && r.out.endsWith('|planned'), `${fn}: a STABLE consumer answers from the calling statement's snapshot (${r.error})`);
+    else assert.ok(!r.ok && /POSTONA_RESV_AUTH_REQUIRED/u.test(r.error), `${fn}: the VOLATILE consumer sees the sign-out (${r.out})`);
+  }
+  // anti 2 vs the contract: REPEATABLE READ (and SERIALIZABLE) keep the transaction's first snapshot
+  for (const [fn, expectStale] of [['receipt_noguard_anti', true], ['receipt', false]] as const) {
+    const a = await person();
+    const id = await reserve(a);
+    const marker = `sv-p31rr-${fn}`;
+    const child = spawn(`begin isolation level repeatable read; ${settings(jsonClaims(a))} set local role ${apiRole()}; select 1; select pg_sleep(2) /* ${marker} */;
+      select coalesce(sv_consumer.${fn}('${id}'), 'none'); commit`);
+    await untilSleeping(marker);
+    await sql(`delete from auth.sessions where id = '${a.session}'`);
+    const r = await finish(child);
+    if (expectStale) assert.ok(r.ok && r.out.split('\n').pop() === 'planned', `${fn}: REPEATABLE READ answers from the first snapshot (${r.error})`);
+    else assert.ok(!r.ok && /POSTONA_RESV_ISOLATION_UNSUPPORTED/u.test(r.error), `${fn}: the contract consumer refuses a non-READ COMMITTED transaction (${r.out})`);
+  }
+  const s = await person();
+  const sid = await reserve(s);
+  for (const level of ['repeatable read', 'serializable']) {
+    for (const fn of ['receipt', 'cancel']) {
+      const r = await psql(`begin isolation level ${level}; ${settings(jsonClaims(s))} set local role ${apiRole()}; select sv_consumer.${fn}('${sid}'); commit`);
+      assert.ok(!r.ok && /0A000|POSTONA_RESV_ISOLATION_UNSUPPORTED/u.test(r.error), `${level} / ${fn}: refused (${r.error})`);
+    }
+  }
+  assert.equal(await status(sid), 'planned', 'a refused isolation level changes nothing');
+  // anti 3 vs the contract: a sign-out committed between the first check and the write
+  for (const [fn, expectStale] of [['cancel_precheck_anti', true], ['cancel', false]] as const) {
+    const a = await person();
+    const id = await reserve(a);
+    const marker = `sv-p31w-${fn}`;
+    const child = spawnApi(jsonClaims(a), `set local sv.test_pause = '2'; select sv_consumer.${fn}('${id}') /* ${marker} */`);
+    await untilSleeping(marker);
+    await sql(`delete from auth.sessions where id = '${a.session}'`);
+    const r = await finish(child);
+    if (expectStale) {
+      assert.ok(r.ok, `${fn}: the write ran on the earlier check (${r.error})`);
+      assert.equal(await status(id), 'cancelled');
+    } else {
+      assert.ok(!r.ok && /POSTONA_RESV_AUTH_REQUIRED/u.test(r.error), `${fn}: the write statement re-authorizes and refuses (${r.out})`);
+      assert.equal(await status(id), 'planned', 'nothing cancelled');
+    }
+  }
+  // the contract consumer still works for a live session, and its not-found answer is unchanged
+  const live = await person();
+  const mine = await reserve(live);
+  assert.equal((await asApi(jsonClaims(live), `select sv_consumer.receipt('${mine}')`)).out, 'planned');
+  assert.equal((await asApi(jsonClaims(live), `select sv_consumer.cancel('${mine}')`)).out, 'cancelled');
+  const unknown = await asApi(jsonClaims(live), `select sv_consumer.receipt('${randomUUID()}')`);
+  assert.ok(!unknown.ok && /POSTONA_RESV_NOT_FOUND/u.test(unknown.error));
+});
+
+test_('P3-2 the install refuses a superuser owner and a non-STABLE auth.uid(), and leaves nothing', async () => {
+  const gone = () => sql(`select count(*) from pg_proc where proname = 'account_lifecycle_session_verdict'`);
+  assert.ok((await run(owner, ['-f', rollback()])).ok);
+  try {
+    const su = await run(superUser, ['-f', candidate()]);
+    assert.ok(!su.ok && /SESSION_VERDICT_PRECONDITION_OWNER_IS_SUPERUSER/u.test(su.error), su.error);
+    assert.equal(await gone(), '0');
+    const def = await sql(`select pg_get_functiondef('auth.uid()'::regprocedure)`);
+    await sql(`create or replace function auth.uid() returns uuid language sql volatile as $$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid $$`);
+    try {
+      const v = await run(owner, ['-f', candidate()]);
+      assert.ok(!v.ok && /SESSION_VERDICT_PRECONDITION_HELPER_SHAPE auth\.uid\(\)/u.test(v.error), v.error);
+      assert.equal(await gone(), '0');
+    } finally {
+      await sql(def);
+    }
+  } finally {
+    const r = await run(owner, ['-f', candidate()]);
+    assert.ok(r.ok, r.error);
+  }
+});
+
+test_('P3-3 the expiry is judged at the call (clock_timestamp), not at the transaction start: a session that expires inside a long transaction is EXPIRED there', async () => {
+  const a = await person({ notAfter: `now() + interval '1500 milliseconds'` });
+  const out = await sql(inTx(jsonClaims(a), `select ${SV}() || '|' || pg_sleep(2.2)::text || '|' || 'x'; select ${SV}()`));
+  const [first, last] = [out.split('\n')[0].split('|')[0], out.split('\n').pop()];
+  assert.deepEqual([first, last], ['active', 'SESSION_EXPIRED'], 'active at the start, expired at the later call of the SAME transaction');
+});
+
+test_('P3-4 recorded as is: a banned or deleted-flagged login with a live session row is still active here (GoTrue / the Edge refuse those; G5 does not read them)', async () => {
+  await sql(`alter table auth.users add column if not exists banned_until timestamptz, add column if not exists deleted_at timestamptz`);
+  try {
+    const a = await person();
+    await sql(`update auth.users set banned_until = now() + interval '1 day', deleted_at = now() where id = '${a.user}'`);
+    assert.equal(await agree(jsonClaims(a), 'banned + deleted-flagged'), 'active');
+  } finally {
+    await sql(`alter table auth.users drop column if exists banned_until, drop column if exists deleted_at`);
+  }
 });
 
 test_('no network: the model made no request', () => {
