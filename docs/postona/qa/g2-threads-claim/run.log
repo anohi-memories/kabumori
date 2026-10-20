@@ -1,0 +1,36 @@
+NOTICE:  role "kb_cal_svc_child" has already been granted membership in role "service_role" by role "g2super"
+NOTICE:  role "kb_cal_auth_child" has already been granted membership in role "authenticated" by role "g2super"
+NOTICE:  role "kb_postona_sp_owner" has already been granted membership in role "anon" by role "g2super"
+NOTICE:  role "kb_postona_sp_owner" has already been granted membership in role "authenticated" by role "g2super"
+NOTICE:  role "kb_postona_sp_owner" has already been granted membership in role "service_role" by role "g2super"
+NOTICE:  role "kb_postona_sp_owner" has already been granted membership in role "kb_cal_svc_child" by role "g2super"
+NOTICE:  role "kb_postona_sp_owner" has already been granted membership in role "kb_cal_auth_child" by role "g2super"
+BASELINE_001_006_READY
+P_MULTI_PROVIDER_PRECONDITION_PEOPLE_PASS
+FB1_GAP_X_RESERVATIONS_REFUSE_THREADS_ACCOUNTS
+FB2_GAP_NO_THREADS_RESERVATION_STORE
+FB3_GAP_X_DISPATCHER_HAS_NO_THREADS_ROWS
+THREADS_FAIL_BEFORE_ALL_GAPS_CONFIRMED
+S0_REFUSALS_ATOMIC_REAPPLY_X_UNCHANGED_SHIPPED_DENY_PASS
+L1_ACL_PASS
+L2_CREATE_REFUSALS_PASS
+L3_IDEMPOTENCY_PASS
+L4_CLAIM_PREFLIGHT_RECORD_RECEIPT_PASS
+L5_CHANGE_AFTER_CLAIM_REFUSED_PASS
+L6_RECORD_AFTER_FREEZE_UNCERTAIN_PASS
+L7_RELEASE_CANCEL_RECEIPT_PASS
+L8_PROFILE_DEFENCE_IN_DEPTH_PASS
+L9_SERVICE_GENERATION_ABA_PASS
+POSTONA_THREADS_RESV_BEHAVIOR_PASS
+R_CONCURRENT_CLAIMS_DISJOINT_PASS
+ok | 5 passed | 0 failed (367ms)
+E2E_THREADS_DISPATCH_PG_PASS
+RB_ROLLBACK_X_UNCHANGED_REAPPLY_PASS
+POSTONA_THREADS_RESV_ALL_PASS
+--- G2 scenario markers
+G2_C1_SWEEP_BEFORE_LATE_RECORD_STAYS_UNCERTAIN_PASS
+G2_C2_EXPIRY_IN_CONTAINER_WAIT_RELEASED_RECLAIMED_ONCE_PASS
+G2_C3_RESTART_LIVE_LEASE_NOT_RESELECTED_PASS
+G2_C4_NO_PATH_BACK_FROM_UNCERTAIN_PASS
+G2_NEGATIVE_CONTROLS_3_OF_3_DETECTED_PASS
+G2_THREADS_CLAIM_SCENARIOS_ALL_PASS
