@@ -192,6 +192,27 @@ export function marksOf(outcome: ManualPublishOutcome): ResultMarks {
 }
 
 /**
+ * The state of a screen that opens WHILE a send of this process is still out (the screen that started it was left or
+ * re-created). It is "sending", exactly as the screen that started it would show: no result is invented, no re-ask or
+ * other send is offered, and the real answer is applied through `send_settled` when the send ends.
+ */
+export function createSendingState(attempt: UnresolvedAttempt & Readonly<{ text: string }>): ManualPublishState {
+  return {
+    draft: attempt.text,
+    accountId: attempt.accountId,
+    phase: 'sending',
+    readiness: null,
+    consent: null,
+    requestId: attempt.requestId,
+    result: null,
+    unresolved: { ...attempt, kind: 'in_flight' },
+    store: STORE_READY,
+    draftRestore: 'done',
+    retrying: false,
+  };
+}
+
+/**
  * The only mapping from a port answer to something the user is shown. Anything that does not clearly prove what
  * it claims (wrong target id, a post id that is not a number) is `uncertain`, never `sent`.
  */

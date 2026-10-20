@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import * as flow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as port from '../src/features/manual-publish/manual-publish-port.ts';
-import { createAttemptStore } from '../src/features/manual-publish/manual-publish-store.ts';
+import { createAttemptStore, storeKeyOf } from '../src/features/manual-publish/manual-publish-store.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const saved = new Map();
@@ -210,4 +210,100 @@ test('no network entry point was touched by any step', async () => {
   await flow.runSend(h.deps, args());
   await flow.runReadinessCheck({ ...h.deps, port: port.UNCONNECTED_MANUAL_PUBLISH_PORT }, 'X_A');
   assert.equal(trapped, 0, 'no booby-trapped network entry point was called');
+});
+
+// ---- the registry of the send that is out ----------------------------------------------------------------------------------------------------
+
+test('inflight: begin -> out -> end tells every waiter the answer, and keeps it for a late waiter', async () => {
+  const reg = flow.createInFlightSends();
+  assert.equal(reg.isOut('U1', ID(1)), false);
+  assert.equal(reg.wait('U1', ID(1)), null);
+  reg.begin('U1', ID(1));
+  assert.equal(reg.isOut('U1', ID(1)), true);
+  assert.equal(reg.isOut('U1', ID(2)), false, 'another id is not out');
+  assert.equal(reg.isOut('U2', ID(1)), false, 'another user is not out');
+  assert.equal(reg.isOut(null, ID(1)), false);
+  const a = reg.wait('U1', ID(1));
+  const b = reg.wait('U1', ID(1));
+  assert.equal(reg.wait('U1', ID(2)), null);
+  const answer = { kind: 'pending', targetId: ID(1), code: null };
+  reg.end('U1', ID(2), { kind: 'published', targetId: ID(2), providerPostId: '1' }); // another id: ignored
+  reg.end('U2', ID(1), { kind: 'published', targetId: ID(1), providerPostId: '1' }); // another user: ignored
+  assert.equal(reg.isOut('U1', ID(1)), true);
+  reg.end('U1', ID(1), answer);
+  assert.equal(reg.isOut('U1', ID(1)), false);
+  assert.deepEqual(await a, answer);
+  assert.deepEqual(await b, answer);
+  assert.deepEqual(await reg.wait('U1', ID(1)), answer, 'a late waiter still gets the answer');
+  reg.end('U1', ID(1), { kind: 'published', targetId: ID(1), providerPostId: '9' });
+  assert.deepEqual(await reg.wait('U1', ID(1)), answer, 'an answer is not overwritten by a second end');
+});
+
+test('inflight: runSend registers the send before the port is called and ends it AFTER memory and device record are final, whatever the answer', async () => {
+  for (const [label, answer, memoryAfter, recordAfter] of [
+    ['pending', { kind: 'pending', code: null, marks: REAL }, 'pending', 'pending'],
+    ['unavailable', { kind: 'unavailable', code: 'TRANSPORT_FAILED' }, 'unconfirmed', 'unconfirmed'],
+    ['uncertain', { kind: 'uncertain', code: 'X_TIMEOUT', marks: REAL }, 'uncertain', 'uncertain'],
+    ['simulated', { kind: 'published', providerPostId: '1' }, 'uncertain', 'uncertain'],
+    ['published', { kind: 'published', providerPostId: '1', marks: REAL }, null, null],
+    ['rejected', { kind: 'rejected', code: 'X_REJECTED_403', marks: REAL }, null, null],
+  ]) {
+    const h = harness({ send: async (t) => ({ targetId: t.targetId, ...answer }) });
+    h.deps.inflight = flow.createInFlightSends();
+    let outDuringSend = null;
+    const original = h.deps.port.send;
+    h.deps.port.send = async (t) => { outDuringSend = h.deps.inflight.isOut('U1', t.targetId); return original(t); };
+    const waiting = (async () => {
+      let promise = null;
+      for (let i = 0; i < 50 && promise === null; i += 1) {
+        promise = h.deps.inflight.wait('U1', ID(1));
+        if (promise === null) await new Promise((resolve) => setImmediate(resolve));
+      }
+      assert.ok(promise, 'the send was registered');
+      await promise;
+      // the moment a waiter is released, memory and the device record already say what the answer is
+      return { memory: h.memory.get('U1')?.kind ?? null, record: h.kv.data.get(storeKeyOf('U1')) === undefined ? null : JSON.parse(h.kv.data.get(storeKeyOf('U1'))).kind };
+    })();
+    const outcome = await flow.runSend(h.deps, args());
+    assert.equal(outDuringSend, true, `${label}: registered before the port was called`);
+    assert.equal(h.deps.inflight.isOut('U1', ID(1)), false, `${label}: ended`);
+    assert.deepEqual(await h.deps.inflight.wait('U1', ID(1)), outcome, label);
+    assert.deepEqual(await waiting, { memory: memoryAfter, record: recordAfter }, label);
+  }
+});
+
+test('inflight: a thrown port, an invalid answer and a local refusal never leave a waiter hanging; a refusal before the port is not registered at all', async () => {
+  const thrown = harness({ send: async () => { throw new Error('boom'); } });
+  thrown.deps.inflight = flow.createInFlightSends();
+  const outcome = await flow.runSend(thrown.deps, args());
+  assert.equal(outcome.code, 'SEND_THREW');
+  assert.deepEqual(await thrown.deps.inflight.wait('U1', ID(1)), outcome);
+  const invalid = harness({ send: async () => null });
+  invalid.deps.inflight = flow.createInFlightSends();
+  assert.equal((await flow.runSend(invalid.deps, args())).code, 'OUTCOME_INVALID');
+  assert.equal(invalid.deps.inflight.isOut('U1', ID(1)), false);
+  const refused = harness();
+  refused.deps.inflight = flow.createInFlightSends();
+  assert.equal((await flow.runSend(refused.deps, args({ text: 'hello ' }))).code, 'LOCAL_CONSENT_MISMATCH');
+  assert.equal(refused.deps.inflight.wait('U1', ID(1)), null, 'nothing was sent, nothing is registered');
+  const noStore = harness();
+  noStore.deps.inflight = flow.createInFlightSends();
+  noStore.kv.fail.set = true;
+  assert.equal((await flow.runSend(noStore.deps, args())).code, 'LOCAL_STORE_UNAVAILABLE');
+  assert.equal(noStore.deps.inflight.wait('U1', ID(1)), null);
+  // A memory that fails while the answer is recorded still releases the waiter (as uncertain).
+  const broken = harness({ send: async (t) => ({ targetId: t.targetId, kind: 'pending', code: null }) });
+  broken.deps.inflight = flow.createInFlightSends();
+  const mark = broken.memory.mark;
+  let calls = 0;
+  broken.memory.mark = (userId, entry) => { calls += 1; if (calls > 1) throw new Error('memory failed'); return mark(userId, entry); };
+  const lost = await flow.runSend(broken.deps, args());
+  assert.deepEqual(lost, { kind: 'uncertain', targetId: ID(1), code: 'SEND_STATE_LOST' });
+  assert.deepEqual(await broken.deps.inflight.wait('U1', ID(1)), lost);
+});
+
+test('inflight: without a registry nothing changes (the registry is optional, runSend works as before)', async () => {
+  const h = harness();
+  assert.equal(h.deps.inflight, undefined);
+  assert.equal((await flow.runSend(h.deps, args())).kind, 'published');
 });

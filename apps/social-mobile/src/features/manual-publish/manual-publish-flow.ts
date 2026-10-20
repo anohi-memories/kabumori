@@ -35,6 +35,53 @@ export function createAttemptMemory(): AttemptMemory {
 /** The screen's memory (module scope: shared by every visit of the screen in this app process). */
 export const attemptMemory: AttemptMemory = createAttemptMemory();
 
+// ---- the send that is still out -------------------------------------------------------------------------------------
+
+/**
+ * Remembers, per signed-in user and for the life of the app process, the ONE send whose answer has not come back yet --
+ * and, once it has, that answer. The screen that started the send may be gone when the answer arrives (it was left, or it
+ * was re-created because the sign-in session mark changed): a screen that opens while the send is still out must not call
+ * it "unconfirmed" and offer a re-ask while the first request is still on its way, and it must show the real answer when
+ * it comes. `end` is called only AFTER the attempt memory and the durable record were updated, so whoever waits sees them final.
+ */
+export interface InFlightSends {
+  begin(userId: string, requestId: string): void;
+  end(userId: string, requestId: string, outcome: ManualPublishOutcome): void;
+  /** True only while this user's send with this id has not ended yet. */
+  isOut(userId: string | null, requestId: string): boolean;
+  /** The answer of this user's most recent send, if it has this id (already ended or still out); otherwise null. */
+  wait(userId: string, requestId: string): Promise<ManualPublishOutcome> | null;
+}
+
+export function createInFlightSends(): InFlightSends {
+  type Entry = { requestId: string; out: boolean; promise: Promise<ManualPublishOutcome>; settle: (outcome: ManualPublishOutcome) => void };
+  const entries = new Map<string, Entry>();
+  return {
+    begin(userId, requestId) {
+      let settle: (outcome: ManualPublishOutcome) => void = () => {};
+      const promise = new Promise<ManualPublishOutcome>((resolve) => { settle = resolve; });
+      entries.set(userId, { requestId, out: true, promise, settle });
+    },
+    end(userId, requestId, outcome) {
+      const entry = entries.get(userId);
+      if (entry === undefined || entry.requestId !== requestId || !entry.out) return;
+      entry.out = false;
+      entry.settle(outcome);
+    },
+    isOut: (userId, requestId) => {
+      const entry = userId === null ? undefined : entries.get(userId);
+      return entry !== undefined && entry.requestId === requestId && entry.out;
+    },
+    wait: (userId, requestId) => {
+      const entry = entries.get(userId);
+      return entry !== undefined && entry.requestId === requestId ? entry.promise : null;
+    },
+  };
+}
+
+/** The process-wide registry (module scope, like the attempt memory). */
+export const inFlightSends: InFlightSends = createInFlightSends();
+
 // ---- readiness ---------------------------------------------------------------------------------------------------
 
 export type FlowDeps = Readonly<{
@@ -44,6 +91,8 @@ export type FlowDeps = Readonly<{
   memory: AttemptMemory;
   /** The durable, hash-only record of an unresolved attempt (survives an app restart). */
   store: AttemptStore;
+  /** Optional: where a send that is out is registered, so a screen that opens meanwhile can wait for its answer. */
+  inflight?: InFlightSends;
 }>;
 
 function sanitizeReadiness(value: unknown): PortReadiness {
@@ -147,6 +196,30 @@ export async function runSend(
     return refuse('LOCAL_STORE_UNAVAILABLE');
   }
   deps.memory.mark(userId, entry);
+  deps.inflight?.begin(userId, requestId);
+  let outcome: ManualPublishOutcome;
+  try {
+    outcome = await sendAndRecord(deps, { userId, requestId, entry, record, target });
+  } catch {
+    // Never leave a waiter hanging: whatever went wrong, the send may have gone out.
+    outcome = { kind: 'uncertain', targetId: requestId, code: 'SEND_STATE_LOST' };
+  }
+  // Only now, after the memory and the durable record say what the answer is, whoever waits for this send is told.
+  deps.inflight?.end(userId, requestId, outcome);
+  return outcome;
+}
+
+async function sendAndRecord(
+  deps: FlowDeps,
+  args: Readonly<{
+    userId: string;
+    requestId: string;
+    entry: UnresolvedAttempt;
+    record: (kind: PersistedAttempt['kind']) => PersistedAttempt;
+    target: ReturnType<typeof buildTarget>;
+  }>,
+): Promise<ManualPublishOutcome> {
+  const { userId, requestId, entry, record, target } = args;
   const keep = async (kind: Exclude<PersistedAttempt['kind'], 'in_flight'>) => {
     deps.memory.mark(userId, { ...entry, kind });
     await deps.store.write(userId, record(kind)); // best effort: the in_flight record already blocks

@@ -13,13 +13,14 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
-import { attemptMemory, loadPersistedAttempt, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, type FlowDeps } from '@/features/manual-publish/manual-publish-flow';
+import { attemptMemory, inFlightSends, loadPersistedAttempt, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, type FlowDeps } from '@/features/manual-publish/manual-publish-flow';
 import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
   checkDraft,
   consentForSend,
   createInitialState,
+  createSendingState,
   manualPublishReducer,
   normalizeDraft,
   resolveSelectedAccount,
@@ -104,6 +105,12 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   // the device is left, and until it has been read (or if it cannot be read) nothing can be typed or sent.
   const [state, dispatch] = useReducer(manualPublishReducer, null, () => {
     const remembered = attemptMemory.get(userId);
+    // A send of THIS process is still out (the screen that started it was left, or re-created because the sign-in
+    // session mark changed): this screen is "sending" too -- it never calls the attempt unconfirmed and offers no
+    // re-ask while the first request is still on its way. The real answer is applied when the send ends (below).
+    if (remembered !== null && remembered.kind === 'in_flight' && remembered.text !== null && inFlightSends.isOut(userId, remembered.requestId)) {
+      return createSendingState({ ...remembered, text: remembered.text });
+    }
     return createInitialState(remembered, remembered === null && userId !== null ? { kind: 'loading' } : undefined);
   });
   const [recheck, setRecheck] = useState(0);
@@ -117,7 +124,24 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   }, []);
 
   const port = useMemo(() => getManualPublishPort(), []);
-  const deps: FlowDeps = useMemo(() => ({ port, now, newRequestId, memory: attemptMemory, store: attemptStore }), [port, now, newRequestId]);
+  const deps: FlowDeps = useMemo(() => ({ port, now, newRequestId, memory: attemptMemory, store: attemptStore, inflight: inFlightSends }), [port, now, newRequestId]);
+
+  // A screen that took over a send which is still out waits for ITS answer (the screen that started it no longer applies it).
+  // If the send cannot be found any more, the attempt is shown as uncertain -- never sent, never "not posted", never re-asked.
+  useEffect(() => {
+    if (state.phase !== 'sending' || sendingRef.current || userId === null || state.requestId === null) return undefined;
+    const requestId = state.requestId;
+    const waiting = inFlightSends.wait(userId, requestId);
+    if (waiting === null) {
+      dispatch({ type: 'send_settled', requestId, outcome: { kind: 'uncertain', targetId: requestId, code: 'SEND_STATE_LOST' } });
+      return undefined;
+    }
+    let cancelled = false;
+    void waiting.then((outcome) => {
+      if (!cancelled && mountedRef.current) dispatch({ type: 'send_settled', requestId, outcome });
+    });
+    return () => { cancelled = true; };
+  }, [state.phase, state.requestId, userId]);
 
   const storeKind = state.store.kind;
   useEffect(() => {
