@@ -11,10 +11,11 @@ import {
   type ThreadsBindingPorts,
   type ThreadsConnectFlowContext,
 } from "./threads_account_binding.ts";
+import { INVALID_SOCIAL_ACCOUNT_IDS, VALID_SOCIAL_ACCOUNT_IDS } from "./social_account_id_cases.ts";
 
 const ALICE = "0b6a8c1e-2d3f-4a5b-8c7d-9e0f1a2b3c4d";
 const BOB = "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e5f";
-const ACCOUNT = "3f6c1b8e-5d2a-4c7f-9e1b-0a2b3c4d5e6f";
+const ACCOUNT = "sa_3f6c1b8e5d2a4c7f9e1b0a2b"; // the real social_accounts id shape (G4-12)
 const BRAND = "brand_alice_personal";
 const KEY = "x_autopost"; // G5's common POSTONA key (G4-10)
 const NOW = 1_760_800_000_000;
@@ -169,7 +170,7 @@ test("the account: unreadable, missing, several, another provider, not verified,
     [row({ bindLifecycleVersion: 2 }), "ACCOUNT_UNAVAILABLE"],
     [null, "ACCOUNT_NOT_FOUND"],
     [[], "ACCOUNT_NOT_FOUND"],
-    [row({ socialAccountId: "11111111-2222-4333-8444-555555555555" }), "ACCOUNT_NOT_FOUND"],
+    [row({ socialAccountId: "sa_111122224333844455550000" }), "ACCOUNT_NOT_FOUND"],
     [[row(), row()], "ACCOUNT_AMBIGUOUS"],
     [row({ platform: "x" }), "ACCOUNT_NOT_THREADS"],
     [row({ connectionStatus: "connected" }), "ACCOUNT_NOT_VERIFIED"],
@@ -243,7 +244,7 @@ test("refusals carry only a fixed code", async () => {
 
 test("isolation: imports only G4's service-key rule; only its test and the G4-04 vertical path import it", async () => {
   const source = await Deno.readTextFile(new URL("./threads_account_binding.ts", import.meta.url));
-  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./g5_owner_epoch_token.ts", "./threads_send_port.ts"]);
+  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./g5_owner_epoch_token.ts", "./social_account_id.ts", "./threads_send_port.ts"]);
   assert.equal(/\b(fetch|Deno\.|console\.)/u.test(source.replace(/^\s*\/\/.*$/gmu, "")), false);
   const importers: string[] = [];
   async function walk(dir: URL, rel: string) {
@@ -277,4 +278,38 @@ test("G4-08: both G5 numbers stay exact decimal text beyond 2^53", async () => {
   }
   const { p: off } = ports(row({ bindOwnerEpoch: "9007199254740992" }), verdict({ ownerEpochToken: `g5oe:${big}:2` }));
   assert.deepEqual(await decide(off), { ok: false, code: "OWNER_EPOCH_CHANGED" });
+});
+
+// ---- G4-12: the real social_accounts id shape (G3 U2) -----------------------------------------------------------------
+
+test("G4-12: a connected receipt of a real account id (sa_...) binds that account; the row must still be that id", async () => {
+  for (const id of VALID_SOCIAL_ACCOUNT_IDS) {
+    assert.equal(connectedReceiptAccountId(receipt({ social_account_id: id })), id);
+    const { p, calls } = ports(row({ socialAccountId: id }));
+    const v = await decide(p, receipt({ social_account_id: id }));
+    assert.equal(v.ok && v.binding.socialAccountId, id, id);
+    assert.deepEqual(calls, [`account ${id}`, `g5 ${ALICE} ${BRAND} ${KEY}`]);
+  }
+  const { p } = ports(row({ socialAccountId: "sa_x" }));
+  assert.deepEqual(await decide(p, receipt()), { ok: false, code: "ACCOUNT_NOT_FOUND" }); // another account's row
+});
+
+test("G4-12: a receipt id the table refuses is not a receipt: no account read, no G5", async () => {
+  const { p, calls } = ports();
+  for (const id of INVALID_SOCIAL_ACCOUNT_IDS) {
+    assert.equal(connectedReceiptAccountId(receipt({ social_account_id: id })), null, JSON.stringify(String(id)));
+    assert.deepEqual(await decide(p, receipt({ social_account_id: id })), { ok: false, code: "RECEIPT_INVALID" });
+  }
+  assert.deepEqual(calls, []);
+});
+
+test("G4-12: the person, brand, epoch and generation checks are unchanged for a real id", async () => {
+  const cases: [ReturnType<typeof ports>, ThreadsConnectFlowContext, string][] = [
+    [ports(), flow({ currentPrincipalId: BOB }), "PRINCIPAL_CHANGED"],
+    [ports(row({ brandId: "brand_bob" })), flow(), "BRAND_MISMATCH"],
+    [ports(row({ boundByPrincipalId: BOB })), flow(), "BOUND_BY_OTHER_PRINCIPAL"],
+    [ports(row(), verdict({ ownerEpochToken: "g5oe:4:2" })), flow(), "OWNER_EPOCH_CHANGED"],
+    [ports(row(), verdict({ ownerEpochToken: "g5oe:3:3" })), flow(), "SERVICE_GENERATION_CHANGED"],
+  ];
+  for (const [{ p }, f, code] of cases) assert.deepEqual(await decide(p, receipt(), f), { ok: false, code }, code);
 });

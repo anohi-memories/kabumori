@@ -27,6 +27,7 @@ import {
   type ThreadsConnectFlowContext,
 } from "./threads_account_binding.ts";
 import { g5Decimal } from "./g5_owner_epoch_token.ts";
+import { isSocialAccountId } from "./social_account_id.ts";
 import { checkThreadsText, type FetchLike } from "./threads_publish_contract.ts";
 import {
   acceptableServiceKey,
@@ -57,7 +58,10 @@ export type ThreadsWorkerVerdictPort = (
   expectedLifecycleVersion: string,
 ) => Promise<unknown>;
 
-/** Exactly what W1 (PR #358 @ 4f4ece89) can answer besides 'active'. The pre-G5-04 names are not accepted. */
+/**
+ * Exactly what W1 (PR #358 @ 4f4ece89, + G5-05 PR #371 @ 7140e416) can answer besides 'active'. The pre-G5-04 names are
+ * not accepted. Each is passed on as the refusal; none of them ever sends.
+ */
 export const G5_WORKER_VERDICT_CODES = [
   "WORKSPACE_OWNER_UNKNOWN",
   "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
@@ -71,6 +75,7 @@ export const G5_WORKER_VERDICT_CODES = [
   "EXPECTED_OWNER_EPOCH_REQUIRED",
   "EXPECTED_LIFECYCLE_VERSION_REQUIRED",
   "OWNER_EPOCH_UNAVAILABLE",
+  "SERVICE_GENERATION_UNAVAILABLE", // G4-12: G5-05, the lifecycle triggers are not exactly P1's, so the generation is no fence
   "OWNER_EPOCH_CHANGED",
   "SERVICE_GENERATION_CHANGED",
 ] as const;
@@ -130,7 +135,7 @@ function bindingProblem(b: unknown, serviceKey: string): ThreadsVerticalRefusal 
   if (typeof b !== "object" || b === null || !Object.isFrozen(b)) return "BINDING_INVALID";
   const r = b as Record<string, unknown>;
   if (
-    typeof r.socialAccountId !== "string" || !UUID.test(r.socialAccountId) || typeof r.brandId !== "string" || r.brandId === "" ||
+    !isSocialAccountId(r.socialAccountId) || typeof r.brandId !== "string" || r.brandId === "" ||
     typeof r.threadsUserId !== "string" || !THREADS_USER.test(r.threadsUserId) || typeof r.principalId !== "string" ||
     !UUID.test(r.principalId) || r.serviceKey !== serviceKey || typeof r.entitlementVersion !== "string"
   ) return "BINDING_INVALID";

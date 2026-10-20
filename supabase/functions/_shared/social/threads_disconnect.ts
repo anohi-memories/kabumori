@@ -23,6 +23,7 @@
 // never decodes a JWT, never takes a user id from the body, holds no service-role key and logs nothing.
 
 import { parseFlatJsonObject } from "../../social-mobile-threads-publish/logic.ts";
+import { SOCIAL_ACCOUNT_ID } from "./social_account_id.ts";
 
 /** The server gate. A reviewed source change, together with the database gate and the app gate. */
 export const THREADS_DISCONNECT_SERVER_ENABLED = false;
@@ -68,7 +69,7 @@ const keysAre = (value: Record<string, unknown>, keys: readonly string[]) => {
   return own.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 };
 
-export const SOCIAL_ACCOUNT_ID = /^[a-z][a-z0-9_]{1,80}$/;
+export { SOCIAL_ACCOUNT_ID };
 /** A handle as shown on screen, with or without its leading @; no spaces or control characters. */
 export const EXPECTED_HANDLE = /^@?[^\s\p{Cc}@]{1,63}$/u;
 

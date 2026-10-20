@@ -15,11 +15,12 @@ import {
   THREADS_SEND_PORT_ENABLED,
   type ThreadsSendOutcome,
 } from "./threads_send_port.ts";
+import { INVALID_SOCIAL_ACCOUNT_IDS, VALID_SOCIAL_ACCOUNT_IDS } from "./social_account_id_cases.ts";
 
 const USER = "17841400000000001";
 const TOKEN = "THfaketoken0123456789abcdef";
 const CRED = { threadsUserId: USER, accessToken: TOKEN };
-const ACCOUNT = "3f6c1b8e-5d2a-4c7f-9e1b-0a2b3c4d5e6f";
+const ACCOUNT = "sa_3f6c1b8e5d2a4c7f9e1b0a2b"; // the real social_accounts id shape (G4-12)
 const GEN = "a".repeat(64);
 const PERMALINK = "https://www.threads.net/@postona_tester/post/AbC_123";
 
@@ -239,7 +240,7 @@ test("one statement per lookup, nothing cached: an owner change or a newer gener
 
 test("rows that are not provably this account's current credential are refused", async () => {
   const bad: unknown[] = [
-    { ...ROW, social_account_id: "11111111-2222-4333-8444-555555555555" }, // cross-account / cross-brand
+    { ...ROW, social_account_id: "sa_111122224333844455550000" }, // cross-account / cross-brand
     { ...ROW, generation: "A".repeat(64) },
     { ...ROW, generation: "a".repeat(63) },
     { ...ROW, generation: null },
@@ -269,7 +270,7 @@ test("rows that are not provably this account's current credential are refused",
 
 test("isolation: the module imports only the existing transport; only its test and the G4-03 binding verdict import it", async () => {
   const source = await Deno.readTextFile(new URL("./threads_send_port.ts", import.meta.url));
-  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./threads_publish_contract.ts"]);
+  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./threads_publish_contract.ts", "./social_account_id.ts"]);
   assert.equal(/\b(Deno\.|console\.)/u.test(source.replace(/^\s*\/\/.*$/gmu, "")), false);
   const importers: string[] = [];
   async function walk(dir: URL, rel: string) {
@@ -398,4 +399,29 @@ test("hook: never called again after send returns", async () => {
   await port(fake.fetch).send(CRED, "hello", { beforePublish: () => (calls += 1, Promise.resolve(true)) });
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(calls, 1);
+});
+
+// ---- G4-12: the real social_accounts id shape (G3 U2) -----------------------------------------------------------------
+
+test("G4-12: credentialFor takes every real account id (sa_...) to exactly one statement call for that id", async () => {
+  for (const id of VALID_SOCIAL_ACCOUNT_IDS) {
+    const s = statement([{ ...ROW, social_account_id: id }]);
+    const p = createGatedThreadsCredentialPort(true, "x_autopost", s.fn);
+    assert.deepEqual(await p.credentialFor(id), { socialAccountId: id, threadsUserId: USER, accessToken: TOKEN, generation: GEN }, id);
+    assert.deepEqual(s.calls, [`${id} x_autopost`]);
+  }
+});
+
+test("G4-12: an id the table refuses (UUID, case, space, control, Unicode, length) never reaches the statement", async () => {
+  const s = statement([]);
+  const p = createGatedThreadsCredentialPort(true, "x_autopost", s.fn);
+  for (const id of INVALID_SOCIAL_ACCOUNT_IDS) assert.equal(await p.credentialFor(id as string), null, JSON.stringify(String(id)));
+  assert.deepEqual(s.calls, []);
+});
+
+test("G4-12: a well-formed id still gets only its own row (another account's answer is refused)", async () => {
+  const s = statement([{ ...ROW, social_account_id: "sa_x" }]);
+  const p = createGatedThreadsCredentialPort(true, "x_autopost", s.fn);
+  assert.equal(await p.credentialFor(ACCOUNT), null);
+  assert.deepEqual(s.calls, [`${ACCOUNT} x_autopost`]);
 });
