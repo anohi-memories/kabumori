@@ -132,6 +132,8 @@ export type ManualPublishState = Readonly<{
   store: StoreStatus;
   /** Whether the stored draft of an earlier visit has been looked at yet (it is looked at once, never again). */
   draftRestore: 'pending' | 'done';
+  /** True only while a send is under way that RE-ASKS an unresolved attempt (same id); false for a first send. */
+  retrying: boolean;
 }>;
 
 export const UNRESOLVED_FROM_EARLIER_VISIT = 'UNRESOLVED_FROM_EARLIER_VISIT';
@@ -173,9 +175,10 @@ export function createInitialState(unresolved: UnresolvedAttempt | null = null, 
       unresolved: { ...unresolved, kind },
       store: STORE_READY,
       draftRestore: 'done', // an unresolved attempt shows its own result; no draft is put in front of it
+      retrying: false,
     };
   }
-  return { draft: '', accountId: null, phase: 'editing', readiness: null, consent: null, requestId: null, result: null, unresolved: null, store, draftRestore: 'pending' };
+  return { draft: '', accountId: null, phase: 'editing', readiness: null, consent: null, requestId: null, result: null, unresolved: null, store, draftRestore: 'pending', retrying: false };
 }
 
 /**
@@ -327,6 +330,7 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
       return {
         ...state,
         phase: 'sending',
+        retrying: state.unresolved !== null, // read BEFORE `unresolved` is replaced by this send's own in-flight record
         requestId: action.requestId,
         result: null,
         unresolved: { accountId: state.accountId, requestId: action.requestId, contentSha256: consent.contentSha256, text: draft.text, kind: 'in_flight' },
@@ -343,6 +347,7 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
               : null;
       return {
         ...state,
+        retrying: false,
         phase: 'result',
         result,
         readiness: null,

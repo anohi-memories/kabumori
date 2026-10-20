@@ -476,9 +476,9 @@ test('the route re-creates the screen for a different user (and signed out), so 
   const element = () => { rt.setCursor(0); return rt.mod.exports.default({}); };
   assert.equal(element().type, 'ManualPublishScreen');
   assert.equal(element().props.userId, 'U1');
-  assert.equal(keyOf(), 'U1');
+  assert.equal(keyOf(), 'U1:', 'no session mark yet');
   world.userId = 'U2';
-  assert.equal(keyOf(), 'U2');
+  assert.equal(keyOf(), 'U2:');
   world.userId = null;
   assert.equal(keyOf(), 'signed-out');
   assert.equal(element().props.userId, null);
@@ -1457,4 +1457,103 @@ test('U1: the route passes the sign-in session mark of the user (a re-login chan
   assert.equal(element().props.sessionMark, '');
   world.session = { user: { id: 'U1', last_sign_in_at: '2026-10-20T01:00:00Z' } };
   assert.equal(element().props.sessionMark, '2026-10-20T01:00:00Z');
+});
+
+// ---- G2 SM1 / SM3 / N1 ---------------------------------------------------------------------------------------------------------------------------
+
+const withSession = (world, userId, mark, token = 'ACCESS-TOKEN-1') => { world.userId = userId; world.session = { access_token: token, user: { id: userId, ...(mark === undefined ? {} : { last_sign_in_at: mark }) } }; };
+
+test('SM3: the route re-creates the screen when the SIGN-IN SESSION changes -- also for the same person and without a sign-out in between', async () => {
+  const world = { memory: realFlow.createAttemptMemory(), port: fakePort().port, status: 'ready', userId: 'U1', accounts: [account('X_A')], active: 'X_A', draftStore: realDraft.createDraftStore(fakeKV()), store: realStore.createAttemptStore(fakeKV()) };
+  const rt = await loadRoute(world);
+  const element = () => { rt.setCursor(0); return rt.mod.exports.default({}); };
+  withSession(world, 'U1', '2026-10-20T01:00:00Z');
+  const first = element();
+  assert.equal(first.key, 'U1:2026-10-20T01:00:00Z');
+  assert.equal(first.props.sessionMark, '2026-10-20T01:00:00Z');
+  // A token refresh: the same person, the same sign-in time, a new access token -> the same screen (nothing is lost).
+  withSession(world, 'U1', '2026-10-20T01:00:00Z', 'ACCESS-TOKEN-2');
+  assert.equal(element().key, first.key);
+  // A new sign-in of the same person (no sign-out event needed): a new sign-in time -> a NEW screen.
+  withSession(world, 'U1', '2026-10-20T09:30:00Z');
+  const second = element();
+  assert.notEqual(second.key, first.key);
+  assert.equal(second.props.sessionMark, '2026-10-20T09:30:00Z');
+  // Another person, signed out, and a session without a sign-in time.
+  withSession(world, 'U2', '2026-10-20T09:30:00Z');
+  assert.equal(element().key, 'U2:2026-10-20T09:30:00Z');
+  withSession(world, 'U1', undefined);
+  assert.equal(element().key, 'U1:');
+  assert.equal(element().props.sessionMark, '');
+  world.userId = null;
+  assert.equal(element().key, 'signed-out');
+  // Nothing of the access token is in the element (key or props).
+  withSession(world, 'U1', 'S', 'SECRET-ACCESS-TOKEN');
+  assert.ok(!JSON.stringify(element().key).includes('SECRET') && !JSON.stringify(element().props).includes('SECRET'));
+});
+
+test('SM3: text typed in one session never reaches the next one -- not on screen, and not under the next session\'s mark on the device', async () => {
+  const first = await mount({ ...TWO, sessionMark: 'S1' });
+  await first.typeText('前のセッションの本文');
+  assert.equal(JSON.parse(first.draftKv.data.get(DKEY())).sessionMark, 'S1');
+  first.unmount(); // the route re-created the screen because the mark changed
+  const second = await mount({ ...TWO, draftKv: first.draftKv, sessionMark: 'S2' });
+  assert.equal(second.state().draft, '');
+  assert.equal(first.draftKv.data.has(DKEY()), false, 'the old session\'s text is removed');
+  await second.typeText('新');
+  const record = JSON.parse(second.draftKv.data.get(DKEY()));
+  assert.equal(record.text, '新');
+  assert.equal(record.sessionMark, 'S2', 'only what the person types in THIS session is kept, under this session\'s mark');
+  assert.ok(!second.draftKv.data.get(DKEY()).includes('前のセッション'));
+});
+
+test('SM1: without a usable session mark the screen keeps nothing and restores nothing, and removes what it finds', async () => {
+  for (const mark of ['', 'm'.repeat(65)]) {
+    const draftKv = fakeKV();
+    draftKv.data.set(DKEY(), JSON.stringify({ v: 1, accountId: 'X_B', text: '印の無い下書き', sessionMark: mark === '' ? '' : 'S1', savedAt: 100_000 - 1000 }));
+    const ui = await mount({ ...TWO, draftKv, sessionMark: mark });
+    assert.equal(ui.state().draft, '', JSON.stringify(mark));
+    assert.equal(draftKv.data.has(DKEY()), false, `${mark.length}: the record is removed`);
+    let writes = 0;
+    const set = draftKv.setItem;
+    draftKv.setItem = async (key, value) => { writes += 1; return set(key, value); };
+    await ui.typeText('保存されない本文');
+    assert.equal(writes, 0, 'the device storage is not even asked to write');
+    assert.equal(ui.state().draft, '保存されない本文', 'the editor works as usual');
+    assert.equal(draftKv.data.has(DKEY()), false, 'but nothing is written without a usable mark');
+    assert.equal(ui.all('TextInput')[0].props.editable, true);
+  }
+  // Same for an earlier build's record with an empty mark when the mark IS usable now.
+  const old = fakeKV();
+  old.data.set(DKEY(), JSON.stringify({ v: 1, accountId: null, text: '昔の下書き', sessionMark: '', savedAt: 100_000 - 1000 }));
+  const ui = await mount({ ...TWO, draftKv: old, sessionMark: 'S1' });
+  assert.equal(ui.state().draft, '');
+  assert.equal(old.data.has(DKEY()), false);
+});
+
+test('N1: a FIRST send does not say "same content, same send id" -- only a real re-ask does', async () => {
+  const SENTENCE = '前回と同じ内容・同じ送信IDで確認します';
+  const { ui, fp } = await readyConfirmation();
+  assert.ok(!ui.text().includes(SENTENCE), 'a fresh confirmation');
+  await ui.press('Xに投稿する');
+  assert.equal(ui.state().phase, 'sending');
+  assert.equal(ui.state().retrying, false);
+  assert.ok(!ui.text().includes(SENTENCE), 'a first send under way');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'pending', code: null, marks: REAL });
+  await ui.flush();
+  assert.ok(!ui.text().includes(SENTENCE), 'the result');
+  // Re-asking the same attempt: the sentence is true, in the confirmation and while sending.
+  await ui.press('同じ内容・同じ送信IDで確認し直す');
+  assert.equal(ui.state().phase, 'confirming');
+  assert.ok(ui.text().includes(SENTENCE), 'confirming a re-ask');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(ui.state().phase, 'sending');
+  assert.equal(ui.state().retrying, true);
+  assert.ok(ui.text().includes(SENTENCE), 'a re-ask under way');
+  assert.equal(fp.calls.send[1].targetId, ID(1), 'the same attempt id');
+  fp.pending[1].resolve({ targetId: ID(1), kind: 'published', providerPostId: '9', marks: REAL });
+  await ui.flush();
+  assert.ok(!ui.text().includes(SENTENCE));
+  assert.equal(ui.state().retrying, false);
 });
