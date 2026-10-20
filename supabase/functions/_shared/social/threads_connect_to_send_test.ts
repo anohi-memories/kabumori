@@ -8,13 +8,15 @@ import type { ThreadsAccountBinding, ThreadsConnectFlowContext } from "./threads
 import {
   createGatedThreadsVerticalPath,
   createThreadsVerticalPath,
+  G5_WORKER_VERDICT_CODES,
   THREADS_VERTICAL_PATH_ENABLED,
   type ThreadsVerticalDeps,
 } from "./threads_connect_to_send.ts";
+import { INVALID_SOCIAL_ACCOUNT_IDS, VALID_SOCIAL_ACCOUNT_IDS } from "./social_account_id_cases.ts";
 
 const ALICE = "0b6a8c1e-2d3f-4a5b-8c7d-9e0f1a2b3c4d";
 const BOB = "7c1d2e3f-4a5b-4c6d-8e7f-0a1b2c3d4e5f";
-const ACCOUNT = "3f6c1b8e-5d2a-4c7f-9e1b-0a2b3c4d5e6f";
+const ACCOUNT = "sa_3f6c1b8e5d2a4c7f9e1b0a2b"; // the real social_accounts id shape (G4-12)
 const BRAND = "brand_alice_personal";
 const USER = "17841400000000001";
 const TOKEN = "THfaketoken0123456789abcdef";
@@ -188,7 +190,10 @@ test("forged or incomplete bindings are refused before any port (owner epoch mis
     [{ ...good }, "BINDING_INVALID"], // not frozen: not produced by bind
     [Object.freeze({ ...good, serviceKey: "kabumori" }), "BINDING_INVALID"],
     [Object.freeze({ ...good, threadsUserId: "0" }), "BINDING_INVALID"],
-    [Object.freeze({ ...good, socialAccountId: "nope" }), "BINDING_INVALID"],
+    [Object.freeze({ ...good, socialAccountId: "Sa_nope" }), "BINDING_INVALID"], // G4-12: not the social_accounts id shape
+    [Object.freeze({ ...good, socialAccountId: "3f6c1b8e-5d2a-4c7f-9e1b-0a2b3c4d5e6f" }), "BINDING_INVALID"], // a UUID is not one
+    [Object.freeze({ ...good, socialAccountId: `${ACCOUNT}\n` }), "BINDING_INVALID"],
+    [Object.freeze({ ...good, socialAccountId: 7 }), "BINDING_INVALID"],
     [Object.freeze({ ...good, ownerEpoch: null }), "OWNER_EPOCH_MISSING"],
     [Object.freeze({ ...good, ownerEpoch: "0" }), "OWNER_EPOCH_MISSING"],
     [Object.freeze({ ...good, ownerEpoch: 3 }), "OWNER_EPOCH_MISSING"], // a JS number is refused, never rounded
@@ -280,6 +285,7 @@ test("isolation: composes only the three G4 modules; nothing imports it but its 
   const source = await Deno.readTextFile(new URL("./threads_connect_to_send.ts", import.meta.url));
   assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]).sort(), [
     "./g5_owner_epoch_token.ts",
+    "./social_account_id.ts",
     "./threads_account_binding.ts",
     "./threads_publish_contract.ts",
     "./threads_send_port.ts",
@@ -341,5 +347,85 @@ test("G4-08: a service ended and restarted since the binding (new generation) ne
       : { kind: "sent", outcome: { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" }, transport: "simulated" };
     assert.deepEqual(result, expected, seq.join(","));
     assert.equal(w.log.some((l) => l.endsWith("/threads_publish")), false);
+  }
+});
+
+// ---- G4-12: the real social_accounts id shape (G3 U2) and G5-05's SERVICE_GENERATION_UNAVAILABLE (G3 U7) -------------
+
+test("G4-12: connect -> bind -> one post with real account ids (sa_...): every port gets exactly that id", async () => {
+  for (const id of VALID_SOCIAL_ACCOUNT_IDS) {
+    const w = world({ account: accountRow({ socialAccountId: id }), credential: credentialRow({ social_account_id: id }) });
+    const verdict = await w.path.bind({ ...receipt, social_account_id: id }, flow());
+    assert.equal(verdict.ok, true, `${id} ${JSON.stringify(verdict)}`);
+    const result = await w.path.postOnce(post((verdict as { binding: ThreadsAccountBinding }).binding));
+    assert.equal(result.kind, "sent", id);
+    assert.deepEqual(w.log.filter((l) => l.startsWith("account") || l.startsWith("credential")), [`account ${id}`, `credential ${id} ${TEST_KEY}`]);
+    assert.equal(w.log.filter((l) => l.endsWith("/threads_publish")).length, 1);
+  }
+});
+
+test("G4-12: an id the table refuses binds nothing and posts nothing, at bind and in a forged binding", async () => {
+  const w = world();
+  const good = await boundIn(w);
+  w.log.length = 0;
+  for (const id of INVALID_SOCIAL_ACCOUNT_IDS) {
+    assert.deepEqual(await w.path.bind({ ...receipt, social_account_id: id }, flow()), { ok: false, code: "RECEIPT_INVALID" });
+    assert.deepEqual(await w.path.postOnce(post(Object.freeze({ ...good, socialAccountId: id }) as ThreadsAccountBinding)), { kind: "refused", code: "BINDING_INVALID" });
+  }
+  assert.deepEqual(w.log, []);
+});
+
+test("G4-12: a forged binding of another well-formed account gets no credential and no request", async () => {
+  const w = world(); // the statement answers ACCOUNT's row only
+  const good = await boundIn(w);
+  w.log.length = 0;
+  assert.deepEqual(await w.path.postOnce(post(Object.freeze({ ...good, socialAccountId: "sa_x" }))), { kind: "refused", code: "CREDENTIAL_UNAVAILABLE" });
+  assert.deepEqual(w.log, [`credential sa_x ${TEST_KEY}`]);
+});
+
+test("G4-12: the G5 worker codes are exactly W1's (PR #371 @ 7140e416) besides 'active'", () => {
+  assert.deepEqual([...G5_WORKER_VERDICT_CODES].sort(), [
+    "ACCOUNT_DELETION_IN_PROGRESS",
+    "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
+    "ACCOUNT_LIFECYCLE_SERVICE_INVALID",
+    "ACCOUNT_LOCKED",
+    "EXPECTED_LIFECYCLE_VERSION_REQUIRED",
+    "EXPECTED_OWNER_EPOCH_REQUIRED",
+    "OWNER_EPOCH_CHANGED",
+    "OWNER_EPOCH_UNAVAILABLE",
+    "SERVICE_DELETION_IN_PROGRESS",
+    "SERVICE_GENERATION_CHANGED",
+    "SERVICE_GENERATION_UNAVAILABLE",
+    "SERVICE_NOT_ACTIVE",
+    "SERVICE_NOT_REGISTERED",
+    "SERVICE_STATE_UNKNOWN",
+    "WORKSPACE_OWNER_UNKNOWN",
+  ]);
+  assert.equal(new Set(G5_WORKER_VERDICT_CODES).size, G5_WORKER_VERDICT_CODES.length);
+});
+
+test("G4-12: SERVICE_GENERATION_UNAVAILABLE is passed on as itself and never sends (first check or pre-publish hook)", async () => {
+  const first = world({ worker: "SERVICE_GENERATION_UNAVAILABLE" });
+  assert.deepEqual(await first.path.postOnce(post(await boundIn(first))), { kind: "refused", code: "SERVICE_GENERATION_UNAVAILABLE" });
+  assert.equal(threadsCalls(first.log), 0);
+  const hook = world({ workerSeq: ["active", "SERVICE_GENERATION_UNAVAILABLE"] });
+  assert.deepEqual(await hook.path.postOnce(post(await boundIn(hook))), {
+    kind: "sent",
+    outcome: { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" },
+    transport: "simulated",
+  });
+  assert.equal(hook.log.some((l) => l.endsWith("/threads_publish")), false);
+});
+
+test("G4-12: every G5 worker code refuses with itself, no request; an unknown one stays WORKER_VERDICT_UNKNOWN", async () => {
+  for (const code of G5_WORKER_VERDICT_CODES) {
+    const w = world({ worker: code });
+    assert.deepEqual(await w.path.postOnce(post(await boundIn(w))), { kind: "refused", code }, code);
+    assert.equal(threadsCalls(w.log), 0, code);
+  }
+  for (const answer of ["SERVICE_GENERATION_UNAVAILABLE ", "service_generation_unavailable", "SERVICE_GENERATION_UNKNOWN", "GENERATION_UNAVAILABLE", ""]) {
+    const w = world({ worker: answer });
+    assert.deepEqual(await w.path.postOnce(post(await boundIn(w))), { kind: "refused", code: "WORKER_VERDICT_UNKNOWN" }, JSON.stringify(answer));
+    assert.equal(threadsCalls(w.log), 0);
   }
 });

@@ -30,6 +30,7 @@
 // not applied) is wired, a real binding always answers BIND_EPOCH_UNRECORDED. It never writes: a duplicate or replayed receipt gets the same verdict and changes nothing
 // (the single-use state and code are the database's and H5's).
 import { g5Decimal, parseG5OwnerEpochToken } from "./g5_owner_epoch_token.ts";
+import { isSocialAccountId } from "./social_account_id.ts";
 import { acceptableServiceKey, THREADS_POSTING_SERVICE_KEY } from "./threads_send_port.ts";
 
 export const THREADS_ACCOUNT_BINDING_ENABLED = false;
@@ -130,7 +131,7 @@ export function connectedReceiptAccountId(receipt: unknown): string | null {
   if (Object.keys(r).sort().join(",") !== "ok,provider,publish_enabled,social_account_id,status,token_expires_at") return null;
   if (r.ok !== true || r.status !== "connected" || r.provider !== "threads" || r.publish_enabled !== false) return null;
   if (typeof r.token_expires_at !== "string" || Number.isNaN(Date.parse(r.token_expires_at))) return null;
-  return typeof r.social_account_id === "string" && UUID.test(r.social_account_id) ? r.social_account_id : null;
+  return isSocialAccountId(r.social_account_id) ? r.social_account_id : null;
 }
 
 function accountRow(answer: unknown): ThreadsAccountRow | "none" | "many" | null {

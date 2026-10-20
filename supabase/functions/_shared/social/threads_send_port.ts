@@ -48,6 +48,7 @@ import {
   readThreadsPublishedPost,
   ThreadsPublishError,
 } from "./threads_publish_contract.ts";
+import { isSocialAccountId } from "./social_account_id.ts";
 
 export const THREADS_CREDENTIAL_PORT_ENABLED = false;
 export const THREADS_SEND_PORT_ENABLED = false;
@@ -91,7 +92,6 @@ export type ThreadsSendPort = {
  */
 export type ThreadsCredentialStatement = (socialAccountId: string, serviceKey: string) => Promise<unknown>;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const GENERATION = /^[0-9a-f]{64}$/u;
 const TOKEN = /^[A-Za-z0-9._|-]{16,4096}$/u;
 const ROW_KEYS = "access_token,generation,social_account_id,threads_user_id";
@@ -129,7 +129,7 @@ export function createGatedThreadsCredentialPort(
   return Object.freeze({
     available,
     async credentialFor(socialAccountId: string): Promise<ThreadsGenerationCredential | null> {
-      if (!available || !UUID.test(socialAccountId)) return null;
+      if (!available || !isSocialAccountId(socialAccountId)) return null;
       try {
         // One call per lookup, nothing cached: an owner change or a newer credential is the statement's answer.
         return parseThreadsCredentialRow(socialAccountId, await statement!(socialAccountId, serviceKey as string));
