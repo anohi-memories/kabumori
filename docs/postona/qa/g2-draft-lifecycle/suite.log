@@ -1,0 +1,8 @@
+# node --test tests/*.test.mjs  (whole app suite on the same tree)
+ℹ tests 518
+ℹ suites 0
+ℹ pass 517
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
