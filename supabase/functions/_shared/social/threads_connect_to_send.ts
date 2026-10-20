@@ -6,7 +6,8 @@
 //                                   -> G4-02 credentialFor            (ONE statement: decision + token + generation)
 //                                   -> the credential is the bound identity, and the generation the caller expects
 //                                   -> G5 worker verdict (W2 shape)    (LAST check before the provider)
-//                                   -> G4-02 ThreadsSendPort.send      (one two-step publish, never retried)
+//                                   -> G4-02 ThreadsSendPort.send      (one two-step publish, never retried; its
+//                                      pre-publish hook asks the G5 worker verdict again once the container is ready)
 //   G3       credentials / sender = the same two G4-02 ports, for G3's dispatcher (G3 runs W1 in its own preflight)
 // Nothing here re-implements the transport, the OAuth handler, the binding rules or any SQL.
 //
@@ -166,8 +167,18 @@ export function createGatedThreadsVerticalPath(enabled: boolean, serviceKey: str
       return refused((G5_WORKER_VERDICT_CODES as readonly unknown[]).includes(answer) ? answer as ThreadsVerticalRefusal : "WORKER_VERDICT_UNKNOWN");
     }
 
-    // Exactly one send; whatever it answers is returned as is and never retried here.
-    const outcome = await sender.send({ threadsUserId: credential.threadsUserId, accessToken: credential.accessToken }, request.text);
+    // Exactly one send; whatever it answers is returned as is and never retried here. The send port requires the
+    // pre-publish hook (G4-07): after the container is ready it asks G5's worker verdict once more, and only 'active'
+    // lets the publish request out (the container wait would otherwise sit unchecked between step 4 and the publish).
+    const outcome = await sender.send({ threadsUserId: credential.threadsUserId, accessToken: credential.accessToken }, request.text, {
+      async beforePublish() {
+        try {
+          return (await workerVerdict(binding.brandId, serviceKey as string, binding.ownerEpoch, request.boundAtMs)) === "active";
+        } catch {
+          return false;
+        }
+      },
+    });
     return Object.freeze({ kind: "sent", outcome, transport: sender.transport });
   }
 

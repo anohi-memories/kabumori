@@ -74,6 +74,8 @@ type World = {
   threads?: Array<() => Response | Error>;
   noStatement?: boolean;
   noWorker?: boolean;
+  /** G4-07: successive worker answers (the first check, then the pre-publish hook). */
+  workerSeq?: unknown[];
 };
 function world(w: World = {}) {
   const log: string[] = [];
@@ -91,7 +93,8 @@ function world(w: World = {}) {
       principalVerdict: (p, b, k) => (log.push(`g5-person ${p} ${b} ${k}`), answer("person" in w ? w.person : personVerdict())),
     },
     credentialStatement: w.noStatement ? null : (id, key) => (log.push(`credential ${id} ${key}`), answer("credential" in w ? w.credential : credentialRow())),
-    workerVerdict: w.noWorker ? null : (b, k, e, t) => (log.push(`g5-worker ${b} ${k} ${e} ${t}`), answer("worker" in w ? w.worker : "active")),
+    workerVerdict: w.noWorker ? null : (b, k, e, t) => (log.push(`g5-worker ${b} ${k} ${e} ${t}`),
+      answer(w.workerSeq ? w.workerSeq.shift() : "worker" in w ? w.worker : "active")),
     fetch,
     transport: "simulated",
     sendOptions: { sleep: () => Promise.resolve() },
@@ -158,6 +161,7 @@ test("connect -> bind -> one post: G5 person, account, credential, G5 worker LAS
     `g5-worker ${BRAND} ${TEST_KEY} 3 ${BOUND_AT}`,
     "threads POST /v1.0/17841400000000001/threads",
     "threads GET /v1.0/111",
+    `g5-worker ${BRAND} ${TEST_KEY} 3 ${BOUND_AT}`, // G4-07: the pre-publish hook asks again once the container is ready
     "threads POST /v1.0/17841400000000001/threads_publish",
     "threads GET /v1.0/222",
   ]);
@@ -287,4 +291,18 @@ test("isolation: composes only the three G4 modules; nothing imports it but its 
   await walk(new URL("supabase/", root), "supabase/");
   await walk(new URL("apps/", root), "apps/");
   assert.deepEqual(importers, ["supabase/functions/_shared/social/threads_connect_to_send_test.ts"]);
+});
+
+test("G4-07: the service or owner changes while the container waits -> the pre-publish hook stops the publish request", async () => {
+  for (const later of ["OWNER_EPOCH_CHANGED", "SERVICE_NOT_ACTIVE", "SERVICE_GENERATION_CHANGED", "ACCOUNT_DELETION_IN_PROGRESS", new Error("g5 down"), "ACTIVE"]) {
+    const w = world({ workerSeq: ["active", later] });
+    const result = await w.path.postOnce(post(await boundIn(w)));
+    assert.deepEqual(result, { kind: "sent", outcome: { kind: "not_written", stage: "publish", code: "THREADS_PREPUBLISH_REFUSED" }, transport: "simulated" }, String(later));
+    assert.deepEqual(w.log.filter((l) => l.startsWith("threads") || l.startsWith("g5-worker")), [
+      `g5-worker ${BRAND} ${TEST_KEY} 3 ${BOUND_AT}`,
+      "threads POST /v1.0/17841400000000001/threads",
+      "threads GET /v1.0/111",
+      `g5-worker ${BRAND} ${TEST_KEY} 3 ${BOUND_AT}`,
+    ], String(later));
+  }
 });
