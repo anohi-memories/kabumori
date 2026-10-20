@@ -1,0 +1,16 @@
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+✔ this build declares no Android App Link (and no android.package): the Threads connect is refused on Android before anything starts (0.755625ms)
+✔ filters that cannot carry the HTTPS callback are refused (0.230125ms)
+✔ a filter with several data entries is accepted only through the entry that really covers the callback (0.074958ms)
+✔ OBSERVATION: a host-wide pathPrefix "/" is accepted (it does cover the callback); App Link verification of the host remains the guard (0.049042ms)
+✔ Android intent: URIs and scheme-only forms are not returns (0.334459ms)
+✔ OBSERVATION: scheme and host case are normalised by the URL parser (Android only dispatches the lowercase scheme it registered) (0.140417ms)
+✔ OBSERVATION (by design): the app never reads state, so a stale return of an earlier attempt re-delivered during a new one is forwarded ONCE and the server refusal is shown — no retry, no second forward (2.565666ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 236.409667
