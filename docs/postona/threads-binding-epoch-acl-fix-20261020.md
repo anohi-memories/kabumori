@@ -9,6 +9,8 @@
   - PR #367 自身の head、H2 のレビューの証拠、PR #377 は**変えていない**。
 - 元のレビュー: H2 #329 コメント 6287507627（REPORT）、6287571008（ACCEPT）。
 
+> **訂正（G4-14、2026-10-21）**: 下の「complete と同じトランザクションの中だけ（`consumed_at = now()`）」は、同じトランザクションの証明に**なっていなかった**（H2 #329 C2 R1。同じ開始時刻の別のトランザクションから通る）。G4-14 で、単独の attest を無くし、PR #124 の complete と結び付けを1つの入口 `complete_and_attest_binding` にまとめた。詳しくは `threads-binding-attest-atomic-entry-20261021.md`。
+
 ## 1. 直したこと（`supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql`）
 
 ### R1［P2］SET ROLE だけで届く役割を、事後の確認が見落とす

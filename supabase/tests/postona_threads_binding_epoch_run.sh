@@ -18,6 +18,10 @@
 # leaving the delegate EXECUTE / USAGE (fail-before), and this version refusing it (owner reachable via NOINHERIT / SET;
 # default ACLs on functions / schemas / tables naming a delegate); 4 adds S1 -> S2 -> S1 and later-transaction attests;
 # 5 races two complete + attest transactions on one state. A delegate role and authenticator are cluster-wide: run alone.
+# G4-14 (H2 #329 C2 on PR #388): 3 refuses an exposed or changed PR #124 complete; 4 has no attest entry any more (one
+# complete_and_attest_binding call), and adds rollback / savepoint / same-transaction cases; 5b opens many sessions until two
+# DIFFERENT transactions share now() and shows PR #388's 001 (5bf6f915) accepting an attest there and leaving a rolled-back
+# attest's completion committed (fail-before), then this 001 refusing it and undoing both together. 5b needs node.
 # Usage: TB_PGHOST=/private/tmp/<socket-dir> TB_PGPORT=<port> TB_PGSUPER=<superuser> supabase/tests/postona_threads_binding_epoch_run.sh
 set -euo pipefail
 export LC_ALL=C
@@ -45,6 +49,7 @@ tree="$(mktemp -d /private/tmp/kabumori-tb.XXXXXX)"
 n="$$"
 owner="kb_tb_owner_$n"
 delegate="kb_tb_delegate_$n"
+hop1="kb_tb_hop1_$n"; hop2="kb_tb_hop2_$n"; leaf="kb_tb_leaf_$n"
 prefix="kabumori_tb_${n}"
 as_super=("$psql_bin" -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 cleanup() {
@@ -52,6 +57,7 @@ cleanup() {
   for db in $("${as_super[@]}" -d postgres -c "select datname from pg_database where datname like '${prefix}_%'" 2>/dev/null); do
     "${as_super[@]}" -d postgres -c "drop database if exists $db with (force)" > /dev/null 2>&1 || true
   done
+  "${as_super[@]}" -d postgres -c "drop role if exists $leaf" -c "drop role if exists $hop2" -c "drop role if exists $hop1" > /dev/null 2>&1 || true
   "${as_super[@]}" -d postgres -c "drop role if exists $delegate" -c "drop role if exists $owner" > /dev/null 2>&1 || true
   if [[ "${KEEP:-0}" != 1 ]]; then rm -rf "$tree"; else echo "kept $tree"; fi
 }
@@ -79,6 +85,8 @@ rollback="$c/postona_threads_binding_epoch/001_threads_binding_epoch_rollback.sq
 behavior="$t/postona_threads_binding_epoch_behavior.sql"
 git -C "$repo" show "fd71450511f4a8d73e150a92bd9fe95677b70edc:supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql" > "$tree/pr367_original_001.sql"
 echo "fd71450511f4a8d73e150a92bd9fe95677b70edc $(shasum -a 256 "$tree/pr367_original_001.sql" | cut -c1-16) PR #367's original 001 (fail-before copy)" >> "$tree/TB_MANIFEST.txt"
+git -C "$repo" show "5bf6f915353eadb4e1425ae6aec3d281ac36c8a8:supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql" > "$tree/pr388_001.sql"
+echo "5bf6f915353eadb4e1425ae6aec3d281ac36c8a8 $(shasum -a 256 "$tree/pr388_001.sql" | cut -c1-16) PR #388's 001 (fail-before copy)" >> "$tree/TB_MANIFEST.txt"
 sed 's/^/  /' "$tree/TB_MANIFEST.txt"
 
 # ---- 2. The world ---------------------------------------------------------------------------------------------------
@@ -164,6 +172,21 @@ db="$(copy p_h2_schema "$pre")"; q "$db" -c "alter default privileges for role $
 expect "001 under a default ACL granting schemas to a delegate (H2 R1)" "$db" "$cand" "THREADS_BINDING_POSTCONDITION_SCHEMA_ACL"
 db="$(copy p_h2_table "$pre")"; q "$db" -c "alter default privileges for role $owner grant select on tables to $delegate" > /dev/null
 expect "001 under a default ACL granting tables to a delegate" "$db" "$cand" "THREADS_BINDING_POSTCONDITION_TABLE_ACL"
+# G4-14: deeper graphs. authenticated -> hop1 -> hop2 -> leaf, each WITH INHERIT FALSE, SET TRUE, a default ACL granting the
+# leaf: refused by the ACL enumeration whatever the depth. authenticator -> hop1 -> owner (SET only): refused as reachable.
+"${as_super[@]}" -d postgres -c "create role $hop1 nologin noinherit" -c "create role $hop2 nologin noinherit" -c "create role $leaf nologin" \
+  -c "grant $hop1 to authenticated with inherit false, set true" -c "grant $hop2 to $hop1 with inherit false, set true" \
+  -c "grant $leaf to $hop2 with inherit false, set true" > /dev/null
+[[ "$(q postgres -c "select pg_has_role('authenticated', '$leaf', 'SET') and not pg_has_role('authenticated', '$leaf', 'USAGE')")" == t ]] || fail "deep graph read-back"
+db="$(copy p_deep_fn "$pre")"; q "$db" -c "alter default privileges for role $owner grant execute on functions to $leaf" > /dev/null
+expect "001 under a default ACL granting functions to a leaf 3 SET-only hops from authenticated" "$db" "$cand" "THREADS_BINDING_POSTCONDITION_FUNCTION_ACL"
+db="$(copy p_deep_table "$pre")"; q "$db" -c "alter default privileges for role $owner grant select, insert, update, delete, truncate, references, trigger, maintain on tables to $leaf" > /dev/null
+expect "001 under a default ACL granting every table privilege to the leaf" "$db" "$cand" "THREADS_BINDING_POSTCONDITION_TABLE_ACL"
+db="$(copy p_deep_owner "$pre")"
+"${as_super[@]}" -d postgres -c "revoke $hop1 from authenticated" -c "grant $hop1 to authenticator with inherit false, set true" -c "grant $owner to $hop1 with inherit false, set true" > /dev/null
+expect "001 while authenticator reaches the owner in two SET-only hops" "$db" "$cand" "THREADS_BINDING_PRECONDITION_OWNER_REACHABLE authenticator"
+"${as_super[@]}" -d postgres -c "revoke $owner from $hop1" -c "revoke $hop1 from authenticator" > /dev/null
+echo "PASS deep role graphs (3 SET-only hops to a default-ACL leaf: functions / all table privileges refused; authenticator 2 hops to the owner refused)"
 # Fail-before: PR #367's original 001 installs in H2's world and the delegate (which authenticated may SET ROLE to) keeps
 # EXECUTE on attest_binding and USAGE on the schema.
 db="$(copy p_h2_before "$pre")"
@@ -172,7 +195,12 @@ q "$db" -c "alter default privileges for role $owner grant execute on functions 
 before="$(q "$db" -c "select pg_has_role('authenticated', '$delegate', 'SET')::text || ',' || has_function_privilege('$delegate', 'postona_threads_binding.attest_binding(uuid,uuid,text)', 'EXECUTE')::text || ',' || has_schema_privilege('$delegate', 'postona_threads_binding', 'USAGE')::text || ',' || has_function_privilege('authenticated', 'postona_threads_binding.attest_binding(uuid,uuid,text)', 'EXECUTE')::text")"
 [[ "$before" == "true,true,true,false" ]] || fail "fail-before read-back: $before"
 echo "PASS fail-before (PR #367 fd714505 installs under H2's shape: authenticated SET->delegate, delegate EXECUTE attest_binding, delegate USAGE schema, authenticated itself not = $before)"
-echo "PASS preconditions (superuser, F5 getter, F5 coverage, PR #124, G5 brand owner, authenticator SET->owner) + H2 default ACLs (functions, schemas, tables) refused + re-apply refused + rollback + re-apply"
+# G4-14: the complete the entry calls is PR #124's reviewed body and owner-only.
+db="$(copy p_124_exposed "$pre")"; q "$db" -c "grant execute on function public.complete_social_mobile_threads_oauth_connection(uuid,text,text,text,text) to authenticated" > /dev/null
+expect "001 while PR #124's complete is granted to authenticated" "$db" "$cand" THREADS_BINDING_PRECONDITION_COMPLETE_EXPOSED
+db="$(copy p_124_drift "$pre")"; q "$db" -c "do \$\$ begin execute format('create or replace function public.complete_social_mobile_threads_oauth_connection(p_oauth_state_id uuid, p_platform_user_id text, p_handle text, p_access_token text, p_attestation text) returns void language plpgsql volatile security definer set search_path = '''' as %L', (select p.prosrc from pg_proc p where p.oid = 'public.complete_social_mobile_threads_oauth_connection(uuid,text,text,text,text)'::regprocedure) || '-- drift'); end \$\$" > /dev/null
+expect "001 while PR #124's complete body differs from the reviewed one" "$db" "$cand" THREADS_BINDING_PRECONDITION_COMPLETE_UNPINNED
+echo "PASS preconditions (superuser, F5 getter, F5 coverage, PR #124, G5 brand owner, authenticator SET->owner, PR #124 complete exposed / changed) + H2 default ACLs (functions, schemas, tables) refused + re-apply refused + rollback + re-apply"
 
 # ---- 4. Behavior -----------------------------------------------------------------------------------------------------
 world="$(copy world "$pre")"
@@ -203,6 +231,31 @@ grep -q THREADS_OAUTH_STATE_NOT_CONSUMABLE <<<"$second" || fail "race second com
 [[ "$(q "$race" -c "select count(*) from postona_threads_binding.bindings")" == 1 ]] || fail "race: not exactly one binding"
 [[ "$(q "$race" -c "select count(*) from postona_threads_binding.state_generations where attested_at is not null")" == 1 ]] || fail "race: not exactly one attested state"
 echo "PASS race (two complete + attest transactions on one state: the second waits and is refused by PR #124; one binding, one attested state)"
+
+# ---- 5b. Same now(), different transactions (G4-14, H2 #329 C2 R1) -------------------------------------------------------
+collision_setup() {
+  { sed -n '1,/^-- 0\. No API role/p' "$behavior" | sed '$d'
+    cat <<'SQL'
+select tb.enroll(911) as c1u \gset
+select tb.begin(:'c1u', 'c1') as acct_c1 \gset
+select tb.check(tb.record(:'c1u', 'c1', tb.epoch(:'c1u'), tb.lifecycle(:'c1u')) = 'OK', 'collision record c1');
+select tb.enroll(912) as c2u \gset
+select tb.begin(:'c2u', 'c2') as acct_c2 \gset
+select tb.check(tb.record(:'c2u', 'c2', tb.epoch(:'c2u'), tb.lifecycle(:'c2u')) = 'OK', 'collision record c2');
+SQL
+  } > "$tree/collision_setup.sql"
+  as_owner "$1" -A -t -f "$tree/collision_setup.sql" > /dev/null
+}
+node_bin="${NODE:-node}"
+cb="$(copy coll_before "$pre")"; need "$cb" "$tree/pr388_001.sql"; collision_setup "$cb"
+"$node_bin" "$t/postona_threads_binding_epoch_collision.mjs" "$psql_bin" "$host" "$port" "$owner" "$cb" before > "$tree/collision_before.out" 2>&1 \
+  || fail "fail-before collision: $(cat "$tree/collision_before.out")"
+sed 's/^/  /' "$tree/collision_before.out"
+ca="$(copy coll_after "$pre")"; need "$ca" "$cand"; collision_setup "$ca"
+"$node_bin" "$t/postona_threads_binding_epoch_collision.mjs" "$psql_bin" "$host" "$port" "$owner" "$ca" after > "$tree/collision_after.out" 2>&1 \
+  || fail "collision: $(cat "$tree/collision_after.out")"
+sed 's/^/  /' "$tree/collision_after.out"
+echo "PASS same-now() different transactions (PR #388 5bf6f915: other-transaction attest accepted + rollback left the completion committed = fail-before; this 001: refused, rollback undoes both)"
 
 # ---- 6. Mutations -----------------------------------------------------------------------------------------------------
 caught=0; total=0
@@ -243,26 +296,32 @@ mutate attest_unrecorded_ok "  if not found then
   end if;" "  if not found then
     return;
   end if;"
-mutate attest_any_actor "  if v_gen.initiated_by is distinct from p_actor then
-    raise exception 'THREADS_BINDING_NOT_INITIATOR' using errcode = 'P0001';
-  end if;" ""
-mutate attest_any_threads_user "     or v_account.platform_user_id is distinct from p_threads_user_id then" "     then"
 mutate attest_replay_ok "  if v_gen.attested_at is not null
      or exists (select 1 from postona_threads_binding.bindings b where b.oauth_state_id = p_oauth_state_id) then
     raise exception 'THREADS_BINDING_ALREADY_ATTESTED' using errcode = 'P0001';
   end if;" ""
 mutate attest_once_only_current "  if v_gen.attested_at is not null
      or exists" "  if exists"
-mutate attest_any_transaction "  if not exists (select 1 from public.social_account_oauth_states s where s.id = p_oauth_state_id and s.consumed_at = now()) then
-    raise exception 'THREADS_BINDING_NOT_IN_COMPLETE_TRANSACTION' using errcode = 'P0001';
-  end if;" ""
+mutate entry_skips_complete "  perform public.complete_social_mobile_threads_oauth_connection(p_oauth_state_id, p_platform_user_id, p_handle,
+                                                                 p_access_token, p_attestation);" ""
+mutate entry_unpinned "                    and pg_catalog.md5(p.prosrc) = '8c90c72f625ff4af247a11e413fc761b'
+                    and p.proacl is not null" "                    and p.proacl is not null"
+mutate entry_exposed_ok "                    and p.proacl is not null
+                    and not exists (select 1 from pg_catalog.aclexplode(p.proacl) a where a.grantee <> p.proowner)) then" "                    ) then"
+mutate entry_invoker_ok "                    and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)
+                    and p.prosecdef and" "                    and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)
+                    and"
+mutate entry_no_actor "  if v_actor is null or p_oauth_state_id is null" "  if p_oauth_state_id is null"
+mutate separate_attest_kept "-- The G4-03 ThreadsAccountRow" "create function postona_threads_binding.attest_binding(p_actor uuid, p_oauth_state_id uuid, p_threads_user_id text)
+returns void language sql volatile security definer set search_path = '' as \$\$ select \$\$;
+revoke all on function postona_threads_binding.attest_binding(uuid, uuid, text) from public, anon, authenticated, service_role;
+-- The G4-03 ThreadsAccountRow"
 mutate attested_at_not_set "  update postona_threads_binding.state_generations set attested_at = now() where oauth_state_id = p_oauth_state_id;
 " ""
-mutate attest_before_complete "and s.consumed_at is not null" "and true"
 mutate record_consumed_ok "s.initiated_by_user_id = p_actor and s.consumed_at is null and s.expires_at > now()" "s.initiated_by_user_id = p_actor and s.expires_at > now()"
 mutate record_expired_ok "s.initiated_by_user_id = p_actor and s.consumed_at is null and s.expires_at > now()" "s.initiated_by_user_id = p_actor and s.consumed_at is null"
 mutate record_any_actor "s.id = p_oauth_state_id and s.initiated_by_user_id = p_actor and s.consumed_at is null" "s.id = p_oauth_state_id and s.consumed_at is null"
-mutate attest_no_owner "  if v_owner is distinct from p_actor then
+mutate attest_no_owner "  if v_owner is distinct from v_actor then
     raise exception 'THREADS_BINDING_NOT_OWNER' using errcode = 'P0001';
   end if;
   if v_epoch is null or v_epoch < 1 then
@@ -302,6 +361,12 @@ mutate_install schema_acl_weak "              where n.nspname = 'postona_threads
   "alter default privileges for role $owner grant usage on schemas to $delegate" "" "" THREADS_BINDING_POSTCONDITION_SCHEMA_ACL
 mutate_install table_acl_weak "                where c.oid = to_regclass(v_rel) and a.grantee <> v_me) then" "                where false) then" \
   "alter default privileges for role $owner grant select on tables to $delegate" "" "" THREADS_BINDING_POSTCONDITION_TABLE_ACL
+mutate_install complete_pin_pre_removed "                    and pg_catalog.md5(p.prosrc) = '8c90c72f625ff4af247a11e413fc761b') then
+    raise exception 'THREADS_BINDING_PRECONDITION_COMPLETE_UNPINNED';" "                    ) then
+    raise exception 'THREADS_BINDING_PRECONDITION_COMPLETE_UNPINNED';" \
+  "do \$\$ begin execute format('create or replace function public.complete_social_mobile_threads_oauth_connection(p_oauth_state_id uuid, p_platform_user_id text, p_handle text, p_access_token text, p_attestation text) returns void language plpgsql volatile security definer set search_path = '''' as %L', (select p.prosrc from pg_proc p where p.oid = 'public.complete_social_mobile_threads_oauth_connection(uuid,text,text,text,text)'::regprocedure) || '-- drift'); end \$\$" "" "" THREADS_BINDING_PRECONDITION_COMPLETE_UNPINNED
+mutate_install complete_exposed_pre_removed "    raise exception 'THREADS_BINDING_PRECONDITION_COMPLETE_EXPOSED';" "    null;" \
+  "grant execute on function public.complete_social_mobile_threads_oauth_connection(uuid,text,text,text,text) to authenticated" "" "" THREADS_BINDING_PRECONDITION_COMPLETE_EXPOSED
 mutate_install owner_reach_pre_removed "    if exists (select 1 from pg_catalog.pg_roles r where r.rolname = v_fn)
        and (pg_catalog.pg_has_role(v_fn, v_me, 'MEMBER') or pg_catalog.pg_has_role(v_fn, v_me, 'SET')
             or pg_catalog.pg_has_role(v_fn, v_me, 'USAGE')) then
