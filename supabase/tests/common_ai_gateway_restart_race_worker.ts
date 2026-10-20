@@ -14,6 +14,9 @@ import { createG5AuthorityPort, type G5Transport } from "../ai_gateway/authority
 import { createG5RpcTransport, G5_VERDICT_RPC } from "../ai_gateway/g5_rpc_transport.ts";
 import { reconcileUnknownCalls } from "../ai_gateway/recovery.ts";
 import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { PROVIDER_API_KEY_ENV, SupabaseLedgerBudgetGuard } from "../functions/_shared/ai_provider/mod.ts";
+import { SupabaseAiCallsStore } from "../ai_gateway/ai_calls_store.ts";
+import { type CallClaim, type CallIdentity, type CallStore, type ClaimContext, gatewayExecute, type StoredOutcome } from "../ai_gateway/gateway.ts";
 
 const HOST = Deno.env.get("GRR_PGHOST") ?? "";
 const PORT = Deno.env.get("GRR_PGPORT") ?? "";
@@ -51,6 +54,12 @@ export type GatewayJob = Readonly<{
   rpcTimeoutMs?: number;
   /** G6-08: write "start:<rpc>#<n>" / "end:<rpc>#<n>" events (with the clock) around every ledger / ai_calls RPC. */
   trace?: boolean;
+  /**
+   * G6-11: compose the gateway with a TEST-ONLY call store whose pre-send check asks the CANDIDATE RPC
+   * ai_calls_claim_held (created by the G6-11 test in its scratch database only) with the ORIGINAL claim token,
+   * instead of calling ai_calls_claim again. gateway.ts is unchanged; nothing here exists in any migration.
+   */
+  ownerHeld?: boolean;
 }>;
 export type RecoverJob = Readonly<{ role: "recover"; name: string; revision: string; apps: "all" | "postona"; mode: "advise" | "apply"; abandonAfterSeconds: number }>;
 
@@ -215,7 +224,63 @@ async function runGateway(job: GatewayJob): Promise<unknown> {
     random: () => 0,
   });
   const brand = job.brand === null ? null : { app: job.app, slug: job.brand };
-  return await gateway.execute(job.credential, { app: job.app, feature: job.feature, operationId: job.operationId, input: `operation ${job.operationId}`, brand });
+  const request = { app: job.app, feature: job.feature, operationId: job.operationId, input: `operation ${job.operationId}`, brand };
+  if (!job.ownerHeld) return await gateway.execute(job.credential, request);
+  // G6-11: the same composition as createAiGateway, with the owner-held store.
+  const serviceKey = new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY);
+  const keyNames: readonly string[] = Object.values(PROVIDER_API_KEY_ENV);
+  return await gatewayExecute({
+    authority: createG5AuthorityPort({ transport, planAllowlist: set.planAllowlist, acceptSystemSubject: job.app === "kabumori" }),
+    policies: set.registry,
+    provider: {
+      readEnv: (name) => keyNames.includes(name) ? (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined) : undefined,
+      fetch: route,
+      retryTiming: { baseDelayMs: 1, maxDelayMs: 1, maxRetryAfterMs: 10, minAttemptMs: 1 },
+      sleep: () => Promise.resolve(),
+      random: () => 0,
+    },
+    budget: new SupabaseLedgerBudgetGuard({ supabaseUrl: SUPABASE, serviceKey, fetch: route, holdSeconds: 30, rpcTimeoutMs: job.rpcTimeoutMs }),
+    store: new OwnerHeldStore(new SupabaseAiCallsStore({ supabaseUrl: SUPABASE, serviceKey, fetch: route, rpcTimeoutMs: job.rpcTimeoutMs }), route, job.rpcTimeoutMs ?? 10_000),
+  }, job.credential, request);
+}
+
+/**
+ * G6-11 TEST-ONLY call store. The first claim of an operation is the real ai_calls_claim (its owner token is kept in
+ * memory only). Every later claim of the same identity is the gateway's pre-send check: it asks the candidate
+ * ai_calls_claim_held with that ORIGINAL token and answers "busy" (held, go on) only for {held: true}; anything else,
+ * an error, a timeout or a lost answer is "conflict" (not held, send nothing). The check never creates a row.
+ */
+class OwnerHeldStore implements CallStore {
+  readonly #owners = new Map<string, string>();
+  constructor(readonly inner: SupabaseAiCallsStore, readonly fetch: FetchLike, readonly timeoutMs: number) {}
+  async claim(identity: CallIdentity, context: ClaimContext): Promise<CallClaim> {
+    const owner = this.#owners.get(identity.key);
+    if (owner === undefined) {
+      const first = await this.inner.claim(identity, context);
+      if (first.kind === "acquired") this.#owners.set(identity.key, first.owner);
+      return first;
+    }
+    const s = context.subject;
+    const p: Record<string, unknown> = {
+      call_key: identity.key, tenant_tag: identity.tenantTag, fingerprint: identity.fingerprint, application: context.app,
+      feature: context.storeFeature, subject_kind: s.kind, owner,
+    };
+    if (s.kind === "user") {
+      p.user_id = s.userId;
+      if (s.brand) p.brand_ref = s.brand.slug;
+    }
+    const response = await this.fetch(`${SUPABASE}/rest/v1/rpc/ai_calls_claim_held`, {
+      method: "POST",
+      headers: { "apikey": SERVICE_KEY, "Authorization": `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ p }),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    const body = await response.json().catch(() => null) as Record<string, unknown> | null;
+    return response.ok && body !== null && body.held === true && Object.keys(body).length === 1 ? { kind: "busy" } : { kind: "conflict" };
+  }
+  complete(identity: CallIdentity, owner: string, outcome: StoredOutcome): Promise<void> {
+    return this.inner.complete(identity, owner, outcome);
+  }
 }
 
 async function runRecover(job: RecoverJob): Promise<unknown> {
