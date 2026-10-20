@@ -1,0 +1,23 @@
+# node --test tests/g2-draft-time-lifecycle.test.mjs  (PR #366 HEAD 44ab2e6bb812f3484c85f847574de103757e3dfc + PR #380 825fc837227af9b81c7d6e9db3c0744d9b8f01ed + this G2 test; node v24.19.0; auth-js 2.115.0)
+✔ G2-L1 24-hour boundary after the last edit: 23:59:59 and 24:00:00 come back; 24:00:01 is discarded and removed (103.475833ms)
+✔ G2-L2 only looking at a restored draft does not extend it; editing does (24 hours count from the last edit) (30.002916ms)
+✔ G2-L3 clock moved back or far forward: within 5 minutes back it is kept; more than that, or a year ahead, is discarded and removed (fail closed) (64.530917ms)
+✔ G2-L4 app restart: after 23 hours stopped it comes back; after 48 hours it is discarded and removed when the screen opens (40.522584ms)
+✔ KNOWN SM4 (not re-reported): nothing removes an expired draft at start-up -- after 48 hours stopped it is still on the device until the screen is opened (18.232625ms)
+✔ G2-L5 a visit of B reads, writes and removes only B's key; A's stored bytes are untouched (13.753875ms)
+✔ G2-L6 late INITIAL_SESSION: a screen opened before the session is known touches no draft, and restores once the session arrives (20.732792ms)
+✔ G2-L7 TOKEN_REFRESHED (same mark) while the restore read is pending: no second read, nothing removed, restored (13.613125ms)
+✔ G2-L8 an old restore that is left pending when the screen is closed, then the screen is opened again: restored exactly once, by the new screen (10.231583ms)
+✔ G2-L9 an old restore that answered FIRST, then another person / sign-out: nothing of A is shown afterwards; A's next new session discards it (20.660625ms)
+✔ G2-L10 while A's old read is pending, B signs in and opens: B's read is only issued after A's answered, and B sees nothing of A (10.615ms)
+✔ G2-L11 a day: A types, signs out; B types, signs out; A signs in the next day (new session): A gets nothing and A's text is removed (11.464958ms)
+✔ FINDING G2-SM4-D (P3, new condition, owner G1/G5): account deletion forgets "per-user state" but not the draft, and a deleted person never reads it again -- so it stays for good (19.014083ms)
+✔ negative controls: ">=" at 24h, no future check, a restore that re-saves, and a key without the user are each caught by the scenarios above (86.106667ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 662.2435
