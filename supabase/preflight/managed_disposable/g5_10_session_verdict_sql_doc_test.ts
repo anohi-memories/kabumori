@@ -80,11 +80,9 @@ test('R1\'s claim lines verbatim, the G5-08 visibility rule, and the reference\'
   assert.ok(answers.size > 0);
 });
 
-test('the document names its tests with the real counts and the files exist', () => {
-  const pg = (read(PG).match(/^test_\(/gmu) ?? []).length;
-  const mutants = (read(MUT).match(/^ {4}\(['"]/gmu) ?? []).length;
-  assert.ok(doc.includes(`${pg} tests`), `the document should say ${pg} tests`);
-  assert.ok(doc.includes(`${mutants}/${mutants} detected`), `the document should say ${mutants}/${mutants} detected`);
+test('the document names its tests with the counts as of G5-10 (the current counts are in the G5-11 document) and the files exist', () => {
+  assert.ok(doc.includes('9 tests') && doc.includes('25/25 detected'), 'the G5-10 counts');
+  assert.ok(doc.includes('G5-11 update') && doc.includes('g5-11-session-verdict-consumer-contract.md'), 'points to G5-11');
   for (const path of [SQL, RB, PG, MUT, RUN]) {
     assert.ok(exists(path), path);
     assert.ok(doc.includes(path.split('/').pop()!), `${path} is named`);

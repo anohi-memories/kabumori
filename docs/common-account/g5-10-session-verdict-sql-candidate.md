@@ -4,6 +4,10 @@ Status: **SQL source candidate + local PG17 proofs. Not in `supabase/migrations/
 G3's 007, any Edge or any app; no grant at all (owner-only).** Production is **NO_GO**. A focused **Codex Sol (high)** security review of the SQL is
 required next.
 
+> **G5-11 update (Issue #320 task 11):** H1 C1 passed this candidate (P0-P2 none) with four P3. The consumer contract (VOLATILE, READ COMMITTED
+> only, the verdict first, re-authorization inside the read / write statement), the added tests and the managed assumptions are in
+> `docs/common-account/g5-11-session-verdict-consumer-contract.md`; the SQL is unchanged. The counts in section 8 are as of G5-10 (9 tests, 25/25).
+
 - TASK `common-account-g5-session-only-verdict-isolated-sql-source-candidate-20261021` (Issue #320, G5-01 generation, task 10, completion K5).
 - Contract: PR #406 (`1d032e1ee7d91848118abe8d20f847fb78c3250a`), `docs/common-account/g5-09-session-verdict-interface.md` §4-§7 and its reference
   `sessionVerdict()` in `supabase/candidates/common_account_postona_authz/session_verdict.ts` (ACCEPT `PASS_OFFLINE_SESSION_VERDICT_IF_CONTRACT`).
