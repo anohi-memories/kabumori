@@ -1,0 +1,56 @@
+// F2 QA RIG ONLY (never committed): a scripted, OFFLINE send port for the Simulator pass. No network, no X, no token.
+// The scenario is picked from a tag in the text; every call is logged to the Metro console with the attempt id.
+//   #ok real-looking published | #sim simulated | #nomark published without marks | #freeze published+afterFreeze
+//   #uncertain | #net unavailable | #pending | #fail rejected | #refuse refused | (no tag) refused QA_RIG_NO_SCENARIO
+import type { ManualPublishOutcome, ManualPublishPort, ManualPublishTarget, PortReadiness } from '../src/features/manual-publish/manual-publish-port';
+
+export const READINESS_MAX_AGE_MS = 60_000;
+const calls = new Map<string, number>();
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Scenario of a NEW attempt id = an explicit tag in the text, else the next entry of QUEUE. A retry of the same id keeps
+// its scenario, except that a retried #net / #pending resolves as #ok (the same id is answered once).
+export const QUEUE: readonly string[] = ['#ok'];
+let next = 0;
+const scenarioById = new Map<string, string>();
+function scenarioOf(targetId: string, text: string, n: number): string {
+  const known = scenarioById.get(targetId);
+  if (known !== undefined) return n >= 2 && (known === '#net' || known === '#pending') ? '#ok' : known;
+  const tags = ['#ok', '#sim', '#nomark', '#freeze', '#uncertain', '#net', '#pending', '#fail', '#refuse'];
+  const chosen = tags.find((tag) => text.includes(tag)) ?? QUEUE[next++ % QUEUE.length];
+  scenarioById.set(targetId, chosen);
+  return chosen;
+}
+
+const RIG_PORT: ManualPublishPort = Object.freeze({
+  checkReadiness: async (accountId: string): Promise<PortReadiness> => {
+    console.log(`[F2QA] readiness account=${accountId}`);
+    await wait(300);
+    return accountId === 'account-x-main' || accountId === 'account-x-sub' ? { kind: 'ready' } : { kind: 'not_connected' };
+  },
+  send: async (target: ManualPublishTarget): Promise<ManualPublishOutcome> => {
+    const n = (calls.get(target.targetId) ?? 0) + 1;
+    calls.set(target.targetId, n);
+    const scenario = scenarioOf(target.targetId, target.renderedText, n);
+    console.log(`[F2QA] send call#${n} targetId=${target.targetId} account=${target.connectedAccountId} scenario=${scenario} consentSha=${target.consent.contentSha256.slice(0, 12)} chars=${target.renderedText.length}`);
+    await wait(1500);
+    const id = target.targetId;
+    switch (scenario) {
+      case '#ok': return { kind: 'published', targetId: id, providerPostId: '1850000000000000001', marks: { simulated: false, afterFreeze: false } };
+      case '#sim': return { kind: 'published', targetId: id, providerPostId: '1850000000000000002', marks: { simulated: true, afterFreeze: false } };
+      case '#nomark': return { kind: 'published', targetId: id, providerPostId: '1850000000000000003' };
+      case '#freeze': return { kind: 'published', targetId: id, providerPostId: '1850000000000000004', marks: { simulated: false, afterFreeze: true } };
+      case '#uncertain': return { kind: 'uncertain', targetId: id, code: 'X_RESULT_UNKNOWN', marks: { simulated: false, afterFreeze: false } };
+      case '#net': return { kind: 'unavailable', targetId: id, code: null };
+      case '#pending': return { kind: 'pending', targetId: id, code: 'BUSY', marks: { simulated: false, afterFreeze: false } };
+      case '#fail': return { kind: 'rejected', targetId: id, code: 'X_REJECTED', marks: { simulated: false, afterFreeze: false } };
+      case '#refuse': return { kind: 'refused', targetId: id, code: 'ENTITLEMENT_INACTIVE', retryable: false };
+      default: return { kind: 'refused', targetId: id, code: 'QA_RIG_NO_SCENARIO', retryable: false };
+    }
+  },
+});
+
+export const UNCONNECTED_MANUAL_PUBLISH_PORT = RIG_PORT;
+export function getManualPublishPort(): ManualPublishPort {
+  return RIG_PORT;
+}

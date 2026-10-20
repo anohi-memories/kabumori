@@ -1,0 +1,23 @@
+// G2 QA RIG ONLY (2026-10-19, untracked, never committed). Swaps three modules in THIS worktree's bundle:
+// auth (fake session), the mock preview accounts (+2 X accounts) and, only with G2_QA_PORT=1, the send port.
+const path = require('path');
+const { getDefaultConfig } = require('expo/metro-config');
+
+const config = getDefaultConfig(__dirname);
+const rigDir = path.join(__dirname, '.g2-qa-rig');
+const swaps = {
+  [path.join(__dirname, 'src/providers/auth-provider.tsx')]: path.join(rigDir, 'auth-provider.rig.tsx'),
+  [path.join(__dirname, 'src/data/mock-repository.ts')]: path.join(rigDir, 'mock-repository.rig.ts'),
+};
+if (process.env.G2_QA_PORT === '1') {
+  swaps[path.join(__dirname, 'src/features/manual-publish/manual-publish-port.ts')] = path.join(rigDir, 'manual-publish-port.rig.ts');
+}
+const upstream = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolved = upstream ? upstream(context, moduleName, platform) : context.resolveRequest(context, moduleName, platform);
+  if (resolved && resolved.type === 'sourceFile' && swaps[resolved.filePath] && !context.originModulePath.startsWith(rigDir)) {
+    return { type: 'sourceFile', filePath: swaps[resolved.filePath] };
+  }
+  return resolved;
+};
+module.exports = config;
