@@ -39,9 +39,11 @@ test('the document has its sections, answers the three questions and keeps the g
   for (const code of SESSION_VERDICTS.filter((c) => c !== 'SESSION_UNKNOWN')) assert.ok(doc.includes(`'${code}'`), `the interface names ${code}`);
 });
 
-test('the interface is proposed, not created: no SQL, migration, Edge or G3 file names it', () => {
+// G5-10 created the interface as an isolated SQL candidate (003_session_verdict*.sql): those files may name it; nothing else may.
+const SV_CANDIDATE = /^supabase\/candidates\/common_account_authorization_verdict\/003_session_verdict(_rollback)?\.sql$/u;
+test('the interface exists only as the G5-10 SQL candidate: no migration, Edge, app or G3 file names it', () => {
   for (const path of [...walk('supabase/migrations'), ...walk('supabase/candidates'), ...walk('supabase/functions'), ...walk('apps')]) {
-    if (!/\.(sql|ts|tsx|js|mjs)$/u.test(path) || path === MODEL) continue;
+    if (!/\.(sql|ts|tsx|js|mjs)$/u.test(path) || path === MODEL || SV_CANDIDATE.test(path)) continue;
     assert.ok(!read(path).includes('account_lifecycle_session_verdict'), `${path} names the proposed function`);
   }
 });
