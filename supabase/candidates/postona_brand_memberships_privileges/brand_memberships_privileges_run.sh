@@ -306,7 +306,8 @@ pass "P6 a change after the forward: the rollback refuses (MISMATCH) until the s
 # P7 a line of another database, or a tampered line
 d="$(newdb p7)"; b="$(apply_cand "$d")"
 rb_fail "$d" "$a" BM_PRIV_ROLLBACK_PRESTATE_OTHER_OBJECT "P7 another database's line"
-rb_fail "$d" "${b%?}0" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 tampered sha"
+last="${b: -1}"; flip=0; [[ "$last" == 0 ]] && flip=1   # always a DIFFERENT last hex digit
+rb_fail "$d" "${b%?}$flip" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 tampered sha"
 rb_fail "$d" "$(sed 's/|\([0-9a-f]\{64\}\)$/,anon=t\/'"$owner"'|\1/' <<<"$b")" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 an added item without a matching sha"
 rb_fail "$d" "v1|garbage" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 garbage"
 expect "P7 unchanged" "$(priv "$d")" "$POST_PRIV"
@@ -327,6 +328,128 @@ own "$d" -c "$HARDEN" >/dev/null; P9NOW="$(acl "$d")"
 rb_fail "$d" "$line" BM_PRIV_ROLLBACK_PRESTATE_MISMATCH "P9 another grantor's item in a hand-made line"
 expect "P9 unchanged" "$(acl "$d")" "$P9NOW"
 pass "P9 a hand-made line with another grantor's item (since removed): refused as MISMATCH -- the rollback only counts the owner's own grants as removable"
+
+# ---- Q: H3 C3 (TASK 6) counterexamples, TASK 17/50 -- concurrency (R1) and relation identity (R2) ----
+# A test-only copy of a file with "select pg_sleep(N);" inserted after a marker line pauses it at that point (no product file is changed).
+OLD=d3ff513bdf184f2c8f80950733d229936f49d83d
+git -C "$repo" show "$OLD:supabase/candidates/postona_brand_memberships_privileges/001_brand_memberships_api_privilege_revoke.sql" >"$tmp/fwd_old.sql"
+git -C "$repo" show "$OLD:supabase/candidates/postona_brand_memberships_privileges/001_brand_memberships_api_privilege_revoke_rollback.sql" >"$tmp/rb_old.sql"
+pause_after() { awk -v m="$2" -v n="$3" '{ print } !done && index($0, m) == 1 { print "select pg_sleep(" n ");"; done = 1 }' "$1"; }
+pause_before() { awk -v m="$2" -v n="$3" '!done && index($0, m) == 1 { print "select pg_sleep(" n ");"; done = 1 } { print }' "$1"; }
+sleeping_in() { local d="$1" i; for i in $(seq 1 100); do
+  [ "$("${S[@]}" -d "$d" -c "select count(*) from pg_stat_activity where datname = '$d' and query like '%pg_sleep(%' and state = 'active' and pid <> pg_backend_pid()")" -ge 1 ] && return 0; sleep 0.1; done; return 1; }
+ae_held() { local d="$1" i; for i in $(seq 1 100); do
+  [ "$("${S[@]}" -d "$d" -c "select count(*) from pg_locks l join pg_database b on b.oid = l.database where b.datname = '$d' and l.mode = 'AccessExclusiveLock' and l.granted and l.locktype = 'relation'")" -ge 1 ] && return 0; sleep 0.1; done; return 1; }
+has_priv() { val "$1" -c "select has_table_privilege('$2', 'public.brand_memberships', '$3')"; }
+REPLACE_TABLE="alter table public.brand_memberships rename to brand_memberships_replaced; create table public.brand_memberships (brand_id text, user_id uuid, role text);
+  revoke all on table public.brand_memberships from anon; revoke insert, update, delete on table public.brand_memberships from anon, authenticated;
+  revoke trigger, truncate, references on table public.brand_memberships from public, anon, authenticated; revoke trigger on table public.brand_memberships from service_role"
+
+# Q1 R1 reproduced on the reviewed head (d3ff513b): another owner session's REVOKE commits between the prestate and the REVOKE; the rollback re-grants it
+d="$(newdb q1)"; pause_before "$tmp/fwd_old.sql" "revoke trigger, truncate, references" 3 >"$tmp/q1.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/q1.sql" >"$tmp/q1.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "Q1 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "revoke truncate on table public.brand_memberships from authenticated" >"$tmp/q1o" 2>&1 || fail "Q1 the concurrent REVOKE was blocked on the old head: $(cat "$tmp/q1o")"
+wait "$bg" || fail "Q1 old forward: $(cat "$tmp/q1.out")"
+a="$(sed -n 's/^BM_PRIV_PRESTATE //p' "$tmp/q1.out")"
+own "$d" -v bm_prestate="$a" -f "$tmp/rb_old.sql" >/dev/null
+expect "Q1 the old rollback re-grants the TRUNCATE another session removed" "$(has_priv "$d" authenticated TRUNCATE)" "t"
+pass "Q1 H3 R1 reproduced on d3ff513b: a concurrent REVOKE commits inside the forward; the old rollback re-grants it"
+
+# Q2 R1 fixed: the forward claims the table's pg_class row before the prestate; a concurrent REVOKE waits and fails (lock_timeout, or
+# "tuple concurrently updated" once the forward commits); the rollback then restores exactly the forward's prestate
+d="$(newdb q2)"; Q2PRE="$(acl "$d")"; pause_after "$cand" "-- (prestate taken" 3 >"$tmp/q2.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/q2.sql" >"$tmp/q2.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "Q2 the paused forward never paused"
+if own "$d" -c "set lock_timeout = '1s'" -c "revoke truncate on table public.brand_memberships from authenticated" >"$tmp/q2o" 2>&1; then fail "Q2 a concurrent REVOKE committed inside the forward"; fi
+grep -q "lock timeout" "$tmp/q2o" || fail "Q2 the concurrent REVOKE did not wait: $(cat "$tmp/q2o")"
+own "$d" -c "revoke truncate on table public.brand_memberships from authenticated" >"$tmp/q2w" 2>&1 & w=$!
+wait "$bg" || fail "Q2 forward: $(cat "$tmp/q2.out")"
+if wait "$w"; then fail "Q2 the waiting REVOKE committed after the forward"; fi
+grep -q "tuple concurrently updated" "$tmp/q2w" || fail "Q2 the waiting REVOKE: $(cat "$tmp/q2w")"
+expect "Q2 forward result" "$(priv "$d")" "$POST_PRIV"
+rollback_with "$d" "$(sed -n 's/^BM_PRIV_PRESTATE //p' "$tmp/q2.out")" >/dev/null
+expect "Q2 rollback = the forward's prestate exactly" "$(acl "$d")" "$Q2PRE"
+pass "Q2 R1 fixed: inside the forward a concurrent REVOKE times out, a waiting one fails with 'tuple concurrently updated'; the rollback restores exactly the prestate"
+
+# Q3 the same on the rollback side: a concurrent ACL change during the rollback cannot commit; the result is exactly the prestate
+d="$(newdb q3)"; Q3PRE="$(acl "$d")"; a="$(apply_cand "$d")"; pause_after "$rb" "-- (claimed" 3 >"$tmp/q3.sql"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$tmp/q3.sql" >"$tmp/q3.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "Q3 the paused rollback never paused"
+if own "$d" -c "set lock_timeout = '1s'" -c "revoke select on table public.brand_memberships from authenticated" >"$tmp/q3o" 2>&1; then fail "Q3 a concurrent REVOKE committed inside the rollback"; fi
+grep -q "lock timeout" "$tmp/q3o" || fail "Q3 the concurrent REVOKE did not wait: $(cat "$tmp/q3o")"
+wait "$bg" || fail "Q3 rollback: $(cat "$tmp/q3.out")"
+expect "Q3 rollback = the prestate exactly" "$(acl "$d")" "$Q3PRE"
+pass "Q3 R1 on the rollback side: a concurrent REVOKE times out; the rollback's result is exactly the prestate"
+
+# Q4 R2 reproduced on the reviewed head: while the old rollback waits for the table lock, the table is renamed and replaced; it grants on the new one
+d="$(newdb q4)"; a="$(apply_cand "$d")"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -c "begin" -c "lock table public.brand_memberships in access exclusive mode" -c "select pg_sleep(2)" -c "$REPLACE_TABLE" -c "commit" >"$tmp/q4h" 2>&1 & h=$!
+ae_held "$d" || fail "Q4 the replacing session never held the lock"
+own "$d" -v bm_prestate="$a" -f "$tmp/rb_old.sql" >"$tmp/q4.out" 2>&1 & bg=$!
+wait "$h" || fail "Q4 replacement: $(cat "$tmp/q4h")"
+wait "$bg" || fail "Q4 the old rollback refused (expected it to run): $(cat "$tmp/q4.out")"
+expect "Q4 the old rollback granted TRIGGER on the NEW table" "$(has_priv "$d" authenticated TRIGGER)" "t"
+pass "Q4 H3 R2 reproduced on d3ff513b: the old rollback checked the OID before the lock and granted the old line's privileges on the replacement table"
+
+# Q5 R2 fixed: the same replacement -> the rollback refuses after the lock; the new table is unchanged
+d="$(newdb q5)"; a="$(apply_cand "$d")"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -c "begin" -c "lock table public.brand_memberships in access exclusive mode" -c "select pg_sleep(2)" -c "$REPLACE_TABLE" -c "commit" >"$tmp/q5h" 2>&1 & h=$!
+ae_held "$d" || fail "Q5 the replacing session never held the lock"
+rollback_with "$d" "$a" >"$tmp/q5.out" 2>&1 & bg=$!
+wait "$h" || fail "Q5 replacement: $(cat "$tmp/q5h")"
+if wait "$bg"; then fail "Q5 the rollback ran on the replacement table"; fi
+grep -q BM_PRIV_ROLLBACK_TABLE_REPLACED "$tmp/q5.out" || fail "Q5 wrong refusal: $(grep ERROR "$tmp/q5.out" | head -1)"
+expect "Q5 the new table unchanged" "$(has_priv "$d" authenticated TRIGGER)" "f"
+pass "Q5 R2 fixed: a rename / replacement while the rollback waited for the lock -> TABLE_REPLACED, nothing granted"
+
+# Q6 an owner change while the rollback waits -> NOT_TABLE_OWNER after the lock
+d="$(newdb q6)"; a="$(apply_cand "$d")"; Q6NOW="$(priv "$d")"
+"${S[@]}" -d "$d" -c "begin" -c "lock table public.brand_memberships in access exclusive mode" -c "select pg_sleep(2)" -c "alter table public.brand_memberships owner to $other" -c "commit" >"$tmp/q6h" 2>&1 & h=$!
+ae_held "$d" || fail "Q6 the owner-changing session never held the lock"
+rollback_with "$d" "$a" >"$tmp/q6.out" 2>&1 & bg=$!
+wait "$h" || fail "Q6 owner change: $(cat "$tmp/q6h")"
+if wait "$bg"; then fail "Q6 the rollback ran after an owner change"; fi
+grep -q BM_PRIV_ROLLBACK_NOT_TABLE_OWNER "$tmp/q6.out" || fail "Q6 wrong refusal: $(grep ERROR "$tmp/q6.out" | head -1)"
+pass "Q6 an owner change while the rollback waited -> NOT_TABLE_OWNER after the lock, nothing granted"
+
+# Q7 G5's owner-epoch objects appear while the rollback waits -> refused after the lock (a test-only marker function of G5's name)
+d="$(newdb q7)"; a="$(apply_cand "$d")"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -c "begin" -c "lock table public.brand_memberships in access exclusive mode" -c "select pg_sleep(2)" \
+  -c "create schema if not exists private" -c "create function private.account_lifecycle_owner_epoch_exposure() returns text language sql as 'select null::text'" -c "commit" >"$tmp/q7h" 2>&1 & h=$!
+ae_held "$d" || fail "Q7 the marker session never held the lock"
+rollback_with "$d" "$a" >"$tmp/q7.out" 2>&1 & bg=$!
+wait "$h" || fail "Q7 marker: $(cat "$tmp/q7h")"
+if wait "$bg"; then fail "Q7 the rollback ran while G5 appeared"; fi
+grep -q BM_PRIV_ROLLBACK_REFUSED_OWNER_EPOCH_INSTALLED "$tmp/q7.out" || fail "Q7 wrong refusal: $(grep ERROR "$tmp/q7.out" | head -1)"
+expect "Q7 unchanged" "$(priv "$d")" "$POST_PRIV"
+pass "Q7 G5's owner epoch appearing while the rollback waited -> refused after the lock, nothing granted"
+
+# Q8 the forward too: a replacement while it waits for the lock -> TABLE_REPLACED, the new table unchanged
+d="$(newdb q8)"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -c "begin" -c "lock table public.brand_memberships in access exclusive mode" -c "select pg_sleep(2)" \
+  -c "alter table public.brand_memberships rename to brand_memberships_replaced" -c "create table public.brand_memberships (brand_id text, user_id uuid, role text)" -c "commit" >"$tmp/q8h" 2>&1 & h=$!
+ae_held "$d" || fail "Q8 the replacing session never held the lock"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$cand" >"$tmp/q8.out" 2>&1 & bg=$!
+wait "$h" || fail "Q8 replacement: $(cat "$tmp/q8h")"
+if wait "$bg"; then fail "Q8 the forward ran on the replacement table"; fi
+grep -q BM_PRIV_PRECONDITION_TABLE_REPLACED "$tmp/q8.out" || fail "Q8 wrong refusal: $(grep ERROR "$tmp/q8.out" | head -1)"
+expect "Q8 the new table keeps its own ACL" "$(has_priv "$d" authenticated TRIGGER)" "t"
+pass "Q8 the forward: a replacement while it waited -> TABLE_REPLACED, nothing revoked on the new table"
+
+# Q9 the claim does not block readers: a SELECT during the paused forward completes within 1 s
+d="$(newdb q9)"; pause_after "$cand" "-- (prestate taken" 3 >"$tmp/q9.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/q9.sql" >"$tmp/q9.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "Q9 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "begin" -c "set local role authenticated" -c "select count(*) from public.brand_memberships" -c "commit" >"$tmp/q9r" 2>&1 || fail "Q9 a reader was blocked: $(cat "$tmp/q9r")"
+wait "$bg" || fail "Q9 forward: $(cat "$tmp/q9.out")"
+pass "Q9 readers are not blocked by the row claim (writers still wait for the table lock, as K1)"
+# Q10 the claim must be ACL-neutral: an owner that revoked its own SELECT is refused before the claim (the claim would have changed the ACL)
+d="$(newdb q10)"; own "$d" -c "revoke select on table public.brand_memberships from $owner" >/dev/null; Q10PRE="$(acl "$d")"
+if psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$cand" >"$tmp/q10.out" 2>&1; then fail "Q10 the forward ran with the owner's SELECT missing"; fi
+grep -q BM_PRIV_PRECONDITION_OWNER_ACL_INCOMPLETE "$tmp/q10.out" || fail "Q10 wrong refusal: $(grep ERROR "$tmp/q10.out" | head -1)"
+expect "Q10 unchanged" "$(acl "$d")" "$Q10PRE"
+pass "Q10 the owner's own SELECT missing -> OWNER_ACL_INCOMPLETE before the claim; the ACL is unchanged"
 
 # ---- O: apply order with G5's REAL candidate files (optional) ----
 if [ -n "$g5" ]; then

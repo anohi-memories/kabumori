@@ -1,4 +1,4 @@
--- G3 SOURCE CANDIDATE (2026-10-20, Issue #318 TASK 8/50; prestate artifact TASK 16/50). NOT in supabase/migrations/. Never apply to a managed or production database without the
+-- G3 SOURCE CANDIDATE (2026-10-20, Issue #318 TASK 8/50; prestate artifact TASK 16/50; row claim + post-lock checks TASK 17/50). NOT in supabase/migrations/. Never apply to a managed or production database without the
 -- limited Codex Sol (high) review of this file, the user's separate GO, a production mutation window and a read-back.
 --
 -- public.brand_memberships: take TRIGGER away from every API role and TRUNCATE / REFERENCES away from the end-user roles (and from PUBLIC).
@@ -17,6 +17,14 @@
 -- taken under the lock, before the REVOKE. It is the only input the rollback file accepts: the rollback puts back exactly what THIS run took
 -- away (owner-granted items only, no grant option, never to anon / PUBLIC) and refuses anything else. The line is recorded in the production
 -- mutation window's read-back; nothing is stored in the database (no new table, no comment).
+--
+-- SERIALISATION (2026-10-20, TASK 17/50, H3 C3 R1 / R2): a table lock does NOT serialise GRANT / REVOKE (measured on PG17: another session's
+-- REVOKE commits while this one holds even ACCESS EXCLUSIVE), but every GRANT / REVOKE / ALTER of the table rewrites the table's pg_class
+-- row, and a second writer of that row waits for the first transaction and then fails ("tuple concurrently updated") or hits its lock_timeout.
+-- So right after the table lock this file CLAIMS the row with an ACL-neutral statement -- the owner grants itself SELECT, which it already
+-- holds (checked first; the ACL does not change) -- and only then takes the prestate. From the claim to COMMIT no other ACL change of this
+-- table can commit; table readers and writers are not blocked by the claim (the table lock still holds writers, as before).
+-- Every precondition is checked again AFTER the lock, on the relation the lock was taken on (its OID must be the one the name gave before).
 --
 -- Fail-closed: any precondition or postcondition that does not hold raises and the whole transaction rolls back (nothing changes).
 -- The postconditions are read from the catalog with has_table_privilege / pg_has_role, so a privilege left by another grantor, by PUBLIC or through
@@ -50,12 +58,48 @@ begin
               where not exists (select 1 from pg_catalog.pg_roles r where r.rolname = n.rolname)) then
     raise exception 'BM_PRIV_PRECONDITION_API_ROLE_MISSING';
   end if;
+  perform pg_catalog.set_config('bm_priv.oid_before_lock', 'public.brand_memberships'::regclass::oid::text, true);
 end $$;
 
 -- Same lock as G5 PR #303's install (writers wait, readers do not); it also keeps a concurrent CREATE TRIGGER / ADD FOREIGN KEY out until commit.
 lock table public.brand_memberships in share row exclusive mode;
 
--- the prestate, under the lock and before the REVOKE (printed after the postconditions)
+-- every precondition again, on the relation that is now locked (a rename / replacement while this waited for the lock is refused)
+do $$
+declare
+  v_me oid := (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user);
+  v_table regclass := to_regclass('public.brand_memberships');
+begin
+  if v_table is null or v_table::oid::text is distinct from pg_catalog.current_setting('bm_priv.oid_before_lock', true) then
+    raise exception 'BM_PRIV_PRECONDITION_TABLE_REPLACED';
+  end if;
+  if (select r.rolsuper from pg_catalog.pg_roles r where r.oid = v_me) is distinct from false then
+    raise exception 'BM_PRIV_PRECONDITION_RUN_AS_SUPERUSER';
+  end if;
+  if (select c.relowner from pg_catalog.pg_class c where c.oid = v_table) is distinct from v_me then
+    raise exception 'BM_PRIV_PRECONDITION_NOT_TABLE_OWNER';
+  end if;
+  if (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = v_table) is distinct from true then
+    raise exception 'BM_PRIV_PRECONDITION_RLS_DISABLED';
+  end if;
+  if not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = v_table and p.polname = 'social_mobile_membership_self_select') then
+    raise exception 'BM_PRIV_PRECONDITION_SELF_SELECT_POLICY_MISSING';
+  end if;
+  -- the claim below must not change the ACL: the owner's own SELECT must already be there
+  if not exists (select 1 from pg_catalog.pg_class c,
+                   pg_catalog.aclexplode(coalesce(c.relacl, pg_catalog.acldefault('r', c.relowner))) a
+                  where c.oid = v_table and a.grantor = v_me and a.grantee = v_me and a.privilege_type = 'SELECT') then
+    raise exception 'BM_PRIV_PRECONDITION_OWNER_ACL_INCOMPLETE';
+  end if;
+end $$;
+
+-- the claim of the table's pg_class row (ACL-neutral: the owner already holds SELECT); other GRANT / REVOKE / ALTER of this table now wait
+do $$
+begin
+  execute pg_catalog.format('grant select on table public.brand_memberships to %I', current_user);
+end $$;
+
+-- the prestate, under the lock and the claim, before the REVOKE (printed after the postconditions)
 do $$
 declare
   v_body text := 'v1|' || pg_catalog.current_database() || '|' || 'public.brand_memberships'::regclass::oid::text || '|'
@@ -63,6 +107,7 @@ declare
 begin
   perform pg_catalog.set_config('bm_priv.prestate', v_body || '|' || pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_body, 'UTF8')), 'hex'), true);
 end $$;
+-- (prestate taken: from here to COMMIT no other ACL change of this table can commit)
 
 revoke trigger, truncate, references on table public.brand_memberships from public, anon, authenticated;
 revoke trigger on table public.brand_memberships from service_role;

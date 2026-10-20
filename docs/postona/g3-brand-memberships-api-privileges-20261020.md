@@ -86,6 +86,48 @@
 - **G5 の owner epoch（PR #303）が入っている間は戻さない**（`BM_PRIV_ROLLBACK_REFUSED_OWNER_EPOCH_INSTALLED`）。戻す順番は PR #358（#371）→ PR #303 → この rollback。
 - 表の owner だけが実行できる。
 
+### TASK 17/50 の修正（H3 C3 TASK 6 の 2 つの P2 への対応。Codex Sol（高）の独立の再レビュー待ち）
+- **R1（並行性）**: 元の本体は、表に `SHARE ROW EXCLUSIVE` のロックを取ってから記録を取っていた。しかし、別の owner のセッションの REVOKE は、記録と REVOKE のあいだに commit できた。rollback は、その人が外した権限まで戻していた（Q1 で再現）。
+- **R2（表の同一性）**: 元の rollback は、記録の OID をロックの**前**に確かめていた。ロックを待っている間に表が入れ替えられると、新しい表に古い記録の権限を付けていた（Q4 で再現）。
+- **ロックの方式の実測による比較**（PG17.11、使い捨ての DB）:
+
+  | 方式 | 他のセッションの GRANT・REVOKE | 表の読み取り | 表の書き込み |
+  |---|---|---|---|
+  | 表に `SHARE ROW EXCLUSIVE`（元の方式） | **待たずに commit する** | 止めない | 止める |
+  | 表に `ACCESS EXCLUSIVE`（H3 が挙げた候補） | **待たずに commit する**（GRANT・REVOKE は表のロックを取らない） | 止める | 止める |
+  | **`pg_class` の行の確保**（今回の方式。ACL を変えない GRANT で、表の `pg_class` の行を自分のトランザクションで書き換える） | **待ち、lock_timeout で失敗する。待ち続けた場合は、確保した側の COMMIT の後に `tuple concurrently updated` で失敗する** | 止めない | 止めない（表のロックは別に止める） |
+
+  - 強い表のロックでは R1 を防げない。そのため、今回の方式を採った。
+  - 全員が従う排他の時間帯（advisory lock）のような、承認の要る運用の取り決めも要らない。
+- **本体の新しい順番**:
+  1. 名前から OID を記録する（ロックの前）
+  2. 表のロック
+  3. ロックした表について、すべての前提をもう一度確かめる
+     - OID がロックの前と同じか（違えば `BM_PRIV_PRECONDITION_TABLE_REPLACED`）
+     - owner、superuser でないこと、RLS、ポリシー
+     - **owner 自身の SELECT があること**（無ければ `BM_PRIV_PRECONDITION_OWNER_ACL_INCOMPLETE`）
+  4. **行の確保**: owner が自分に SELECT を GRANT する。すでに持っているので ACL は変わらない。
+  5. 記録
+  6. REVOKE・事後条件・出力
+- **rollback の新しい順番**:
+  1. 表と owner だけを確かめ、OID を記録する（ロックの前）
+  2. 表のロック
+  3. ロックした表について、次を確かめる（ロックの前に確かめたことは信用しない）
+     - OID（`BM_PRIV_ROLLBACK_TABLE_REPLACED`）
+     - owner
+     - G5 の owner epoch
+     - 記録（sha256・DB・**ロックした表の OID**）
+     - owner 自身の SELECT
+  4. 行の確保
+  5. 計算・GRANT・最後の事後条件
+- **運用のリスク**（PASS とは偽らない）:
+  - 本体と rollback の実行中（確保から COMMIT まで）は、この表に対する他の GRANT・REVOKE・ALTER が待たされ、失敗する。他の作業と重ならない作業時間に当てること。
+  - 確保の時に、他の人の ACL の変更が未確定なら、こちらが最大 5 秒（lock_timeout）待つ。その後に失敗した場合も、何も変わらない。
+  - 表の書き込みは、これまでどおり表のロックで最大 5 秒待つ（K1）。読み取りは止めない（K2・Q9）。
+  - 記録の行は COMMIT の前に出力される。psql の成功・COMMIT の完了・読み戻しを確かめてから保存すること。
+  - 同じ表の、以前の有効な記録（例: 最初の実行の記録）も受け付けられる（仕様どおり、最初の記録で元に戻すため）。どの記録で戻すかは、運用で正しく結び付けること。
+- 最後の事後条件（`POSTCONDITION_NOT_PRESTATE`）は残す。H3 が、予期しない副作用が入った場合でも全体が戻ることを確かめた。
+
 ## 3. テスト（使い捨ての PG17、`brand_memberships_privileges_run.sh`）
 - 土台はリポジトリのファイル: 偽データの fixture（新しい表への既定の付与を、プラットフォームの既定の模型として入れる [A]）→ X の接続 RPC → 削除の候補 → membership の migration（`20260918120000`）。
 - 照会は `has_table_privilege`・`pg_has_role(…, 'MEMBER')`・`aclexplode` だけ。権限を足すこと、役割の membership を足すことはしていない。
@@ -110,6 +152,16 @@
 | P7 | 別の DB の記録は `PRESTATE_OTHER_OBJECT`。sha256 を変えた記録、項目を足した記録、壊れた記録は `PRESTATE_CORRUPT`。何も変わらない。 |
 | P8 | もともと anon に TRIGGER があった: 001 は取り上げる。rollback は anon・PUBLIC には戻さない（`GRANTEE_UNSUPPORTED`）。 |
 | P9 | 実行が出力したのではない、手で作った記録（sha256 は正しい）で、別の付与者の項目を含み、その項目は今は無い: `PRESTATE_MISMATCH` で止まる。rollback が「取り上げたもの」と数えるのは owner 自身の付与だけ。 |
+| Q1 | **H3 R1 の再現**（レビューした head `d3ff513b` の本体と rollback を git から取り出す）: 記録の直後に止めた本体の間に、別のセッションの REVOKE TRUNCATE が commit する。元の rollback はそれを戻す。 |
+| Q2 | **R1 の修正**: 記録の直後に止めた本体の間に、別のセッションの REVOKE は lock timeout で失敗する。待ち続けた REVOKE は、本体の COMMIT の後に `tuple concurrently updated` で失敗する。rollback は記録と文字単位で同じ ACL に戻す。 |
+| Q3 | rollback の側: 行の確保の後に止めた rollback の間に、別のセッションの REVOKE は lock timeout で失敗する。結果は記録と文字単位で同じ。 |
+| Q4 | **H3 R2 の再現**: 元の rollback がロックを待っている間に、表が入れ替えられる。元の rollback は、新しい表に TRIGGER を付けてしまう。 |
+| Q5 | **R2 の修正**: 同じ入れ替え → `ROLLBACK_TABLE_REPLACED`。新しい表は変わらない。 |
+| Q6 | rollback がロックを待っている間に owner が変わる → ロックの後に `NOT_TABLE_OWNER`。 |
+| Q7 | rollback がロックを待っている間に G5 の owner epoch の関数が現れる（テスト用の印）→ ロックの後に `REFUSED_OWNER_EPOCH_INSTALLED`。何も変わらない。 |
+| Q8 | 本体がロックを待っている間に表が入れ替えられる → `PRECONDITION_TABLE_REPLACED`。新しい表は変わらない。 |
+| Q9 | 行の確保の間も、表の読み取りは 1 秒以内に終わる（止めない）。 |
+| Q10 | owner が自分の SELECT を外していた → 行の確保の前に `OWNER_ACL_INCOMPLETE` で止まる（確保が ACL を変えてしまうのを防ぐ）。ACL は変わらない。 |
 | C6 | 作り直したスキーマ（fixture → migration → 候補）でも ACL は同じ。migration を後から当てた DB でも、その後なら当てられる。 |
 | O1 | **G5 の本物のファイル**（PR #358 の木、変えずに使う）: G3 の候補の前は、PR #303 の install が `OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS` で止まる。PR #358 は PR #303 が無いので止まる。 |
 | O2 | G3 の候補 → PR #303 の install（G5 の本物の検査 `account_lifecycle_owner_epoch_exposure()` が NULL）→ PR #358 の install（R1・W1・W2 ができる）。G3 の写しと G5 の本物の答えが一致する。 |
@@ -117,6 +169,18 @@
 | O4 | 戻す順番 PR #358 → PR #303 → G3 は通る。戻した後は PR #303 の再 install が止まる。G3 の候補を当て直すと、G5 は再 install できる。 |
 
 - 結果: `BRAND_MEMBERSHIPS_PRIVILEGES_ALL_PASS`（G5 の木あり・なしの両方。なしのときは O が `O_NOT_RUN`）。
+- 変異テスト（TASK 17/50）: 本体と rollback の写しに 19 個を入れ、**18 個を検出**した（TASK 16 の 11 個の流し直しを含む）。
+  - 新しい 8 個は、すべて検出した。
+    - 本体の行の確保なし（Q2）
+    - 確保が記録の後（Q2）
+    - ロックの後の同一性の確認なし（Q8）
+    - owner の SELECT の確認なし（Q10）
+    - rollback の行の確保なし（Q3）
+    - rollback のロックの後の同一性の確認なし（Q5）
+    - ロックの後の G5 の確認なし（Q7）
+    - ロックの後の owner の確認なし（Q6）
+  - 残った 1 個は、TASK 16 と同じく最後の事後条件を外す変異。H3 が独立に、副作用を差し込んだ場合にこの事後条件で全体が戻ることを確かめている。
+  - テストの誤りを 1 つ直した: P7 の「sha256 を変えた記録」は最後の 1 文字を `0` に置き換えていたが、もとが `0` なら変わらない（16 回に 1 回、正しい記録のまま流れて失敗していた）。必ず違う文字にする形にした。
 - 変異テスト（TASK 16/50、新しい rollback と記録）: 11 個を入れ、**10 個を検出**した（`BM_ROLLBACK`・`BM_CANDIDATE` で写しに入れる）。
   - 検出: 記録が無くても進む（C5）、MISMATCH を見ない（P3）、grant option を見ない（P5）、anon に戻す（P8）、別の付与者の項目も数える（P9）、sha256 を見ない（P7）、DB・表を見ない（P7）、元の固定の GRANT に戻す（P1 ほか）、記録を REVOKE の後に取る（C4）、記録に sha256 が無い（C5 ほか）。
   - 残った 1 個: 最後の事後条件（`POSTCONDITION_NOT_PRESTATE`）を外す変異。他の確認がすべて正しい限り結果が同じで、多重の防御として残す。
@@ -144,7 +208,10 @@
 1. **Codex Sol（高）の限定レビュー**: この 2 つのファイルとランナー。
 2. **ユーザーの個別の GO**。
 3. 本番の前の読み取り（別の承認が要る）: `public.brand_memberships` の owner・ACL・RLS、API の役割の membership、表のトリガーと、表を参照する外部キーの一覧。読み取り用の SQL はレビューの後に用意する。
-4. **本番の作業時間（production mutation window）**: 表の owner として、この 1 ファイルだけを当てる（`db push` はしない）。書き込みは最大 5 秒待つ。止まったら何も変わらない。
+4. **本番の作業時間（production mutation window）**: 表の owner として、この 1 ファイルだけを当てる（`db push` はしない）。
+   - 書き込みは最大 5 秒待つ。
+   - 確保から COMMIT まで、この表への他の GRANT・REVOKE・ALTER は待たされて失敗する（TASK 17）。他の権限の作業と重ねない。
+   - 止まったら何も変わらない。
 5. **読み戻し**: ACL、`has_table_privilege` の表、G5 の検査と同じ照会の答えが `NONE` であること。001 が出力した `BM_PRIV_PRESTATE` の行を、そのまま記録に残す（rollback の唯一の入力）。
 6. その後に限って、G5 の順番に進む（PR #303 のレビュー → install → PR #358）。
 7. 戻すときは PR #358（#371）→ PR #303 → この rollback の順。rollback には、手順 4 で出力された `BM_PRIV_PRESTATE` の行（読み戻しに残したもの）を `-v bm_prestate=` で渡す。記録が無い・状態が変わった場合は止まるので、その場合は手で判断する（権限を推測で戻さない）。
