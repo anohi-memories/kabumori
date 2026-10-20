@@ -26,6 +26,7 @@ const ALLOWED_IMPORTS = new Set([
   '@/components/ui',
   '@/domain/types',
   '@/features/manual-publish/manual-post-preview',
+  '@/features/manual-publish/manual-publish-draft-store',
   '@/features/manual-publish/manual-publish-flow',
   '@/features/manual-publish/manual-publish-model',
   '@/features/manual-publish/manual-publish-port',
@@ -35,6 +36,7 @@ const ALLOWED_IMPORTS = new Set([
   '@/providers/data-provider',
   '../../domain/schedule-planner.ts',
   '../../domain/types.ts',
+  './manual-publish-draft-store.ts',
   './manual-publish-flow.ts',
   './manual-publish-hash.ts',
   './manual-publish-model.ts',
@@ -54,6 +56,7 @@ test('the feature has exactly the expected files', async () => {
     [
       'src/app/manual-publish.tsx',
       'src/features/manual-publish/manual-post-preview.tsx',
+      'src/features/manual-publish/manual-publish-draft-store.ts',
       'src/features/manual-publish/manual-publish-flow.ts',
       'src/features/manual-publish/manual-publish-hash.ts',
       'src/features/manual-publish/manual-publish-model.ts',
@@ -230,4 +233,27 @@ test('only the storage file imports the device storage, and the screen reaches i
   }
   const route = await readFile(join(ROOT, ROUTE), 'utf8');
   assert.ok(route.includes("from '@/features/manual-publish/manual-publish-storage'"));
+});
+
+// ---- the short-lived draft copy (G2-U1) ----------------------------------------------------------------------------------------------
+
+test('the draft copy holds only account, text, session mark and time: no consent, confirmation, token or attempt id can be written', async () => {
+  const text = await readFile(join(ROOT, `${FEATURE_DIR}/manual-publish-draft-store.ts`), 'utf8');
+  const serialize = /function serialize[\s\S]*?\n\}\n/u.exec(text)[0];
+  const fields = [...serialize.matchAll(/(\w+): (?:DRAFT_VERSION|record\.\w+)/gu)].map((match) => match[1]).sort();
+  assert.deepEqual(fields, ['accountId', 'savedAt', 'sessionMark', 'text', 'v']);
+  for (const forbiddenField of [/consent/iu, /token/iu, /requestId/iu, /contentSha256/u, /readiness/iu, /unresolved/iu]) {
+    assert.ok(!forbiddenField.test(serialize), `serialize() must not mention ${forbiddenField}`);
+  }
+  const type = /export type DraftRecord = [\s\S]*?\}>;/u.exec(text)[0];
+  for (const key of ['accountId', 'text', 'sessionMark', 'savedAt']) assert.ok(type.includes(key), key);
+  assert.ok(!/consent|token|requestId/iu.test(type));
+});
+
+test('the unresolved-attempt record still holds NO text (only the short-lived draft copy may, and only while editing)', async () => {
+  const attempt = await readFile(join(ROOT, `${FEATURE_DIR}/manual-publish-store.ts`), 'utf8');
+  const type = /export type PersistedAttempt = [\s\S]*?\}>;/u.exec(attempt)[0];
+  assert.ok(!/\btext\b/u.test(type));
+  const route = await readFile(join(ROOT, ROUTE), 'utf8');
+  assert.ok(route.includes('void draftStore.clear(userId); // the text now lives only in this attempt'), 'the draft copy is removed when a send starts');
 });

@@ -51,7 +51,7 @@ export interface AttemptStore {
 export const STORE_VERSION = 1;
 const KINDS: readonly UnresolvedKind[] = ['in_flight', 'pending', 'unconfirmed', 'uncertain'];
 const KEYS = ['accountId', 'contentSha256', 'kind', 'requestId', 'savedAt', 'v'].join(',');
-const USER_RE = /^[A-Za-z0-9_-]{1,64}$/u;
+export const USER_RE = /^[A-Za-z0-9_-]{1,64}$/u;
 
 export const storeKeyOf = (userId: string) => `postona.manual-publish.unresolved.v${STORE_VERSION}:${userId}`;
 

@@ -13,6 +13,7 @@ import * as model from '../src/features/manual-publish/manual-publish-model.ts';
 import * as realFlow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as realPort from '../src/features/manual-publish/manual-publish-port.ts';
 import * as realStore from '../src/features/manual-publish/manual-publish-store.ts';
+import * as realDraft from '../src/features/manual-publish/manual-publish-draft-store.ts';
 
 
 /** A device storage that can fail in every way: a thrown read / write / remove, or a write that silently stores nothing. */
@@ -103,9 +104,10 @@ async function loadRoute(world) {
     '@/features/manual-publish/manual-publish-flow': { ...realFlow, attemptMemory: world.memory },
     '@/features/manual-publish/manual-publish-model': model,
     '@/features/manual-publish/manual-publish-port': { ...realPort, getManualPublishPort: () => world.port },
-    '@/features/manual-publish/manual-publish-storage': { attemptStore: world.store },
+    '@/features/manual-publish/manual-publish-storage': { attemptStore: world.store, draftStore: world.draftStore },
+    '@/features/manual-publish/manual-publish-draft-store': realDraft,
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts, activeAccount: world.accounts.find((a) => a.id === world.active) ?? null }) },
-    '@/providers/auth-provider': { useAuth: () => ({ session: world.userId === null ? null : { user: { id: world.userId } } }) },
+    '@/providers/auth-provider': { useAuth: () => ({ session: world.userId === null ? null : (world.session ?? { user: { id: world.userId } }) }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reason: null, snapshot: null }) },
   };
   const source = await readFile(new URL('../src/app/manual-publish.tsx', import.meta.url), 'utf8');
@@ -115,15 +117,16 @@ async function loadRoute(world) {
   return { mod, slots, getCursor: () => cursor, setCursor: (v) => { cursor = v; }, pendingEffects };
 }
 
-async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), clock = { t: 100_000 }, os = 'ios' } = {}) {
+async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', clock = { t: 100_000 }, os = 'ios' } = {}) {
   const store = realStore.createAttemptStore(kv);
-  const world = { status, userId, accounts, active, port: port.port, memory, store, os };
+  const draftStore = realDraft.createDraftStore(draftKv);
+  const world = { status, userId, accounts, active, port: port.port, memory, store, draftStore, os };
   const rt = await loadRoute(world);
   let ids = 0;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
   const nowFn = () => clock.t;
   const idFn = () => ID(++ids);
-  const props = () => ({ userId: world.userId, now: nowFn, newRequestId: idFn });
+  const props = () => ({ userId: world.userId, sessionMark, now: nowFn, newRequestId: idFn });
   const render = () => { rt.setCursor(0); return rt.mod.exports.ManualPublishScreen(props()); };
   const flush = async () => {
     for (let round = 0; round < 12; round += 1) {
@@ -141,7 +144,7 @@ async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A
   };
   const unmount = () => { rt.slots.forEach((s) => s?.cleanup?.()); };
   const api = {
-    world, port, clock, rt, flush, unmount, kv, store, memory,
+    world, port, clock, rt, flush, unmount, kv, store, memory, draftKv, draftStore,
     tree: () => render(),
     all: (type) => { const out = []; walk(render(), (n) => { if (n.type === type) out.push(n); }); return out; },
     text: () => {
@@ -1247,4 +1250,211 @@ test('keyboard up: iOS keeps the keyboard while the content is scrolled (interac
     assert.equal(ui.all('ScrollView')[0].props.keyboardShouldPersistTaps, 'handled', 'a tap on a button works while the keyboard is up');
     assert.equal(ui.all('ScrollView')[0].props.automaticallyAdjustKeyboardInsets, true);
   }
+});
+
+// ---- G2-U1: what was typed survives a callback route replacing the screen --------------------------------------------------------------------
+
+const TWO = { accounts: [account('X_A'), account('X_B')], active: 'X_A' };
+const DKEY = (userId = 'U1') => realDraft.draftKeyOf(userId);
+const draftOf = (ui) => (ui.draftKv.data.has(DKEY()) ? JSON.parse(ui.draftKv.data.get(DKEY())) : null);
+const chooseSecond = async (ui) => {
+  ui.all('Pressable').filter((n) => n.props.accessibilityRole === 'radio')[1].props.onPress();
+  await ui.flush();
+};
+/** The route unmounts (a callback route redirected to home); the person comes back later: a new mount over the same device. */
+const comeBack = async (first, over = {}) => {
+  first.unmount();
+  return mount({ ...TWO, draftKv: first.draftKv, kv: first.kv, ...over });
+};
+
+test('U1: the text and the chosen account are still there after the screen was replaced and opened again', async () => {
+  const first = await mount(TWO);
+  await chooseSecond(first);
+  await first.typeText('下書きの本文');
+  assert.equal(first.state().accountId, 'X_B');
+  assert.deepEqual(draftOf(first), { v: 1, accountId: 'X_B', text: '下書きの本文', sessionMark: 'S1', savedAt: 100_000 });
+  const second = await comeBack(first);
+  assert.equal(second.state().draft, '下書きの本文');
+  assert.equal(second.state().accountId, 'X_B', 'not the suggested account: the one the person chose');
+  assert.equal(second.all('TextInput')[0].props.value, '下書きの本文');
+  assert.equal(second.all('ManualPostPreview')[0].props.text, '下書きの本文');
+  assert.equal(second.state().phase, 'editing');
+});
+
+test('U1: only the editor comes back -- no consent, no confirmation, no readiness, no attempt id, and the send stays disabled', async () => {
+  const fp = fakePort();
+  const first = await mount({ ...TWO, port: fp });
+  await first.typeText('こんにちは');
+  await first.press('内容を確認する');
+  await first.tick();
+  assert.equal(first.state().phase, 'confirming');
+  assert.ok(first.state().consent !== null);
+  const second = await comeBack(first, { port: fp });
+  assert.equal(second.state().draft, 'こんにちは');
+  assert.equal(second.state().phase, 'editing', 'back in the editor, not in the confirmation');
+  for (const key of ['consent', 'readiness', 'requestId', 'result', 'unresolved']) assert.equal(second.state()[key], null, key);
+  assert.equal(second.button('Xに投稿する'), null);
+  assert.equal(fp.calls.send.length, 0);
+  await second.press('内容を確認する');
+  assert.equal(second.checkbox().props.accessibilityState.checked, false, 'a new explicit consent is needed');
+  assert.equal(second.button('Xに投稿する').props.disabled, true);
+  const raw = second.draftKv.data.get(DKEY());
+  for (const forbidden of ['consent', 'contentSha256', 'clientRequestId', 'requestId', 'token']) assert.ok(!raw.includes(forbidden), forbidden);
+});
+
+test('U1: another user never gets the draft, and another sign-in session of the same user does not either (the record is removed)', async () => {
+  const first = await mount(TWO);
+  await first.typeText('秘密の下書き');
+  first.unmount();
+  const other = await mount({ ...TWO, userId: 'U2', draftKv: first.draftKv });
+  assert.equal(other.state().draft, '');
+  assert.ok(first.draftKv.data.has(DKEY('U1')), "another user's visit leaves U1's record alone");
+  const newSession = await mount({ ...TWO, draftKv: first.draftKv, sessionMark: 'S2' });
+  assert.equal(newSession.state().draft, '', 'signed out and in again: a new session');
+  assert.equal(first.draftKv.data.has(DKEY('U1')), false, 'and the old text is gone from the device');
+});
+
+test('U1: an account that is gone or disconnected, an expired draft and a corrupt record are discarded -- and removed', async () => {
+  const seed = async (record) => { const kv = fakeKV(); kv.data.set(DKEY(), typeof record === 'string' ? record : JSON.stringify({ v: 1, ...record })); return kv; };
+  const fresh = { accountId: 'X_B', text: '下書き', sessionMark: 'S1', savedAt: 100_000 - 1000 };
+  for (const [label, record, over] of [
+    ['account no longer listed', fresh, { accounts: [account('X_A')], active: 'X_A' }],
+    ['account disconnected', fresh, { accounts: [account('X_A'), account('X_B', { connectionStatus: 'not_connected' })], active: 'X_A' }],
+    ['expired (24h + 1ms)', { ...fresh, savedAt: 100_000 - realDraft.DRAFT_MAX_AGE_MS - 1 }, {}],
+    ['from the future', { ...fresh, savedAt: 100_000 + 10 * 60 * 1000 }, {}],
+    ['corrupt', '{broken', {}],
+    ['newer version', JSON.stringify({ ...fresh, v: 9 }), {}],
+    ['a record that smuggles a consent', JSON.stringify({ v: 1, ...fresh, consent: { confirmed: true } }), {}],
+  ]) {
+    const draftKv = await seed(record);
+    const ui = await mount({ ...TWO, ...over, draftKv });
+    assert.equal(ui.state().draft, '', label);
+    assert.equal(ui.state().phase, 'editing', label);
+    assert.equal(draftKv.data.has(DKEY()), false, `${label}: removed`);
+    assert.equal(ui.all('TextInput')[0].props.editable, true, `${label}: the editor is usable`);
+  }
+});
+
+test('U1: while the account list is not usable the draft waits (loading/unavailable) or is discarded (blocked) -- it is never judged blind', async () => {
+  const record = JSON.stringify({ v: 1, accountId: 'X_B', text: '待機中の下書き', sessionMark: 'S1', savedAt: 100_000 - 1000 });
+  for (const status of ['loading', 'unavailable']) {
+    const draftKv = fakeKV();
+    draftKv.data.set(DKEY(), record);
+    const ui = await mount({ ...TWO, status, draftKv });
+    assert.equal(ui.state().draftRestore, 'pending', status);
+    assert.equal(ui.state().draft, '', status);
+    assert.equal(draftKv.data.has(DKEY()), true, `${status}: kept for when the list is usable`);
+  }
+  const draftKv = fakeKV();
+  draftKv.data.set(DKEY(), record);
+  const blocked = await mount({ ...TWO, status: 'blocked', draftKv });
+  assert.equal(blocked.state().draft, '');
+  assert.equal(draftKv.data.has(DKEY()), false, 'blocked: discarded');
+});
+
+test('U1: emptying the text removes the stored draft, and "下書きを消す" empties it at once; a cleared draft is not put back', async () => {
+  const first = await mount(TWO);
+  await first.typeText('消すための下書き');
+  assert.ok(draftOf(first) !== null);
+  assert.ok(first.text().includes('入力中の本文と投稿先は、この端末に最大24時間まで保存され'));
+  await first.press('下書きを消す');
+  assert.equal(first.state().draft, '');
+  assert.equal(draftOf(first), null);
+  assert.equal(first.button('下書きを消す'), null, 'nothing to discard');
+  const second = await comeBack(first);
+  assert.equal(second.state().draft, '');
+  await second.typeText('x');
+  await second.typeText('   ');
+  assert.equal(draftOf(second), null, 'a blank text is not kept either');
+  const third = await mount({ ...TWO, draftKv: fakeKV() });
+  await third.typeText('あ'.repeat(realDraft.DRAFT_MAX_TEXT_UNITS + 1));
+  assert.equal(draftOf(third), null, 'a text nobody can post is not kept');
+});
+
+test('U1: starting a send removes the stored draft at once -- the text then lives only in that attempt, whose record holds no text', async () => {
+  const kv = fakeKV();
+  const fp = fakePort();
+  const first = await mount({ ...TWO, port: fp, kv });
+  await first.typeText('送信する本文');
+  assert.ok(draftOf(first) !== null);
+  await first.press('内容を確認する');
+  await first.tick();
+  assert.ok(draftOf(first) !== null, 'confirming keeps the editor draft');
+  await first.press('Xに投稿する');
+  assert.equal(draftOf(first), null, 'removed when the send starts');
+  assert.ok(!kv.data.get(realStore.storeKeyOf('U1')).includes('送信する本文'), 'the attempt record holds no text');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'pending', code: null, marks: REAL });
+  await first.flush();
+  assert.equal(draftOf(first), null, 'an unresolved attempt leaves no draft behind');
+  const restarted = await mount({ ...TWO, kv, draftKv: first.draftKv });
+  assert.equal(restarted.state().result.kind, 'pending');
+  assert.equal(restarted.state().draft, '');
+  assert.equal(draftOf(restarted), null);
+});
+
+test('U1: a draft written before an unresolved attempt is never put in front of it, and is removed', async () => {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(9), contentSha256: sha('earlier'), text: 'earlier', kind: 'pending' });
+  const draftKv = fakeKV();
+  draftKv.data.set(DKEY(), JSON.stringify({ v: 1, accountId: 'X_A', text: '古い下書き', sessionMark: 'S1', savedAt: 100_000 - 1000 }));
+  const ui = await mount({ memory, draftKv });
+  assert.equal(ui.state().result.kind, 'pending');
+  assert.equal(ui.state().draft, 'earlier', "the attempt's own text, not the draft");
+  assert.equal(draftKv.data.has(DKEY()), false);
+});
+
+test('U1: a failed answer returns the text to the editor and it is kept again; a sent text is not kept', async () => {
+  const failed = await sendAndAnswer({ kind: 'rejected', code: 'X_REJECTED_403', marks: REAL });
+  assert.equal(draftOf(failed.ui), null, 'nothing while the result is shown');
+  await failed.ui.press('編集に戻る');
+  assert.equal(failed.ui.state().draft, 'こんにちは');
+  assert.equal(draftOf(failed.ui).text, 'こんにちは', 'back in the editor: kept again');
+  const sent = await sendAndAnswer({ kind: 'published', providerPostId: '1234567890', marks: REAL });
+  await sent.ui.press('新しい投稿を作る');
+  assert.equal(draftOf(sent.ui), null);
+});
+
+test('U1: typing before the stored draft has been read wins; the stored one is never put over it', async () => {
+  const draftKv = fakeKV();
+  draftKv.data.set(DKEY(), JSON.stringify({ v: 1, accountId: 'X_B', text: '古い保存', sessionMark: 'S1', savedAt: 100_000 - 1000 }));
+  let release;
+  const read = draftKv.getItem;
+  draftKv.getItem = (key) => new Promise((resolve) => { release = () => resolve(read(key)); });
+  const ui = await mount({ ...TWO, draftKv });
+  await ui.typeText('先に入力した本文');
+  release();
+  await ui.flush();
+  assert.equal(ui.state().draft, '先に入力した本文');
+  assert.equal(JSON.parse(draftKv.data.get(DKEY())).text, '先に入力した本文', 'and the device now holds what is on screen');
+});
+
+test('U1: a device storage that fails to read or write never breaks the screen, and the draft is simply not kept', async () => {
+  const draftKv = fakeKV();
+  draftKv.fail.get = true;
+  draftKv.fail.set = true;
+  const ui = await mount({ ...TWO, draftKv });
+  assert.equal(ui.all('TextInput')[0].props.editable, true);
+  await ui.typeText('保存できない本文');
+  assert.equal(ui.state().draft, '保存できない本文');
+  await ui.press('内容を確認する');
+  assert.equal(ui.state().phase, 'confirming');
+  assertNoSentClaim(ui);
+});
+
+test('U1: the signed-out screen reads and writes no draft', async () => {
+  const draftKv = fakeKV();
+  draftKv.data.set(DKEY(), JSON.stringify({ v: 1, accountId: null, text: '誰かの下書き', sessionMark: '', savedAt: 100_000 - 1000 }));
+  const ui = await mount({ ...TWO, userId: null, draftKv });
+  assert.equal(ui.state().draft, '');
+  await ui.typeText('ログアウト中の入力');
+  assert.equal(draftKv.data.size, 1, 'untouched');
+});
+
+test('U1: the route passes the sign-in session mark of the user (a re-login changes it, a token refresh does not)', async () => {
+  const world = { memory: realFlow.createAttemptMemory(), port: fakePort().port, status: 'ready', userId: 'U1', accounts: [account('X_A')], active: 'X_A', draftStore: realDraft.createDraftStore(fakeKV()), store: realStore.createAttemptStore(fakeKV()) };
+  const rt = await loadRoute(world);
+  const element = () => { rt.setCursor(0); return rt.mod.exports.default({}); };
+  assert.equal(element().props.sessionMark, '');
+  world.session = { user: { id: 'U1', last_sign_in_at: '2026-10-20T01:00:00Z' } };
+  assert.equal(element().props.sessionMark, '2026-10-20T01:00:00Z');
 });
