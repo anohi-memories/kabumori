@@ -45,7 +45,8 @@ const row = (over: Record<string, unknown> = {}) => ({
   connectionStatus: "identity_verified",
   hasAccessCredential: true,
   boundByPrincipalId: ALICE,
-  bindOwnerEpoch: 3,
+  bindOwnerEpoch: "3",
+  bindLifecycleVersion: "2",
   ...over,
 });
 const verdict = (over: Record<string, unknown> = {}) => ({
@@ -55,7 +56,7 @@ const verdict = (over: Record<string, unknown> = {}) => ({
   verdict: "allow",
   role: "owner",
   entitlementVersion: "ent:v7",
-  ownerEpoch: 3,
+  ownerEpochToken: "g5oe:3:2",
   ...over,
 });
 
@@ -103,7 +104,8 @@ test("bound: one account read, then one G5 verdict for that principal, brand and
       threadsUserId: "17841400000000001",
       principalId: ALICE,
       serviceKey: KEY,
-      ownerEpoch: 3,
+      ownerEpoch: "3",
+      lifecycleVersion: "2",
       entitlementVersion: "ent:v7",
     },
   });
@@ -163,7 +165,8 @@ test("the account: unreadable, missing, several, another provider, not verified,
   const cases: [unknown, string, Partial<ThreadsConnectFlowContext>?][] = [
     [new Error(`db detail ${ACCOUNT}`), "ACCOUNT_UNAVAILABLE"],
     [{ ...row(), hasAccessCredential: "yes" }, "ACCOUNT_UNAVAILABLE"],
-    [row({ bindOwnerEpoch: 1.5 }), "ACCOUNT_UNAVAILABLE"],
+    [row({ bindOwnerEpoch: 3 }), "ACCOUNT_UNAVAILABLE"], // G4-08: a JS number is not a stored G5 number
+    [row({ bindLifecycleVersion: 2 }), "ACCOUNT_UNAVAILABLE"],
     [null, "ACCOUNT_NOT_FOUND"],
     [[], "ACCOUNT_NOT_FOUND"],
     [row({ socialAccountId: "11111111-2222-4333-8444-555555555555" }), "ACCOUNT_NOT_FOUND"],
@@ -195,19 +198,29 @@ test("G5: unreadable, about someone else, denied, wrong role, unknown or moved o
     [row(), null, "ENTITLEMENT_UNAVAILABLE"],
     [row(), verdict({ verdict: "maybe" }), "ENTITLEMENT_UNAVAILABLE"],
     [row(), verdict({ entitlementVersion: "" }), "ENTITLEMENT_UNAVAILABLE"],
-    [row(), verdict({ ownerEpoch: "3" }), "ENTITLEMENT_UNAVAILABLE"],
+    [row(), verdict({ ownerEpochToken: 3 }), "ENTITLEMENT_UNAVAILABLE"],
     [row(), verdict({ principalId: BOB }), "VERDICT_MISMATCH"],
     [row(), verdict({ brandId: "brand_bob" }), "VERDICT_MISMATCH"],
     [row(), verdict({ serviceKey: "x_autopost" }), "VERDICT_MISMATCH"],
     [row(), verdict({ verdict: "deny" }), "SERVICE_NOT_ACTIVE"],
     [row(), verdict({ role: "member" }), "ROLE_INSUFFICIENT"],
     [row(), verdict({ role: null }), "ROLE_INSUFFICIENT"],
-    [row(), verdict({ ownerEpoch: null }), "OWNER_EPOCH_UNKNOWN"],
-    [row(), verdict({ ownerEpoch: 0 }), "OWNER_EPOCH_UNKNOWN"],
+    [row(), verdict({ ownerEpochToken: null }), "OWNER_EPOCH_UNKNOWN"],
+    [row(), verdict({ ownerEpochToken: "g5oe:0:2" }), "OWNER_EPOCH_UNKNOWN"],
+    [row(), verdict({ ownerEpochToken: "g5oe:3:0" }), "OWNER_EPOCH_UNKNOWN"],
+    [row(), verdict({ ownerEpochToken: "g5oe:3" }), "OWNER_EPOCH_UNKNOWN"],
+    [row(), verdict({ ownerEpochToken: "g5oe:03:2" }), "OWNER_EPOCH_UNKNOWN"],
+    [row(), verdict({ ownerEpochToken: "g5oe:9223372036854775808:2" }), "OWNER_EPOCH_UNKNOWN"], // bigint overflow
+    [row(), verdict({ ownerEpochToken: "3" }), "OWNER_EPOCH_UNKNOWN"],
     [row({ bindOwnerEpoch: null }), verdict(), "BIND_EPOCH_UNRECORDED"],
-    [row({ bindOwnerEpoch: 0 }), verdict(), "BIND_EPOCH_UNRECORDED"],
-    [row({ bindOwnerEpoch: 3 }), verdict({ ownerEpoch: 5 }), "OWNER_EPOCH_CHANGED"], // owner A -> B -> A
-    [row({ bindOwnerEpoch: 5 }), verdict({ ownerEpoch: 3 }), "OWNER_EPOCH_CHANGED"],
+    [row({ bindLifecycleVersion: null }), verdict(), "BIND_EPOCH_UNRECORDED"],
+    [row({ bindOwnerEpoch: "0" }), verdict(), "BIND_EPOCH_UNRECORDED"],
+    [row({ bindLifecycleVersion: "02" }), verdict(), "BIND_EPOCH_UNRECORDED"],
+    [row({ bindOwnerEpoch: "99999999999999999999" }), verdict(), "BIND_EPOCH_UNRECORDED"],
+    [row({ bindOwnerEpoch: "3" }), verdict({ ownerEpochToken: "g5oe:5:2" }), "OWNER_EPOCH_CHANGED"], // owner A -> B -> A
+    [row({ bindOwnerEpoch: "5" }), verdict({ ownerEpochToken: "g5oe:3:2" }), "OWNER_EPOCH_CHANGED"],
+    [row({ bindLifecycleVersion: "2" }), verdict({ ownerEpochToken: "g5oe:3:4" }), "SERVICE_GENERATION_CHANGED"], // ended + restarted
+    [row({ bindLifecycleVersion: "4" }), verdict({ ownerEpochToken: "g5oe:3:2" }), "SERVICE_GENERATION_CHANGED"],
   ];
   for (const [account, g5, code] of cases) {
     const { p } = ports(account, g5);
@@ -230,7 +243,7 @@ test("refusals carry only a fixed code", async () => {
 
 test("isolation: imports only G4's service-key rule; only its test and the G4-04 vertical path import it", async () => {
   const source = await Deno.readTextFile(new URL("./threads_account_binding.ts", import.meta.url));
-  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./threads_send_port.ts"]);
+  assert.deepEqual([...source.matchAll(/from "([^"]+)"/gu)].map((m) => m[1]), ["./g5_owner_epoch_token.ts", "./threads_send_port.ts"]);
   assert.equal(/\b(fetch|Deno\.|console\.)/u.test(source.replace(/^\s*\/\/.*$/gmu, "")), false);
   const importers: string[] = [];
   async function walk(dir: URL, rel: string) {
@@ -251,4 +264,17 @@ test("isolation: imports only G4's service-key rule; only its test and the G4-04
     "supabase/functions/_shared/social/threads_connect_to_send.ts",
     "supabase/functions/_shared/social/threads_connect_to_send_test.ts", // types only
   ]);
+});
+
+test("G4-08: both G5 numbers stay exact decimal text beyond 2^53", async () => {
+  const big = "9007199254740993"; // 2^53 + 1: a JS number would become ...992
+  const { p } = ports(row({ bindOwnerEpoch: big, bindLifecycleVersion: "9223372036854775807" }), verdict({ ownerEpochToken: `g5oe:${big}:9223372036854775807` }));
+  const v = await decide(p);
+  assert.equal(v.ok, true);
+  if (v.ok) {
+    assert.equal(v.binding.ownerEpoch, big);
+    assert.equal(v.binding.lifecycleVersion, "9223372036854775807");
+  }
+  const { p: off } = ports(row({ bindOwnerEpoch: "9007199254740992" }), verdict({ ownerEpochToken: `g5oe:${big}:2` }));
+  assert.deepEqual(await decide(off), { ok: false, code: "OWNER_EPOCH_CHANGED" });
 });
