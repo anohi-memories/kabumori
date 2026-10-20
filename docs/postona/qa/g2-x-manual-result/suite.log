@@ -1,0 +1,14 @@
+# node --test tests/*.test.mjs  (whole app suite on the same tree)
+ℹ tests 497
+ℹ suites 0
+ℹ pass 496
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+
+# existing manual-publish suites (F1/G1), for the gap table
+ℹ tests 214
+ℹ pass 213
+ℹ fail 0
+ℹ skipped 1

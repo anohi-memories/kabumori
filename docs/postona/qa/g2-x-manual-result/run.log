@@ -1,0 +1,15 @@
+# node --test tests/g2-x-manual-result-gate.test.mjs  (G1 PR #366 HEAD 44ab2e6bb812f3484c85f847574de103757e3dfc + this G2 test; node v24.19.0)
+✔ control (this build): with the unconnected port nothing is sent and nothing says it was -- the send button stays disabled even after the consent (62.701291ms)
+✔ FINDING G2-X1 (P3, owner G1): during the FIRST send of a new text the confirmation already says "前回と同じ内容・同じ送信IDで確認します" -- there was no earlier attempt (20.529291ms)
+✔ G2-X2: another person signs in while A's send is still out -- B gets a fresh screen with nothing of A, and A's late "published" never reaches B (20.758417ms)
+✔ G2-X3: the chosen account disappears while the send is out and the answer is "pending" / "unavailable" -- the same-id retry is not offered for a missing account and nothing is sent again (30.540167ms)
+✔ G2-X4: after an "uncertain" answer and the explicit "Xで確認しました", the editor is EMPTY (no old text to re-send by mistake), and a new send gets a NEW id (19.23925ms)
+✔ negative controls: a route without the per-user key lets B see A's send; showing the same-id line only on a retry flips G2-X1 (33.095792ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 406.451625
