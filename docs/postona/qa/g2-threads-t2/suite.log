@@ -1,0 +1,17 @@
+# node --test tests/*.test.mjs  (whole app suite on the same tree)
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (134.567916ms)
+ℹ tests 302
+ℹ suites 0
+ℹ pass 301
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+✖ failing tests:
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (134.567916ms)
+
+# G4 tests/threads-disconnect.test.mjs (known G2-T1-X, handed to G4 in gen 13; no fix HEAD yet)
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (47.830834ms)
+ℹ tests 17
+ℹ pass 16
+ℹ fail 1
