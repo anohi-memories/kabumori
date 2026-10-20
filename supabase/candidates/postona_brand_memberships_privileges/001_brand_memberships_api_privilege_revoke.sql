@@ -1,4 +1,4 @@
--- G3 SOURCE CANDIDATE (2026-10-20, Issue #318 TASK 8/50). NOT in supabase/migrations/. Never apply to a managed or production database without the
+-- G3 SOURCE CANDIDATE (2026-10-20, Issue #318 TASK 8/50; prestate artifact TASK 16/50). NOT in supabase/migrations/. Never apply to a managed or production database without the
 -- limited Codex Sol (high) review of this file, the user's separate GO, a production mutation window and a read-back.
 --
 -- public.brand_memberships: take TRIGGER away from every API role and TRUNCATE / REFERENCES away from the end-user roles (and from PUBLIC).
@@ -11,6 +11,12 @@
 -- What it keeps: authenticated SELECT (the RLS self-select policy decides the rows), service_role SELECT / INSERT / UPDATE / DELETE, the table owner
 -- (definer RPCs such as the X onboarding RPC and the deletion saga write as the owner). It creates no object, grants nothing, edits no row, no RLS
 -- policy, no function and no file of another slot. It is idempotent: a second run revokes nothing new and re-checks the same postconditions.
+--
+-- PRESTATE ARTIFACT (2026-10-20, Issue #318 TASK 16/50, H3 C3 R1): the run prints ONE line
+--   BM_PRIV_PRESTATE v1|<database>|<table oid>|<the table's exact ACL before this run>|<sha256 of the four fields>
+-- taken under the lock, before the REVOKE. It is the only input the rollback file accepts: the rollback puts back exactly what THIS run took
+-- away (owner-granted items only, no grant option, never to anon / PUBLIC) and refuses anything else. The line is recorded in the production
+-- mutation window's read-back; nothing is stored in the database (no new table, no comment).
 --
 -- Fail-closed: any precondition or postcondition that does not hold raises and the whole transaction rolls back (nothing changes).
 -- The postconditions are read from the catalog with has_table_privilege / pg_has_role, so a privilege left by another grantor, by PUBLIC or through
@@ -48,6 +54,15 @@ end $$;
 
 -- Same lock as G5 PR #303's install (writers wait, readers do not); it also keeps a concurrent CREATE TRIGGER / ADD FOREIGN KEY out until commit.
 lock table public.brand_memberships in share row exclusive mode;
+
+-- the prestate, under the lock and before the REVOKE (printed after the postconditions)
+do $$
+declare
+  v_body text := 'v1|' || pg_catalog.current_database() || '|' || 'public.brand_memberships'::regclass::oid::text || '|'
+    || coalesce(pg_catalog.array_to_string((select c.relacl from pg_catalog.pg_class c where c.oid = 'public.brand_memberships'::regclass), ','), '');
+begin
+  perform pg_catalog.set_config('bm_priv.prestate', v_body || '|' || pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(v_body, 'UTF8')), 'hex'), true);
+end $$;
 
 revoke trigger, truncate, references on table public.brand_memberships from public, anon, authenticated;
 revoke trigger on table public.brand_memberships from service_role;
@@ -106,5 +121,7 @@ begin
     raise exception 'BM_PRIV_POSTCONDITION_RLS_DISABLED';
   end if;
 end $$;
+
+select 'BM_PRIV_PRESTATE ' || pg_catalog.current_setting('bm_priv.prestate') as bm_priv_prestate;
 
 commit;

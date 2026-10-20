@@ -19,7 +19,7 @@ m="$repo/supabase/migrations"; t="$repo/supabase/tests"
 cand="${BM_CANDIDATE:-$here/001_brand_memberships_api_privilege_revoke.sql}"
 rb="${BM_ROLLBACK:-$here/001_brand_memberships_api_privilege_revoke_rollback.sql}"
 g5="${BM_G5_TREE:-}"
-n="$$"; owner="kb_bm_owner_$n"; other="kb_bm_other_$n"; prefix="kabumori_bm_$n"
+n="$$"; owner="kb_bm_owner_$n"; other="kb_bm_other_$n"; grantor="kb_bm_grantor_$n"; prefix="kabumori_bm_$n"
 db="${prefix}_main"; fresh="${prefix}_fresh"; plain="${prefix}_plain"; order="${prefix}_order"
 S=(psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 tmp="$(mktemp -d /private/tmp/kabumori-bm.XXXXXX)"
@@ -29,7 +29,7 @@ cleanup() {
   for d in $("${S[@]}" -d postgres -c "select datname from pg_database where datname like '${prefix}_%'" 2>/dev/null); do
     "${S[@]}" -d postgres -c "drop database if exists $d with (force)" >/dev/null 2>&1 || true
   done
-  "${S[@]}" -d postgres -c "drop role if exists $owner" -c "drop role if exists $other" >/dev/null 2>&1 || true
+  "${S[@]}" -d postgres -c "drop role if exists $owner" -c "drop role if exists $other" -c "drop role if exists $grantor" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 fail() { echo "FAIL $*" >&2; exit 1; }
@@ -53,6 +53,9 @@ create role $other login nosuperuser;
 create database $db owner $owner;
 create database $fresh owner $owner;
 create database $plain owner $owner;
+create database ${prefix}_tpl owner $owner;
+create role $grantor nologin;
+grant $grantor to $owner;
 SQL
 own() { local d="$1"; shift; psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" "$@"; }
 val() { local d="$1"; shift; psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" "$@"; }
@@ -70,6 +73,17 @@ baseline() {
 baseline "$db" yes
 baseline "$fresh" yes
 baseline "$plain" no
+baseline "${prefix}_tpl" yes
+
+# The prestate artifact (TASK 16/50): 001 prints "BM_PRIV_PRESTATE <line>"; the rollback takes that line as -v bm_prestate.
+apply_cand() { local d="$1" out="$tmp/apply_$RANDOM"
+  psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$cand" >"$out" 2>&1 || { cat "$out" >&2; return 1; }
+  sed -n 's/^BM_PRIV_PRESTATE //p' "$out" | tail -1; }
+rollback_with() { local d="$1" a="$2"; shift 2; psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$rb" "$@"; }
+rb_fail() { local d="$1" a="$2" code="$3" label="$4"
+  if rollback_with "$d" "$a" >"$tmp/out" 2>&1; then fail "$label: the rollback ran"; fi
+  grep -q "$code" "$tmp/out" || fail "$label: wrong refusal: $(grep ERROR "$tmp/out" | head -1)"; }
+newdb() { local d="${prefix}_$1"; "${S[@]}" -d postgres -c "create database $d owner $owner template ${prefix}_tpl" >/dev/null; echo "$d"; }
 
 # Catalog readers (read-only).
 PRIVS="array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']"
@@ -158,7 +172,7 @@ for _ in $(seq 1 100); do
   [ "$("${S[@]}" -d "$db" -c "select count(*) from pg_locks l join pg_stat_activity a on a.pid = l.pid where l.relation = 'public.brand_memberships'::regclass and l.mode = 'AccessShareLock' and a.query like '%pg_sleep%'")" -ge 1 ] && break
   sleep 0.1
 done
-own "$db" -f "$cand" >/dev/null
+A_DB="$(apply_cand "$db")"
 [ "$("${S[@]}" -d "$db" -c "select count(*) from pg_stat_activity where query like '%pg_sleep(4)%' and state = 'active' and pid <> pg_backend_pid()")" = 1 ] || fail "K2 the reader was not still open while the candidate committed"
 wait "$k2r" || fail "K2 reader failed: $(cat "$tmp/k2r")"
 pass "K2 the candidate committed while a reader's transaction was still open"
@@ -198,7 +212,8 @@ expect "C3 owner path" "$(val "$db" -c "select count(*) from public.brand_member
 pass "C3 normal paths: authenticated own-row SELECT, service_role insert/update/delete, owner writes"
 
 # ---- C4: idempotent re-apply, and two applies at the same time ----
-own "$db" -f "$cand" >/dev/null
+B_DB="$(apply_cand "$db")"
+[[ "$A_DB" == v1\|* && "$B_DB" == v1\|* && "$A_DB" != "$B_DB" ]] || fail "C4 the two runs did not print two different prestate lines"
 expect "C4 re-apply same acl" "$(acl "$db")" "$POST_ACL"
 own "$db" -f "$cand" >"$tmp/c4a" 2>&1 & c4a=$!
 own "$db" -f "$cand" >"$tmp/c4b" 2>&1 & c4b=$!
@@ -207,8 +222,13 @@ wait "$c4b" || fail "C4 concurrent apply B: $(cat "$tmp/c4b")"
 expect "C4 concurrent applies same acl" "$(acl "$db")" "$POST_ACL"
 pass "C4 re-apply and two concurrent applies: both succeed, same final ACL"
 
-# ---- C5: rollback restores the exact previous ACL; re-apply restores the candidate's ----
-own "$db" -f "$rb" >/dev/null
+# ---- C5: rollback restores the exact previous ACL from the FIRST run's prestate; re-apply restores the candidate's ----
+if own "$db" -f "$rb" >"$tmp/out" 2>&1; then fail "C5 a rollback without the prestate ran"; fi
+grep -q BM_PRIV_ROLLBACK_PRESTATE_REQUIRED "$tmp/out" || fail "C5 no-prestate refusal: $(grep ERROR "$tmp/out" | head -1)"
+expect "C5 no prestate: unchanged" "$(acl "$db")" "$POST_ACL"
+rollback_with "$db" "$B_DB" >/dev/null
+expect "C5 the re-apply's prestate (already hardened) puts nothing back" "$(acl "$db")" "$POST_ACL"
+rollback_with "$db" "$A_DB" >/dev/null
 expect "C5 rollback acl" "$(acl "$db")" "$PRE_ACL"
 expect "C5 rollback privileges" "$(priv "$db")" "$PRE_PRIV"
 expect "C5 rollback member reach" "$(reach "$db")" "$PRE_REACH"
@@ -218,7 +238,7 @@ grep -q BM_PRIV_ROLLBACK_NOT_TABLE_OWNER "$tmp/out" || fail "C5 non-owner rollba
 own "$db" -f "$cand" >/dev/null
 expect "C5 re-apply acl" "$(acl "$db")" "$POST_ACL"
 expect "C5 re-apply privileges" "$(priv "$db")" "$POST_PRIV"
-pass "C5 rollback = exact previous ACL (non-owner refused); re-apply = the candidate's ACL"
+pass "C5 rollback needs the prestate line; the hardened re-apply's line puts nothing back; the first run's line = exact previous ACL (non-owner refused); re-apply = the candidate's ACL"
 
 # ---- C6: a freshly built schema (migration order: fixture -> membership migration -> candidate) gives the same ACL ----
 expect "C6 fresh before" "$(acl "$fresh")" "$PRE_ACL"
@@ -228,6 +248,85 @@ own "$plain" -f "$m/20260918120000_social_mobile_brand_memberships.sql" >/dev/nu
 own "$plain" -f "$cand" >/dev/null
 expect "C6 late membership migration then candidate" "$(priv "$plain")" "$POST_PRIV"
 pass "C6 regenerated schemas: same ACL; the candidate works once the membership migration is in"
+
+# ---- P: every prestate the candidate accepts -- the rollback never widens (TASK 16/50, H3 C3 R1) ----
+HARDEN="revoke trigger, truncate, references on table public.brand_memberships from authenticated; revoke trigger on table public.brand_memberships from service_role"
+# P0 the finding, reproduced with the ORIGINAL rollback of PR #370 (05ef903c): a prehardened table, forward no-op, the old rollback widens it
+git -C "$repo" show 05ef903c31c120634906fa8b62481711f4a37a4c:supabase/candidates/postona_brand_memberships_privileges/001_brand_memberships_api_privilege_revoke_rollback.sql >"$tmp/rb_05ef903c.sql"
+d="$(newdb p0)"; own "$d" -c "$HARDEN" >/dev/null
+expect "P0 prehardened = the candidate's after-state" "$(priv "$d")" "$POST_PRIV"
+a="$(apply_cand "$d")"; expect "P0 forward is a no-op" "$(priv "$d")" "$POST_PRIV"
+own "$d" -f "$tmp/rb_05ef903c.sql" >/dev/null
+expect "P0 the ORIGINAL rollback widens (H3 R1 reproduced)" "$(priv "$d")" "$PRE_PRIV"
+pass "P0 H3 R1 reproduced: on a prehardened table the original fixed-GRANT rollback adds authenticated TRIGGER/TRUNCATE/REFERENCES and service_role TRIGGER"
+# P1 the same prestate with the new rollback: nothing to put back
+d="$(newdb p1)"; own "$d" -c "$HARDEN" >/dev/null; P1PRE="$(acl "$d")"
+a="$(apply_cand "$d")"; expect "P1 forward no-op" "$(acl "$d")" "$P1PRE"
+rb_fail "$d" "" BM_PRIV_ROLLBACK_PRESTATE_REQUIRED "P1 empty prestate"
+if own "$d" -f "$rb" >"$tmp/out" 2>&1; then fail "P1 rollback without -v ran"; fi
+grep -q BM_PRIV_ROLLBACK_PRESTATE_REQUIRED "$tmp/out" || fail "P1 no -v: $(grep ERROR "$tmp/out" | head -1)"
+rollback_with "$d" "$a" >/dev/null
+expect "P1 the new rollback widens nothing" "$(acl "$d")" "$P1PRE"
+pass "P1 prehardened: forward no-op; the new rollback refuses without the line and, with it, puts nothing back (ACL identical)"
+# P2 partially hardened: only authenticated TRIGGER was gone before
+d="$(newdb p2)"; own "$d" -c "revoke trigger on table public.brand_memberships from authenticated" >/dev/null; P2PRE="$(acl "$d")"; P2PRIV="$(priv "$d")"
+a="$(apply_cand "$d")"; expect "P2 forward hardens the rest" "$(priv "$d")" "$POST_PRIV"
+rollback_with "$d" "$a" >/dev/null
+expect "P2 rollback = the partial prestate exactly" "$(acl "$d")" "$P2PRE"
+expect "P2 authenticated TRIGGER stays absent" "$(priv "$d")" "$P2PRIV"
+pass "P2 partially hardened: the rollback puts back only what this run removed"
+# P3 re-apply: the first line restores the original; the second line is a no-op; the first line twice is refused
+d="$(newdb p3)"; a1="$(apply_cand "$d")"; a2="$(apply_cand "$d")"
+rollback_with "$d" "$a2" >/dev/null; expect "P3 second run's line: no-op" "$(priv "$d")" "$POST_PRIV"
+rollback_with "$d" "$a1" >/dev/null; expect "P3 first run's line: original" "$(acl "$d")" "$PRE_ACL"
+rb_fail "$d" "$a1" BM_PRIV_ROLLBACK_PRESTATE_MISMATCH "P3 the first line again"
+expect "P3 unchanged after the refused repeat" "$(acl "$d")" "$PRE_ACL"
+pass "P3 re-apply: lines are per run; the original comes back once, a repeat is refused"
+# P4 another grantor: the owner's REVOKE cannot remove it -> the forward refuses (postcondition), nothing changes
+d="$(newdb p4)"; own "$d" -c "grant trigger on table public.brand_memberships to $grantor with grant option" >/dev/null
+own "$d" -c "begin" -c "set local role $grantor" -c "grant trigger on table public.brand_memberships to authenticated" -c "commit" >/dev/null
+P4PRE="$(acl "$d")"
+if psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$cand" >"$tmp/out" 2>&1; then fail "P4 forward applied over another grantor's TRIGGER"; fi
+grep -q BM_PRIV_POSTCONDITION_API_ROLE_HAS_TRIGGER "$tmp/out" || fail "P4 wrong refusal: $(grep ERROR "$tmp/out" | head -1)"
+expect "P4 unchanged" "$(acl "$d")" "$P4PRE"
+pass "P4 another grantor's TRIGGER for authenticated: the forward refuses (postcondition), ACL unchanged"
+# P5 a grant option on a removed item: the forward removes it; the rollback refuses to put it back
+d="$(newdb p5)"; own "$d" -c "revoke trigger on table public.brand_memberships from authenticated" -c "grant trigger on table public.brand_memberships to authenticated with grant option" >/dev/null
+a="$(apply_cand "$d")"; expect "P5 forward" "$(priv "$d")" "$POST_PRIV"
+[[ "$a" == *"authenticated=r*"* || "$a" == *"t*"* ]] || fail "P5 the prestate line does not show the grant option: $a"
+rb_fail "$d" "$a" BM_PRIV_ROLLBACK_GRANT_OPTION_UNSUPPORTED "P5 grant option"
+expect "P5 unchanged (still hardened)" "$(priv "$d")" "$POST_PRIV"
+pass "P5 a removed item carried a grant option: the rollback refuses, nothing is put back"
+# P6 something changed after the forward: refused until the state is what the forward left
+d="$(newdb p6)"; a="$(apply_cand "$d")"; own "$d" -c "grant select on table public.brand_memberships to anon" >/dev/null
+rb_fail "$d" "$a" BM_PRIV_ROLLBACK_PRESTATE_MISMATCH "P6 changed after"
+own "$d" -c "revoke select on table public.brand_memberships from anon" >/dev/null
+rollback_with "$d" "$a" >/dev/null; expect "P6 after the change is undone" "$(acl "$d")" "$PRE_ACL"
+pass "P6 a change after the forward: the rollback refuses (MISMATCH) until the state is what the forward left"
+# P7 a line of another database, or a tampered line
+d="$(newdb p7)"; b="$(apply_cand "$d")"
+rb_fail "$d" "$a" BM_PRIV_ROLLBACK_PRESTATE_OTHER_OBJECT "P7 another database's line"
+rb_fail "$d" "${b%?}0" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 tampered sha"
+rb_fail "$d" "$(sed 's/|\([0-9a-f]\{64\}\)$/,anon=t\/'"$owner"'|\1/' <<<"$b")" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 an added item without a matching sha"
+rb_fail "$d" "v1|garbage" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 garbage"
+expect "P7 unchanged" "$(priv "$d")" "$POST_PRIV"
+pass "P7 another database's line -> OTHER_OBJECT; tampered / garbage lines -> CORRUPT; nothing changes"
+# P8 a prestate that gave anon TRIGGER: the forward removes it; the rollback never gives anything to anon / PUBLIC
+d="$(newdb p8)"; own "$d" -c "grant trigger on table public.brand_memberships to anon" >/dev/null
+a="$(apply_cand "$d")"; expect "P8 forward" "$(priv "$d")" "$POST_PRIV"
+rb_fail "$d" "$a" BM_PRIV_ROLLBACK_GRANTEE_UNSUPPORTED "P8 anon"
+expect "P8 unchanged" "$(priv "$d")" "$POST_PRIV"
+pass "P8 anon / PUBLIC are never given anything back"
+# P9 a line NOT printed by a successful run (made by hand, valid sha): another grantor's item that has since gone -> MISMATCH, nothing granted
+d="$(newdb p9)"; own "$d" -c "grant trigger on table public.brand_memberships to $grantor with grant option" >/dev/null
+own "$d" -c "begin" -c "set local role $grantor" -c "grant trigger on table public.brand_memberships to authenticated" -c "commit" >/dev/null
+body="v1|$d|$(val "$d" -c "select 'public.brand_memberships'::regclass::oid")|$(val "$d" -c "select array_to_string(relacl, ',') from pg_class where oid = 'public.brand_memberships'::regclass")"
+line="$body|$(printf '%s' "$body" | shasum -a 256 | cut -d' ' -f1)"
+own "$d" -c "begin" -c "set local role $grantor" -c "revoke trigger on table public.brand_memberships from authenticated" -c "commit" >/dev/null
+own "$d" -c "$HARDEN" >/dev/null; P9NOW="$(acl "$d")"
+rb_fail "$d" "$line" BM_PRIV_ROLLBACK_PRESTATE_MISMATCH "P9 another grantor's item in a hand-made line"
+expect "P9 unchanged" "$(acl "$d")" "$P9NOW"
+pass "P9 a hand-made line with another grantor's item (since removed): refused as MISMATCH -- the rollback only counts the owner's own grants as removable"
 
 # ---- O: apply order with G5's REAL candidate files (optional) ----
 if [ -n "$g5" ]; then
@@ -262,7 +361,7 @@ if [ -n "$g5" ]; then
   expect "O1 nothing installed" "$(val "$order" -c "select (to_regprocedure('private.account_lifecycle_owner_epoch_exposure()') is null and to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is null)::text")" "true"
   pass "O1 G5 refuses before L-1: PR #303 OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS, PR #358 needs PR #303"
 
-  own "$order" -f "$cand" >/dev/null
+  A_ORDER="$(apply_cand "$order")"
   expect "O2 order world privileges after" "$(priv "$order")" "$POST_PRIV"
   own "$order" -f "$oe/001_brand_owner_epoch.sql" >/dev/null || fail "O2 PR #303 install after the G3 candidate"
   expect "O2 G5's real L-1 check" "$(oexp)" "NONE"
@@ -271,7 +370,7 @@ if [ -n "$g5" ]; then
   expect "O2 R1/W1/W2 exist" "$(val "$order" -c "select (to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is not null and to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)') is not null and to_regprocedure('public.common_account_worker_brand_verdict(text,text,bigint,bigint)') is not null)::text")" "true"
   pass "O2 G3 candidate -> PR #303 install (G5 exposure NONE) -> PR #358 install"
 
-  if own "$order" -f "$rb" >"$tmp/out" 2>&1; then fail "O3 G3 rollback ran while G5 is installed"; fi
+  if rollback_with "$order" "$A_ORDER" >"$tmp/out" 2>&1; then fail "O3 G3 rollback ran while G5 is installed"; fi
   grep -q BM_PRIV_ROLLBACK_REFUSED_OWNER_EPOCH_INSTALLED "$tmp/out" || fail "O3 wrong refusal: $(grep ERROR "$tmp/out" | head -1)"
   expect "O3 privileges unchanged" "$(priv "$order")" "$POST_PRIV"
   expect "O3 G5 exposure still NONE" "$(oexp)" "NONE"
@@ -279,7 +378,7 @@ if [ -n "$g5" ]; then
 
   own "$order" -f "$av/001_authorization_verdict_rollback.sql" >/dev/null
   own "$order" -f "$oe/001_brand_owner_epoch_rollback.sql" >/dev/null
-  own "$order" -f "$rb" >/dev/null
+  rollback_with "$order" "$A_ORDER" >/dev/null
   expect "O4 privileges after the full rollback" "$(priv "$order")" "$PRE_PRIV"
   g5_try "$oe/001_brand_owner_epoch.sql" OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS "O4 PR #303 re-install without L-1"
   own "$order" -f "$cand" >/dev/null

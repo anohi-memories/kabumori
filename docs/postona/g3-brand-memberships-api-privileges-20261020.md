@@ -65,9 +65,25 @@
   - ほかの付与者が与えた権限や、membership を通した権限は、この REVOKE では消えない。それでも事後条件の照会が見つけて止める。
 - 何度当てても同じ（2 回目は何も取り上げず、同じ事後条件を確かめる）。
 
-### `001_brand_memberships_api_privilege_revoke_rollback.sql`
-- 001 が取り上げたものだけを戻す: authenticated の TRIGGER・TRUNCATE・REFERENCES と、service_role の TRIGGER。anon と PUBLIC には何も戻さない。
-- **G5 の owner epoch（PR #303）が入っている間は戻さない**（`BM_PRIV_ROLLBACK_REFUSED_OWNER_EPOCH_INSTALLED`）。戻す順番は PR #358 → PR #303 → この rollback。
+### `001_brand_memberships_api_privilege_revoke_rollback.sql`（TASK 16/50 で書き直し。H3 C3 R1 への対応）
+- **H3 の指摘（P2）**: 元の rollback（`05ef903c`）は、固定の GRANT で authenticated の TRIGGER・TRUNCATE・REFERENCES と service_role の TRIGGER を戻していた。そのため、001 の前からそれらが無かった表（もともと絞られていた表）では、前には無かった権限を付けてしまう。ランナーの P0 で、元のファイルを git から取り出して再現した。
+- **新しい契約**: rollback は、今の ACL から「001 が取り上げたもの」を推し量らない。001 の実行が出力した 1 行（prestate の記録）だけを入力にする。
+  - 001 は、ロックを取った後・REVOKE の前に、表の ACL を記録して出力する: `BM_PRIV_PRESTATE v1|<DB 名>|<表の oid>|<ACL>|<sha256>`。DB に何も保存しない（新しい表もコメントも作らない）。記録は本番の作業時間の読み戻しに残す。
+  - rollback は `psql -v bm_prestate='<その行の BM_PRIV_PRESTATE の後ろ>'` で受け取る。
+  - 戻すのは、その記録から 001 の REVOKE が取り除くもの（owner が付与した、authenticated の TRIGGER・TRUNCATE・REFERENCES と、service_role の TRIGGER）だけ。もともと絞られていた表なら、戻すものは無い。
+  - 止まる場合（どれも何も変えない）:
+    - 記録が無い（`PRESTATE_REQUIRED`）
+    - 壊れている・sha256 が合わない（`PRESTATE_CORRUPT`）
+    - 別の DB・別の表の記録（`PRESTATE_OTHER_OBJECT`）
+    - owner でない
+    - G5 の owner epoch が入っている
+    - 今の ACL が「その記録に 001 を当てた結果」と違う（`PRESTATE_MISMATCH`。後から何かが変わった、または最後の実行の記録ではない）
+    - 戻す項目に grant option がある（`GRANT_OPTION_UNSUPPORTED`）
+    - 戻す相手が anon・PUBLIC（`GRANTEE_UNSUPPORTED`）
+    - 戻した後の ACL が記録と完全には一致しない（`POSTCONDITION_NOT_PRESTATE`）
+  - 記録の信頼の境界: sha256 は写し間違いを見つけるためのもので、偽造は防がない。表の owner はそもそも直接 GRANT できる。rollback の目的は「うっかり権限を広げない」ことで、そのために、記録が無ければ止まり、記録と今の状態が食い違えば止まる。
+  - 001 を何度か当てた場合、記録は実行ごとに違う。元に戻すには**最初の実行の記録**を使う。後の実行の記録では何も戻らない（P3）。
+- **G5 の owner epoch（PR #303）が入っている間は戻さない**（`BM_PRIV_ROLLBACK_REFUSED_OWNER_EPOCH_INSTALLED`）。戻す順番は PR #358（#371）→ PR #303 → この rollback。
 - 表の owner だけが実行できる。
 
 ## 3. テスト（使い捨ての PG17、`brand_memberships_privileges_run.sh`）
@@ -80,10 +96,20 @@
 | C1 | 表の owner でない・RLS が無い（membership の migration の前）・RLS はあるが自分の行を読むポリシーが無い・表が無い・superuser は、それぞれのコードで止まる。ACL は変わらない。 |
 | K1 | 書き込みのトランザクションが開いている間は、5 秒でロック待ちを打ち切って止まる。ACL は変わらない。書き込みはそのまま commit できる。 |
 | K2 | 読み取りのトランザクションが開いたままでも、候補は commit できる（読み取りを止めない）。 |
-| C2 | 適用の後: authenticated は `MAINTAIN, SELECT`、service_role は TRIGGER だけが無くなる。MEMBER で届く全ての役割に TRIGGER が無い。anon・authenticated の側に書き込み・TRUNCATE・REFERENCES が無い。PUBLIC の項目 0。API の役割の grant option 0。BYPASSRLS 0。G5 の L-1 検査（G3 の写し）は `NONE`。RLS とポリシーは変わらない。 |
+| C2 | 適用の後: authenticated は `MAINTAIN, SELECT`、service_role は TRIGGER だけが無くなる。MEMBER で届く全ての役割に TRIGGER が無い。anon・authenticated の側に書き込み・TRUNCATE・REFERENCES が無い。PUBLIC の項目 0。API の役割の grant option 0（模型での結果。001 が保証する事後条件ではない。§7 の 2）。BYPASSRLS 0。G5 の L-1 検査（G3 の写し）は `NONE`。RLS とポリシーは変わらない。 |
 | C3 | 正常系: authenticated は RLS で自分の行だけ読める。service_role の INSERT・UPDATE・DELETE と、owner の書き込みは通る。anon は SELECT を持たない。 |
 | C4 | 2 回目の適用と、2 つの同時の適用: どちらも成功し、ACL は同じ。 |
-| C5 | rollback で ACL が**元と文字単位で同じ**に戻る。owner 以外の rollback は止まる。もう一度当てると、適用後の ACL に戻る。 |
+| C5 | 記録の無い rollback は止まる。2 回目の実行（すでに絞られていた）の記録では何も戻らない。最初の実行の記録で、ACL が**元と文字単位で同じ**に戻る。owner 以外の rollback は止まる。もう一度当てると、適用後の ACL に戻る。 |
+| P0 | **H3 R1 の再現**: もともと絞られていた表では、001 は何も変えない。そこに元の rollback（`05ef903c`）を当てると、権限が広がる（C0 の「前」と同じ表になる）。 |
+| P1 | 同じ状態で新しい rollback: 記録が無ければ止まる。記録があっても戻すものは無く、ACL は文字単位で同じ。 |
+| P2 | 一部だけ絞られていた（authenticated の TRIGGER だけ無い）: 戻すのは今回取り上げたものだけで、記録の ACL と完全に一致。authenticated の TRIGGER は無いまま。 |
+| P3 | 2 回当てる: 2 回目の記録では何も戻らない。1 回目の記録で元に戻る。同じ記録をもう一度使うと `PRESTATE_MISMATCH` で止まる。 |
+| P4 | 別の付与者が authenticated に TRIGGER を付けていた: owner の REVOKE では消せないので、001 自体が事後条件（`API_ROLE_HAS_TRIGGER`）で止まり、何も変わらない。 |
+| P5 | 取り上げる項目に grant option があった（`t*`）: 001 は取り上げる。rollback は `GRANT_OPTION_UNSUPPORTED` で止まり、何も戻さない。 |
+| P6 | 001 の後で状態が変わった（anon に SELECT）: `PRESTATE_MISMATCH` で止まる。元に戻すと、rollback は通る。 |
+| P7 | 別の DB の記録は `PRESTATE_OTHER_OBJECT`。sha256 を変えた記録、項目を足した記録、壊れた記録は `PRESTATE_CORRUPT`。何も変わらない。 |
+| P8 | もともと anon に TRIGGER があった: 001 は取り上げる。rollback は anon・PUBLIC には戻さない（`GRANTEE_UNSUPPORTED`）。 |
+| P9 | 実行が出力したのではない、手で作った記録（sha256 は正しい）で、別の付与者の項目を含み、その項目は今は無い: `PRESTATE_MISMATCH` で止まる。rollback が「取り上げたもの」と数えるのは owner 自身の付与だけ。 |
 | C6 | 作り直したスキーマ（fixture → migration → 候補）でも ACL は同じ。migration を後から当てた DB でも、その後なら当てられる。 |
 | O1 | **G5 の本物のファイル**（PR #358 の木、変えずに使う）: G3 の候補の前は、PR #303 の install が `OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS` で止まる。PR #358 は PR #303 が無いので止まる。 |
 | O2 | G3 の候補 → PR #303 の install（G5 の本物の検査 `account_lifecycle_owner_epoch_exposure()` が NULL）→ PR #358 の install（R1・W1・W2 ができる）。G3 の写しと G5 の本物の答えが一致する。 |
@@ -91,7 +117,10 @@
 | O4 | 戻す順番 PR #358 → PR #303 → G3 は通る。戻した後は PR #303 の再 install が止まる。G3 の候補を当て直すと、G5 は再 install できる。 |
 
 - 結果: `BRAND_MEMBERSHIPS_PRIVILEGES_ALL_PASS`（G5 の木あり・なしの両方。なしのときは O が `O_NOT_RUN`）。
-- 変異テスト: 候補と rollback に 21 個入れ、**19 個を検出**した。
+- 変異テスト（TASK 16/50、新しい rollback と記録）: 11 個を入れ、**10 個を検出**した（`BM_ROLLBACK`・`BM_CANDIDATE` で写しに入れる）。
+  - 検出: 記録が無くても進む（C5）、MISMATCH を見ない（P3）、grant option を見ない（P5）、anon に戻す（P8）、別の付与者の項目も数える（P9）、sha256 を見ない（P7）、DB・表を見ない（P7）、元の固定の GRANT に戻す（P1 ほか）、記録を REVOKE の後に取る（C4）、記録に sha256 が無い（C5 ほか）。
+  - 残った 1 個: 最後の事後条件（`POSTCONDITION_NOT_PRESTATE`）を外す変異。他の確認がすべて正しい限り結果が同じで、多重の防御として残す。
+- 変異テスト（TASK 8）: 候補と rollback に 21 個入れ、**19 個を検出**した。
   - REVOKE を一部抜いた変異（TRIGGER・TRUNCATE・REFERENCES・service_role・authenticated）と、SELECT・service_role の DML を取り過ぎる変異は、どれも候補自身の事後条件で止まった（`BM_PRIV_POSTCONDITION_*`）。
   - 前提・ロック・rollback の変異は、C1・K1・C5・O3 で検出した。
   - 最初の実行では、自分の行を読むポリシーの前提が止まらずに残った。C1 にテストを足して検出した。
@@ -116,9 +145,9 @@
 2. **ユーザーの個別の GO**。
 3. 本番の前の読み取り（別の承認が要る）: `public.brand_memberships` の owner・ACL・RLS、API の役割の membership、表のトリガーと、表を参照する外部キーの一覧。読み取り用の SQL はレビューの後に用意する。
 4. **本番の作業時間（production mutation window）**: 表の owner として、この 1 ファイルだけを当てる（`db push` はしない）。書き込みは最大 5 秒待つ。止まったら何も変わらない。
-5. **読み戻し**: ACL、`has_table_privilege` の表、G5 の検査と同じ照会の答えが `NONE` であること。
+5. **読み戻し**: ACL、`has_table_privilege` の表、G5 の検査と同じ照会の答えが `NONE` であること。001 が出力した `BM_PRIV_PRESTATE` の行を、そのまま記録に残す（rollback の唯一の入力）。
 6. その後に限って、G5 の順番に進む（PR #303 のレビュー → install → PR #358）。
-7. 戻すときは PR #358 → PR #303 → この rollback の順。
+7. 戻すときは PR #358（#371）→ PR #303 → この rollback の順。rollback には、手順 4 で出力された `BM_PRIV_PRESTATE` の行（読み戻しに残したもの）を `-v bm_prestate=` で渡す。記録が無い・状態が変わった場合は止まるので、その場合は手で判断する（権限を推測で戻さない）。
 
 ## 6. NOT_VERIFIED・UNKNOWN
 - **本番の実際の付与・役割の membership・表の owner**: UNKNOWN（managed を読んでいない）。
@@ -128,7 +157,11 @@
 - managed の `authenticator` の membership と、プラットフォームの既定の付与: この模型は G5 の runner と同じ形で、本物ではない。
 
 ## 7. 残ること
-1. **PostgreSQL 17 の MAINTAIN**: 既定の付与の模型では、authenticated に MAINTAIN が残る（C0・C2）。G5 の L-1 検査の対象ではなく、この候補も取り上げていない。取り上げるかどうかは、Sol のレビューで判断してほしい（`revoke maintain … from authenticated` を足すだけ。正当な使い道はリポジトリに無い）。本番で付いているかは UNKNOWN。
-2. service_role の TRUNCATE・REFERENCES は L-1 の範囲外なので残した。G5 の検査も service_role には求めていない。
-3. G5 の文書（PR #303 L-1・§7 の 0 番）は、この候補を前提としている。G5 のファイルは変えていない。G5 への連絡は、差分の提案が要るときだけにする。
-4. この候補の migration 化・本番の適用は、レビューとユーザーの承認の後。x-test-post の認証（PR #349／#352）と Threads の流れの本番の停止は続けている。
+1. **PostgreSQL 17 の MAINTAIN**: 既定の付与の模型では、authenticated に MAINTAIN が残る（C0・C2）。G5 の L-1 検査の対象ではなく、この候補も取り上げていない。
+   - 001 の後の authenticated は **SELECT（RLS の自分の行）と MAINTAIN**（VACUUM・ANALYZE・LOCK・REINDEX・CLUSTER）を持つ。**読むだけの権限ではない**。
+   - H3 は、利用者の側の MAINTAIN も取り上げ、届く役割に残っていれば止める形を推奨した。ただし、今回の P2 の修正とは混ぜず、別の決定を待つ（TASK 16/50）。
+   - 本番で付いているかは UNKNOWN。
+2. **SELECT の grant option**: 001 は、取り上げる 3 つの権限以外の grant option を見ない。authenticated の `SELECT WITH GRANT OPTION` があれば、そのまま残す（H3 がローカルで確認）。テストの模型では 0 だが、001 が保証する事後条件ではない。方針（許す・止める）は、MAINTAIN と一緒に別に決める。本番の前の読み取りで確かめる。
+3. service_role の TRUNCATE・REFERENCES は L-1 の範囲外なので残した。G5 の検査も service_role には求めていない。
+4. G5 の文書（PR #303 L-1・§7 の 0 番）は、この候補を前提としている。G5 のファイルは変えていない。G5 への連絡は、差分の提案が要るときだけにする。
+5. この候補の migration 化・本番の適用は、レビューとユーザーの承認の後。x-test-post の認証（PR #349／#352）と Threads の流れの本番の停止は続けている。
