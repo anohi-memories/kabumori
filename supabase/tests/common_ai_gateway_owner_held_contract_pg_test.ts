@@ -39,7 +39,10 @@ import {
   USER_A,
   USER_B,
 } from "./common_ai_gateway_restart_race_support.ts";
-import { OWNER_HELD_CANDIDATE_SQL } from "./common_ai_gateway_owner_held_fixture.ts";
+import { MIGRATION_PATH, OWNER_HELD_CANDIDATE_SQL, psqlFile } from "./common_ai_gateway_owner_held_fixture.ts";
+
+/** G6-13: "migration" runs every test below against the REAL migration file instead of the TEST-ONLY candidate. */
+const SOURCE = Deno.env.get("GRR_OWNER_HELD_SOURCE") === "migration" ? "migration" : "fixture";
 
 
 const USER_C = "00000000-0000-4000-8000-0000000000c3";
@@ -89,7 +92,7 @@ Deno.test({ name: "setup: the shared fixtures, person C, and the TEST-ONLY candi
     insert into g6r_fake.entitlements values ('${USER_C}', 'postona:x_autopost');
     insert into g6r_fake.brands values ('brand_c', '${USER_C}', 21, 1)`);
   assert.equal(await rows(`select count(*) from pg_proc where proname = 'ai_calls_claim_held'`), "0", "no such function before the test creates it");
-  const r = await psql(OWNER_HELD_CANDIDATE_SQL);
+  const r = SOURCE === "migration" ? await psqlFile(MIGRATION_PATH) : await psql(OWNER_HELD_CANDIDATE_SQL);
   assert.ok(r.ok, r.err);
 });
 

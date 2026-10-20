@@ -144,7 +144,23 @@ $$;
   "  -- G6-12 proposal 2: stamp my own acquired row (a write the abandon's FOR UPDATE conflicts with); never insert.\n  update ai_calls.consumer_calls c set fence_seq = c.fence_seq + 1\n   where c.call_key = v_key and c.state = 'acquired' and c.claim_token = v_owner\n     and (c.tenant_tag, c.fingerprint, c.application, c.feature, c.subject_kind, c.user_id, c.brand_ref)\n         is not distinct from (v_tenant, v_fingerprint, v_application, v_feature, v_subject, v_user, v_brand)\n  returning c.* into v_row;\n  if found then\n    return jsonb_build_object('held', true);\n  end if;\n  select c.* into v_row from ai_calls.consumer_calls c where c.call_key = v_key for share;\n  if not found then",
 );
 
-export type Isolation = "read committed" | "repeatable read" | "serializable";
+export type Isolation = "read committed" | "repeatable read" | "serializable" | "read uncommitted";
+
+/** G6-13: the REAL migration (not a fixture) and the local-only rollback the tests apply with psql -f. */
+export const MIGRATION_PATH = new URL("../migrations/20261020154536_ai_calls_owner_held_rc_guard.sql", import.meta.url).pathname;
+export const ROLLBACK_PATH = new URL("./ai_calls_owner_held_rc_guard_rollback.sql", import.meta.url).pathname;
+/** psql -f <file> on the runner's database (or `db`), as the runner's superuser (the call store's owner). */
+export async function psqlFile(file: string, db?: string): Promise<{ ok: boolean; out: string; err: string; sqlstate: string | null }> {
+  const o = await new Deno.Command("psql", {
+    args: ["-X", "-h", Deno.env.get("GRR_PGHOST")!, "-p", Deno.env.get("GRR_PGPORT")!, "-U", Deno.env.get("GRR_PGSUPER")!, "-d", db ?? Deno.env.get("GRR_DB")!,
+      "-Atq", "-v", "ON_ERROR_STOP=1", "-v", "VERBOSITY=verbose", "-f", file],
+    env: { LC_ALL: "C" },
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  const err = new TextDecoder().decode(o.stderr).trim();
+  return { ok: o.success, out: new TextDecoder().decode(o.stdout).trim(), err, sqlstate: err.match(/ERROR:\s+([0-9A-Z]{5}):/)?.[1] ?? null };
+}
 export const USER_C = "00000000-0000-4000-8000-0000000000c3";
 const TOMB = { role: "postona.consult.reply", model: "gpt-6-luna", policyVersion: "r1", attempts: 0, estimatedCostUsd: 0, costBasis: "no_request" };
 
