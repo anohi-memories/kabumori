@@ -1,0 +1,25 @@
+# read-only verification summary (counts copied from the runner output; no secrets, no paths of other slots)
+## PR #366 head 44ab2e6bb812f3484c85f847574de103757e3dfc (whole stack #274..#366), independent clean checkout, 0 uncommitted files before/after
+tsc --noEmit: exit 0
+expo lint: exit 0
+node --test tests/*.test.mjs: ℹ tests 491
+node --test tests/*.test.mjs: ℹ pass 490
+node --test tests/*.test.mjs: ℹ fail 0
+node --test tests/*.test.mjs: ℹ skipped 1
+node --test tests/manual-publish-*.test.mjs: ℹ tests 214
+node --test tests/manual-publish-*.test.mjs: ℹ pass 213
+node --test tests/manual-publish-*.test.mjs: ℹ fail 0
+node --test tests/manual-publish-*.test.mjs: ℹ skipped 1
+parity with F3 PR #278 single_post_contract.ts (F3_SINGLE_POST_CONTRACT): 7/7 PASS
+
+## Scratch merge of PR #366 into origin/main (not pushed, discarded): MERGE CLEAN, 22 files, tsc exit 0
+node --test (merged): ℹ tests 491
+node --test (merged): ℹ pass 490
+node --test (merged): ℹ fail 0
+node --test (merged): ℹ skipped 1
+
+## PR #369 head 6c363afeec63327deeedeec4ee37ae8f3206fa96 on main: see its PR (283 tests, 283 pass, 0 fail, 0 skipped; mutants 13/13)
+
+## Probes at PR #366 head (temporary tests, deleted; not committed)
+N1: first send -> phase=sending unresolvedKind=in_flight retrySentence=true
+N2: dataStatus=mock_preview + ready fake port -> send button enabled (gate allowed=true)
