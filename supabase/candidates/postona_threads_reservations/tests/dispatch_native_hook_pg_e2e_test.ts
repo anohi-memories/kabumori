@@ -26,8 +26,10 @@ const people = new Map((await owner<[number, string, string, string]>("select n,
 const P = (n: number) => people.get(n)!;
 async function reserve(n: number, text: string): Promise<string> {
   return String((await owner<[string]>(
-    `insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at)
-     select p.user_id, p.brand, p.threads_account, gen_random_uuid(), $2, encode(sha256(convert_to($2, 'UTF8')), 'hex'), now() - interval '1 second'
+    `insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at,
+       bound_owner_epoch, bound_lifecycle_version)
+     select p.user_id, p.brand, p.threads_account, gen_random_uuid(), $2, encode(sha256(convert_to($2, 'UTF8')), 'hex'), now() - interval '1 second',
+       (select e.v from t_g5.owner_epoch e where e.brand_id = p.brand), (select l.v from t_g5.lifecycle l where l.user_id = p.user_id)
      from t_ids.people p where p.n = $1 returning id::text`, [n, text]))[0][0]);
 }
 const row = async (id: string) => (await owner<[string, string | null, boolean | null]>(
@@ -69,14 +71,22 @@ Deno.test("N1 nothing changes: the native hook re-runs 007's preflight for the c
   assert.deepEqual(await row(id), ["published", "PUBLISHED", false]);
 });
 
-Deno.test("N2 changes during the container wait -> 0 publish requests; 007 records the refusal once; the report never says uncertain", async () => {
+Deno.test("N2 changes during the container wait (incl. G5 generation: service restart, owner A->B->A) -> 0 publish requests; 007 records the refusal once; the report never says uncertain", async () => {
   const cases: [number, string, () => Promise<unknown>, [string, string | null]][] = [
-    [86, "entitlement ended", () => owner("update t_threads.entitlement set status = 'ended' where user_id = $1::uuid", [P(86).user]), ["failed", "NOT_PUBLISHABLE_AT_SEND"]],
-    [87, "account deleting", () => owner("update public.common_accounts set status = 'deleting' where user_id = $1::uuid", [P(87).user]), ["failed", "NOT_PUBLISHABLE_AT_SEND"]],
+    [86, "entitlement ended", () => owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = $1::uuid and service_key = 'x_autopost'", [P(86).user]), ["failed", "SERVICE_NOT_ACTIVE"]],
+    [87, "account deleting", () => owner("update public.common_accounts set status = 'deleting' where user_id = $1::uuid", [P(87).user]), ["failed", "ACCOUNT_DELETION_IN_PROGRESS"]],
     [88, "second owner", () => owner("insert into public.brand_memberships (brand_id, user_id, role) values ($1, $2::uuid, 'owner')", [P(88).brand, P(99).user]), ["failed", "NOT_PUBLISHABLE_AT_SEND"]],
     [89, "G4 verification removed", () => owner("delete from t_threads.verified where social_account_id = $1", [P(89).threads]), ["failed", "NOT_PUBLISHABLE_AT_SEND"]],
     [90, "publish switch OFF", () => owner("update public.social_accounts set publish_enabled = false where id = $1", [P(90).threads]), ["failed", "NOT_PUBLISHABLE_AT_SEND"]],
     [91, "credential rotated", () => owner("update public.threads_account_credential_custody set vault_secret_id = gen_random_uuid(), recorded_at = now() where social_account_id = $1", [P(91).threads]), ["failed", "CREDENTIAL_CHANGED"]],
+    [96, "service restarted (A -> B -> A)", async () => {
+      await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = $1::uuid and service_key = 'x_autopost'", [P(96).user]);
+      await owner("update public.service_entitlements set status = 'active', ended_at = null where user_id = $1::uuid and service_key = 'x_autopost'", [P(96).user]);
+    }, ["failed", "SERVICE_GENERATION_CHANGED"]],
+    [97, "owner A -> B -> A", async () => {
+      await owner("insert into public.brand_memberships (brand_id, user_id, role) values ($1, $2::uuid, 'owner')", [P(97).brand, P(98).user]);
+      await owner("delete from public.brand_memberships where brand_id = $1 and user_id = $2::uuid", [P(97).brand, P(98).user]);
+    }, ["failed", "OWNER_EPOCH_CHANGED"]],
   ];
   for (const [n, label, change, expected] of cases) {
     const id = await reserve(n, `N2 ${label}`);
@@ -112,7 +122,7 @@ Deno.test("N4 the re-check is late (timeout) -> 0 publishes, the still-claimed r
 
 Deno.test("N5 a freeze AFTER the hook (during the publish request) is published once with after_freeze; unknown publish -> uncertain, never resent", async () => {
   const id = await reserve(94, "N5 送信中の停止");
-  const s = port({ afterHook: () => owner("update t_threads.entitlement set status = 'ended' where user_id = $1::uuid", [P(94).user]) });
+  const s = port({ afterHook: () => owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = $1::uuid and service_key = 'x_autopost'", [P(94).user]) });
   await deliver(s.p);
   assert.deepEqual([s.log.publishes, ...(await row(id))], [1, "published", "PUBLISHED", true]);
   const u = await reserve(95, "N5 不明");

@@ -24,9 +24,15 @@
 --               | 'simulated') and after_freeze (G5's state read again); an expired lease is fenced to uncertain
 --               ('lease_lost'); an identical published replay is idempotent; anything else on a finished row refuses.
 --   release     hands back a claimed row that was NOT sent.
--- Interfaces of other owners shipped as DENY (replaced only by their owners' reviewed code):
+-- G5 service generation (2026-10-20, Issue #318 TASK 7/50; G5 notice #318 6279933784, G5 PR #358): the Threads posting service key is
+-- 'x_autopost'. create stores the TWO numbers of R1's allow token g5oe:<owner_epoch>:<lifecycle_version>, read inside create from
+--   R1 public.common_account_authorization_verdict('postona', 'threads_publish', brand) -> jsonb   (the person's verdict; decision 'allow')
+-- and claim_due, preflight (and so the dispatcher's pre-publish hook) and record ask
+--   W1 private.account_lifecycle_worker_brand_verdict(brand, 'x_autopost', bound_owner_epoch, bound_lifecycle_version) -> text
+-- and continue ONLY on 'active'; every other answer (OWNER_EPOCH_CHANGED, SERVICE_GENERATION_CHANGED, EXPECTED_*_REQUIRED, ...) stops the row and
+-- is kept as its outcome code. No timestamp is compared for authorization. A row without a bound pair (written before this rule) is never sent.
+-- Interface of another owner shipped as DENY (replaced only by its owner's reviewed code):
 --   postona_threads_resv.g4_threads_account_verified(user, account) -> boolean   G4 (false)
---   postona_threads_resv.g5_threads_state(user) -> text (null = usable)          G5 ('THREADS_ENTITLEMENT_KEY_UNDECIDED')
 -- Optional G4 tables read only where they exist (PR #258/#263 candidates): public.threads_account_credential_custody,
 -- public.threads_credential_refresh_leases.
 -- Rollback: 007_postona_threads_reservations_rollback.sql.
@@ -41,6 +47,16 @@ begin
   end if;
   if to_regnamespace('postona_threads_resv') is not null then
     raise exception 'POSTONA_THREADS_RESV_ALREADY_APPLIED';
+  end if;
+  -- G5 R1 / W1 (PR #358): present, STABLE, definer, owned by this owner, unreachable from the API roles.
+  if to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is null
+     or to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)') is null
+     or exists (select 1 from pg_catalog.pg_proc p where p.oid in (to_regprocedure('public.common_account_authorization_verdict(text,text,text)'),
+                                                                  to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'))
+                and (p.provolatile <> 's' or not p.prosecdef or p.proowner <> v_owner))
+     or exists (select 1 from pg_catalog.pg_roles r where r.rolname in ('anon', 'postona_resv_api', 'postona_resv_worker')
+                and pg_catalog.has_function_privilege(r.oid, to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'), 'EXECUTE')) then
+    raise exception 'POSTONA_THREADS_RESV_PRECONDITION_G5_VERDICT';
   end if;
   if to_regprocedure('private.account_lifecycle_brand_owner(text)') is null
      or (select p.proowner from pg_catalog.pg_proc p where p.oid = to_regprocedure('private.account_lifecycle_brand_owner(text)')) is distinct from v_owner then
@@ -75,6 +91,10 @@ create table postona_threads_resv.reservations (
   lease_expires_at timestamptz,
   claimed_by text,
   bound_generation text check (bound_generation is null or bound_generation ~ '^[0-9a-f]{64}$'),
+  -- G5's service generation bound at create (R1's allow token); NULL = written before this rule: never sent.
+  bound_owner_epoch bigint check (bound_owner_epoch is null or bound_owner_epoch >= 1),
+  bound_lifecycle_version bigint check (bound_lifecycle_version is null or bound_lifecycle_version >= 1),
+  check ((bound_owner_epoch is null) = (bound_lifecycle_version is null)),
   provider_post_id text check (provider_post_id is null or provider_post_id ~ '^[1-9][0-9]{0,31}$'),
   outcome_code text check (outcome_code is null or outcome_code ~ '^[A-Z][A-Z0-9_]{1,63}$'),
   transport text check (transport is null or transport in ('threads', 'simulated')),
@@ -93,10 +113,28 @@ revoke all on table postona_threads_resv.reservations from public, anon, authent
 create function postona_threads_resv.g4_threads_account_verified(p_user_id uuid, p_social_account_id text) returns boolean
 language sql stable security definer set search_path = '' as $$ select false $$;
 
-/** G5 (DENY until delivered): null = the person may use POSTONA Threads posting now (session, account, entitlement,
- *  no deletion); otherwise a fixed code. The Threads service key is undecided, so nothing is guessed here. */
-create function postona_threads_resv.g5_threads_state(p_user_id uuid) returns text
-language sql stable security definer set search_path = '' as $$ select 'THREADS_ENTITLEMENT_KEY_UNDECIDED'::text $$;
+/** R1's owner-epoch token g5oe:<epoch>:<lifecycle_version> -> the two numbers, or NULLs for anything else (empty, malformed, leading zero,
+ *  zero, more than bigint). Internal. */
+create function postona_threads_resv.parse_owner_epoch_token(p_token text, out owner_epoch bigint, out lifecycle_version bigint)
+language plpgsql immutable set search_path = '' as $$
+declare v text[];
+begin
+  if p_token is null or pg_catalog.length(p_token) > 64 then return; end if;
+  v := pg_catalog.regexp_match(p_token, '^g5oe:([1-9][0-9]{0,18}):([1-9][0-9]{0,18})$');
+  if v is null then return; end if;
+  if v[1]::numeric > 9223372036854775807 or v[2]::numeric > 9223372036854775807 then return; end if;
+  owner_epoch := v[1]::bigint;
+  lifecycle_version := v[2]::bigint;
+end $$;
+
+/** G5 W1 for a bound pair: 'active' or G5's fixed code (a missing pair answers without asking). Internal. */
+create function postona_threads_resv.g5_bound_state(p_brand_id text, p_owner_epoch bigint, p_lifecycle_version bigint) returns text
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if p_owner_epoch is null or p_owner_epoch < 1 then return 'EXPECTED_OWNER_EPOCH_REQUIRED'; end if;
+  if p_lifecycle_version is null or p_lifecycle_version < 1 then return 'EXPECTED_LIFECYCLE_VERSION_REQUIRED'; end if;
+  return coalesce(private.account_lifecycle_worker_brand_verdict(p_brand_id, 'x_autopost', p_owner_epoch, p_lifecycle_version), 'SERVICE_STATE_UNKNOWN');
+end $$;
 
 /** The credential generation of one Threads account (64 lowercase hex). Internal. */
 create function postona_threads_resv.threads_credential_generation(p_social_account_id text) returns text
@@ -134,10 +172,11 @@ begin
 end $$;
 
 /** The fence: Threads account of a user workspace whose single owner is the person, connected, verified, switch ON,
- *  G4 verified, G5 usable. Returns the workspace; raises a fixed code otherwise. Internal. */
+ *  G4 verified. Returns the workspace; raises a fixed code otherwise. G5 is asked by the callers (R1 at create, W1 with the
+ *  bound pair afterwards). Internal. */
 create function postona_threads_resv.fence(p_user_id uuid, p_social_account_id text) returns text
 language plpgsql stable security definer set search_path = '' as $$
-declare v_sa public.social_accounts%rowtype; v_state text;
+declare v_sa public.social_accounts%rowtype;
 begin
   select sa.* into v_sa from public.social_accounts sa where sa.id = p_social_account_id;
   if v_sa.id is null or v_sa.platform is distinct from 'threads'
@@ -152,10 +191,6 @@ begin
   end if;
   if v_sa.publish_enabled is not true then
     raise exception 'POSTONA_THREADS_RESV_PUBLISH_DISABLED' using errcode = 'P0001';
-  end if;
-  v_state := postona_threads_resv.g5_threads_state(p_user_id);
-  if v_state is not null then
-    raise exception 'POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
   end if;
   return v_sa.brand_id;
 end $$;
@@ -175,6 +210,7 @@ create function postona_threads_resv.create_reservation(p_social_account_id text
 returns table (reservation_id uuid, status text, created boolean)
 language plpgsql volatile security definer set search_path = '' as $$
 declare v_user uuid := postona_x_resv.caller(); v_brand text; v_row postona_threads_resv.reservations%rowtype; v_sha text;
+        v_verdict jsonb; v_epoch bigint; v_lifecycle bigint;
 begin
   if p_social_account_id is null or p_client_request_id is null or p_scheduled_at is null then
     raise exception 'POSTONA_THREADS_RESV_REQUEST_INVALID' using errcode = 'P0001';
@@ -190,6 +226,15 @@ begin
     raise exception 'POSTONA_THREADS_RESV_SCHEDULE_INVALID' using errcode = 'P0001';
   end if;
   v_brand := postona_threads_resv.fence(v_user, p_social_account_id);
+  -- G5 R1, the person's verdict for this workspace, read now: only 'allow' with a well-formed owner-epoch token is bound.
+  v_verdict := public.common_account_authorization_verdict('postona', 'threads_publish', v_brand);
+  if v_verdict ->> 'decision' is distinct from 'allow' then
+    raise exception 'POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
+  end if;
+  select t.owner_epoch, t.lifecycle_version into v_epoch, v_lifecycle from postona_threads_resv.parse_owner_epoch_token(v_verdict ->> 'owner_epoch') t;
+  if v_epoch is null or v_lifecycle is null then
+    raise exception 'POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
+  end if;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('postona_threads_resv:' || p_social_account_id, 0));
   select r.* into v_row from postona_threads_resv.reservations r
    where r.user_id = v_user and r.social_account_id = p_social_account_id and r.client_request_id = p_client_request_id;
@@ -199,8 +244,9 @@ begin
     end if;
     reservation_id := v_row.id; status := v_row.status; created := false; return next; return;
   end if;
-  insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at)
-  values (v_user, v_brand, p_social_account_id, p_client_request_id, p_text, v_sha, p_scheduled_at)
+  insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at,
+    bound_owner_epoch, bound_lifecycle_version)
+  values (v_user, v_brand, p_social_account_id, p_client_request_id, p_text, v_sha, p_scheduled_at, v_epoch, v_lifecycle)
   returning * into v_row;
   reservation_id := v_row.id; status := v_row.status; created := true; return next;
 end $$;
@@ -244,7 +290,7 @@ end $$;
 create function postona_threads_resv.claim_due(p_worker text, p_lease_seconds integer, p_limit integer)
 returns table (reservation_id uuid, lease_token uuid, provider text, social_account_id text, body text)
 language plpgsql volatile security definer set search_path = '' as $$
-declare v_row postona_threads_resv.reservations%rowtype; v_token uuid;
+declare v_row postona_threads_resv.reservations%rowtype; v_token uuid; v_g5 text;
 begin
   if p_worker is null or p_worker !~ '^[a-z0-9_-]{1,40}$' or p_lease_seconds is null or p_lease_seconds not between 30 and 300
      or p_limit is null or p_limit not between 1 and 50 then
@@ -261,6 +307,14 @@ begin
     limit p_limit
     for update skip locked
   loop
+    -- G5 W1 with the pair bound at create: anything but 'active' stops the row here (never claimed, never sent).
+    v_g5 := postona_threads_resv.g5_bound_state(v_row.brand_id, v_row.bound_owner_epoch, v_row.bound_lifecycle_version);
+    if v_g5 is distinct from 'active' then
+      update postona_threads_resv.reservations r set status = 'failed',
+             outcome_code = case when v_g5 ~ '^[A-Z][A-Z0-9_]{1,63}$' then v_g5 else 'SERVICE_STATE_UNKNOWN' end, updated_at = pg_catalog.now()
+      where r.id = v_row.id;
+      continue;
+    end if;
     v_token := gen_random_uuid();
     update postona_threads_resv.reservations r
     set status = 'claimed', lease_token = v_token, lease_expires_at = pg_catalog.clock_timestamp() + pg_catalog.make_interval(secs => p_lease_seconds),
@@ -274,7 +328,7 @@ end $$;
 create function postona_threads_resv.preflight(p_reservation_id uuid, p_lease_token uuid)
 returns table (verdict text, credential_generation text)
 language plpgsql volatile security definer set search_path = '' as $$
-declare v_row postona_threads_resv.reservations%rowtype; v_now text;
+declare v_row postona_threads_resv.reservations%rowtype; v_now text; v_g5 text;
 begin
   select r.* into v_row from postona_threads_resv.reservations r where r.id = p_reservation_id for update;
   if v_row.id is null or v_row.status <> 'claimed' or v_row.lease_token is distinct from p_lease_token then
@@ -296,6 +350,14 @@ begin
     where r.id = v_row.id;
     verdict := 'NOT_PUBLISHABLE'; return next; return;
   end;
+  v_g5 := postona_threads_resv.g5_bound_state(v_row.brand_id, v_row.bound_owner_epoch, v_row.bound_lifecycle_version);
+  if v_g5 is distinct from 'active' then
+    update postona_threads_resv.reservations r set status = 'failed',
+           outcome_code = case when v_g5 ~ '^[A-Z][A-Z0-9_]{1,63}$' then v_g5 else 'SERVICE_STATE_UNKNOWN' end, lease_token = null,
+           lease_expires_at = null, updated_at = pg_catalog.now()
+    where r.id = v_row.id;
+    verdict := 'NOT_PUBLISHABLE'; return next; return;
+  end if;
   v_now := postona_threads_resv.threads_credential_generation(v_row.social_account_id);
   if v_now is null or v_row.bound_generation is distinct from v_now then
     update postona_threads_resv.reservations r set status = 'failed', outcome_code = 'CREDENTIAL_CHANGED', lease_token = null,
@@ -338,7 +400,8 @@ begin
   set status = case p_outcome when 'published' then 'published' when 'failed_before_send' then 'failed' else 'uncertain' end,
       provider_post_id = p_provider_post_id, outcome_code = coalesce(p_code, pg_catalog.upper(p_outcome)),
       lease_token = null, lease_expires_at = null, transport = p_transport,
-      after_freeze = postona_threads_resv.g5_threads_state(v_row.user_id) is not null, updated_at = pg_catalog.now()
+      after_freeze = postona_threads_resv.g5_bound_state(v_row.brand_id, v_row.bound_owner_epoch, v_row.bound_lifecycle_version) is distinct from 'active',
+      updated_at = pg_catalog.now()
   where r.id = v_row.id;
   return p_outcome;
 end $$;

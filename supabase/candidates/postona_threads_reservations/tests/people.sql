@@ -2,7 +2,7 @@
 -- guarded onboarding (so each has a social_mobile_user_v1 workspace with a single owner), then ONE Threads account in
 -- that workspace (TEST DATA written by the owner role: G4's real Threads connection is not part of this proof):
 -- identity_verified, publish switch ON, an access reference (fake uuid), no refresh reference, custody recorded,
--- listed as verified (G4 double) and entitled (G5 double). Fake identities only.
+-- listed as verified (G4 double); x_autopost (the Threads service key too) comes from G5's real enrolment. Fake identities only.
 \ir ../../postona_x_oauth_t13_guard/helpers.sql
 create schema t_ids;
 create table t_ids.people (n integer primary key, user_id uuid not null, x_account text not null, threads_account text not null, brand text not null);
@@ -20,7 +20,6 @@ begin
   insert into public.threads_account_credential_custody (social_account_id, vault_secret_id, expires_at, recorded_by)
   values (v_threads, gen_random_uuid(), now() + interval '50 days', v_user);
   insert into t_threads.verified values (v_threads);
-  insert into t_threads.entitlement values (v_user, 'active');
   insert into t_ids.people values (p_n, v_user, v_account, v_threads, v_brand);
 end $$;
 select pg_temp.onboard(n) from generate_series(61, 99) n;

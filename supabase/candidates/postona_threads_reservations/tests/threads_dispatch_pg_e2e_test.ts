@@ -56,8 +56,10 @@ const P = (n: number) => people.get(n)!;
 /** A due reservation written by the owner (the API's create path is proven in behavior.sql). */
 async function reserve(n: number, text: string): Promise<string> {
   return String((await owner<[string]>(
-    `insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at)
-     select p.user_id, p.brand, p.threads_account, gen_random_uuid(), $2, encode(sha256(convert_to($2, 'UTF8')), 'hex'), now() - interval '1 second'
+    `insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at,
+       bound_owner_epoch, bound_lifecycle_version)
+     select p.user_id, p.brand, p.threads_account, gen_random_uuid(), $2, encode(sha256(convert_to($2, 'UTF8')), 'hex'), now() - interval '1 second',
+       (select e.v from t_g5.owner_epoch e where e.brand_id = p.brand), (select l.v from t_g5.lifecycle l where l.user_id = p.user_id)
      from t_ids.people p where p.n = $1 returning id::text`, [n, text]))[0][0]);
 }
 const row = async (id: string) => (await owner<[string, string | null, string | null, string | null]>(
@@ -132,7 +134,7 @@ Deno.test("E4 changes after the credential was read, before the send: rotation /
   const cases: [number, string, (account: string) => Promise<unknown>][] = [
     [87, "CREDENTIAL_CHANGED", (a) => owner("update public.threads_account_credential_custody set vault_secret_id = gen_random_uuid(), recorded_at = now() where social_account_id = $1", [a])],
     [88, "NOT_PUBLISHABLE_AT_SEND", (a) => owner("update public.social_accounts set publish_enabled = false where id = $1", [a])],
-    [89, "NOT_PUBLISHABLE_AT_SEND", () => owner("update t_threads.entitlement set status = 'ended' where user_id = $1::uuid", [P(89).user])],
+    [89, "SERVICE_NOT_ACTIVE", () => owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = $1::uuid and service_key = 'x_autopost'", [P(89).user])],
     [90, "NOT_PUBLISHABLE_AT_SEND", () => owner("insert into public.brand_memberships (brand_id, user_id, role) select brand, $1::uuid, 'owner' from t_ids.people where n = 90", [P(99).user])],
   ];
   for (const [n, code, change] of cases) {

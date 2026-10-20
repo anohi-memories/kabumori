@@ -51,7 +51,8 @@ select pg_temp.expect(pg_temp.api(q, pg_temp.p(61), pg_temp.sess(61)) like 'ERR:
   'select count(*)::text from postona_threads_resv.reservations']) q;
 select pg_temp.expect(pg_temp.wk(q) like 'ERR:permission denied%', 'L1 worker closed: ' || q) from unnest(array[
   pg_temp.create_sql(pg_temp.th(61), gen_random_uuid(), 'x'), format('select state from postona_threads_resv.receipt(%L, %L)', pg_temp.th(61), gen_random_uuid()),
-  format('select postona_threads_resv.g5_threads_state(%L)', pg_temp.p(61)), 'select count(*)::text from postona_threads_resv.reservations']) q;
+  format('select postona_threads_resv.g5_bound_state(%L, 1, 1)', pg_temp.br(61)), format('select postona_threads_resv.parse_owner_epoch_token(%L)', 'g5oe:1:1'),
+  'select count(*)::text from postona_threads_resv.reservations']) q;
 select 'L1_ACL_PASS' as result;
 
 -- L2: create refuses (nothing recorded): another person's / an X / an unknown account, a second owner, not verified (G4),
@@ -78,8 +79,8 @@ select pg_temp.l2(61, 'connection error', 'update public.social_accounts set las
   'update public.social_accounts set last_connection_error_code = null where id = %1$L', 'ERR:POSTONA_THREADS_RESV_ACCOUNT_NOT_VERIFIED');
 select pg_temp.l2(61, 'switch OFF', 'update public.social_accounts set publish_enabled = false where id = %1$L',
   'update public.social_accounts set publish_enabled = true where id = %1$L', 'ERR:POSTONA_THREADS_RESV_PUBLISH_DISABLED');
-select pg_temp.l2(61, 'entitlement ended', 'update t_threads.entitlement set status = ''ended'' where user_id = %2$L',
-  'update t_threads.entitlement set status = ''active'' where user_id = %2$L', 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE');
+select pg_temp.l2(61, 'entitlement ended', 'update public.service_entitlements set status = ''ended'', ended_at = now() where user_id = %2$L and service_key = ''x_autopost''',
+  'update public.service_entitlements set status = ''active'', ended_at = null where user_id = %2$L and service_key = ''x_autopost''', 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE');
 select pg_temp.l2(61, 'deleting', 'update public.common_accounts set status = ''deleting'' where user_id = %2$L',
   'update public.common_accounts set status = ''active'' where user_id = %2$L', 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE');
 select pg_temp.l2(61, 'locked', 'update public.common_accounts set status = ''locked'' where user_id = %2$L',
@@ -145,10 +146,10 @@ select pg_temp.l5(66, 'switch OFF', 'update public.social_accounts set publish_e
   'update public.social_accounts set publish_enabled = true where id = %1$L', 'NOT_PUBLISHABLE failed/NOT_PUBLISHABLE_AT_SEND');
 select pg_temp.l5(66, 'disconnected', 'update public.social_accounts set connection_status = ''unconnected'' where id = %1$L',
   'update public.social_accounts set connection_status = ''identity_verified'' where id = %1$L', 'NOT_PUBLISHABLE failed/NOT_PUBLISHABLE_AT_SEND');
-select pg_temp.l5(66, 'entitlement ended', 'update t_threads.entitlement set status = ''ended'' where user_id = %2$L',
-  'update t_threads.entitlement set status = ''active'' where user_id = %2$L', 'NOT_PUBLISHABLE failed/NOT_PUBLISHABLE_AT_SEND');
+select pg_temp.l5(66, 'entitlement ended', 'update public.service_entitlements set status = ''ended'', ended_at = now() where user_id = %2$L and service_key = ''x_autopost''',
+  'update public.service_entitlements set status = ''active'', ended_at = null where user_id = %2$L and service_key = ''x_autopost''', 'NOT_PUBLISHABLE failed/SERVICE_NOT_ACTIVE');
 select pg_temp.l5(66, 'deleting', 'update public.common_accounts set status = ''deleting'' where user_id = %2$L',
-  'update public.common_accounts set status = ''active'' where user_id = %2$L', 'NOT_PUBLISHABLE failed/NOT_PUBLISHABLE_AT_SEND');
+  'update public.common_accounts set status = ''active'' where user_id = %2$L', 'NOT_PUBLISHABLE failed/ACCOUNT_DELETION_IN_PROGRESS');
 select pg_temp.l5(67, 'credential rotated (custody)', 'update public.threads_account_credential_custody set vault_secret_id = gen_random_uuid(), recorded_at = now() where social_account_id = %1$L',
   null, 'NOT_PUBLISHABLE failed/CREDENTIAL_CHANGED');
 select pg_temp.l5(67, 'Threads user changed', 'update public.social_accounts set platform_user_id = platform_user_id || ''0'' where id = %1$L',
@@ -171,9 +172,9 @@ select pg_temp.expect(pg_temp.rec(:'r6', :'l6', o, i, null, t) = 'ERR:POSTONA_TH
   from (values ('published', null, 'simulated'), ('uncertain', '18000000000000001', 'simulated'), ('published', '0123', 'simulated'),
                ('published', '18000000000000001', null), ('published', '18000000000000001', 'x'), ('sent', '18000000000000001', 'simulated')) v(o, i, t);
 select pg_temp.expect(pg_temp.pre(:'r6', :'l6') like 'OK/%', 'L6 preflight');
-update t_threads.entitlement set status = 'ended' where user_id = pg_temp.p(69);
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.p(69) and service_key = 'x_autopost';
 select pg_temp.expect(pg_temp.rec(:'r6', :'l6', 'published', '18000000000000069', null, 'threads') = 'published', 'L6 in-flight post recorded as it happened');
-update t_threads.entitlement set status = 'active' where user_id = pg_temp.p(69);
+update public.service_entitlements set status = 'active', ended_at = null where user_id = pg_temp.p(69) and service_key = 'x_autopost';
 select pg_temp.expect(pg_temp.receipt(69, (select client_request_id from postona_threads_resv.reservations where id = :'r6')) = 'sent/18000000000000069/PUBLISHED/true/false', 'L6 after_freeze, real transport');
 select pg_temp.mk(70, 'L6 期限切れ') as r6b \gset
 select pg_temp.claim(:'r6b') as l6b \gset
@@ -221,5 +222,95 @@ select pg_temp.expect(pg_temp.api(pg_temp.create_sql(pg_temp.th(73), gen_random_
 rollback;
 select pg_temp.expect((select md5(prosrc) from pg_proc where oid = 'private.account_lifecycle_brand_owner(text)'::regprocedure) = :'l8src', 'L8 F5 restored');
 select 'L8_PROFILE_DEFENCE_IN_DEPTH_PASS' as result;
+
+
+-- L9: G5's service generation (owner_epoch, lifecycle_version) -- bound at create from R1's allow token, compared with W1 at the claim and right
+-- before the send; no timestamp is compared. People 74-79.
+create function pg_temp.pair(p_rid uuid) returns text language sql as $$
+  select bound_owner_epoch || ':' || bound_lifecycle_version from postona_threads_resv.reservations where id = p_rid $$;
+create function pg_temp.claim_answer(p_rid uuid) returns text language plpgsql as $$
+declare v text;
+begin
+  update postona_threads_resv.reservations set scheduled_at = now() - interval '1 second' where id = p_rid;
+  v := pg_temp.wk('select coalesce(string_agg(reservation_id::text, '',''), '''') from postona_threads_resv.claim_due(''w1'', 60, 50)');
+  update postona_threads_resv.reservations set status = 'cancelled', lease_token = null, lease_expires_at = null where id = p_rid and status = 'claimed';
+  return (case when v = p_rid::text then 'claimed' when v = '' then 'not claimed' else 'other:' || v end) || ' ' || pg_temp.st(p_rid);
+end $$;
+-- a: the stored pair is R1's token for this person and workspace
+select pg_temp.mk(74, 'L9 a') as r9a \gset
+select pg_temp.expect(pg_temp.pair(:'r9a') = (select e.v from t_g5.owner_epoch e where e.brand_id = pg_temp.br(74)) || ':' || (select l.v from t_g5.lifecycle l where l.user_id = pg_temp.p(74)), 'L9a pair');
+select pg_temp.expect(pg_temp.claim_answer(:'r9a') = 'claimed cancelled/-', 'L9a unchanged -> claimed');
+-- b: service ended and restarted after the reservation (A -> B -> A of the service) -> never claimed
+select pg_temp.mk(74, 'L9 b') as r9b \gset
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.p(74) and service_key = 'x_autopost';
+update public.service_entitlements set status = 'active', ended_at = null where user_id = pg_temp.p(74) and service_key = 'x_autopost';
+select pg_temp.expect(public.common_account_brand_service_state(pg_temp.br(74), 'x_autopost') = 'active', 'L9b the service is active again');
+select pg_temp.expect(pg_temp.claim_answer(:'r9b') = 'not claimed failed/SERVICE_GENERATION_CHANGED', 'L9b restart -> ' || pg_temp.claim_answer(:'r9b'));
+-- c: stopped and restarted INSIDE ONE transaction (the old activated_at / now() design let this through)
+select pg_temp.mk(75, 'L9 c') as r9c \gset
+begin;
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.p(75) and service_key = 'x_autopost';
+update public.service_entitlements set status = 'active', ended_at = null where user_id = pg_temp.p(75) and service_key = 'x_autopost';
+commit;
+select pg_temp.expect(pg_temp.claim_answer(:'r9c') = 'not claimed failed/SERVICE_GENERATION_CHANGED', 'L9c same-transaction restart');
+-- d: a stop that was rolled back changes nothing
+select pg_temp.mk(75, 'L9 d') as r9d \gset
+begin;
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.p(75) and service_key = 'x_autopost';
+rollback;
+select pg_temp.expect(pg_temp.claim_answer(:'r9d') = 'claimed cancelled/-', 'L9d rolled-back stop -> still claimable');
+-- e: owner A -> B -> A -> a new owner epoch
+select pg_temp.mk(76, 'L9 e') as r9e \gset
+insert into public.brand_memberships (brand_id, user_id, role) values (pg_temp.br(76), pg_temp.p(79), 'owner');
+delete from public.brand_memberships where brand_id = pg_temp.br(76) and user_id = pg_temp.p(79);
+select pg_temp.expect(pg_temp.claim_answer(:'r9e') = 'not claimed failed/OWNER_EPOCH_CHANGED', 'L9e owner A->B->A');
+-- f: an UNRELATED service change of the owner (Kabumori started) also moves the generation: the earlier reservation is refused (UX debt)
+select pg_temp.mk(77, 'L9 f') as r9f \gset
+insert into public.service_entitlements (user_id, service_key, status, source, activated_at) values (pg_temp.p(77), 'kabumori', 'active', 'self_service', now())
+on conflict (user_id, service_key) do update set updated_at = now();
+select pg_temp.expect(pg_temp.claim_answer(:'r9f') = 'not claimed failed/SERVICE_GENERATION_CHANGED', 'L9f unrelated service change');
+-- g: a restart after the claim, before the send -> the preflight (and so the pre-publish hook) refuses
+select pg_temp.mk(78, 'L9 g') as r9g \gset
+select pg_temp.claim(:'r9g') as l9g \gset
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.p(78) and service_key = 'x_autopost';
+update public.service_entitlements set status = 'active', ended_at = null where user_id = pg_temp.p(78) and service_key = 'x_autopost';
+select pg_temp.expect(pg_temp.pre(:'r9g', :'l9g') || ' ' || pg_temp.st(:'r9g') = 'NOT_PUBLISHABLE/ failed/SERVICE_GENERATION_CHANGED', 'L9g restart after the claim');
+-- h: a row written before this rule (no bound pair) is never claimed
+insert into postona_threads_resv.reservations (user_id, brand_id, social_account_id, client_request_id, body, content_sha256, scheduled_at)
+select user_id, brand, threads_account, gen_random_uuid(), 'L9 legacy', encode(sha256(convert_to('L9 legacy', 'UTF8')), 'hex'), now() + interval '1 hour'
+from t_ids.people where n = 78 returning id as r9h \gset
+select pg_temp.expect(pg_temp.claim_answer(:'r9h') = 'not claimed failed/EXPECTED_OWNER_EPOCH_REQUIRED', 'L9h legacy row');
+-- i: R1 answers allow with a malformed / out-of-range token, or another decision with a token: nothing is bound (TEST-ONLY stand-in of R1
+--    inside rolled-back transactions)
+create function pg_temp.with_r1(p_body text) returns text language plpgsql as $fn$
+declare v text;
+begin
+  execute format('create or replace function public.common_account_authorization_verdict(p_app text, p_feature text, p_brand_id text) '
+    || 'returns jsonb language sql stable security definer set search_path = '''' as %L', 'select ' || p_body);
+  v := pg_temp.api(pg_temp.create_sql(pg_temp.th(79), gen_random_uuid(), 'L9 token'), pg_temp.p(79), pg_temp.sess(79));
+  return v;
+end $fn$;
+select md5(prosrc) as r1src from pg_proc where oid = 'public.common_account_authorization_verdict(text,text,text)'::regprocedure \gset
+select count(*) as l9rows from postona_threads_resv.reservations \gset
+begin;
+select pg_temp.expect(pg_temp.with_r1(format('pg_catalog.jsonb_build_object(%L, %L, %L, %L)', 'decision', 'allow', 'owner_epoch', tok)) = 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE', 'L9i token ' || tok)
+  from unnest(array['g5oe:0:1', 'g5oe:1:0', 'g5oe:01:1', 'g5oe:1:01', 'g5oe:1:1:1', 'g5oe:1', 'g5oe:9223372036854775808:1', 'g5oe:1:9223372036854775808',
+                    'g5oe:1:-1', 'g5oe: 1:1', 'G5OE:1:1', 'x', '', 'g5oe:1:1 ']) tok;
+select pg_temp.expect(pg_temp.with_r1($q$pg_catalog.jsonb_build_object('decision', 'allow')$q$) = 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE', 'L9i allow without token');
+select pg_temp.expect(pg_temp.with_r1($q$pg_catalog.jsonb_build_object('decision', 'unknown', 'owner_epoch', 'g5oe:1:1')$q$) = 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE', 'L9i unknown with token');
+select pg_temp.expect(pg_temp.with_r1($q$null::jsonb$q$) = 'ERR:POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE', 'L9i no answer');
+select pg_temp.expect(pg_temp.with_r1($q$pg_catalog.jsonb_build_object('decision', 'allow', 'owner_epoch', 'g5oe:9223372036854775807:9223372036854775807')$q$) like 'planned/%/true', 'L9i bigint max is accepted');
+rollback;
+select pg_temp.expect((select md5(prosrc) from pg_proc where oid = 'public.common_account_authorization_verdict(text,text,text)'::regprocedure) = :'r1src', 'L9i R1 double restored');
+select pg_temp.expect((select count(*) from postona_threads_resv.reservations) = :'l9rows', 'L9i nothing recorded');
+-- j: a freeze between the preflight and the record -> after_freeze from W1 (generation moved)
+select pg_temp.mk(79, 'L9 j') as r9j \gset
+select pg_temp.claim(:'r9j') as l9j \gset
+select pg_temp.expect(pg_temp.pre(:'r9j', :'l9j') like 'OK/%', 'L9j preflight');
+update public.service_entitlements set status = 'ended', ended_at = now() where user_id = pg_temp.p(79) and service_key = 'x_autopost';
+update public.service_entitlements set status = 'active', ended_at = null where user_id = pg_temp.p(79) and service_key = 'x_autopost';
+select pg_temp.expect(pg_temp.rec(:'r9j', :'l9j', 'published', '18000000000000079', null, 'simulated') = 'published', 'L9j recorded as it happened');
+select pg_temp.expect((select after_freeze from postona_threads_resv.reservations where id = :'r9j'), 'L9j after_freeze');
+select 'L9_SERVICE_GENERATION_ABA_PASS' as result;
 
 select 'POSTONA_THREADS_RESV_BEHAVIOR_PASS' as result;
