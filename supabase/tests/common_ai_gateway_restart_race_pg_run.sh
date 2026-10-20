@@ -10,7 +10,8 @@
 # common_ai_gateway_r1_r2_corrective_pg_test.ts (G6-09: the R1 / R2 corrective) or
 # common_ai_gateway_lost_reserve_pg_test.ts (G6-10: an ambiguous reserve failure) or
 # common_ai_gateway_owner_held_contract_pg_test.ts (G6-11: the candidate non-creating owner-held check, created by
-# that test in this scratch database only); nothing else is accepted.
+# that test in this scratch database only) or one of the G6-12 isolation files
+# (common_ai_gateway_owner_held_isolation_{baseline,guard,fence}_pg_test.ts); nothing else is accepted.
 #
 # The host must be a local socket directory under /tmp (anything else is refused) and the server must have no TCP
 # listener. One scratch database is created and dropped; no role is created (the three Supabase API roles are
@@ -30,7 +31,7 @@ unset PGHOST PGHOSTADDR PGPORT PGDATABASE PGUSER PGPASSWORD PGSERVICE PGSERVICEF
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TEST="${1:-common_ai_gateway_restart_race_pg_test.ts}"
 case "$TEST" in
-  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts|common_ai_gateway_lost_reserve_pg_test.ts|common_ai_gateway_owner_held_contract_pg_test.ts) ;;
+  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts|common_ai_gateway_lost_reserve_pg_test.ts|common_ai_gateway_owner_held_contract_pg_test.ts|common_ai_gateway_owner_held_isolation_baseline_pg_test.ts|common_ai_gateway_owner_held_isolation_guard_pg_test.ts|common_ai_gateway_owner_held_isolation_fence_pg_test.ts) ;;
   *) echo "refusing test file '$TEST'" >&2; exit 2 ;;
 esac
 LEDGER="$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql"
@@ -78,7 +79,7 @@ create table g6r_fake.sessions (jwt text primary key, user_id uuid not null, ses
 create table g6r_fake.entitlements (user_id uuid not null, entitlement text not null, primary key (user_id, entitlement));
 create table g6r_fake.brands (slug text primary key, owner uuid not null, owner_epoch bigint not null, lifecycle bigint not null);
 create table g6r_fake.events (seq bigserial primary key, worker text not null, point text not null, at timestamptz not null default clock_timestamp());
-create table g6r_fake.gates (worker text primary key);
+create table g6r_fake.gates (worker text not null, point text not null default '*', primary key (worker, point));
 create table g6r_fake.provider_requests (seq bigserial primary key, worker text not null, operation_id text not null, provider text not null,
   at timestamptz not null default clock_timestamp());
 SQL

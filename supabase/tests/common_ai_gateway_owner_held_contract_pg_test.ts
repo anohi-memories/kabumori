@@ -7,6 +7,11 @@
 // gateway.ts does not call it. The gateway is composed with it only inside the test worker (ownerHeld mode). Writing
 // it as a real migration needs a separate approved TASK and a Codex Sol (high) review.
 //
+// G6-12: every process here runs each RPC in its own READ COMMITTED transaction; the results hold in that scope only.
+// A recovery with an older REPEATABLE READ / SERIALIZABLE snapshot breaks the held -> send argument (H3 #330): see
+// common_ai_gateway_owner_held_isolation_{baseline,guard,fence}_pg_test.ts and docs/ai-provider/G6_OWNER_HELD_ISOLATION.md.
+// The candidate SQL now lives in common_ai_gateway_owner_held_fixture.ts.
+//
 // Real ledger, ai_calls and maintenance SQL, separate gateway / recovery processes, fake G5 and providers.
 // Run by common_ai_gateway_restart_race_pg_run.sh common_ai_gateway_owner_held_contract_pg_test.ts.
 import assert from "node:assert/strict";
@@ -34,58 +39,8 @@ import {
   USER_A,
   USER_B,
 } from "./common_ai_gateway_restart_race_support.ts";
+import { OWNER_HELD_CANDIDATE_SQL } from "./common_ai_gateway_owner_held_fixture.ts";
 
-/** The candidate (TEST-ONLY; see the header). */
-export const OWNER_HELD_CANDIDATE_SQL = `
-create function public.ai_calls_claim_held(p jsonb)
-returns jsonb
-language plpgsql
-volatile
-security definer
-set search_path = ''
-as $$
-declare
-  v_key text := ai_calls.input_text(p, 'call_key', true, '^h5m2_[0-9a-f]{64}$');
-  v_tenant text := ai_calls.input_text(p, 'tenant_tag', true, '^[0-9a-f]{64}$');
-  v_fingerprint text := ai_calls.input_text(p, 'fingerprint', true, '^[0-9a-f]{64}$');
-  v_application text := ai_calls.input_text(p, 'application', true, '^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$');
-  v_feature text := ai_calls.input_text(p, 'feature', true, '^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$');
-  v_subject text := ai_calls.input_text(p, 'subject_kind', true, '^(system|user)$');
-  v_user uuid := ai_calls.input_uuid(p, 'user_id', false);
-  v_brand text := ai_calls.input_text(p, 'brand_ref', false, '^[a-z][a-z0-9_]{1,40}$');
-  v_owner uuid := ai_calls.input_uuid(p, 'owner', true);
-  v_row ai_calls.consumer_calls;
-begin
-  if (v_subject = 'system' and v_user is not null) or (v_subject = 'user' and v_user is null) then
-    raise exception 'AI_CALLS_INVALID_INPUT: subject' using errcode = '22023';
-  end if;
-  -- The same locks, in the same order, as ai_calls_claim: the person's lock shared (forget_user takes it exclusive),
-  -- then the call key's (ai_calls_claim and ai_calls_abandon take it), then the row FOR SHARE (ai_calls_complete
-  -- takes it FOR UPDATE). Nothing is inserted or updated: a missing row stays missing.
-  if v_subject = 'user' then
-    perform pg_advisory_xact_lock_shared(hashtextextended('ai_calls:user:' || v_user::text, 0));
-  end if;
-  perform pg_advisory_xact_lock(hashtextextended('ai_calls:call:' || v_key, 0));
-  select c.* into v_row from ai_calls.consumer_calls c where c.call_key = v_key for share;
-  if not found then
-    return jsonb_build_object('held', false, 'reason', 'NOT_FOUND');
-  end if;
-  if (v_row.tenant_tag, v_row.fingerprint, v_row.application, v_row.feature, v_row.subject_kind, v_row.user_id, v_row.brand_ref)
-     is distinct from (v_tenant, v_fingerprint, v_application, v_feature, v_subject, v_user, v_brand) then
-    return jsonb_build_object('held', false, 'reason', 'IDENTITY_MISMATCH');
-  end if;
-  if v_row.state <> 'acquired' then
-    return jsonb_build_object('held', false, 'reason', 'NOT_ACQUIRED');
-  end if;
-  if v_row.claim_token is distinct from v_owner then
-    return jsonb_build_object('held', false, 'reason', 'OWNER_MISMATCH');
-  end if;
-  return jsonb_build_object('held', true);
-end;
-$$;
-revoke all on function public.ai_calls_claim_held(jsonb) from public, anon, authenticated, service_role;
-grant execute on function public.ai_calls_claim_held(jsonb) to service_role;
-`;
 
 const USER_C = "00000000-0000-4000-8000-0000000000c3";
 const JWT_C1 = "g6r-user-c.session-1.sig";
