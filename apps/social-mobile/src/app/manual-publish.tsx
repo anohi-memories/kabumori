@@ -29,8 +29,9 @@ import {
   xAccountsOf,
   type Surface,
 } from '@/features/manual-publish/manual-publish-model';
+import { DRAFT_MAX_TEXT_UNITS, loadDraftForRestore } from '@/features/manual-publish/manual-publish-draft-store';
 import { getManualPublishPort, type ResultMarks } from '@/features/manual-publish/manual-publish-port';
-import { attemptStore } from '@/features/manual-publish/manual-publish-storage';
+import { attemptStore, draftStore } from '@/features/manual-publish/manual-publish-storage';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -84,10 +85,19 @@ function defaultRequestId() {
   return Crypto.randomUUID();
 }
 
-type ScreenProps = Readonly<{ userId: string | null; now?: () => number; newRequestId?: () => string }>;
+type ScreenProps = Readonly<{
+  userId: string | null;
+  /** Identifies the sign-in session (not a secret): a stored draft is put back only into the session that wrote it. */
+  sessionMark?: string;
+  now?: () => number;
+  newRequestId?: () => string;
+}>;
+
+/** What the device holds for the draft: nothing known yet, nothing (removed), or this text and account. */
+const DRAFT_ON_DEVICE_NONE = 'none';
 
 /** The screen for ONE signed-in user. The route below re-creates it (new key) when the user changes. */
-export function ManualPublishScreen({ userId, now = Date.now, newRequestId = defaultRequestId }: ScreenProps) {
+export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, newRequestId = defaultRequestId }: ScreenProps) {
   const { status: dataStatus } = useDataStatus();
   const { accounts, activeAccount } = useActiveAccount();
   // The process remembers an unresolved attempt with its text; after an app restart only the hash-only record on
@@ -124,6 +134,60 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
 
   const xAccounts = useMemo(() => xAccountsOf(accounts), [accounts]);
   const xIdsKey = xAccounts.map((account) => account.id).join('|');
+
+  // A callback route (oauth-callback / auth-callback) replaces this screen with the home screen, so what was typed is
+  // kept on the device for a short time (see manual-publish-draft-store.ts) and put back ONCE when the screen opens
+  // again -- into the editor only: no consent, confirmation or attempt id is ever restored.
+  const draftOnDevice = useRef<string | null>(null);
+  const draftRestore = state.draftRestore;
+  const storeReady = state.store.kind === 'ready';
+  const editorUntouched = state.phase === 'editing' && state.unresolved === null;
+  useEffect(() => {
+    if (draftRestore !== 'pending' || !storeReady) return undefined;
+    // Nothing to restore: signed out, or the screen starts on a result / an unresolved attempt.
+    if (userId === null || !editorUntouched) {
+      dispatch({ type: 'draft_restored', text: null, accountId: null });
+      return undefined;
+    }
+    // Without a usable account list a draft cannot be judged: wait for it. A blocked data source restores nothing, and
+    // the effect below then removes the stored draft (an editor that is empty and finished looking leaves none behind).
+    if (dataStatus === 'blocked') {
+      dispatch({ type: 'draft_restored', text: null, accountId: null });
+      return undefined;
+    }
+    if (dataStatus !== 'ready' && dataStatus !== 'mock_preview') return undefined;
+    let cancelled = false;
+    void loadDraftForRestore(draftStore, userId, { at: now(), sessionMark, xAccounts }).then((decision) => {
+      if (cancelled || !mountedRef.current) return;
+      if (decision.kind === 'restore') {
+        draftOnDevice.current = JSON.stringify([decision.text, decision.accountId]);
+        dispatch({ type: 'draft_restored', text: decision.text, accountId: decision.accountId });
+      } else {
+        dispatch({ type: 'draft_restored', text: null, accountId: null });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [draftRestore, storeReady, editorUntouched, userId, dataStatus, sessionMark, xAccounts, now]);
+
+  // Keep the stored draft equal to the editor while the person edits; remove it when it is empty, too long, or when a
+  // send is under way or unresolved (the text then lives only in that attempt, whose durable record holds no text).
+  useEffect(() => {
+    if (userId === null || !storeReady || draftRestore !== 'done') return;
+    const sendingOrUnresolved = state.phase === 'sending' || state.unresolved !== null;
+    const text = state.draft;
+    if (sendingOrUnresolved || (state.phase === 'editing' && (text.trim() === '' || text.length > DRAFT_MAX_TEXT_UNITS))) {
+      if (draftOnDevice.current !== DRAFT_ON_DEVICE_NONE) {
+        draftOnDevice.current = DRAFT_ON_DEVICE_NONE;
+        void draftStore.clear(userId);
+      }
+      return;
+    }
+    if (state.phase !== 'editing') return;
+    const key = JSON.stringify([text, state.accountId]);
+    if (draftOnDevice.current === key) return;
+    draftOnDevice.current = key;
+    void draftStore.write(userId, { accountId: state.accountId, text, sessionMark, savedAt: now() });
+  }, [userId, storeReady, draftRestore, state.phase, state.unresolved, state.draft, state.accountId, sessionMark, now]);
   const suggestedId = activeAccount?.platform === 'x' ? activeAccount.id : xAccounts.length === 1 ? xAccounts[0].id : null;
   const account = resolveSelectedAccount(accounts, state.accountId);
 
@@ -176,6 +240,7 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
     if (manualPublishReducer(state, start).phase !== 'sending') return;
     sendingRef.current = true;
     dispatch(start);
+    void draftStore.clear(userId); // the text now lives only in this attempt
     void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId, consent: given, retry: state.unresolved !== null }).then((outcome) => {
       sendingRef.current = false;
       if (mountedRef.current) dispatch({ type: 'send_settled', requestId, outcome });
@@ -315,6 +380,8 @@ export function ManualPublishScreen({ userId, now = Date.now, newRequestId = def
                     ? '使えない文字が含まれています。'
                     : `${draft.kind === 'ok' ? draft.used : 0} / ${MANUAL_PUBLISH_TEXT_LIMIT}　全角・絵文字は2、URLは23として数えます`}
               </Text>
+              <Text style={styles.muted}>入力中の本文と投稿先は、この端末に最大24時間まで保存され、画面を離れても戻れます。ログインし直すと復元されません。送信を始めると消えます。</Text>
+              {state.draft !== '' ? <ActionButton label="下書きを消す" onPress={() => dispatch({ type: 'draft_changed', text: '' })} /> : null}
             </Card>
 
             <ManualPostPreview account={account} text={previewText} />
@@ -461,5 +528,5 @@ export default function ManualPublishRoute() {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
   // A different signed-in user (or sign-out) gets a fresh screen: no draft, selection or result carries over.
-  return <ManualPublishScreen key={userId ?? 'signed-out'} userId={userId} />;
+  return <ManualPublishScreen key={userId ?? 'signed-out'} userId={userId} sessionMark={session?.user.last_sign_in_at ?? ''} />;
 }

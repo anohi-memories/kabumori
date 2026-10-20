@@ -130,6 +130,8 @@ export type ManualPublishState = Readonly<{
   result: AttemptResult | null;
   unresolved: UnresolvedAttempt | null;
   store: StoreStatus;
+  /** Whether the stored draft of an earlier visit has been looked at yet (it is looked at once, never again). */
+  draftRestore: 'pending' | 'done';
 }>;
 
 export const UNRESOLVED_FROM_EARLIER_VISIT = 'UNRESOLVED_FROM_EARLIER_VISIT';
@@ -170,9 +172,10 @@ export function createInitialState(unresolved: UnresolvedAttempt | null = null, 
       result,
       unresolved: { ...unresolved, kind },
       store: STORE_READY,
+      draftRestore: 'done', // an unresolved attempt shows its own result; no draft is put in front of it
     };
   }
-  return { draft: '', accountId: null, phase: 'editing', readiness: null, consent: null, requestId: null, result: null, unresolved: null, store };
+  return { draft: '', accountId: null, phase: 'editing', readiness: null, consent: null, requestId: null, result: null, unresolved: null, store, draftRestore: 'pending' };
 }
 
 /**
@@ -226,6 +229,7 @@ export type ManualPublishAction =
   | Readonly<{ type: 'retry_requested' }>
   | Readonly<{ type: 'result_dismissed' }>
   | Readonly<{ type: 'unresolved_acknowledged' }>
+  | Readonly<{ type: 'draft_restored'; text: string | null; accountId: string | null }>
   | Readonly<{ type: 'store_loaded'; unresolved: UnresolvedAttempt | null }>
   | Readonly<{ type: 'store_unreadable'; reason: 'io' | 'corrupt' | 'version' }>
   | Readonly<{ type: 'store_reload_requested' }>
@@ -361,6 +365,15 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
     case 'unresolved_acknowledged':
       if (state.phase !== 'result' || state.unresolved === null) return state;
       return { ...state, draft: '', phase: 'editing', result: null, requestId: null, readiness: null, consent: null, unresolved: null };
+    case 'draft_restored': {
+      // The stored draft of an earlier visit is looked at ONCE. It is put into the editor only while the editor is
+      // untouched (no text typed, nothing unresolved, record readable); it never carries a consent or a confirmation.
+      if (state.draftRestore !== 'pending' || state.store.kind !== 'ready') return state;
+      const done: ManualPublishState = { ...state, draftRestore: 'done' };
+      if (action.text === null || action.text.trim() === '' || state.phase !== 'editing' || state.unresolved !== null || state.draft !== '') return done;
+      if (action.accountId !== null && !ACCOUNT_RE.test(action.accountId)) return done;
+      return { ...done, draft: action.text, accountId: action.accountId ?? state.accountId, readiness: null, consent: null };
+    }
     case 'store_loaded':
       // Only the answer to the read this visit started; the state is untouched until then (every input is blocked).
       if (state.store.kind !== 'loading') return state;
