@@ -45,8 +45,9 @@ test('the features and codes the document states are the model\'s; R1\'s feature
   assert.ok(model.includes("scope: { app: 'postona', feature: scope.feature, brand_slug: null },"), 'the allow names no brand');
 });
 
-test('nothing of the proposal exists as SQL, and the model is wired nowhere', () => {
+test('the proposal exists as SQL only in its own candidate directory (G5-07), never in the migration path; the model is wired nowhere', () => {
   for (const path of [...walk('supabase/migrations'), ...walk('supabase/candidates')].filter((p) => p.endsWith('.sql'))) {
+    if (path.startsWith('supabase/candidates/common_account_authorization_verdict/002_bootstrap_verdict')) continue;
     assert.ok(!/bootstrap_verdict|x_connect_bootstrap|threads_connect_bootstrap/u.test(read(path)), `${path} defines a proposed object`);
   }
   for (const path of [...walk('supabase/functions'), ...walk('apps/social-mobile/src'), ...walk('src')]) {
