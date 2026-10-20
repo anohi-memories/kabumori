@@ -16,6 +16,10 @@
 # 4. postona_threads_credential_atomic_behavior.sql.
 # 5. A two-session race: a rotation committing while credential_row runs -> always a matching (token, generation) pair.
 # 6. Mutations of 001 must FAIL the proof.
+# G4-15 (H2 #329 C2 R1 on PR #377): 4 adds the clock-at-retrieval expiry (just before / just after / equal / a long
+# transaction), READ COMMITTED only, and dependencies changed to VOLATILE after the install; 5b runs PR #377's ORIGINAL
+# 001 (afab36d9) and this one side by side: a long transaction past the expiry, and a REPEATABLE READ transaction across
+# a committed revoke -- the original returns the credential in both (fail-before), this one does not.
 # Usage: TC_PGHOST=/private/tmp/<socket-dir> TC_PGPORT=<port> TC_PGSUPER=<superuser> supabase/tests/postona_threads_credential_atomic_run.sh
 # A delegate role is created cluster-wide for some cases: run alone on its cluster.
 set -euo pipefail
@@ -83,6 +87,8 @@ t="$tree/supabase/tests"; m="$tree/supabase/migrations"; c="$tree/supabase/candi
 cand="${TC_CANDIDATE:-$c/postona_threads_credential_atomic/001_threads_credential_atomic.sql}"
 rollback="$c/postona_threads_credential_atomic/001_threads_credential_atomic_rollback.sql"
 behavior="$t/postona_threads_credential_atomic_behavior.sql"
+git -C "$repo" show "afab36d977bbc5588f4dce283bd5f05521b41733:supabase/candidates/postona_threads_credential_atomic/001_threads_credential_atomic.sql" > "$tree/pr377_001.sql"
+echo "afab36d977bbc5588f4dce283bd5f05521b41733 $(shasum -a 256 "$tree/pr377_001.sql" | cut -c1-16) PR #377's original 001 (fail-before copy)" >> "$tree/TC_MANIFEST.txt"
 sed 's/^/  /' "$tree/TC_MANIFEST.txt"
 
 # ---- 2. The world ---------------------------------------------------------------------------------------------------
@@ -212,6 +218,50 @@ after="$(pair)"
 [[ "$after" == fakeTHREADSrotated0123456789ab"|"* && "${after#*|}" != "${old#*|}" ]] || fail "race: after the rotation: $after"
 echo "PASS race (an uncommitted rotation is invisible; after commit the NEW token comes with a NEW generation; never a mixed pair)"
 
+# ---- 5b. Fail-before / after: the clock and the snapshot age (G4-15) ------------------------------------------------------
+stale_setup() {  # connects persons 91 (expiry), 92 (repeatable read), 93 (read committed)
+  { sed -n '1,/^-- 0\. No API role/p' "$behavior" | sed '$d'
+    printf '%s\n' "select tc.enroll(91) as u91 \\gset" "select tc.check(tc.connect_all(:'u91', 's91', '17841400000000091') like 'sa_%', 'connect 91');" \
+      "select tc.enroll(92) as u92 \\gset" "select tc.check(tc.connect_all(:'u92', 's92', '17841400000000092') like 'sa_%', 'connect 92');" \
+      "select tc.enroll(93) as u93 \\gset" "select tc.check(tc.connect_all(:'u93', 's93', '17841400000000093') like 'sa_%', 'connect 93');"
+  } > "$tree/stale_setup.sql"
+  as_owner "$1" -A -t -f "$tree/stale_setup.sql" > /dev/null
+}
+acct_of() { q "$1" -c "select id from public.social_accounts where platform_user_id = '1784140000000009$2'"; }
+rows() { echo "(select count(*) from postona_threads_credential.credential_row('$1', 'x_autopost'))"; }
+# Expiry: committed as "1 s from now"; then a transaction waits past it and reads. Prints "<expired by clock>|<future by now()>|<rows>".
+long_tx() {
+  local db="$1" a; a="$(acct_of "$db" 1)"
+  q "$db" -c "update public.threads_account_credential_custody set expires_at = clock_timestamp() + interval '1 second' where social_account_id = '$a'" > /dev/null
+  q "$db" -c "begin" -c "select pg_sleep(1.3)" \
+    -c "select (c.expires_at < clock_timestamp())::text || '|' || (c.expires_at > now())::text || '|' || $(rows "$a") from public.threads_account_credential_custody c where c.social_account_id = '$a'" \
+    -c "commit" | grep '|'
+}
+# Revoke across a long transaction: the reader opens it (isolation $3), a second session deletes the binding and commits,
+# the reader reads again. Prints "<rows before>,<rows after>".
+across_revoke() {
+  local db="$1" a out; a="$(acct_of "$db" "$2")"
+  ( q "$db" -c "begin isolation level $3" -c "select $(rows "$a")" -c "select pg_sleep(1.5)" -c "select $(rows "$a")" -c "commit" > "$tree/revoke_$2.out" 2>&1 ) &
+  local holder=$!
+  sleep 0.4
+  q "$db" -c "delete from postona_threads_binding.bindings where social_account_id = '$a'" > /dev/null
+  wait "$holder" || fail "revoke reader: $(cat "$tree/revoke_$2.out")"
+  grep -E '^[0-9]+$' "$tree/revoke_$2.out" | paste -sd, -
+}
+sb="$(copy stale_before "$pre")"; need "$sb" "$tree/pr377_001.sql"; stale_setup "$sb"
+got="$(long_tx "$sb")"; [[ "$got" == "true|true|1" ]] || fail "fail-before long transaction: $got"
+echo "  fail-before PR #377 afab36d9, long transaction past the expiry: expired by clock|future by now()|rows = $got (the expired token is returned)"
+got="$(across_revoke "$sb" 2 'repeatable read')"; [[ "$got" == "1,1" ]] || fail "fail-before repeatable read revoke: $got"
+echo "  fail-before PR #377 afab36d9, repeatable read across a committed revoke: rows before,after = $got (the revoked credential is returned)"
+sa="$(copy stale_after "$pre")"; need "$sa" "$cand"; stale_setup "$sa"
+got="$(long_tx "$sa")"; [[ "$got" == "true|true|0" ]] || fail "after long transaction: $got"
+echo "  this 001, long transaction past the expiry: $got (no row)"
+got="$(across_revoke "$sa" 2 'repeatable read')"; [[ "$got" == "0,0" ]] || fail "after repeatable read revoke: $got"
+echo "  this 001, repeatable read: rows before,after = $got (never a row under repeatable read)"
+got="$(across_revoke "$sa" 3 'read committed')"; [[ "$got" == "1,0" ]] || fail "after read committed revoke: $got"
+echo "  this 001, read committed across a committed revoke: rows before,after = $got (the revoke is seen)"
+echo "PASS fail-before / after (PR #377 original returns the expired and the revoked credential; this 001 returns neither)"
+
 # ---- 6. Mutations -----------------------------------------------------------------------------------------------------
 caught=0; total=0
 mutate() {
@@ -233,15 +283,21 @@ open(dst, "w", encoding="utf-8").write(s.replace(old, new))
   fi
 }
 mutate any_key "       where p_service_key = 'x_autopost'
-         and sa.id" "       where sa.id"
+         and pg_catalog.current_setting" "       where pg_catalog.current_setting"
 mutate no_w1 "         and private.account_lifecycle_worker_brand_verdict(sa.brand_id, 'x_autopost', b.owner_epoch, b.lifecycle_version) = 'active'
 " ""
 mutate w1_not_active_ok "b.owner_epoch, b.lifecycle_version) = 'active'" "b.owner_epoch, b.lifecycle_version) is not null"
 mutate no_binding_identity "          on b.social_account_id = sa.id and b.brand_id = sa.brand_id and b.threads_user_id = sa.platform_user_id" "          on b.social_account_id = sa.id"
 mutate no_bound_owner "         and b.bound_by = private.account_lifecycle_brand_owner(sa.brand_id)
 " ""
-mutate custody_expiry_ignored "         and public.threads_account_credential_expires_at(sa.id) > pg_catalog.now()
+mutate custody_expiry_ignored "         and public.threads_account_credential_expires_at(sa.id) > pg_catalog.clock_timestamp()
 " ""
+mutate expiry_transaction_start "public.threads_account_credential_expires_at(sa.id) > pg_catalog.clock_timestamp()" "public.threads_account_credential_expires_at(sa.id) > pg_catalog.now()"
+mutate expiry_statement_start "public.threads_account_credential_expires_at(sa.id) > pg_catalog.clock_timestamp()" "public.threads_account_credential_expires_at(sa.id) > pg_catalog.statement_timestamp()"
+mutate any_isolation "         and pg_catalog.current_setting('transaction_isolation') = 'read committed'
+" ""
+mutate dependencies_unchecked_at_runtime "                 and p.provolatile = 's'
+                 and p.proowner" "                 and p.proowner"
 mutate generation_separate "             postona_threads_resv.threads_credential_generation(sa.id) as generation" "             null::text as generation"
 mutate api_grant "revoke all on function postona_threads_credential.credential_row(text, text) from public, anon, authenticated, service_role;" "revoke all on function postona_threads_credential.credential_row(text, text) from public, anon, service_role;
 grant execute on function postona_threads_credential.credential_row(text, text) to authenticated;"
@@ -296,5 +352,6 @@ open(dst, "w", encoding="utf-8").write(s.replace(old, new))
 }
 equiv not_verified_ok "         and sa.connection_status = 'identity_verified'
 " "" "G4 custody's reader also requires identity_verified"
+equiv expiry_inclusive "threads_account_credential_expires_at(sa.id) > pg_catalog.clock_timestamp()" "threads_account_credential_expires_at(sa.id) >= pg_catalog.clock_timestamp()" "an expiry equal to the clock at the microsecond of the read cannot be produced; strict > is kept"
 equiv generation_not_required "   where c.generation ~ '^[0-9a-f]{64}\$'" "   where true" "G3's generation is always 64 hex for a Threads account the statement already selected"
 echo "POSTONA_THREADS_CREDENTIAL_ATOMIC_RUN_PASS"

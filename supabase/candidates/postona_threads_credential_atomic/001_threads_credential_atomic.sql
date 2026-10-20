@@ -16,11 +16,26 @@
 --   * G5's W1 (PR #358 private.account_lifecycle_worker_brand_verdict) answers 'active' for the binding's owner_epoch and
 --     lifecycle_version, unchanged (owner A -> B -> A, a service ended and restarted, deletion, freeze -> another answer);
 --   * G4's custody (threads_account_credential_expires_at: the expiry recorded for exactly this Vault secret, after the
---     verified connection) is in the future -- an expired, rotated-but-unrecorded or never-recorded credential gives no row;
+--     verified connection) is later than the clock AT RETRIEVAL (clock_timestamp(), strictly) -- an expired, rotated-but-
+--     unrecorded or never-recorded credential gives no row, however long the caller's transaction has been open;
 --   * the Vault secret exists;
 --   * G3's credential generation (postona_threads_resv.threads_credential_generation, 007) is 64 lowercase hex.
 -- The generation is G3's, computed in the same statement as the token; G4 computes none of its own. G3 compares it with
 -- the generation bound at claim (preflight), so a rotation between the two calls is refused by G3, not hidden here.
+--
+-- G4-15 (H2 #329 C2 on PR #377, R1): the expiry was compared with now() -- the TRANSACTION start time -- so inside a
+-- transaction opened before the expiry the token kept coming back after it. Now:
+--   * the expiry is compared with clock_timestamp() in the same SELECT (the clock when the row is read, not when the
+--     caller's transaction began); equal is expired. The function is VOLATILE accordingly (it reads the clock);
+--   * a row is returned only under READ COMMITTED: a VOLATILE function then takes a FRESH snapshot for its one SELECT, so
+--     the decision, the token and the generation are all as of the retrieval, not of an older transaction snapshot.
+--     REPEATABLE READ / SERIALIZABLE (whose snapshot is the transaction's first) get no row: a revoke, rotation, owner or
+--     service change committed after that snapshot could not be seen there;
+--   * every dependency is re-checked IN the statement: present, owned by this owner, STABLE. A dependency changed to
+--     VOLATILE after the install (H2's DDL-drift reproduction: an old token paired with a new generation) gives no row.
+--     This does NOT prove a dependency's body: a body changed by its owner while still declared STABLE is outside what
+--     this statement can see (see the doc: re-verification is part of any change of those functions).
+-- The token and the generation still come from that ONE SELECT (one snapshot).
 --
 -- Not done here (named, not assumed): the caller (an Edge credential port over a reviewed grant), G3's g4_threads_account_
 -- verified predicate (still G3's DENY), the refresh writer, any real token. bigint numbers stay bigint in SQL; nothing here
@@ -75,7 +90,7 @@ revoke all on schema postona_threads_credential from public, anon, authenticated
 
 create function postona_threads_credential.credential_row(p_social_account_id text, p_service_key text)
 returns table (social_account_id text, threads_user_id text, access_token text, generation text)
-language sql stable security definer set search_path = ''
+language sql volatile security definer set search_path = ''
 as $$
   select c.id, c.platform_user_id, c.token, c.generation
     from (
@@ -86,13 +101,21 @@ as $$
           on b.social_account_id = sa.id and b.brand_id = sa.brand_id and b.threads_user_id = sa.platform_user_id
         join vault.decrypted_secrets ds on ds.id = sa.vault_access_token_secret_id
        where p_service_key = 'x_autopost'
+         and pg_catalog.current_setting('transaction_isolation') = 'read committed'
+         and (select pg_catalog.count(*) from pg_catalog.pg_proc p
+               where p.oid in (pg_catalog.to_regprocedure('private.account_lifecycle_brand_owner(text)'),
+                               pg_catalog.to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'),
+                               pg_catalog.to_regprocedure('public.threads_account_credential_expires_at(text)'),
+                               pg_catalog.to_regprocedure('postona_threads_resv.threads_credential_generation(text)'))
+                 and p.provolatile = 's'
+                 and p.proowner = (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)) = 4
          and sa.id = p_social_account_id
          and sa.platform = 'threads'
          and sa.connection_status = 'identity_verified'
          and sa.platform_user_id ~ '^[1-9][0-9]{0,31}$'
          and b.bound_by = private.account_lifecycle_brand_owner(sa.brand_id)
          and private.account_lifecycle_worker_brand_verdict(sa.brand_id, 'x_autopost', b.owner_epoch, b.lifecycle_version) = 'active'
-         and public.threads_account_credential_expires_at(sa.id) > pg_catalog.now()
+         and public.threads_account_credential_expires_at(sa.id) > pg_catalog.clock_timestamp()
          and ds.decrypted_secret is not null
     ) c
    where c.generation ~ '^[0-9a-f]{64}$'
@@ -102,13 +125,14 @@ revoke all on function postona_threads_credential.credential_row(text, text) fro
 
 -- Postconditions (H2 #329 on PR #367: a role reaching through NOINHERIT / SET or a default ACL must not slip through). The
 -- ACLs must name ONLY this owner -- any other grantee (a default-ACL grant to some delegate role included) refuses the
--- install, whoever could reach that grantee -- and the function is owner / definer / STABLE / empty search_path.
+-- install, whoever could reach that grantee -- and the function is owner / definer / VOLATILE (G4-15: it reads the
+-- clock) / empty search_path.
 do $$
 declare
   v_me oid := (select oid from pg_catalog.pg_roles where rolname = current_user);
   v_fn oid := to_regprocedure('postona_threads_credential.credential_row(text,text)');
 begin
-  if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.proowner = v_me and p.prosecdef and p.provolatile = 's'
+  if not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.proowner = v_me and p.prosecdef and p.provolatile = 'v'
                    and coalesce(p.proconfig @> array['search_path=""'], false)) then
     raise exception 'THREADS_CREDENTIAL_POSTCONDITION_FUNCTION';
   end if;
