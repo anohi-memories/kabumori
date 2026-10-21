@@ -43,6 +43,12 @@
 -- SECURITY DEFINER with an empty search_path; the install refuses otherwise. A complete called on its own (outside this
 -- entry) leaves a state that can never be bound: the entry's own complete refuses a consumed state.
 --
+-- G4-16 (custody's "same transaction" check, verified_at = now(), is no transaction identity either): the entry also
+-- leaves a CONNECT PROOF -- a fresh random uuid, stored in the account's binding (connect_proof) and set as the
+-- transaction-local setting postona_threads_binding.connect_proof. Only this transaction carries that setting: it is
+-- gone at COMMIT / ROLLBACK, and a savepoint rolled back over the entry takes it back with the binding. 002 makes G4's
+-- custody writer require it. One Threads connect per transaction (a second entry call replaces the setting).
+--
 -- Not done here (named, not assumed):
 --   * the caller. H5's owner transport must call record_state_generation right after begin, with the numbers of a fresh
 --     R1 allow (G4-06 adapter), and complete a Threads connect ONLY through complete_and_attest_binding, with the person's
@@ -143,6 +149,7 @@ create table postona_threads_binding.bindings (
   threads_user_id text not null check (threads_user_id ~ '^[1-9][0-9]{0,31}$'),
   bound_by uuid not null,
   oauth_state_id uuid not null unique,
+  connect_proof uuid not null, -- G4-16: this connect's proof (random; not a secret, not a token)
   owner_epoch bigint not null check (owner_epoch >= 1),
   lifecycle_version bigint not null check (lifecycle_version >= 1),
   bound_at timestamptz not null default now() -- audit only: never compared
@@ -215,6 +222,7 @@ declare
   v_owner uuid;
   v_epoch bigint;
   v_lifecycle bigint;
+  v_proof uuid := pg_catalog.gen_random_uuid();
 begin
   if v_actor is null or p_oauth_state_id is null or p_platform_user_id is null or p_platform_user_id !~ '^[1-9][0-9]{0,31}$' then
     raise exception 'THREADS_BINDING_INPUT_INVALID' using errcode = 'P0001';
@@ -277,12 +285,15 @@ begin
   update postona_threads_binding.state_generations set attested_at = now() where oauth_state_id = p_oauth_state_id;
   -- A reconnect replaces the account's binding with this one (a new state, the numbers it was begun under).
   insert into postona_threads_binding.bindings
-    (social_account_id, brand_id, threads_user_id, bound_by, oauth_state_id, owner_epoch, lifecycle_version)
-  values (v_account.id, v_gen.brand_id, p_platform_user_id, v_actor, p_oauth_state_id, v_gen.owner_epoch, v_gen.lifecycle_version)
+    (social_account_id, brand_id, threads_user_id, bound_by, oauth_state_id, connect_proof, owner_epoch, lifecycle_version)
+  values (v_account.id, v_gen.brand_id, p_platform_user_id, v_actor, p_oauth_state_id, v_proof, v_gen.owner_epoch,
+          v_gen.lifecycle_version)
   on conflict (social_account_id) do update
     set brand_id = excluded.brand_id, threads_user_id = excluded.threads_user_id, bound_by = excluded.bound_by,
-        oauth_state_id = excluded.oauth_state_id, owner_epoch = excluded.owner_epoch,
+        oauth_state_id = excluded.oauth_state_id, connect_proof = excluded.connect_proof, owner_epoch = excluded.owner_epoch,
         lifecycle_version = excluded.lifecycle_version, bound_at = now();
+  -- G4-16: the proof of THIS transaction (transaction-local; undone with the binding by any rollback).
+  perform pg_catalog.set_config('postona_threads_binding.connect_proof', v_proof::text, true);
 end $$;
 
 -- The G4-03 ThreadsAccountRow for one account; the two numbers as decimal text (never a JSON number). The binding's

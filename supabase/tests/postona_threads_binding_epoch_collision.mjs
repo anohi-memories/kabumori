@@ -6,12 +6,16 @@
 //                (A), and rolling it back leaves the completion committed (B) -- H2's two reproductions.
 //   mode after:  this 001 (no attest entry; complete_and_attest_binding). The other transaction cannot bind (A'); a
 //                rolled-back entry call undoes the completion too, and the colliding transaction then binds normally (B').
-// Usage: node postona_threads_binding_epoch_collision.mjs <psql> <socket-dir> <port> <user> <db> <before|after>
+//   mode custody_before: G4-16, 001 + the custody candidate's ORIGINAL writer (verified_at = now()). Expected FAIL-BEFORE:
+//                X runs the entry and commits WITHOUT custody; Y (same now(), other transaction) records an expiry for
+//                X's credential and is accepted (C).
+//   mode custody_after:  001 + 002 (the writer requires this transaction's connect proof): Y is refused (C').
+// Usage: node postona_threads_binding_epoch_collision.mjs <psql> <socket-dir> <port> <user> <db> <before|after|custody_before|custody_after>
 import { spawn } from "node:child_process";
 
 const [psql, host, port, user, db, mode] = process.argv.slice(2);
 if (!/^\/(private\/)?tmp\//.test(host ?? "")) throw new Error("socket dir must be a local /tmp path");
-if (mode !== "before" && mode !== "after") throw new Error("mode must be before or after");
+if (!["before", "after", "custody_before", "custody_after"].includes(mode)) throw new Error("unknown mode");
 
 class Session {
   constructor() {
@@ -107,7 +111,25 @@ const consumedEqualsNow = (tag) => `SELECT (s.consumed_at = now())::text FROM pu
 
 try {
   await Promise.all(sessions.map((s) => s.run("SELECT 1;")));
-  if (mode === "before") {
+  if (mode === "custody_before" || mode === "custody_after") {
+    const [x, y, ev] = await collide(mode === "custody_before" ? "C" : "C'");
+    ev.x_entry_without_custody = await x.run(entry("c1", 911));
+    await x.run("COMMIT;");
+    const acct = `(SELECT a.id FROM public.social_accounts a WHERE a.platform_user_id = '${puid(911)}')`;
+    ev.y_sees_verified_at_equal_to_its_now = await y.run(`SELECT (a.verified_at = now())::text FROM public.social_accounts a WHERE a.platform_user_id = '${puid(911)}';`);
+    ev.y_custody = await y.run(`SELECT tb.custody(tb.uid(911), ${acct}, now() + interval '30 days');`);
+    await y.run("COMMIT;");
+    ev.expiry_recorded_after = await fresh.run(`SELECT (public.threads_account_credential_expires_at(${acct}) IS NOT NULL)::text;`);
+    console.log(JSON.stringify(ev));
+    if (ev.x_entry_without_custody !== "OK" || ev.y_sees_verified_at_equal_to_its_now !== "true") fail(`setup: ${JSON.stringify(ev)}`);
+    if (mode === "custody_before") {
+      if (ev.y_custody !== "OK" || ev.expiry_recorded_after !== "true") fail(`C: ${JSON.stringify(ev)}`);
+      console.log("COLLISION_CUSTODY_BEFORE_REPRODUCED (C: another transaction with the same now() recorded the expiry of X's credential)");
+    } else {
+      if (ev.y_custody !== "ERR:THREADS_CUSTODY_NOT_IN_CONNECT_TRANSACTION" || ev.expiry_recorded_after !== "false") fail(`C': ${JSON.stringify(ev)}`);
+      console.log("COLLISION_CUSTODY_AFTER_PASS (C': no connect proof in the other transaction: refused, nothing recorded)");
+    }
+  } else if (mode === "before") {
     // A: X completes and commits; Y (same now(), other transaction) attests directly.
     {
       const [x, y, ev] = await collide("A");
