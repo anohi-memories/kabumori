@@ -1,0 +1,17 @@
+✔ OBSERVATION G2-CB1 (sign-in owner to confirm; by design of PKCE links): a late return of A's sign-in flow after B signed in on the same phone still exchanges with A's stored verifier and replaces B with A, without asking (13.082083ms)
+✔ G2-CB1-S: a late return of A's sign-in flow after a sign-out is refused -- sign-out (auth-js 2.115.0 _removeSession -> removeAllPKCEVerifiers) drops every stored verifier, so nobody is signed in by it (3.770708ms)
+✔ G2-CB2: a return whose code was already used (e.g. a relaunch re-delivering the launch link in a new process) is never a success -- it is refused, with no session change (0.929958ms)
+✔ G2-CB2-E: an expired sign-in return is refused with the expiry message, nobody is signed in, and a second delivery of it stays refused (0.643875ms)
+✔ OBSERVATION G2-CB3 (sign-in owner to confirm): forgetAuthCallbackOutcomes() ("e.g. on sign-out") is called by no product code -- after a sign-out a re-delivered earlier success is answered from memory (no new exchange, no UI effect: the deep-link handler only shows failures) (0.828625ms)
+✔ G2-CB4: both landing routes only go home -- they read no URL, parameter or session (a wrong or forged link cannot produce a success screen there) (0.402875ms)
+✔ FINDING G2-CB5 (P3, owner of the X connect screen / G4 server): another person signs in while A's X browser round trip is open -- the exchange still runs with A's token, and the still-mounted screen then tells B "Xアカウントを接続しました @A's handle" (31.245458ms)
+✔ OBSERVATION G2-CB6 (owner G4 server / NOT_VERIFIED): a sign-out while A's X browser round trip is open does not stop it -- the app still sends the callback exchange with A's (signed-out) token; whether the server accepts it is not verified (6.997875ms)
+✔ negative controls: a landing route that reads the link, and a callback completion that turns a refused code into a success, are each caught (17.369875ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 300.464334
