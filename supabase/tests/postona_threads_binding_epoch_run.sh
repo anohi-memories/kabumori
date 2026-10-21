@@ -22,6 +22,10 @@
 # complete_and_attest_binding call), and adds rollback / savepoint / same-transaction cases; 5b opens many sessions until two
 # DIFFERENT transactions share now() and shows PR #388's 001 (5bf6f915) accepting an attest there and leaving a rolled-back
 # attest's completion committed (fail-before), then this 001 refusing it and undoing both together. 5b needs node.
+# G4-16: the world also holds G4's custody candidate. 4c applies 002 (the custody writer requires 001's connect proof
+# instead of verified_at = now()): preconditions, rollback (restores the original writer), postona_threads_binding_custody_
+# behavior.sql; 5c shows the ORIGINAL writer accepting an expiry from another transaction with the same now() (fail-before)
+# and 002 refusing it; 6 mutates 001's proof and 002.
 # Usage: TB_PGHOST=/private/tmp/<socket-dir> TB_PGPORT=<port> TB_PGSUPER=<superuser> supabase/tests/postona_threads_binding_epoch_run.sh
 set -euo pipefail
 export LC_ALL=C
@@ -82,11 +86,16 @@ overlay "$PR303" supabase/candidates/common_account_brand_owner_epoch/001_brand_
 t="$tree/supabase/tests"; m="$tree/supabase/migrations"; c="$tree/supabase/candidates"
 cand="${TB_CANDIDATE:-$c/postona_threads_binding_epoch/001_threads_binding_epoch.sql}"
 rollback="$c/postona_threads_binding_epoch/001_threads_binding_epoch_rollback.sql"
+cand2="${TB_CANDIDATE2:-$c/postona_threads_binding_epoch/002_custody_connect_proof.sql}"
+rollback2="$c/postona_threads_binding_epoch/002_custody_connect_proof_rollback.sql"
+custody_behavior="$t/postona_threads_binding_custody_behavior.sql"
 behavior="$t/postona_threads_binding_epoch_behavior.sql"
 git -C "$repo" show "fd71450511f4a8d73e150a92bd9fe95677b70edc:supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql" > "$tree/pr367_original_001.sql"
 echo "fd71450511f4a8d73e150a92bd9fe95677b70edc $(shasum -a 256 "$tree/pr367_original_001.sql" | cut -c1-16) PR #367's original 001 (fail-before copy)" >> "$tree/TB_MANIFEST.txt"
 git -C "$repo" show "5bf6f915353eadb4e1425ae6aec3d281ac36c8a8:supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql" > "$tree/pr388_001.sql"
 echo "5bf6f915353eadb4e1425ae6aec3d281ac36c8a8 $(shasum -a 256 "$tree/pr388_001.sql" | cut -c1-16) PR #388's 001 (fail-before copy)" >> "$tree/TB_MANIFEST.txt"
+git -C "$repo" show "80667ffb788836722eb8d98190eaa874e6d5acc4:supabase/candidates/postona_threads_binding_epoch/001_threads_binding_epoch.sql" > "$tree/pr405_001.sql"
+echo "80667ffb788836722eb8d98190eaa874e6d5acc4 $(shasum -a 256 "$tree/pr405_001.sql" | cut -c1-16) PR #405's 001 (no connect proof)" >> "$tree/TB_MANIFEST.txt"
 sed 's/^/  /' "$tree/TB_MANIFEST.txt"
 
 # ---- 2. The world ---------------------------------------------------------------------------------------------------
@@ -140,6 +149,7 @@ as_owner "$pre" -f "$m/20260918120000_social_mobile_brand_memberships.sql" > /de
 q "$pre" -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" > /dev/null
 need "$pre" "$c/common_account_brand_owner_epoch/001_brand_owner_epoch.sql"
 need "$pre" "$c/postona_threads_oauth_workspace_candidate.sql"
+need "$pre" "$c/postona_threads_publish/threads_credential_custody_candidate.sql"
 echo "PASS world: real G5 (T13 + Phase 4 + brand state + Phase 6) + F5 PR #303 owner epoch + live X onboarding tables + 2a-2 + PR #124"
 
 # ---- 3. Preconditions, apply / rollback / re-apply ------------------------------------------------------------------
@@ -210,6 +220,38 @@ out="$(as_owner "$main" -A -t -f "$behavior" 2>&1)" || fail "behavior: $(grep -m
 grep -q POSTONA_THREADS_BINDING_EPOCH_BEHAVIOR_PASS <<<"$out" || fail "behavior marker missing"
 echo "PASS behavior (postona_threads_binding_epoch_behavior.sql)"
 
+# ---- 4c. 002: the custody writer proven by the connect proof (G4-16) ------------------------------------------------------
+prelude() { sed -n '1,/^-- 0\. No API role/p' "$behavior" | sed '$d'; }
+w1="$(copy w001 "$pre")"; need "$w1" "$cand"
+drift_writer="do \$\$ begin execute format('create or replace function public.record_threads_credential_custody(p_social_account_id text, p_expires_at timestamptz) returns void language plpgsql security invoker set search_path = '''' as %L', (select p.prosrc from pg_proc p where p.oid = 'public.record_threads_credential_custody(text,timestamptz)'::regprocedure) || '-- drift'); end \$\$"
+db="$(copy q_no001 "$pre")"
+expect "002 without 001" "$db" "$cand2" THREADS_CUSTODY_PROOF_PRECONDITION_BINDING
+db="$(copy q_pr405 "$pre")"; need "$db" "$tree/pr405_001.sql"
+expect "002 over PR #405's 001 (no connect proof)" "$db" "$cand2" THREADS_CUSTODY_PROOF_PRECONDITION_BINDING
+db="$(copy q_drift "$w1")"; q "$db" -c "$drift_writer" > /dev/null
+expect "002 over a writer that is not the custody candidate's" "$db" "$cand2" THREADS_CUSTODY_PROOF_PRECONDITION_WRITER_UNPINNED
+db="$(copy q_super "$w1")"
+got="$("$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$db" -f "$cand2" 2>&1 || true)"; got="$(sed -n 's/^.*ERROR: *//p' <<<"$got" | head -1)"
+[[ "$got" == THREADS_CUSTODY_PROOF_PRECONDITION_OWNER ]] || fail "002 applied by a superuser: $got"
+db="$(copy q_reach "$w1")"; "${as_super[@]}" -d "$db" -c "grant $owner to authenticator with inherit false, set true" > /dev/null
+expect "002 while authenticator can SET ROLE to the owner" "$db" "$cand2" "THREADS_CUSTODY_PROOF_PRECONDITION_OWNER_REACHABLE authenticator"
+"${as_super[@]}" -d postgres -c "revoke $owner from authenticator" > /dev/null
+db="$(copy q_acl "$w1")"; q "$db" -c "grant execute on function public.record_threads_credential_custody(text, timestamptz) to $delegate" > /dev/null
+expect "002 while the writer is granted to a delegate role" "$db" "$cand2" THREADS_CUSTODY_PROOF_POSTCONDITION_ACL
+db="$(copy q_again "$w1")"; need "$db" "$cand2"
+expect "002 re-applied" "$db" "$cand2" THREADS_CUSTODY_PROOF_ALREADY_APPLIED
+need "$db" "$rollback2"
+[[ "$(q "$db" -c "select md5(prosrc) = 'eb58930b04d23d6a012cf1b54ab93e0f' and obj_description(oid, 'pg_proc') is null from pg_proc where oid = 'public.record_threads_credential_custody(text,timestamptz)'::regprocedure")" == t ]] || fail "002 rollback did not restore the original writer"
+expect "002 rollback twice" "$db" "$rollback2" THREADS_CUSTODY_PROOF_NOT_APPLIED
+need "$db" "$cand2"
+echo "PASS 002 preconditions (no 001, PR #405's 001 without a proof, a writer not the candidate's, superuser, authenticator SET->owner, writer granted to a delegate) + re-apply refused + rollback restores the original writer + rollback twice refused + re-apply"
+w2="$(copy w002 "$w1")"; need "$w2" "$cand2"
+cmain="$(copy cmain "$w2")"
+{ prelude; cat "$custody_behavior"; } > "$tree/custody_behavior_full.sql"
+out="$(as_owner "$cmain" -A -t -f "$tree/custody_behavior_full.sql" 2>&1)" || fail "custody behavior: $(grep -m1 -E 'FAIL|ERROR' <<<"$out")"
+grep -q POSTONA_THREADS_BINDING_CUSTODY_BEHAVIOR_PASS <<<"$out" || fail "custody behavior marker missing"
+echo "PASS custody behavior (postona_threads_binding_custody_behavior.sql)"
+
 # ---- 5. Race: two complete + attest transactions on one state (G4-13: attest only inside the completing transaction) ----
 race="$(copy race "$world")"
 { sed -n '1,/^-- 0\. No API role/p' "$behavior" | sed '$d'
@@ -256,6 +298,25 @@ ca="$(copy coll_after "$pre")"; need "$ca" "$cand"; collision_setup "$ca"
   || fail "collision: $(cat "$tree/collision_after.out")"
 sed 's/^/  /' "$tree/collision_after.out"
 echo "PASS same-now() different transactions (PR #388 5bf6f915: other-transaction attest accepted + rollback left the completion committed = fail-before; this 001: refused, rollback undoes both)"
+
+# ---- 5c. Same now(), different transactions: the custody writer (G4-16) -------------------------------------------------
+custody_collision_setup() {
+  collision_setup "$1"
+  awk 'index($0,"create function tb.custody(") == 1 {on=1} on {print} on && /\$\$;$/ {exit}' "$custody_behavior" | as_owner "$1" -A -t > /dev/null
+}
+kb="$(copy cust_before "$w1")"; custody_collision_setup "$kb"
+"$node_bin" "$t/postona_threads_binding_epoch_collision.mjs" "$psql_bin" "$host" "$port" "$owner" "$kb" custody_before > "$tree/custody_before.out" 2>&1 \
+  || fail "custody fail-before collision: $(cat "$tree/custody_before.out")"
+sed 's/^/  /' "$tree/custody_before.out"
+# What the original DOES guarantee: a later transaction with a different start time is refused by verified_at = now().
+got="$(q "$kb" -c "select tb.custody(tb.uid(911), (select id from public.social_accounts where platform_user_id = '17841400000000911'), now() + interval '20 days')")"
+[[ "$got" == ERR:THREADS_CUSTODY_NOT_IN_CONNECT_TRANSACTION ]] || fail "original writer, later transaction with another now(): $got"
+echo "  original writer, a later transaction with another now(): $got (its check holds only when the start times differ)"
+ka="$(copy cust_after "$w2")"; custody_collision_setup "$ka"
+"$node_bin" "$t/postona_threads_binding_epoch_collision.mjs" "$psql_bin" "$host" "$port" "$owner" "$ka" custody_after > "$tree/custody_after.out" 2>&1 \
+  || fail "custody collision: $(cat "$tree/custody_after.out")"
+sed 's/^/  /' "$tree/custody_after.out"
+echo "PASS custody same-now() different transactions (original writer: accepted = fail-before; 002: refused, nothing recorded)"
 
 # ---- 6. Mutations -----------------------------------------------------------------------------------------------------
 caught=0; total=0
@@ -373,6 +434,69 @@ mutate_install owner_reach_pre_removed "    if exists (select 1 from pg_catalog.
       raise exception 'THREADS_BINDING_PRECONDITION_OWNER_REACHABLE %', v_fn;
     end if;" "    null;" \
   "" "grant $owner to authenticator with inherit false, set true" "revoke $owner from authenticator" THREADS_BINDING_PRECONDITION_OWNER_REACHABLE
+# G4-16: 001's connect proof (binding behavior 10b) ...
+mutate entry_no_proof_setting "  perform pg_catalog.set_config('postona_threads_binding.connect_proof', v_proof::text, true);" ""
+mutate entry_proof_session_wide "pg_catalog.set_config('postona_threads_binding.connect_proof', v_proof::text, true)" "pg_catalog.set_config('postona_threads_binding.connect_proof', v_proof::text, false)"
+mutate entry_proof_not_stored "  values (v_account.id, v_gen.brand_id, p_platform_user_id, v_actor, p_oauth_state_id, v_proof, v_gen.owner_epoch," "  values (v_account.id, v_gen.brand_id, p_platform_user_id, v_actor, p_oauth_state_id, pg_catalog.gen_random_uuid(), v_gen.owner_epoch,"
+mutate reconnect_keeps_old_proof "oauth_state_id = excluded.oauth_state_id, connect_proof = excluded.connect_proof," "oauth_state_id = excluded.oauth_state_id,"
+# ... and 002 (custody behavior, over the world + 001).
+mutate2() {
+  local name="$1" old="$2" new="$3" file db
+  total=$((total + 1))
+  file="$tree/mut2_$name.sql"
+  python3 -I -c '
+import sys
+src, dst, old, new = sys.argv[1:5]
+s = open(src, encoding="utf-8").read()
+if s.count(old) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(old, new))
+' "$cand2" "$file" "$old" "$new" || fail "mutation $name: pattern not unique"
+  db="$(copy "n_$name" "$w1")"
+  if [[ "$(apply "$db" "$file")" != applied ]] || ! as_owner "$db" -A -t -f "$tree/custody_behavior_full.sql" > /dev/null 2>&1; then
+    caught=$((caught + 1)); echo "  CAUGHT $name"
+  else
+    echo "  MISSED $name"
+  fi
+}
+mutate2 custody_proof_unchecked "  if not exists (
+       select 1 from postona_threads_binding.bindings b
+        where b.social_account_id = v_account.id and b.brand_id = v_account.brand_id
+          and b.threads_user_id = v_account.platform_user_id and b.bound_by = v_user
+          and b.connect_proof::text = v_proof) then
+    raise exception 'THREADS_CUSTODY_NOT_IN_CONNECT_TRANSACTION' using errcode = 'P0001';
+  end if;" ""
+mutate2 custody_any_bound_binding "          and b.connect_proof::text = v_proof) then" "          ) then"
+mutate2 custody_any_binder " and b.bound_by = v_user
+          and b.connect_proof" "
+          and b.connect_proof"
+mutate2 custody_any_identity "          and b.threads_user_id = v_account.platform_user_id and b.bound_by = v_user" "          and b.bound_by = v_user"
+mutate2 custody_back_to_clock "          and b.connect_proof::text = v_proof) then" "          and v_account.verified_at = pg_catalog.now()) then"
+mutate2_install() {  # caught when the mutated 002 no longer refuses the adverse world with the expected code
+  local name="$1" old="$2" new="$3" setup="$4" super_setup="$5" undo="$6" want="$7" file db got
+  total=$((total + 1))
+  file="$tree/mut2_$name.sql"
+  python3 -I -c '
+import sys
+src, dst, old, new = sys.argv[1:5]
+s = open(src, encoding="utf-8").read()
+if s.count(old) != 1: sys.exit(1)
+open(dst, "w", encoding="utf-8").write(s.replace(old, new))
+' "$cand2" "$file" "$old" "$new" || fail "mutation $name: pattern not unique"
+  db="$(copy "n_$name" "$w1")"
+  [[ -n "$setup" ]] && q "$db" -c "$setup" > /dev/null
+  [[ -n "$super_setup" ]] && "${as_super[@]}" -d "$db" -c "$super_setup" > /dev/null
+  got="$(apply "$db" "$file")"
+  [[ -n "$undo" ]] && "${as_super[@]}" -d postgres -c "$undo" > /dev/null
+  if [[ "$got" != "$want"* ]]; then caught=$((caught + 1)); echo "  CAUGHT $name ($got)"; else echo "  MISSED $name"; fi
+}
+mutate2_install custody_writer_unpinned "  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from 'eb58930b04d23d6a012cf1b54ab93e0f' then" "  if false then" \
+  "$drift_writer" "" "" THREADS_CUSTODY_PROOF_PRECONDITION_WRITER_UNPINNED
+mutate2_install custody_acl_post_weak "     or exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a where p.oid = v_fn and a.grantee <> v_me) then" "     or false then" \
+  "grant execute on function public.record_threads_credential_custody(text, timestamptz) to $delegate" "" "" THREADS_CUSTODY_PROOF_POSTCONDITION_ACL
+mutate2_install custody_owner_reach_removed "      raise exception 'THREADS_CUSTODY_PROOF_PRECONDITION_OWNER_REACHABLE %', v_api;" "      null;" \
+  "" "grant $owner to authenticator with inherit false, set true" "revoke $owner from authenticator" THREADS_CUSTODY_PROOF_PRECONDITION_OWNER_REACHABLE
+mutate2_install custody_binding_pre_removed "    raise exception 'THREADS_CUSTODY_PROOF_PRECONDITION_BINDING';" "    null;" \
+  "alter table postona_threads_binding.bindings drop column connect_proof" "" "" THREADS_CUSTODY_PROOF_PRECONDITION_BINDING
 echo "mutations caught $caught/$total"
 [[ "$caught" == "$total" ]] || fail "a mutation was not caught"
 echo "POSTONA_THREADS_BINDING_EPOCH_RUN_PASS"

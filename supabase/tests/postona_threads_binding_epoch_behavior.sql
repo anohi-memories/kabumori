@@ -316,6 +316,26 @@ delete from public.social_account_oauth_states where id = tb.state('b2');
 delete from public.social_account_oauth_states where id = tb.state('b1');
 select tb.check((select count(*) from postona_threads_binding.state_generations) = :'before_n'::bigint - 1, '10 a recorded state row goes with its state');
 
+-- 10b. G4-16: the entry leaves this transaction's connect proof -- the binding's connect_proof, set transaction-locally
+--      (it outlives the SECURITY DEFINER call, not the transaction); a reconnect stores and sets a new one.
+select tb.enroll(13) as q \gset
+select tb.begin(:'q', 'q1') as acct_q \gset
+select tb.check(tb.record(:'q', 'q1', tb.epoch(:'q'), tb.lifecycle(:'q')) = 'OK', '10b record');
+begin;
+select tb.check(tb.connect(:'q', 'q1', '17841400000000013') = 'OK', '10b connect');
+select current_setting('postona_threads_binding.connect_proof', true) as proof_q1 \gset
+select tb.check(:'proof_q1' = (select b.connect_proof::text from postona_threads_binding.bindings b where b.social_account_id = :'acct_q'),
+                '10b the setting is the binding''s proof, after the entry returned');
+commit;
+select tb.check(coalesce(current_setting('postona_threads_binding.connect_proof', true), '') = '', '10b gone after COMMIT');
+select tb.begin(:'q', 'q2') as ignore \gset
+select tb.check(tb.record(:'q', 'q2', tb.epoch(:'q'), tb.lifecycle(:'q')) = 'OK', '10b record q2');
+begin;
+select tb.check(tb.connect(:'q', 'q2', '17841400000000013') = 'OK', '10b reconnect');
+select tb.check(current_setting('postona_threads_binding.connect_proof', true) = (select b.connect_proof::text from postona_threads_binding.bindings b where b.social_account_id = :'acct_q')
+                and current_setting('postona_threads_binding.connect_proof', true) <> :'proof_q1', '10b a reconnect stores and sets a new proof');
+commit;
+
 -- 11. G4-14: the entry calls only the reviewed PR #124 complete, owner-only. Exposed (granted to an API role), turned
 --     SECURITY INVOKER, or any change of its body: the entry refuses before anything is claimed. (Last: it changes PR #124.)
 select tb.enroll(12) as n \gset
