@@ -1756,10 +1756,13 @@ test('SM3R: an account change while the take-over screen waits does not turn int
 });
 
 test('SM3R: the send is gone from the registry (nothing to wait for) -> uncertain, never sent, never "not posted", no re-ask', async () => {
-  const memory = realFlow.createAttemptMemory();
-  memory.mark('U1', { accountId: 'X_A', requestId: ID(5), contentSha256: sha('lost'), text: 'lost', kind: 'in_flight' });
-  const lying = { ...realFlow.createInFlightSends(), isOut: () => true, wait: () => null };
-  const ui = await mount({ memory, inflight: lying });
+  // The registry shows the send when the screen is created, but has lost it by the time the screen asks again.
+  const real = realFlow.createInFlightSends();
+  const handle = real.begin('U1', { accountId: 'X_A', requestId: ID(5), contentSha256: sha('lost'), text: 'lost', kind: 'in_flight' }, false);
+  let asked = 0;
+  const lying = { ...real, takeOver: (userId) => { asked += 1; return asked === 1 ? real.takeOver(userId) : null; } };
+  assert.ok(handle);
+  const ui = await mount({ inflight: lying });
   assert.equal(ui.state().result.kind, 'uncertain');
   assert.equal(ui.state().result.code, 'SEND_STATE_LOST');
   assert.equal(ui.button('同じ内容・同じ送信IDで確認し直す'), null);
@@ -1819,12 +1822,398 @@ test('SM3R: a screen\'s OWN send is never mistaken for a take-over -- even when 
   assert.equal(ui.state().result.kind, 'sent');
 });
 
-test('SM3R: an in_flight attempt WITHOUT its text (restored from the device) is never taken over, even if the registry claimed it is out', async () => {
-  const memory = realFlow.createAttemptMemory();
-  memory.mark('U1', { accountId: 'X_A', requestId: ID(8), contentSha256: sha('x'), text: null, kind: 'in_flight' });
-  const claims = { ...realFlow.createInFlightSends(), isOut: () => true, wait: () => new Promise(() => {}) };
-  const ui = await mount({ memory, inflight: claims });
+test('SM3R: an in_flight attempt restored from the device (no text) is not taken over; another user\'s unfinished send does not touch this user\'s screen', async () => {
+  const inflight = realFlow.createInFlightSends();
+  assert.ok(inflight.begin('U2', { accountId: 'X_A', requestId: ID(8), contentSha256: sha('x'), text: 'x', kind: 'in_flight' }, false));
+  const ui = await mount({ kv: deviceWith(RESTORED({ kind: 'in_flight', requestId: ID(8) })), inflight });
   assert.equal(ui.state().phase, 'result');
   assert.equal(ui.state().result.kind, 'unconfirmed', 'the earlier restart behaviour');
   assert.ok(ui.button('前回と同じ本文を入力して確認し直す'));
+});
+
+// ---- H1 P2-1 / P2-2: a send that is still being PREPARED, or already answered but not yet recorded ---------------------------------------------
+
+/** A device storage whose next read-back after a write, or whose next write of a given record, can be held back by the test. */
+function stallableKV() {
+  const kv = fakeKV();
+  const realGet = kv.getItem;
+  const realSet = kv.setItem;
+  const ctl = { kv, armReadBack: false, stallSetWhen: null, held: [] };
+  let justWrote = false;
+  const hold = () => new Promise((resolve) => { ctl.held.push(resolve); });
+  kv.setItem = async (key, value) => {
+    if (ctl.stallSetWhen !== null && ctl.stallSetWhen(value)) { ctl.stallSetWhen = null; await hold(); }
+    await realSet(key, value);
+    if (ctl.armReadBack) { ctl.armReadBack = false; justWrote = true; }
+  };
+  kv.getItem = async (key) => {
+    if (justWrote) { justWrote = false; await hold(); }
+    return realGet(key);
+  };
+  ctl.release = () => { for (const resolve of ctl.held.splice(0)) resolve(); };
+  return ctl;
+}
+
+async function startSendWithStalledReadBack() {
+  const stall = stallableKV();
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const draftKv = fakeKV();
+  const first = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T1' });
+  await first.typeText('保存中の本文');
+  await first.press('内容を確認する');
+  await first.tick();
+  stall.armReadBack = true;
+  await first.press('Xに投稿する');
+  return { stall, memory, inflight, fp, draftKv, first };
+}
+
+test('P2-1: the screen is re-created while the first record is still being written -- it waits, offers no re-ask, and the first send goes out ONCE', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendWithStalledReadBack();
+  assert.equal(first.state().phase, 'sending');
+  assert.equal(fp.calls.send.length, 0, 'nothing is sent before the record on the device is confirmed');
+  first.unmount(); // the sign-in session mark changed: the route re-created the screen
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  assert.equal(second.state().phase, 'sending', 'the send is under way, it is not "unconfirmed"');
+  assert.ok(!second.text().includes('結果を確認できません'));
+  assert.equal(second.button('前回と同じ本文を入力して確認し直す'), null, 'no re-ask while the first request is not even out yet');
+  assert.equal(second.button('同じ内容・同じ送信IDで確認し直す'), null);
+  stall.release();
+  await second.flush();
+  assert.equal(fp.calls.send.length, 1, 'the first request goes out');
+  assert.equal(second.state().phase, 'sending', 'still waiting for the answer of that request');
+  await second.pressIgnoringDisabled('送信中…');
+  assert.equal(fp.calls.send.length, 1, 'a forced press does not send a second time');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '98765', marks: REAL });
+  await second.flush();
+  assert.equal(second.state().result.kind, 'sent', 'the real answer reaches the waiting screen');
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('P2-1: a re-ask tried from the re-created screen can never put a second request with the same id on the wire', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendWithStalledReadBack();
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  const reask = second.button('前回と同じ本文を入力して確認し直す') ?? second.button('同じ内容・同じ送信IDで確認し直す');
+  if (reask !== null) {
+    await second.press(reask.props.label);
+    if (second.state().phase === 'confirming') {
+      if (second.all('TextInput').length > 0 && second.state().draft === '') await second.typeText('保存中の本文');
+      await second.tick();
+    }
+    if (second.button('Xに投稿する') !== null) await second.press('Xに投稿する');
+  }
+  stall.release();
+  await second.flush();
+  assert.equal(fp.calls.send.length, 1, 'exactly one request for the attempt');
+  assert.deepEqual(new Set(fp.calls.send.map((target) => target.targetId)), new Set([ID(1)]));
+});
+
+async function startSendAnsweredButNotRecorded() {
+  const stall = stallableKV();
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const draftKv = fakeKV();
+  const first = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T1' });
+  await first.typeText('応答済みの本文');
+  await first.press('内容を確認する');
+  await first.tick();
+  await first.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1);
+  stall.stallSetWhen = (value) => value.includes('"kind":"pending"');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'pending', code: 'FIRST_PENDING', marks: REAL });
+  await first.flush();
+  return { stall, memory, inflight, fp, draftKv, first };
+}
+
+test('P2-2: the first answer is "pending" but its record on the device is not written yet -- a re-created screen waits and cannot re-ask', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendAnsweredButNotRecorded();
+  assert.equal(memory.get('U1').kind, 'pending', 'the memory already has the answer');
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  assert.equal(second.state().phase, 'sending', 'the record is not final yet: no result, no re-ask');
+  assert.equal(second.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assert.equal(fp.calls.send.length, 1);
+  stall.release();
+  await second.flush();
+  assert.equal(second.state().result.kind, 'pending', 'once the record is final the screen shows the real answer');
+  assert.equal(second.state().result.code, 'FIRST_PENDING');
+  assert.ok(second.button('同じ内容・同じ送信IDで確認し直す'), 'only now a same-id re-ask is possible');
+});
+
+const outstanding = (fp) => fp.pending.filter((p) => p.settled !== true).length;
+const answer = (fp, index, outcome) => { fp.pending[index].settled = true; fp.pending[index].resolve({ targetId: ID(1), ...outcome }); };
+
+test('P2-2: the old answer never ends a newer request (A/B/A) -- at most one request is out, and the real answer of the re-ask reaches the screen that waits', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendAnsweredButNotRecorded();
+  first.settledFirst = true;
+  fp.pending[0].settled = true;
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  // The re-ask is tried while the record of the first answer is still not written (what a re-created screen used to allow).
+  const reask = second.button('同じ内容・同じ送信IDで確認し直す');
+  if (reask !== null) {
+    await second.press('同じ内容・同じ送信IDで確認し直す');
+    await second.tick();
+    await second.press('Xに投稿する');
+  }
+  assert.ok(outstanding(fp) <= 1);
+  second.unmount();
+  const third = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T3' });
+  assert.equal(third.state().phase, 'sending', 'whatever is out, the new screen waits and offers no re-ask');
+  assert.equal(third.button('同じ内容・同じ送信IDで確認し直す'), null);
+  stall.release();
+  await third.flush();
+  if (outstanding(fp) === 1) {
+    // a request is really out (only possible if the re-ask was let through): its real answer must reach the screen
+    answer(fp, fp.pending.findIndex((p) => p.settled !== true), { kind: 'published', providerPostId: '98765', marks: REAL });
+    await third.flush();
+    assert.equal(third.state().result.kind, 'sent', 'the real answer is not lost');
+  } else {
+    assert.equal(third.state().result.kind, 'pending', 'the first answer, once its record is final');
+    await third.press('同じ内容・同じ送信IDで確認し直す');
+    await third.tick();
+    await third.press('Xに投稿する');
+    assert.equal(outstanding(fp), 1);
+    answer(fp, fp.pending.findIndex((p) => p.settled !== true), { kind: 'published', providerPostId: '98765', marks: REAL });
+    await third.flush();
+    assert.equal(third.state().result.kind, 'sent', 'the real answer of the re-ask reaches the screen');
+    assert.equal(third.state().result.providerPostId, '98765');
+  }
+  assert.ok(fp.calls.send.every((target) => target.targetId === ID(1)), 'one attempt id throughout');
+});
+
+// ---- the rest of the H1 P2 negative set (screen level) -----------------------------------------------------------------------------------------
+
+test('P2-1: re-created several times while the first record is being written -- every screen waits, the last one gets the answer, one request', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendWithStalledReadBack();
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  assert.equal(second.state().phase, 'sending');
+  second.unmount();
+  const third = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T3' });
+  assert.equal(third.state().phase, 'sending');
+  assert.equal(third.state().draft, '保存中の本文', 'it shows the attempt that is being sent');
+  stall.release();
+  await third.flush();
+  assert.equal(fp.calls.send.length, 1);
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'rejected', code: 'X_REJECTED_403', marks: REAL });
+  await third.flush();
+  assert.equal(third.state().result.kind, 'failed');
+  assert.equal(memory.get('U1'), null);
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('P2-1: the record cannot be written -- the waiting screen is released with the refusal, nothing was sent, and the fresh editor works again', async () => {
+  const stall = stallableKV();
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const draftKv = fakeKV();
+  const first = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T1' });
+  await first.typeText('書けない本文');
+  await first.press('内容を確認する');
+  await first.tick();
+  stall.stallSetWhen = () => true;
+  await first.press('Xに投稿する');
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  assert.equal(second.state().phase, 'sending');
+  stall.kv.fail.set = true; // the write fails once it is let through
+  stall.release();
+  await second.flush();
+  assert.equal(second.state().phase, 'result');
+  assert.equal(second.state().result.kind, 'refused');
+  assert.equal(second.state().result.code, 'LOCAL_STORE_UNAVAILABLE');
+  assert.equal(second.state().unresolved, null, 'it was never sent: nothing unresolved');
+  assert.equal(fp.calls.send.length, 0);
+  assert.equal(memory.get('U1'), null);
+  assertNoSentClaim(second);
+});
+
+test('P2-1: a record that is read late by a screen which was opened BEFORE the send began does not turn that send into "unconfirmed"', async () => {
+  const stall = stallableKV();
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const draftKv = fakeKV();
+  // B opens first: its read of the device record is held back (late store_loaded).
+  const realGet = stall.kv.getItem;
+  const heldReads = [];
+  stall.kv.getItem = async (key) => {
+    if (heldReads.length === 0 && stall.holdFirstRead === true) { stall.holdFirstRead = false; await new Promise((resolve) => heldReads.push(resolve)); }
+    return realGet(key);
+  };
+  stall.holdFirstRead = true;
+  const slow = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T1' });
+  assert.equal(slow.state().store.kind, 'loading');
+  // A (another screen of the same user) sends meanwhile.
+  const sender = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T1' });
+  await sender.typeText('先に送る');
+  await sender.press('内容を確認する');
+  await sender.tick();
+  await sender.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1);
+  // Now B's read comes back and finds the record the send wrote.
+  for (const resolve of heldReads.splice(0)) resolve();
+  await slow.flush();
+  assert.equal(slow.state().phase, 'sending', 'the record is the send\'s own, not an earlier run\'s');
+  assert.equal(slow.button('前回と同じ本文を入力して確認し直す'), null);
+  assert.equal(slow.state().result, null);
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '4711', marks: REAL });
+  await slow.flush();
+  assert.equal(slow.state().result.kind, 'sent');
+  assert.equal(memory.get('U1'), null);
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('P2-2: another user, and another account of the same user, are not held back by an unfinished send of this user', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendAnsweredButNotRecorded();
+  first.unmount();
+  const otherUser = await mount({ ...TWO, userId: 'U2', port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T9' });
+  assert.equal(otherUser.state().phase, 'editing', 'a different user starts with a free editor');
+  assert.ok(otherUser.state().unresolved === null);
+  const sameUser = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  sameUser.world.accounts = [account('X_B')];
+  sameUser.world.active = 'X_B';
+  await sameUser.flush();
+  assert.equal(sameUser.state().phase, 'sending', 'the attempt stays with its account and its user');
+  assert.equal(sameUser.state().accountId, 'X_A');
+  assert.equal(sameUser.button('同じ内容・同じ送信IDで確認し直す'), null);
+  stall.release();
+  await sameUser.flush();
+  assert.equal(sameUser.state().result.kind, 'pending');
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('P2-2: a request that never gets an answer keeps the screens waiting -- no verdict, no re-ask, no second request (transport timeout is the transport owner\'s)', async () => {
+  const { memory, inflight, fp, draftKv, first, stall } = await startSendWithStalledReadBack();
+  stall.release();
+  await first.flush();
+  assert.equal(fp.calls.send.length, 1);
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  for (let i = 0; i < 5; i += 1) await second.flush();
+  assert.equal(second.state().phase, 'sending');
+  assert.equal(second.button('同じ内容・同じ送信IDで確認し直す'), null);
+  await second.pressIgnoringDisabled('送信中…');
+  assert.equal(fp.calls.send.length, 1);
+  assertNoSentClaim(second);
+});
+
+test('P2-2: the answer is a simulated or marks-less success -- the waiting screen shows it as a test result, never as sent', async () => {
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendWithStalledReadBack();
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  stall.release();
+  await second.flush();
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '1234567890' });
+  await second.flush();
+  assert.equal(second.state().result.kind, 'simulated');
+  assert.equal(memory.get('U1').kind, 'uncertain', 'kept unresolved, never resent');
+  assert.equal(second.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assertNoSentClaim(second);
+});
+
+test('P2-2: a screen that takes over a RE-ASK that is out says it is a re-ask, and offers neither another re-ask nor a discard', async () => {
+  const SENTENCE = '前回と同じ内容・同じ送信IDで確認します';
+  const { stall, memory, inflight, fp, draftKv, first } = await startSendAnsweredButNotRecorded();
+  stall.release();
+  await first.flush();
+  assert.equal(first.state().result.kind, 'pending');
+  await first.press('同じ内容・同じ送信IDで確認し直す');
+  await first.tick();
+  await first.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 2, 'the re-ask: the same id');
+  assert.equal(first.state().retrying, true);
+  first.unmount();
+  const second = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv, sessionMark: 'T2' });
+  assert.equal(second.state().phase, 'sending');
+  assert.equal(second.state().retrying, true, 'it is a re-ask that is out');
+  assert.ok(second.text().includes(SENTENCE));
+  assert.equal(second.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assert.equal(second.button('Xで確認しました（この下書きを破棄）'), null);
+  fp.pending[1].resolve({ targetId: ID(1), kind: 'published', providerPostId: '98765', marks: REAL });
+  await second.flush();
+  assert.equal(second.state().result.kind, 'sent');
+  assert.equal(second.state().retrying, false);
+  assert.ok(!second.text().includes(SENTENCE));
+});
+
+test('P2-2: two screens of one user both offer the re-ask -- the second press is refused as "in progress", the attempt stays unresolved, one request', async () => {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(1), contentSha256: sha('二つの画面'), text: '二つの画面', kind: 'pending' });
+  const inflight = realFlow.createInFlightSends();
+  const kv = deviceWith(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha('二つの画面') }));
+  const fp = fakePort();
+  const a = await mount({ ...TWO, port: fp, memory, inflight, kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  const b = await mount({ ...TWO, port: fp, memory, inflight, kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  for (const ui of [a, b]) {
+    assert.equal(ui.state().result.kind, 'pending');
+    await ui.press('同じ内容・同じ送信IDで確認し直す');
+    await ui.tick();
+  }
+  await a.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1, 'a re-ask is out');
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1, 'the second screen could not put a second request on the wire');
+  assert.equal(b.state().result.kind, 'unconfirmed');
+  assert.equal(b.state().result.code, 'LOCAL_SEND_IN_PROGRESS');
+  assert.notEqual(b.state().unresolved, null, 'the attempt stays unresolved');
+  assertNoSentClaim(b);
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '55', marks: REAL });
+  await a.flush();
+  assert.equal(a.state().result.kind, 'sent');
+});
+
+test('P2-2: a registry that hands out a different send the second time never turns the answer of another attempt into this screen\'s result', async () => {
+  const real = realFlow.createInFlightSends();
+  assert.ok(real.begin('U1', { accountId: 'X_A', requestId: ID(5), contentSha256: sha('five'), text: 'five', kind: 'in_flight' }, false));
+  const other = realFlow.createInFlightSends();
+  const handle = other.begin('U1', { accountId: 'X_A', requestId: ID(6), contentSha256: sha('six'), text: 'six', kind: 'in_flight' }, false);
+  const otherTaken = other.takeOver('U1');
+  let asked = 0;
+  const lying = { ...real, takeOver: (userId) => { asked += 1; return asked === 1 ? real.takeOver(userId) : otherTaken; } };
+  const ui = await mount({ inflight: lying });
+  other.end(handle, { kind: 'published', targetId: ID(6), providerPostId: '123', marks: REAL });
+  await ui.flush();
+  assert.equal(ui.state().result.kind, 'uncertain', 'the answer of an attempt it does not show is not applied');
+  assert.equal(ui.state().result.code, 'SEND_STATE_LOST');
+  assertNoSentClaim(ui);
+});
+
+test('P2-1: a record read late by an older screen while a RE-ASK is out is taken over as a re-ask', async () => {
+  const SENTENCE = '前回と同じ内容・同じ送信IDで確認します';
+  const stall = stallableKV();
+  const realGet = stall.kv.getItem;
+  const heldReads = [];
+  stall.holdFirstRead = false;
+  stall.kv.getItem = async (key) => {
+    if (stall.holdFirstRead === true) { stall.holdFirstRead = false; await new Promise((resolve) => heldReads.push(resolve)); }
+    return realGet(key);
+  };
+  stall.kv.data.set(realStore.storeKeyOf('U1'), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha('二度目') })));
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  stall.holdFirstRead = true;
+  const slow = await mount({ ...TWO, port: fp, memory: realFlow.createAttemptMemory(), inflight, kv: stall.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  assert.equal(slow.state().store.kind, 'loading');
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(1), contentSha256: sha('二度目'), text: '二度目', kind: 'pending' });
+  const sender = await mount({ ...TWO, port: fp, memory, inflight, kv: stall.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  await sender.press('同じ内容・同じ送信IDで確認し直す');
+  await sender.tick();
+  await sender.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1, 'the re-ask is out');
+  for (const resolve of heldReads.splice(0)) resolve();
+  await slow.flush();
+  assert.equal(slow.state().phase, 'sending');
+  assert.equal(slow.state().retrying, true);
+  assert.ok(slow.text().includes(SENTENCE));
+  assert.equal(slow.button('同じ内容・同じ送信IDで確認し直す'), null);
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '31', marks: REAL });
+  await slow.flush();
+  assert.equal(slow.state().result.kind, 'sent');
 });

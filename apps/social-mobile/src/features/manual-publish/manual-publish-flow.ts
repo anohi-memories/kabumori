@@ -37,44 +37,68 @@ export const attemptMemory: AttemptMemory = createAttemptMemory();
 
 // ---- the send that is still out -------------------------------------------------------------------------------------
 
+/** The attempt of a send that is out, with the exact text (it lives in this process only, like the attempt memory). */
+export type InFlightAttempt = UnresolvedAttempt & Readonly<{ text: string }>;
+
 /**
- * Remembers, per signed-in user and for the life of the app process, the ONE send whose answer has not come back yet --
- * and, once it has, that answer. The screen that started the send may be gone when the answer arrives (it was left, or it
- * was re-created because the sign-in session mark changed): a screen that opens while the send is still out must not call
- * it "unconfirmed" and offer a re-ask while the first request is still on its way, and it must show the real answer when
- * it comes. `end` is called only AFTER the attempt memory and the durable record were updated, so whoever waits sees them final.
+ * Identifies ONE send (one call of `begin`): only the holder of its handle can end it. A later send of the same user, even
+ * with the same attempt id (a re-ask), has another generation, so an old send can never end or answer a newer one.
+ */
+export type InFlightHandle = Readonly<{ userId: string; requestId: string; generation: number }>;
+
+/** What a screen that opens while a send is out needs: the attempt it shows, and the answer it waits for. */
+export type InFlightTakeOver = Readonly<{ attempt: InFlightAttempt; retry: boolean; answer: Promise<ManualPublishOutcome> }>;
+
+/**
+ * Remembers, per signed-in user and for the life of the app process, the ONE send that is not finished yet. A send is
+ * registered by `begin` BEFORE its first asynchronous step (the record on the device is written and read back first, and
+ * only then is the port called) and finished by `end` only AFTER the attempt memory and the durable record say what the
+ * answer is. In between -- preparing, out, or answered but not yet recorded -- the user has exactly one send:
+ *   - `begin` refuses (null) while that user's earlier send is not finished: an unfinished send is never replaced, so a
+ *     second request with the same id cannot start meanwhile;
+ *   - a screen that opens meanwhile (it was left, or re-created because the sign-in session mark changed) can `takeOver`
+ *     the send: it must not call it "unconfirmed" or offer a re-ask, and it shows the real answer when it comes;
+ *   - `end` settles only the send of the handle it is given.
+ * A finished send is forgotten (no text is kept).
  */
 export interface InFlightSends {
-  begin(userId: string, requestId: string): void;
-  end(userId: string, requestId: string, outcome: ManualPublishOutcome): void;
-  /** True only while this user's send with this id has not ended yet. */
+  /** Register the send before anything is awaited. Null: this user's earlier send is not finished, nothing was changed. */
+  begin(userId: string, attempt: InFlightAttempt, retry: boolean): InFlightHandle | null;
+  /** Finish the send of this handle with its answer. A handle that is not the current send (already ended, older) is ignored. */
+  end(handle: InFlightHandle, outcome: ManualPublishOutcome): void;
+  /** True only while this user's send with this attempt id is not finished. */
   isOut(userId: string | null, requestId: string): boolean;
-  /** The answer of this user's most recent send, if it has this id (already ended or still out); otherwise null. */
-  wait(userId: string, requestId: string): Promise<ManualPublishOutcome> | null;
+  /** This user's unfinished send, to wait for its answer; null when there is none. */
+  takeOver(userId: string | null): InFlightTakeOver | null;
 }
 
 export function createInFlightSends(): InFlightSends {
-  type Entry = { requestId: string; out: boolean; promise: Promise<ManualPublishOutcome>; settle: (outcome: ManualPublishOutcome) => void };
+  type Entry = { handle: InFlightHandle; attempt: InFlightAttempt; retry: boolean; promise: Promise<ManualPublishOutcome>; settle: (outcome: ManualPublishOutcome) => void };
   const entries = new Map<string, Entry>();
+  let generation = 0;
   return {
-    begin(userId, requestId) {
+    begin(userId, attempt, retry) {
+      if (entries.has(userId)) return null;
       let settle: (outcome: ManualPublishOutcome) => void = () => {};
       const promise = new Promise<ManualPublishOutcome>((resolve) => { settle = resolve; });
-      entries.set(userId, { requestId, out: true, promise, settle });
+      generation += 1;
+      const handle: InFlightHandle = { userId, requestId: attempt.requestId, generation };
+      entries.set(userId, { handle, attempt, retry, promise, settle });
+      return handle;
     },
-    end(userId, requestId, outcome) {
-      const entry = entries.get(userId);
-      if (entry === undefined || entry.requestId !== requestId || !entry.out) return;
-      entry.out = false;
+    end(handle, outcome) {
+      const entry = entries.get(handle.userId);
+      if (entry === undefined || entry.handle.generation !== handle.generation) return;
+      entries.delete(handle.userId);
       entry.settle(outcome);
     },
     isOut: (userId, requestId) => {
       const entry = userId === null ? undefined : entries.get(userId);
-      return entry !== undefined && entry.requestId === requestId && entry.out;
+      return entry !== undefined && entry.handle.requestId === requestId;
     },
-    wait: (userId, requestId) => {
-      const entry = entries.get(userId);
-      return entry !== undefined && entry.requestId === requestId ? entry.promise : null;
+    takeOver: (userId) => {
+      const entry = userId === null ? undefined : entries.get(userId);
+      return entry === undefined ? null : { attempt: entry.attempt, retry: entry.retry, answer: entry.promise };
     },
   };
 }
@@ -137,7 +161,11 @@ export async function loadPersistedAttempt(deps: FlowDeps, userId: string): Prom
   } catch {
     read = { kind: 'unreadable', reason: 'io' };
   }
-  if (read.kind === 'found') deps.memory.mark(userId, restoredAttemptOf(read.attempt));
+  // The text-less record of an earlier run never replaces what this process knows: an attempt of this process is already in
+  // the memory (with its text), and a send that is still being prepared or recorded is about to put its own entry there.
+  if (read.kind === 'found' && deps.memory.get(userId) === null && (deps.inflight?.takeOver(userId) ?? null) === null) {
+    deps.memory.mark(userId, restoredAttemptOf(read.attempt));
+  }
   return read;
 }
 
@@ -162,6 +190,9 @@ export async function runAcknowledge(deps: FlowDeps, userId: string): Promise<bo
 /**
  * The one send of one attempt. Precondition (checked by the caller with `sendGate` and by the reducer): the
  * gate allowed it. Never throws and always returns an outcome for `requestId`:
+ *   - with a registry (`deps.inflight`) the send is registered before anything is awaited and stays registered until the
+ *     memory and the durable record are final; a start while the user's earlier send is unfinished is refused
+ *     (`LOCAL_SEND_IN_PROGRESS`) without touching memory, record or port;
  *   - a target the provider cannot take, or a consent that does not match the exact text, is refused here,
  *     before the port (nothing sent, nothing remembered);
  *   - the attempt is first written to the DURABLE store and read back; if that fails nothing is sent at all
@@ -184,6 +215,44 @@ export async function runSend(
   const target = buildTarget(requestId, accountId, text, consent);
   if (!targetIsSendable(target)) return refuse(consent.contentSha256 === sha256Hex(text) ? 'LOCAL_TARGET_INVALID' : 'LOCAL_CONSENT_MISMATCH');
   const entry: UnresolvedAttempt = { accountId, requestId, contentSha256: consent.contentSha256, text, kind: 'in_flight' };
+  // The send is registered BEFORE the first await: from here until the end of this call the user has exactly this one
+  // send, so a screen that opens while the record is still being written, or while the answer is still being recorded,
+  // waits for it instead of reading half-written state -- and a second start for this user is refused, never run alongside.
+  let handle: InFlightHandle | null = null;
+  if (deps.inflight !== undefined) {
+    handle = deps.inflight.begin(userId, { ...entry, text }, retry);
+    if (handle === null) {
+      // Nothing was changed: the earlier send keeps its memory, its record and its waiters. A retry stays unresolved.
+      return retry ? { kind: 'unavailable', targetId: requestId, code: 'LOCAL_SEND_IN_PROGRESS' } : refuse('LOCAL_SEND_IN_PROGRESS');
+    }
+  }
+  let outcome: ManualPublishOutcome;
+  try {
+    outcome = await prepareAndSend(deps, { userId, accountId, text, requestId, consent, retry, entry, target });
+  } catch {
+    // Never leave a waiter hanging, and never leave the attempt looking settled: whatever went wrong, the send may have gone out.
+    try { deps.memory.mark(userId, { ...entry, kind: 'uncertain' }); } catch { /* the outcome below is still uncertain */ }
+    outcome = { kind: 'uncertain', targetId: requestId, code: 'SEND_STATE_LOST' };
+  }
+  // Only now, after the memory and the durable record say what the answer is, whoever waits for this send is told.
+  if (handle !== null) deps.inflight?.end(handle, outcome);
+  return outcome;
+}
+
+async function prepareAndSend(
+  deps: FlowDeps,
+  args: Readonly<{
+    userId: string;
+    accountId: string;
+    text: string;
+    requestId: string;
+    consent: ManualPublishConsent;
+    retry: boolean;
+    entry: UnresolvedAttempt;
+    target: ReturnType<typeof buildTarget>;
+  }>,
+): Promise<ManualPublishOutcome> {
+  const { userId, accountId, requestId, consent, retry, entry, target } = args;
   const record = (kind: PersistedAttempt['kind']): PersistedAttempt => ({ accountId, requestId, contentSha256: consent.contentSha256, kind, savedAt: deps.now() });
   if (!(await deps.store.write(userId, record('in_flight')))) {
     if (retry) {
@@ -193,20 +262,10 @@ export async function runSend(
     // A fresh attempt that could not be recorded was never sent. A half-written record would only block the next
     // visit, so it is removed if it can be (there was no earlier record for this user to lose).
     await deps.store.clear(userId);
-    return refuse('LOCAL_STORE_UNAVAILABLE');
+    return { kind: 'refused', targetId: requestId, code: 'LOCAL_STORE_UNAVAILABLE', retryable: false };
   }
   deps.memory.mark(userId, entry);
-  deps.inflight?.begin(userId, requestId);
-  let outcome: ManualPublishOutcome;
-  try {
-    outcome = await sendAndRecord(deps, { userId, requestId, entry, record, target });
-  } catch {
-    // Never leave a waiter hanging: whatever went wrong, the send may have gone out.
-    outcome = { kind: 'uncertain', targetId: requestId, code: 'SEND_STATE_LOST' };
-  }
-  // Only now, after the memory and the durable record say what the answer is, whoever waits for this send is told.
-  deps.inflight?.end(userId, requestId, outcome);
-  return outcome;
+  return sendAndRecord(deps, { userId, requestId, entry, record, target });
 }
 
 async function sendAndRecord(
