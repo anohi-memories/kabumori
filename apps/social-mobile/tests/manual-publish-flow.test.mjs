@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import * as flow from '../src/features/manual-publish/manual-publish-flow.ts';
 import * as port from '../src/features/manual-publish/manual-publish-port.ts';
+import * as model from '../src/features/manual-publish/manual-publish-model.ts';
 import { createAttemptStore, storeKeyOf } from '../src/features/manual-publish/manual-publish-store.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
@@ -212,34 +213,125 @@ test('no network entry point was touched by any step', async () => {
   assert.equal(trapped, 0, 'no booby-trapped network entry point was called');
 });
 
-// ---- the registry of the send that is out ----------------------------------------------------------------------------------------------------
+// ---- the registry of the send that is not finished ----------------------------------------------------------------------------------------------------
 
-test('inflight: begin -> out -> end tells every waiter the answer, and keeps it for a late waiter', async () => {
+const ATT = (n = 1, over = {}) => ({ accountId: 'X_A', requestId: ID(n), contentSha256: sha('hello'), text: 'hello', kind: 'in_flight', ...over });
+const later = () => new Promise((resolve) => setImmediate(resolve));
+/** True if the promise has not settled after a few turns of the event loop. */
+async function stillPending(promise) {
+  const mark = Symbol('pending');
+  const first = await Promise.race([promise, later().then(() => mark)]);
+  return first === mark;
+}
+
+test('inflight: begin gives a handle; the send is out until its end; ids, users and null are kept apart', async () => {
   const reg = flow.createInFlightSends();
   assert.equal(reg.isOut('U1', ID(1)), false);
-  assert.equal(reg.wait('U1', ID(1)), null);
-  reg.begin('U1', ID(1));
+  assert.equal(reg.takeOver('U1'), null);
+  assert.equal(reg.takeOver(null), null);
+  const handle = reg.begin('U1', ATT(1), false);
+  assert.deepEqual({ userId: handle.userId, requestId: handle.requestId }, { userId: 'U1', requestId: ID(1) });
   assert.equal(reg.isOut('U1', ID(1)), true);
   assert.equal(reg.isOut('U1', ID(2)), false, 'another id is not out');
   assert.equal(reg.isOut('U2', ID(1)), false, 'another user is not out');
   assert.equal(reg.isOut(null, ID(1)), false);
-  const a = reg.wait('U1', ID(1));
-  const b = reg.wait('U1', ID(1));
-  assert.equal(reg.wait('U1', ID(2)), null);
-  const answer = { kind: 'pending', targetId: ID(1), code: null };
-  reg.end('U1', ID(2), { kind: 'published', targetId: ID(2), providerPostId: '1' }); // another id: ignored
-  reg.end('U2', ID(1), { kind: 'published', targetId: ID(1), providerPostId: '1' }); // another user: ignored
-  assert.equal(reg.isOut('U1', ID(1)), true);
-  reg.end('U1', ID(1), answer);
-  assert.equal(reg.isOut('U1', ID(1)), false);
-  assert.deepEqual(await a, answer);
-  assert.deepEqual(await b, answer);
-  assert.deepEqual(await reg.wait('U1', ID(1)), answer, 'a late waiter still gets the answer');
-  reg.end('U1', ID(1), { kind: 'published', targetId: ID(1), providerPostId: '9' });
-  assert.deepEqual(await reg.wait('U1', ID(1)), answer, 'an answer is not overwritten by a second end');
+  assert.equal(reg.takeOver('U2'), null, 'another user has nothing to take over');
+  const taken = reg.takeOver('U1');
+  assert.deepEqual(taken.attempt, ATT(1));
+  assert.equal(taken.retry, false);
+  const other = reg.begin('U2', ATT(2), true);
+  assert.ok(other, 'another user is never blocked');
+  assert.equal(reg.takeOver('U2').retry, true, 'a re-ask is told apart');
+  assert.notEqual(other.generation, handle.generation, 'every send has its own generation');
 });
 
-test('inflight: runSend registers the send before the port is called and ends it AFTER memory and device record are final, whatever the answer', async () => {
+test('inflight: end tells every waiter the answer, once; a late holder of the promise still gets it', async () => {
+  const reg = flow.createInFlightSends();
+  const handle = reg.begin('U1', ATT(1), false);
+  const a = reg.takeOver('U1').answer;
+  const b = reg.takeOver('U1').answer;
+  assert.equal(await stillPending(a), true);
+  const answer = { kind: 'pending', targetId: ID(1), code: null };
+  reg.end({ ...handle, userId: 'U2' }, { kind: 'published', targetId: ID(1), providerPostId: '1' }); // another user's handle: ignored
+  reg.end({ ...handle, generation: handle.generation + 1 }, { kind: 'published', targetId: ID(1), providerPostId: '1' }); // another generation: ignored
+  assert.equal(reg.isOut('U1', ID(1)), true);
+  assert.equal(await stillPending(a), true, 'not settled by a handle that is not its own');
+  reg.end(handle, answer);
+  assert.equal(reg.isOut('U1', ID(1)), false);
+  assert.equal(reg.takeOver('U1'), null, 'a finished send is forgotten (no text is kept)');
+  assert.deepEqual(await a, answer);
+  assert.deepEqual(await b, answer);
+  reg.end(handle, { kind: 'published', targetId: ID(1), providerPostId: '9' });
+  assert.deepEqual(await a, answer, 'an answer is not overwritten by a second end');
+});
+
+test('inflight: an unfinished send is never replaced -- a second begin of the same user is refused (same id or another), nothing changes', async () => {
+  const reg = flow.createInFlightSends();
+  const first = reg.begin('U1', ATT(1), false);
+  const taken = reg.takeOver('U1');
+  assert.equal(reg.begin('U1', ATT(1), true), null, 'a re-ask with the same id while the first is unfinished');
+  assert.equal(reg.begin('U1', ATT(2), false), null, 'another attempt while the first is unfinished');
+  assert.equal(reg.isOut('U1', ID(1)), true);
+  assert.equal(reg.isOut('U1', ID(2)), false);
+  assert.deepEqual(reg.takeOver('U1').attempt, ATT(1), 'the first send is still the one that is out');
+  assert.equal(await stillPending(taken.answer), true);
+  const answer = { kind: 'uncertain', targetId: ID(1), code: 'X_TIMEOUT' };
+  reg.end(first, answer);
+  assert.deepEqual(await taken.answer, answer, 'its waiter is not lost');
+  assert.ok(reg.begin('U1', ATT(2), false), 'only after it ended may the user start another');
+});
+
+test('inflight: an old send can never end or answer a newer one with the same id (A/B/A)', async () => {
+  const reg = flow.createInFlightSends();
+  const a = reg.begin('U1', ATT(1), false);
+  const waitA = reg.takeOver('U1').answer;
+  const first = { kind: 'pending', targetId: ID(1), code: 'FIRST_PENDING' };
+  reg.end(a, first);
+  const b = reg.begin('U1', ATT(1), true); // the re-ask: the same id, another send
+  assert.notEqual(b.generation, a.generation);
+  const taken = reg.takeOver('U1');
+  assert.equal(taken.retry, true);
+  reg.end(a, { kind: 'pending', targetId: ID(1), code: 'LATE_OLD_END' }); // the old holder ends AGAIN, late
+  assert.equal(reg.isOut('U1', ID(1)), true, 'the newer send is still out');
+  assert.equal(await stillPending(taken.answer), true, 'its waiter was not released with the old answer');
+  const real = { kind: 'published', targetId: ID(1), providerPostId: '98765' };
+  reg.end(b, real);
+  assert.deepEqual(await taken.answer, real, 'the real answer reaches the waiter of the newer send');
+  assert.deepEqual(await waitA, first, 'the waiter of the old send keeps the old answer');
+});
+
+// ---- runSend with the registry ---------------------------------------------------------------------------------------------------------------------
+
+/** A device storage whose writes (and reads) can be held back, and that counts what was written. */
+function heldKV(h) {
+  const realSet = h.kv.setItem;
+  const realGet = h.kv.getItem;
+  const ctl = { writes: [], holdSet: false, holdRead: false, held: [] };
+  const hold = () => new Promise((resolve) => { ctl.held.push(resolve); });
+  h.kv.setItem = async (key, value) => { ctl.writes.push(value); if (ctl.holdSet) await hold(); return realSet(key, value); };
+  h.kv.getItem = async (key) => { if (ctl.holdRead) await hold(); return realGet(key); };
+  ctl.release = () => { ctl.holdSet = false; ctl.holdRead = false; for (const resolve of ctl.held.splice(0)) resolve(); };
+  return ctl;
+}
+const withRegistry = (h) => { h.deps.inflight = flow.createInFlightSends(); return h; };
+
+test('inflight: runSend registers the send BEFORE its first await -- while the record is still being written the user already has that send', async () => {
+  const h = withRegistry(harness());
+  const device = heldKV(h);
+  device.holdSet = true;
+  const done = flow.runSend(h.deps, args());
+  assert.equal(h.deps.inflight.isOut('U1', ID(1)), true, 'registered synchronously');
+  assert.deepEqual(h.deps.inflight.takeOver('U1').attempt, ATT(1), 'with the text, so a screen that opens now can show it');
+  assert.equal(h.memory.get('U1'), null, 'the memory is not written yet');
+  assert.equal(h.calls.send.length, 0, 'nothing is sent before the record is confirmed');
+  device.release();
+  const outcome = await done;
+  assert.equal(outcome.kind, 'published');
+  assert.equal(h.calls.send.length, 1);
+  assert.equal(h.deps.inflight.isOut('U1', ID(1)), false);
+});
+
+test('inflight: the send stays registered through the write, the read-back, the answer and the record of the answer -- and ends only then', async () => {
   for (const [label, answer, memoryAfter, recordAfter] of [
     ['pending', { kind: 'pending', code: null, marks: REAL }, 'pending', 'pending'],
     ['unavailable', { kind: 'unavailable', code: 'TRANSPORT_FAILED' }, 'unconfirmed', 'unconfirmed'],
@@ -248,62 +340,222 @@ test('inflight: runSend registers the send before the port is called and ends it
     ['published', { kind: 'published', providerPostId: '1', marks: REAL }, null, null],
     ['rejected', { kind: 'rejected', code: 'X_REJECTED_403', marks: REAL }, null, null],
   ]) {
-    const h = harness({ send: async (t) => ({ targetId: t.targetId, ...answer }) });
-    h.deps.inflight = flow.createInFlightSends();
+    const h = withRegistry(harness({ send: async (t) => ({ targetId: t.targetId, ...answer }) }));
+    const device = heldKV(h);
     let outDuringSend = null;
     const original = h.deps.port.send;
     h.deps.port.send = async (t) => { outDuringSend = h.deps.inflight.isOut('U1', t.targetId); return original(t); };
-    const waiting = (async () => {
-      let promise = null;
-      for (let i = 0; i < 50 && promise === null; i += 1) {
-        promise = h.deps.inflight.wait('U1', ID(1));
-        if (promise === null) await new Promise((resolve) => setImmediate(resolve));
-      }
-      assert.ok(promise, 'the send was registered');
-      await promise;
-      // the moment a waiter is released, memory and the device record already say what the answer is
-      return { memory: h.memory.get('U1')?.kind ?? null, record: h.kv.data.get(storeKeyOf('U1')) === undefined ? null : JSON.parse(h.kv.data.get(storeKeyOf('U1'))).kind };
-    })();
-    const outcome = await flow.runSend(h.deps, args());
-    assert.equal(outDuringSend, true, `${label}: registered before the port was called`);
+    const done = flow.runSend(h.deps, args());
+    const waiter = h.deps.inflight.takeOver('U1').answer.then(() => ({
+      memory: h.memory.get('U1')?.kind ?? null,
+      record: h.kv.data.get(storeKeyOf('U1')) === undefined ? null : JSON.parse(h.kv.data.get(storeKeyOf('U1'))).kind,
+    }));
+    const outcome = await done;
+    assert.equal(outDuringSend, true, `${label}: registered while the port was called`);
     assert.equal(h.deps.inflight.isOut('U1', ID(1)), false, `${label}: ended`);
-    assert.deepEqual(await h.deps.inflight.wait('U1', ID(1)), outcome, label);
-    assert.deepEqual(await waiting, { memory: memoryAfter, record: recordAfter }, label);
+    // the moment a waiter is released, memory and the device record already say what the answer is
+    assert.deepEqual(await waiter, { memory: memoryAfter, record: recordAfter }, label);
+    assert.ok(device.writes.length >= 1);
+    assert.ok(outcome);
   }
 });
 
+test('inflight: while the answer is being recorded the send is still out (the memory already has it, the device record does not)', async () => {
+  const h = withRegistry(harness({ send: async (t) => ({ targetId: t.targetId, kind: 'pending', code: 'FIRST_PENDING', marks: REAL }) }));
+  const device = heldKV(h);
+  let writes = 0;
+  const realSet = h.kv.setItem;
+  h.kv.setItem = async (key, value) => { writes += 1; if (writes === 2) device.holdSet = true; return realSet(key, value); };
+  const done = flow.runSend(h.deps, args());
+  for (let i = 0; i < 20 && h.memory.get('U1')?.kind !== 'pending'; i += 1) await later();
+  assert.equal(h.memory.get('U1').kind, 'pending', 'the memory has the answer');
+  assert.equal(JSON.parse(h.kv.data.get(storeKeyOf('U1'))).kind, 'in_flight', 'the device record is still the old one');
+  assert.equal(h.deps.inflight.isOut('U1', ID(1)), true, 'so the send is not finished: nobody may re-ask yet');
+  assert.ok(h.deps.inflight.takeOver('U1'));
+  device.release();
+  await done;
+  assert.equal(h.deps.inflight.isOut('U1', ID(1)), false);
+  assert.equal(JSON.parse(h.kv.data.get(storeKeyOf('U1'))).kind, 'pending');
+});
+
+test('inflight: a start while the user\'s earlier send is unfinished is refused without touching memory, record, port or registry', async () => {
+  const sends = [];
+  const h = withRegistry(harness({ send: (t) => new Promise((resolve) => { sends.push({ t, resolve }); }) }));
+  const device = heldKV(h);
+  const first = flow.runSend(h.deps, args());
+  for (let i = 0; i < 20 && sends.length === 0; i += 1) await later();
+  assert.equal(sends.length, 1);
+  const writesBefore = device.writes.length;
+  const memoryBefore = h.memory.get('U1');
+  const reAsk = await flow.runSend(h.deps, args({ retry: true }));
+  assert.deepEqual(reAsk, { kind: 'unavailable', targetId: ID(1), code: 'LOCAL_SEND_IN_PROGRESS' }, 'a re-ask stays unresolved (unavailable), never "refused"');
+  const fresh = await flow.runSend(h.deps, args({ requestId: ID(2) }));
+  assert.deepEqual(fresh, { kind: 'refused', targetId: ID(2), code: 'LOCAL_SEND_IN_PROGRESS', retryable: false });
+  const sameIdFresh = await flow.runSend(h.deps, args());
+  assert.equal(sameIdFresh.code, 'LOCAL_SEND_IN_PROGRESS');
+  assert.equal(sends.length, 1, 'the port was called once');
+  assert.equal(device.writes.length, writesBefore, 'the record on the device was not touched');
+  assert.deepEqual(h.memory.get('U1'), memoryBefore, 'the memory was not touched');
+  assert.equal(h.deps.inflight.isOut('U1', ID(1)), true, 'the first send is still the one that is out');
+  assert.equal(h.deps.inflight.isOut('U1', ID(2)), false);
+  sends[0].resolve({ targetId: ID(1), kind: 'pending', code: null, marks: REAL });
+  assert.equal((await first).kind, 'pending');
+  const again = flow.runSend(h.deps, args({ retry: true })); // only after it ended: the re-ask with the same id
+  for (let i = 0; i < 20 && sends.length < 2; i += 1) await later();
+  assert.equal(sends.length, 2);
+  assert.equal(sends[1].t.targetId, ID(1));
+  sends[1].resolve({ targetId: ID(1), kind: 'published', providerPostId: '98765', marks: REAL });
+  assert.equal((await again).kind, 'published', 'the re-ask of the finished send goes out');
+});
+
+test('inflight: a start while the first record is still being WRITTEN is refused too (nothing is sent twice, nothing is written twice)', async () => {
+  const h = withRegistry(harness());
+  const device = heldKV(h);
+  device.holdSet = true;
+  const first = flow.runSend(h.deps, args());
+  await later();
+  const second = await flow.runSend(h.deps, args({ retry: true }));
+  assert.equal(second.code, 'LOCAL_SEND_IN_PROGRESS');
+  assert.equal(device.writes.length, 1, 'one write: the first attempt\'s');
+  assert.equal(h.calls.send.length, 0);
+  device.release();
+  assert.equal((await first).kind, 'published');
+  assert.equal(h.calls.send.length, 1, 'exactly one request');
+});
+
+test('inflight: another user is never blocked by this user\'s unfinished send', async () => {
+  const sends = [];
+  const h = withRegistry(harness({ send: (t) => new Promise((resolve) => { sends.push({ t, resolve }); }) }));
+  const first = flow.runSend(h.deps, args());
+  for (let i = 0; i < 20 && sends.length === 0; i += 1) await later();
+  const other = flow.runSend(h.deps, args({ userId: 'U2', requestId: ID(2) }));
+  for (let i = 0; i < 20 && sends.length < 2; i += 1) await later();
+  assert.equal(sends.length, 2, 'both users\' requests are out');
+  sends[0].resolve({ targetId: ID(1), kind: 'rejected', code: 'X_REJECTED_403', marks: REAL });
+  sends[1].resolve({ targetId: ID(2), kind: 'rejected', code: 'X_REJECTED_403', marks: REAL });
+  assert.equal((await first).kind, 'rejected');
+  assert.equal((await other).kind, 'rejected');
+});
+
+test('inflight: a record that cannot be written releases the waiters with the refusal (a fresh attempt) or "unavailable" (a re-ask), and frees the user', async () => {
+  const fresh = withRegistry(harness());
+  const device = heldKV(fresh);
+  device.holdSet = true;
+  const done = flow.runSend(fresh.deps, args());
+  const waiter = fresh.deps.inflight.takeOver('U1').answer;
+  fresh.kv.fail.set = true;
+  device.release();
+  const outcome = await done;
+  assert.deepEqual(outcome, { kind: 'refused', targetId: ID(1), code: 'LOCAL_STORE_UNAVAILABLE', retryable: false });
+  assert.deepEqual(await waiter, outcome);
+  assert.equal(fresh.calls.send.length, 0, 'nothing was sent');
+  assert.equal(fresh.deps.inflight.isOut('U1', ID(1)), false, 'the user is free again');
+  assert.equal(fresh.memory.get('U1'), null);
+  const retry = withRegistry(harness());
+  const d2 = heldKV(retry);
+  d2.holdSet = true;
+  const done2 = flow.runSend(retry.deps, args({ retry: true }));
+  const waiter2 = retry.deps.inflight.takeOver('U1').answer;
+  retry.kv.fail.set = true;
+  d2.release();
+  const outcome2 = await done2;
+  assert.deepEqual(outcome2, { kind: 'unavailable', targetId: ID(1), code: 'LOCAL_STORE_UNAVAILABLE' });
+  assert.deepEqual(await waiter2, outcome2);
+  assert.equal(retry.memory.get('U1').kind, 'unconfirmed', 'a failed local write proves nothing about the earlier send');
+  assert.equal(retry.deps.inflight.isOut('U1', ID(1)), false);
+});
+
+test('inflight: a thrown step anywhere never leaves the registry or a waiter hanging, and the attempt is remembered as uncertain', async () => {
+  // the device storage object itself throws
+  const broken = withRegistry(harness());
+  broken.deps.store = { ...broken.store, write: async () => { throw new Error('storage exploded'); } };
+  const done = flow.runSend(broken.deps, args());
+  const waiter = broken.deps.inflight.takeOver('U1').answer;
+  const lost = await done;
+  assert.deepEqual(lost, { kind: 'uncertain', targetId: ID(1), code: 'SEND_STATE_LOST' });
+  assert.deepEqual(await waiter, lost);
+  assert.equal(broken.deps.inflight.isOut('U1', ID(1)), false);
+  assert.equal(broken.memory.get('U1').kind, 'uncertain', 'the screen shows uncertain, so the memory must not say otherwise');
+  assert.equal(broken.calls.send.length, 0);
+  // a memory that fails while the answer is recorded
+  const memoryBroken = withRegistry(harness({ send: async (t) => ({ targetId: t.targetId, kind: 'pending', code: null }) }));
+  const mark = memoryBroken.memory.mark;
+  let calls = 0;
+  memoryBroken.memory.mark = (userId, entry) => { calls += 1; if (calls > 1 && calls < 4) throw new Error('memory failed'); return mark(userId, entry); };
+  const lost2 = await flow.runSend(memoryBroken.deps, args());
+  assert.deepEqual(lost2, { kind: 'uncertain', targetId: ID(1), code: 'SEND_STATE_LOST' });
+  assert.equal(memoryBroken.deps.inflight.isOut('U1', ID(1)), false);
+  // the clear after a failed fresh write throws
+  const clearBroken = withRegistry(harness());
+  clearBroken.kv.fail.set = true;
+  clearBroken.deps.store = { ...clearBroken.store, write: async () => false, clear: async () => { throw new Error('clear exploded'); } };
+  assert.equal((await flow.runSend(clearBroken.deps, args())).code, 'SEND_STATE_LOST');
+  assert.equal(clearBroken.deps.inflight.isOut('U1', ID(1)), false);
+});
+
 test('inflight: a thrown port, an invalid answer and a local refusal never leave a waiter hanging; a refusal before the port is not registered at all', async () => {
-  const thrown = harness({ send: async () => { throw new Error('boom'); } });
-  thrown.deps.inflight = flow.createInFlightSends();
-  const outcome = await flow.runSend(thrown.deps, args());
+  const thrown = withRegistry(harness({ send: async () => { throw new Error('boom'); } }));
+  const doneThrown = flow.runSend(thrown.deps, args());
+  const waitThrown = thrown.deps.inflight.takeOver('U1').answer;
+  const outcome = await doneThrown;
   assert.equal(outcome.code, 'SEND_THREW');
-  assert.deepEqual(await thrown.deps.inflight.wait('U1', ID(1)), outcome);
-  const invalid = harness({ send: async () => null });
-  invalid.deps.inflight = flow.createInFlightSends();
+  assert.deepEqual(await waitThrown, outcome);
+  assert.equal(thrown.deps.inflight.isOut('U1', ID(1)), false);
+  const invalid = withRegistry(harness({ send: async () => null }));
   assert.equal((await flow.runSend(invalid.deps, args())).code, 'OUTCOME_INVALID');
   assert.equal(invalid.deps.inflight.isOut('U1', ID(1)), false);
-  const refused = harness();
-  refused.deps.inflight = flow.createInFlightSends();
-  assert.equal((await flow.runSend(refused.deps, args({ text: 'hello ' }))).code, 'LOCAL_CONSENT_MISMATCH');
-  assert.equal(refused.deps.inflight.wait('U1', ID(1)), null, 'nothing was sent, nothing is registered');
-  const noStore = harness();
-  noStore.deps.inflight = flow.createInFlightSends();
-  noStore.kv.fail.set = true;
-  assert.equal((await flow.runSend(noStore.deps, args())).code, 'LOCAL_STORE_UNAVAILABLE');
-  assert.equal(noStore.deps.inflight.wait('U1', ID(1)), null);
-  // A memory that fails while the answer is recorded still releases the waiter (as uncertain).
-  const broken = harness({ send: async (t) => ({ targetId: t.targetId, kind: 'pending', code: null }) });
-  broken.deps.inflight = flow.createInFlightSends();
-  const mark = broken.memory.mark;
-  let calls = 0;
-  broken.memory.mark = (userId, entry) => { calls += 1; if (calls > 1) throw new Error('memory failed'); return mark(userId, entry); };
-  const lost = await flow.runSend(broken.deps, args());
-  assert.deepEqual(lost, { kind: 'uncertain', targetId: ID(1), code: 'SEND_STATE_LOST' });
-  assert.deepEqual(await broken.deps.inflight.wait('U1', ID(1)), lost);
+  const refused = withRegistry(harness());
+  const doneRefused = flow.runSend(refused.deps, args({ text: 'hello ' }));
+  assert.equal(refused.deps.inflight.takeOver('U1'), null, 'nothing was sent, nothing is registered');
+  assert.equal((await doneRefused).code, 'LOCAL_CONSENT_MISMATCH');
+  const badId = withRegistry(harness());
+  const doneBadId = flow.runSend(badId.deps, args({ requestId: 'not-a-uuid' }));
+  assert.equal(badId.deps.inflight.takeOver('U1'), null);
+  assert.equal((await doneBadId).code, 'LOCAL_ATTEMPT_ID_INVALID');
 });
 
 test('inflight: without a registry nothing changes (the registry is optional, runSend works as before)', async () => {
   const h = harness();
   assert.equal(h.deps.inflight, undefined);
   assert.equal((await flow.runSend(h.deps, args())).kind, 'published');
+});
+
+test('inflight: the text-less record of an earlier run never replaces what this process knows, nor a send that is being prepared', async () => {
+  const h = withRegistry(harness());
+  const record = { v: 1, accountId: 'X_A', requestId: ID(9), contentSha256: sha('older'), kind: 'in_flight', savedAt: 1 };
+  h.kv.data.set(storeKeyOf('U1'), JSON.stringify(record));
+  // (a) memory already has this process's attempt (with its text)
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  assert.equal((await flow.loadPersistedAttempt(h.deps, 'U1')).kind, 'found');
+  assert.equal(h.memory.get('U1').text, 'hello', 'the attempt of this process is kept');
+  assert.equal(h.memory.get('U1').requestId, ID(1));
+  // (b) a send of this user is being prepared right now
+  h.memory.clear('U1');
+  const handle = h.deps.inflight.begin('U1', ATT(2), false);
+  assert.equal((await flow.loadPersistedAttempt(h.deps, 'U1')).kind, 'found');
+  assert.equal(h.memory.get('U1'), null, 'nothing is put into the memory while a send is being prepared');
+  h.deps.inflight.end(handle, { kind: 'refused', targetId: ID(2), code: 'X', retryable: false });
+  // (c) otherwise the record is put into the memory, as before
+  assert.equal((await flow.loadPersistedAttempt(h.deps, 'U1')).kind, 'found');
+  assert.deepEqual(h.memory.get('U1'), { accountId: 'X_A', requestId: ID(9), contentSha256: sha('older'), text: null, kind: 'in_flight' });
+});
+
+test('inflight: send_adopted switches only a visit that is still reading the record; any other state stays as it is', () => {
+  const attempt = ATT(1);
+  const loading = model.createInitialState(null, { kind: 'loading' });
+  const adopted = model.manualPublishReducer(loading, { type: 'send_adopted', attempt, retrying: true });
+  assert.equal(adopted.phase, 'sending');
+  assert.equal(adopted.requestId, ID(1));
+  assert.equal(adopted.retrying, true);
+  assert.equal(adopted.draft, 'hello');
+  assert.equal(adopted.consent, null);
+  assert.equal(adopted.store.kind, 'ready');
+  const ready = model.createInitialState(null);
+  assert.deepEqual(model.manualPublishReducer(ready, { type: 'send_adopted', attempt, retrying: false }), ready, 'a visit that is ready is not replaced');
+  const typing = model.manualPublishReducer(ready, { type: 'draft_changed', text: 'my own words' });
+  assert.deepEqual(model.manualPublishReducer(typing, { type: 'send_adopted', attempt, retrying: false }), typing, 'nothing typed is thrown away');
+  const result = model.createInitialState({ ...ATT(2), kind: 'pending' });
+  assert.deepEqual(model.manualPublishReducer(result, { type: 'send_adopted', attempt, retrying: false }), result, 'a result is not replaced');
+  const unreadable = model.manualPublishReducer(loading, { type: 'store_unreadable', reason: 'io' });
+  assert.deepEqual(model.manualPublishReducer(unreadable, { type: 'send_adopted', attempt, retrying: false }), unreadable);
 });

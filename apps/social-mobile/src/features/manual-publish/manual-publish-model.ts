@@ -196,7 +196,7 @@ export function marksOf(outcome: ManualPublishOutcome): ResultMarks {
  * re-created). It is "sending", exactly as the screen that started it would show: no result is invented, no re-ask or
  * other send is offered, and the real answer is applied through `send_settled` when the send ends.
  */
-export function createSendingState(attempt: UnresolvedAttempt & Readonly<{ text: string }>): ManualPublishState {
+export function createSendingState(attempt: UnresolvedAttempt & Readonly<{ text: string }>, retrying = false): ManualPublishState {
   return {
     draft: attempt.text,
     accountId: attempt.accountId,
@@ -208,7 +208,7 @@ export function createSendingState(attempt: UnresolvedAttempt & Readonly<{ text:
     unresolved: { ...attempt, kind: 'in_flight' },
     store: STORE_READY,
     draftRestore: 'done',
-    retrying: false,
+    retrying,
   };
 }
 
@@ -255,6 +255,7 @@ export type ManualPublishAction =
   | Readonly<{ type: 'unresolved_acknowledged' }>
   | Readonly<{ type: 'draft_restored'; text: string | null; accountId: string | null }>
   | Readonly<{ type: 'store_loaded'; unresolved: UnresolvedAttempt | null }>
+  | Readonly<{ type: 'send_adopted'; attempt: UnresolvedAttempt & Readonly<{ text: string }>; retrying: boolean }>
   | Readonly<{ type: 'store_unreadable'; reason: 'io' | 'corrupt' | 'version' }>
   | Readonly<{ type: 'store_reload_requested' }>
   | Readonly<{ type: 'store_unreadable_acknowledged' }>
@@ -404,6 +405,11 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
       // Only the answer to the read this visit started; the state is untouched until then (every input is blocked).
       if (state.store.kind !== 'loading') return state;
       return action.unresolved === null ? { ...state, store: STORE_READY } : createInitialState(action.unresolved);
+    case 'send_adopted':
+      // A send of this process began while this visit was still reading the record of the device: that record is the
+      // send's own, not an earlier run's. Only a visit that is still loading (nothing typed, nothing sendable) switches.
+      if (state.store.kind !== 'loading') return state;
+      return createSendingState(action.attempt, action.retrying);
     case 'store_unreadable':
       if (state.store.kind !== 'loading') return state;
       return { ...state, store: { kind: 'unreadable', reason: action.reason } };
