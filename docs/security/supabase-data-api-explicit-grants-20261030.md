@@ -14,6 +14,9 @@ needs the user's explicit approval.
 - **G5-14 update** (task `common-account-g5-postona-base-tables-rebuild-risk-readonly-evidence-20261021`, Issue #320 task 14): section 12 holds the
   evidence on the four POSTONA base tables (provenance, dependants, the shape each rebuild must reproduce, an owner decision table, apply order and
   conflicts, minimal follow-up TASKs) with two new read-only tools and an empty-database PG17 proof.
+- **G5-15 update** (task `common-account-g5-data-api-g4-impact-integration-owner-boundaries-20261021`, Issue #320 task 15): section 13 integrates
+  G4's impact list (Issue #320 comment 6317104735, G4 Draft PR #420) — G4's proven facts, measurements, hypotheses and owner proposals kept apart — with
+  G5's own read-only checks; the object set grows to `brand_settings`, `daily_content_plans` and `brand_id` on four operational tables.
 - Stacked on PR #413 (G5-11). New G5-owned files only: this document, `supabase/tests/common_account_data_api_grants_{scan.py,scan_test.py,audit.sql,pg_run.sh,pg_test.ts}`
   and `supabase/preflight/managed_disposable/g5_12_data_api_grants_doc_test.ts`.
 
@@ -105,7 +108,7 @@ default-privilege statement; **0** files with a GRANT inside a function / DO bod
 | --- | --- | --- | --- | --- |
 | G5 | #320 6303406473 | — | this document | **done** (no impact, section 3) |
 | G3 | #318 6303404723 | #318 6315180962 (+ the G5-13 difference, section 9) | not yet | **未回答 — due 2026-10-27** |
-| G4 | #319 6303405548 | #319 6315181585 (+ the G5-13 difference, section 9) | not yet; G4's TASK G4-17 (`postona-g4-data-api-20261030-social-account-schema-acl-impact-20261021`, ready) covers the four base tables | **未回答 — due 2026-10-27** |
+| G4 | #319 6303405548 | #319 6315181585 (+ the G5-13 difference, section 9) | **received** 2026-10-21 JST: #320 6317104735 (G4-17, Draft PR #420); integrated in section 13 | **received** (owner proposals pending G3) |
 | G6 | #321 6303407251 | #321 6315182189 (+ the G5-13 closure of C-2, section 9) | not yet | **未回答 — due 2026-10-27** |
 | Kabumori report / AI Lab / MIC owners | (not named in the directive) | — | — | C-1 / C-3 / C-6: no 10/30 action; the 担当ちゃ decides whether a list is needed |
 
@@ -251,3 +254,63 @@ known only for `social_accounts` (and only if `20261007150000` is applied). If t
 | `common_account_base_tables_refs.py` over main + its offline test | brands 180 / social_accounts 379 / oauth_states 36 / fingerprints 19 references; created only in test fixtures; offline test `REFS_TEST_PASS 9 checks` |
 | `common_account_base_tables_pg_run.sh` (empty database, PG17) | 3 tests passed, 0 failed (three consecutive runs); nothing left behind |
 | regression + harness + checks | Data API PG17 6 passed; scanner test 10 checks; pure 42 passed; the whole harness **250 passed** (244 of PR #417 + 6 new); `deno check` / `deno lint` / `bash -n` / `git diff --check` clean; `supabase/migrations` and `supabase/candidates` unchanged |
+
+## 13. G4's impact list, integrated (G5-15, 2026-10-22 JST)
+
+Source: G4's `IMPACT_LIST` (Issue #320 comment 6317104735, task `postona-g4-data-api-20261030-social-account-schema-acl-impact-20261021`, G4 Draft PR #420
+`docs/postona/data-api-20261030-g4-impact-20261021.md`, head `8bca839a8aae50169c72eb43393497e38740fd90`). G5 does not change G4's list; each row says what
+G4 states and what G5 re-checked. G3 and G6 lists: **未着** (due 2026-10-27); G4 sent G3 one ownership note (#318 6317113668).
+
+### 13.1 G4's statements, kept apart
+
+| # | G4 states (its label) | G5 re-check |
+| --- | --- | --- |
+| G4-F1 | the four base tables are created by no migration (proven) | **confirmed** (section 12.1) |
+| G4-F2 | on an empty database `20260918120000` stops with `PHASE4_PREFLIGHT_MISSING_TABLE:brands` (PG17) | **confirmed** [D] |
+| G4-F3 | `public.brand_settings` and `public.daily_content_plans` are created by no migration; `20261006160200:42` requires `brand_settings`; the Edge `brand_context.ts` reads it as service_role; `daily_content_plans` appears in comments of `20260928160000` | **confirmed**: no CREATE of either [D: file read]; `20261006160200` refuses without `brand_settings` (`STAGE3B_PUBLISH_PRECONDITION_MISSING`) [M]; `daily_content_plans` is only in comments (no code reads it) [M] |
+| G4-F4 | `scheduled_posts`, `post_execution_logs`, `posting_windows` (`20260828203000`) and `publish_claims` (`20260903120000`) are created without `brand_id`; no migration adds it; later files rely on it | **confirmed** [D]: rebuilt in main's order (tips, scheduler, claims), none of the four has `brand_id`; with stand-ins for `brands` / `social_accounts`, `20260918120000` stops with `PHASE4_PREFLIGHT_MISSING_COLUMN:scheduled_posts.brand_id`, nothing left behind; no migration contains `add column brand_id` |
+| G4-F5 | the Data API readers by role (app / user-token Edge as `authenticated`; brand-post / AI-lab Edge as `service_role`); `social_account_oauth_states` has no Data API reader | **consistent** with section 12.2 (G5 lists the same files) |
+| G4-F6 | G4's own new candidate tables follow R-2 / R-3 / R-6 / R-11 (no impact) | not re-checked by G5 (G4's candidates) |
+| G4-H1 | the production ACL / RLS of the four tables; no migration enables RLS on `brands` | hypothesis (= E-1 / E-2) |
+| G4-H2 | `20261007150000:280-293` lets `service_role` hold TRUNCATE / REFERENCES / MAINTAIN on `social_accounts`, against R-7 | **confirmed in the text** [M] (the precondition **allows**, it does not require them) — see D-1 |
+| G4-H3 | some main migrations call themselves candidates not applied in production | hypothesis; which are applied is [U] |
+| G4-P | owner proposals (13.3) and a minimal-grant table for a rebuild (13.2 D-2) | proposals, pending G3 |
+
+### 13.2 Dangerous ACL assumptions and ordering conflicts (G5's reading)
+
+| # | Point | Evidence | Consequence for the owner TASK |
+| --- | --- | --- | --- |
+| D-1 | `service_role` may hold TRUNCATE / REFERENCES / MAINTAIN on `social_accounts` under the `20261007150000` precondition | `20261007150000:285-288` [M] | a rebuild must not grant them (R-7); the precondition still passes without them |
+| D-2 | **G4's own minimal-grant proposal (column SELECT for `authenticated`, the Vault references and `oauth_client_ref` excluded) contradicts the `20261007150000` precondition**, which requires a table-level `authenticated` SELECT and **no column ACL** | `20261007150000:289-293` [M] (`POSTONA_ACCOUNTS_PRECONDITION_ACL`) | order matters: amend the 2a-2 contract (G4) **with** the rebuild, or the rebuilt table makes `20261007150000` refuse; decide whether 2a-2 is applied in production first [U] |
+| D-3 | members can read `vault_access_token_secret_id` / `vault_refresh_token_secret_id` through the whole-row SELECT the contract requires | section 12.3 | the reason D-2's column grant is worth the contract change (R-5) |
+| D-4 | the service-role REST readers must not become a reason for broad grants | G4-F5, section 12.2 | column-minimal SELECT per reader now; G4's own idea of SECURITY DEFINER readers later |
+| D-5 | `create table if not exists` in `20260828203000` / `20260903120000` is a no-op where the tables pre-existed (production per `20260918120000:4`, "Phase 3 inventory") but creates a **different shape** on a rebuild | G4-F4 [D] | the rebuild must either add `brand_id` (and whatever else production has) before `20260918120000`, or reproduce the base schema first; the production shape is [U] |
+| D-6 | the production migration history is unknown | G4-H3 | a rebuild plan needs it (out-of-order entries, section 12.5) |
+
+### 13.3 The extended object set and the owner proposals (candidates only)
+
+| Object | In migrations | Data API readers (product code) | Reset stops at | G4's proposal | G5 note | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| `social_accounts` | never created | authenticated (app, user-token Edge); service_role (brand / AI-lab Edge) | `20260919120000`, `20261007150000` | **G4** | consistent with 12.4 | candidate — G3 to agree |
+| `social_account_oauth_states` | never created | none | (needs `social_accounts` first) | **G4** | consistent | candidate — G3 to agree |
+| `published_content_fingerprints` | never created | service_role (AI-lab Edge) | `20261006160000` (earlier prerequisite) | **G3** | consistent | candidate — **G3 has not answered** |
+| `brands` | never created | authenticated + service_role | `20260918120000` | **G4 (tentative)**; follows G3 / G5 if they prefer | 12.4 said "shared"; G5 must be consulted on `id` / `code_profile_key` / FKs | **open** |
+| `brand_settings` | never created | service_role (`brand_context.ts`) | `20261006160200` | UNKNOWN (posting side, maybe G3) | — | **open** |
+| `daily_content_plans` | never created | none (comments only) | none observed | UNKNOWN | cascades from `brands` per the comments | **open** |
+| `brand_id` on `scheduled_posts` / `post_execution_logs` / `posting_windows` / `publish_claims` | tables created without it; never added | authenticated reads `scheduled_posts` (app) | `20260918120000` (`MISSING_COLUMN:scheduled_posts.brand_id`) | UNKNOWN (posting side, maybe G3) | — | **open** |
+
+### 13.4 Next-TASK proposals per source owner (proposals only; no owner TASK is changed)
+
+| Owner | Proposal | Review / approval |
+| --- | --- | --- |
+| G4 | (a) settle D-2: amend the `20261007150000` contract so a column-level `authenticated` SELECT (no Vault references) and no TRUNCATE / REFERENCES / MAINTAIN for `service_role` are accepted; (b) after G3 agrees, a rebuild candidate for `social_accounts` / `social_account_oauth_states` | Codex Sol (high); PG17 from an empty database **and** from a copy of the current shape |
+| G3 (after its 10/27 list) | ownership answers for `published_content_fingerprints`, `brand_settings`, `daily_content_plans`, the `brand_id` columns; a rebuild candidate for the agreed ones | Codex Sol (high); same two PG17 starting points |
+| G3 + G4 (+ G5 consulted) | one DDL owner for `brands` | 担当ちゃ |
+| user | a read-only production audit of these objects (ACL, RLS, columns, applied migrations) before any rebuild touches production | explicit approval |
+
+Separate gates, unchanged: everything in sections 10 / 12.6; production stays **NO_GO**.
+
+| Check (G5-15) | Result |
+| --- | --- |
+| `common_account_base_tables_pg_run.sh` (two empty databases, PG17) | **5 tests** passed, 0 failed (three consecutive runs; 3 of G5-14 + the `brand_id` proof + the `brand_settings` / `daily_content_plans` file read); nothing left behind |
+| regression + harness + checks | Data API PG17 6 passed; scanner test 10 checks; refs test 9 checks; pure 42 passed; the whole harness **255 passed** (250 of PR #421 + 5 new); `deno check` / `deno lint` / `bash -n` / `git diff --check` clean; `supabase/migrations` and `supabase/candidates` unchanged |

@@ -52,6 +52,46 @@ test_('the migrations never CREATE the four base tables (a file read of every mi
   assert.ok(files > 100, `${files} migration files read`);
 });
 
+// G5-15 (G4's impact list, Issue #320 comment 6317104735): the operational tables are created WITHOUT brand_id, and no migration adds it.
+test_('a rebuild creates scheduled_posts / post_execution_logs / posting_windows / publish_claims WITHOUT brand_id; 20260918120000 then refuses on it even with the base tables present', async () => {
+  const db2 = Deno.env.get('BT_DB2') ?? '';
+  const on2 = (args: string[]) => psql(['-d', db2, ...args]);
+  // in main's order: tips (a prerequisite of the scheduler), the scheduler, publish claims
+  for (const file of ['20260828190000_create_tips.sql', '20260828203000_create_post_scheduler.sql', '20260903120000_add_publish_claims.sql']) {
+    const r = await on2(['-f', `${dir}/${file}`]);
+    assert.ok(r.ok, `${file} applies on an empty database: ${r.error}`);
+  }
+  const cols = await on2(['-c', `select string_agg(table_name, ',' order by table_name) from information_schema.columns
+    where table_schema = 'public' and table_name in ('scheduled_posts', 'post_execution_logs', 'posting_windows', 'publish_claims') and column_name = 'brand_id'`]);
+  assert.equal(cols.out, '', 'none of the four has brand_id after a rebuild');
+  const tables = await on2(['-c', `select count(*) from pg_class where relnamespace = 'public'::regnamespace and relname in ('scheduled_posts', 'post_execution_logs', 'posting_windows', 'publish_claims')`]);
+  assert.equal(tables.out, '4');
+  // TEST-ONLY stand-ins for the two base tables, so the next refusal is about the missing column, not the missing table
+  const stub = await on2(['-c', 'create table public.brands (id text primary key); create table public.social_accounts (id text primary key, brand_id text not null references public.brands (id))']);
+  assert.ok(stub.ok, stub.error);
+  const before = await on2(['-c', `select count(*) from pg_class where relnamespace = 'public'::regnamespace`]);
+  const r = await on2(['-f', `${dir}/20260918120000_social_mobile_brand_memberships.sql`]);
+  const first = r.error.split('\n').find((l) => /ERROR/u.test(l)) ?? r.error;
+  assert.ok(!r.ok && /PHASE4_PREFLIGHT_MISSING_COLUMN:scheduled_posts\.brand_id/u.test(first), first);
+  console.log(`BT_BRAND_ID ${first.replace(/^psql:[^:]*:\d+: /u, '')}`);
+  assert.equal((await on2(['-c', `select count(*) from pg_class where relnamespace = 'public'::regnamespace`])).out, before.out, 'nothing left behind');
+  // and no migration adds the column (a file read)
+  const add = /\badd\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?brand_id\b/iu;
+  for (const e of Deno.readDirSync(dir)) {
+    if (e.name.endsWith('.sql')) assert.ok(!add.test(Deno.readTextFileSync(`${dir}/${e.name}`)), `${e.name} adds brand_id`);
+  }
+});
+
+test_('brand_settings and daily_content_plans are created by no migration either (G4); brand_settings is a hard prerequisite of 20261006160200', () => {
+  const create = /\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?(brand_settings|daily_content_plans)\s*\(/iu;
+  for (const e of Deno.readDirSync(dir)) {
+    if (!e.name.endsWith('.sql')) continue;
+    const text = Deno.readTextFileSync(`${dir}/${e.name}`).split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+    assert.ok(!create.test(text), `${e.name} creates brand_settings / daily_content_plans`);
+  }
+  assert.ok(Deno.readTextFileSync(`${dir}/20261006160200_x_account_publish_authority.sql`).includes("to_regclass('public.brand_settings') is null then"));
+});
+
 test_('no network', () => {
   assert.throws(() => globalThis.fetch('https://example.invalid/'), /no network request/u);
 });
