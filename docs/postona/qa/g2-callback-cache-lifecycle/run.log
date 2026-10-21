@@ -1,0 +1,19 @@
+✔ G2-CC1 (source map): remembered outcomes have no time limit (only 32 entries, oldest settled dropped first) and are read by exactly two callers -- the in-app browser round trip (always with its own flow id) and the deep-link handler (shows failures only) (2.466666ms)
+✔ G2-CC2 (real SDK, differential to the stub-client flow-binding test): a stale remembered success fed into a NEW flow (old code + new flow id) is refused without touching the new flow's verifier -- the real return of the new flow still signs in its own person (12.746833ms)
+✔ G2-CC3: the same person signed in again (a new session) -- re-delivering the old session's link returns the remembered success but changes nothing: no exchange, the new session stays (1.199083ms)
+✔ G2-CC4 (cache "expiry" = eviction): after 32 newer outcomes the old success is forgotten; a re-delivery then goes back to the SDK and is refused (verifier already used) -- an honest failure on the sign-in screen, never a success, current session untouched (0.930166ms)
+✔ G2-CC5: repeated sign-out / sign-in cycles (A, B, A, B) with every earlier link re-delivered after each cycle -- no re-delivery ever changes who is signed in or sends a second exchange (1.66875ms)
+✔ OBSERVATION G2-CC6 (fail-closed): a network failure during the exchange is remembered too -- the same link delivered again after the network is back returns the same failure without retrying; the SDK has already dropped that flow's verifier, so a retry could not succeed either (the person starts sign-in again) (0.672375ms)
+✔ G2-CC7 (service collision at the deep-link entry, real auth-client-flows + SDK): X connect returns (oauth-callback, with or without an injected sb_flow_id) and X-shaped auth returns (state+code, no flow id) are ignored -- nothing is exchanged and nothing is shown (32.509625ms)
+✔ G2-CX1: sign-out, then the X browser is cancelled -- no exchange is sent, nothing is connected (8.511042ms)
+✔ UNKNOWN G2-CX2 (owner G4, server side NOT_VERIFIED): sign-out and the SAME person signs in again while the X browser is open -- the exchange carries the OLD (signed-out) token; if the server refuses it the screen says "安全確認を完了できませんでした" (not connected), if it accepts the screen says connected for the same person (9.030625ms)
+✔ G2-CX3: whatever the server answers to an exchange sent after sign-out (401, 403, 400, 503, success:false, empty handle), the screen never says connected and the reload never runs (23.297333ms)
+✔ negative controls: (1) remembered outcomes shared across flows, (2) a failed exchange turned into a success, (3) the X hook ignoring a cancel -- each is caught by the matching check above (33.717209ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.699416
