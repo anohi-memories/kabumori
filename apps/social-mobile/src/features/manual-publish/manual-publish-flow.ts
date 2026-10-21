@@ -169,6 +169,32 @@ export async function loadPersistedAttempt(deps: FlowDeps, userId: string): Prom
   return read;
 }
 
+/** What a visit shows once its read of the device record is back. */
+export type LoadedView =
+  | Readonly<{ kind: 'send'; takeOver: InFlightTakeOver }>
+  | Readonly<{ kind: 'memory'; attempt: UnresolvedAttempt }>
+  | Readonly<{ kind: 'record'; read: StoreRead }>;
+
+/**
+ * A read of the device record is a SNAPSHOT of the moment it was taken. By the time it is delivered, this process may
+ * have started a send, or finished one that is still unresolved, or replaced the attempt the record described: the
+ * snapshot is then old, and applying it would hide the current state (an old "nothing" would open an empty editor
+ * beside an unresolved attempt; an old record would show an attempt that is no longer the current one). So what this
+ * process knows NOW wins, in this order:
+ *   1. a send that is not finished (the visit waits for it);
+ *   2. the attempt in the process memory (unresolved: shown as it is, with its text);
+ *   3. only if the process knows nothing, the snapshot itself.
+ * The memory is the newer truth because every change of an attempt is written to it first (and an acknowledged or proven
+ * end clears it), while the snapshot can only be as new as the moment it was read.
+ */
+export function reconcileLoadedRead(deps: FlowDeps, userId: string, read: StoreRead): LoadedView {
+  const send = deps.inflight?.takeOver(userId) ?? null;
+  if (send !== null) return { kind: 'send', takeOver: send };
+  const known = deps.memory.get(userId);
+  if (known !== null) return { kind: 'memory', attempt: known };
+  return { kind: 'record', read };
+}
+
 /**
  * The user's explicit "I checked X": forget the unresolved attempt. Only when the durable record is really gone is
  * the process memory cleared too; a record that cannot be removed keeps blocking (fail closed) and `false` is returned.
@@ -218,13 +244,21 @@ export async function runSend(
   // The send is registered BEFORE the first await: from here until the end of this call the user has exactly this one
   // send, so a screen that opens while the record is still being written, or while the answer is still being recorded,
   // waits for it instead of reading half-written state -- and a second start for this user is refused, never run alongside.
+  const notStarted = (code: string): ManualPublishOutcome => (retry ? { kind: 'unavailable', targetId: requestId, code } : refuse(code));
   let handle: InFlightHandle | null = null;
   if (deps.inflight !== undefined) {
     handle = deps.inflight.begin(userId, { ...entry, text }, retry);
-    if (handle === null) {
-      // Nothing was changed: the earlier send keeps its memory, its record and its waiters. A retry stays unresolved.
-      return retry ? { kind: 'unavailable', targetId: requestId, code: 'LOCAL_SEND_IN_PROGRESS' } : refuse('LOCAL_SEND_IN_PROGRESS');
-    }
+    // Nothing was changed: the earlier send keeps its memory, its record and its waiters. A retry stays unresolved.
+    if (handle === null) return notStarted('LOCAL_SEND_IN_PROGRESS');
+  }
+  // Whatever a screen believes (it may be showing an old snapshot), this process may already know an unresolved attempt of
+  // this user. Only a re-ask of THAT attempt (same id) may start; anything else is refused before the port, the record and
+  // the memory are touched. (Still the same synchronous step as the registration above: nobody saw the entry in between.)
+  const unresolved = deps.memory.get(userId);
+  if (unresolved !== null && (!retry || unresolved.requestId !== requestId)) {
+    const refusal = notStarted('LOCAL_UNRESOLVED_ATTEMPT');
+    if (handle !== null) deps.inflight?.end(handle, refusal);
+    return refusal;
   }
   let outcome: ManualPublishOutcome;
   try {

@@ -117,12 +117,12 @@ async function loadRoute(world) {
   return { mod, slots, getCursor: () => cursor, setCursor: (v) => { cursor = v; }, pendingEffects };
 }
 
-async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', inflight = realFlow.createInFlightSends(), clock = { t: 100_000 }, os = 'ios' } = {}) {
+async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', inflight = realFlow.createInFlightSends(), clock = { t: 100_000 }, os = 'ios', idBase = 0 } = {}) {
   const store = realStore.createAttemptStore(kv);
   const draftStore = realDraft.createDraftStore(draftKv);
   const world = { status, userId, accounts, active, port: port.port, memory, store, draftStore, inflight, os };
   const rt = await loadRoute(world);
-  let ids = 0;
+  let ids = idBase;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
   const nowFn = () => clock.t;
   const idFn = () => ID(++ids);
@@ -2216,4 +2216,194 @@ test('P2-1: a record read late by an older screen while a RE-ASK is out is taken
   fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '31', marks: REAL });
   await slow.flush();
   assert.equal(slow.state().result.kind, 'sent');
+});
+
+// ---- H1 C1 9th review, residual P2: a STALE read of the device record that comes back after the send has ended -------------------------------------------
+
+/** A device storage whose read can be made to RETURN late: the value is read at once, but handed back only when the test lets it. */
+function lateReadKV() {
+  const kv = fakeKV();
+  const realGet = kv.getItem;
+  const ctl = { kv, holdNextReturn: false, held: [], failWhenReleased: false };
+  kv.getItem = async (key) => {
+    const value = await realGet(key);
+    if (ctl.holdNextReturn) {
+      ctl.holdNextReturn = false;
+      await new Promise((resolve) => { ctl.held.push(resolve); });
+      if (ctl.failWhenReleased) throw new Error('read failed late');
+    }
+    return value;
+  };
+  ctl.release = () => { for (const resolve of ctl.held.splice(0)) resolve(); };
+  return ctl;
+}
+
+const SAME_TEXT = '同じ本文の二度目';
+
+/** A reads and is ready; B is opened and its read of the (empty) record is held back; A sends and the send ENDS unresolved. */
+async function staleNoneAfterEndedSend(answer) {
+  const late = lateReadKV();
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const draftKv = fakeKV();
+  const a = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv, sessionMark: 'T1' });
+  late.holdNextReturn = true;
+  const b = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv, sessionMark: 'T1', idBase: 100 });
+  assert.equal(b.state().store.kind, 'loading', 'B is still waiting for its (empty) snapshot of the record');
+  await a.typeText(SAME_TEXT);
+  await a.press('内容を確認する');
+  await a.tick();
+  await a.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1);
+  fp.pending[0].resolve({ targetId: ID(1), ...answer });
+  await a.flush();
+  return { late, memory, inflight, fp, draftKv, a, b };
+}
+
+/** What a person would do on a screen that offers an empty editor: type the same text, confirm, consent, send. */
+async function tryToSendAgain(ui) {
+  if (ui.state().phase !== 'editing') return;
+  await ui.typeText(SAME_TEXT);
+  if (!(await ui.press('内容を確認する'))) return;
+  await ui.tick();
+  if (ui.button('Xに投稿する') !== null) await ui.press('Xに投稿する');
+}
+
+const UNRESOLVED_ANSWERS = [
+  ['uncertain / OFFLINE', { kind: 'uncertain', code: 'OFFLINE', marks: REAL }, 'uncertain'],
+  ['pending', { kind: 'pending', code: 'IN_PROGRESS', marks: REAL }, 'pending'],
+  ['unavailable', { kind: 'unavailable', code: 'TRANSPORT_FAILED' }, 'unconfirmed'],
+  ['simulated (marks missing)', { kind: 'published', providerPostId: '1234567890' }, 'uncertain'],
+];
+
+test('STALE-NONE: an old "nothing on the device" that returns AFTER the send ended unresolved never lets the same user send again with another id', async () => {
+  for (const [label, answer, resultKind] of UNRESOLVED_ANSWERS) {
+    const { late, memory, fp, b } = await staleNoneAfterEndedSend(answer);
+    assert.ok(memory.get('U1') !== null, `${label}: the attempt is unresolved in the memory`);
+    late.release();
+    await b.flush();
+    await tryToSendAgain(b);
+    assert.equal(fp.calls.send.length, 1, `${label}: ONE request in total -- the second screen cannot send another one`);
+    assert.deepEqual(new Set(fp.calls.send.map((target) => target.targetId)), new Set([ID(1)]), label);
+    assert.equal(b.state().phase, 'result', `${label}: it shows the unresolved attempt, not an empty editor`);
+    assert.equal(b.state().result.kind, resultKind, label);
+    assert.equal(b.state().unresolved.requestId, ID(1), label);
+    assert.equal(b.button('内容を確認する'), null, `${label}: nothing new can be confirmed`);
+    assertNoSentClaim(b);
+  }
+});
+
+test('STALE-NONE: the common memory is not touched by the late "nothing", and the record on the device keeps the first attempt', async () => {
+  const { late, memory, b } = await staleNoneAfterEndedSend({ kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  late.release();
+  await b.flush();
+  await tryToSendAgain(b);
+  assert.equal(memory.get('U1').requestId, ID(1));
+  assert.equal(memory.get('U1').kind, 'uncertain');
+  assert.equal(JSON.parse(late.kv.data.get(realStore.storeKeyOf('U1'))).requestId, ID(1));
+});
+
+test('STALE-LOADED: an old record returned late is shown only as far as the NEWER memory of this process allows -- the memory wins', async () => {
+  const late = lateReadKV();
+  late.kv.data.set(realStore.storeKeyOf('U1'), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(9), contentSha256: sha('older') })));
+  late.holdNextReturn = true;
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const b = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  assert.equal(b.state().store.kind, 'loading');
+  // meanwhile another screen of this process finished a NEWER attempt that is unresolved (the old record was acknowledged and replaced)
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(2), contentSha256: sha('newer'), text: 'newer', kind: 'uncertain' });
+  late.kv.data.set(realStore.storeKeyOf('U1'), JSON.stringify(RESTORED({ kind: 'uncertain', requestId: ID(2), contentSha256: sha('newer') })));
+  late.release();
+  await b.flush();
+  assert.equal(b.state().unresolved.requestId, ID(2), 'the newer attempt, not the old record');
+  assert.equal(b.state().result.kind, 'uncertain');
+  assert.equal(memory.get('U1').requestId, ID(2), 'the memory was not replaced by the old record');
+  assert.equal(fp.calls.send.length, 0);
+});
+
+test('STALE-NONE: a late "nothing" after a PROVEN end is not over-blocked -- the user may write and send a new attempt', async () => {
+  const { late, memory, fp, b } = await staleNoneAfterEndedSend({ kind: 'published', providerPostId: '5550001', marks: REAL });
+  assert.equal(memory.get('U1'), null, 'a proven end leaves nothing unresolved');
+  late.release();
+  await b.flush();
+  assert.equal(b.state().phase, 'editing');
+  await tryToSendAgain(b);
+  assert.equal(fp.calls.send.length, 2, 'the new attempt goes out');
+  assert.equal(fp.calls.send[1].targetId, ID(101), 'with its own id');
+});
+
+test('STALE-NONE: after a "pending" end the other screen shows it and only a SAME-id re-ask is possible', async () => {
+  const { late, fp, b } = await staleNoneAfterEndedSend({ kind: 'pending', code: 'IN_PROGRESS', marks: REAL });
+  late.release();
+  await b.flush();
+  assert.equal(b.state().result.kind, 'pending');
+  assert.equal(b.state().consent, null, 'no consent is carried to the other screen');
+  assert.equal(b.state().result.requestId, ID(1));
+  assert.equal(b.state().draft, SAME_TEXT, 'it shows the text of the attempt (memory of this process)');
+  assert.ok(!late.kv.data.get(realStore.storeKeyOf('U1')).includes(SAME_TEXT), 'the record on the device stays hash-only');
+  await b.press('同じ内容・同じ送信IDで確認し直す');
+  await b.tick();
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 2, 'the re-ask');
+  assert.equal(fp.calls.send[1].targetId, ID(1), 'with the SAME id');
+});
+
+test('STALE-NONE: several screens re-created after the late "nothing" all see the one unresolved attempt', async () => {
+  const { late, memory, inflight, fp, draftKv, b } = await staleNoneAfterEndedSend({ kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  late.release();
+  await b.flush();
+  b.unmount();
+  const c = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv, sessionMark: 'T2', idBase: 200 });
+  assert.equal(c.state().result.kind, 'uncertain');
+  assert.equal(c.state().unresolved.requestId, ID(1));
+  await tryToSendAgain(c);
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('STALE-NONE: another user\'s screen is not touched by this user\'s unresolved attempt', async () => {
+  const late = lateReadKV();
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const draftKv = fakeKV();
+  const a = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv, sessionMark: 'T1' });
+  late.holdNextReturn = true;
+  const other = await mount({ ...TWO, userId: 'U2', port: fp, memory, inflight, kv: late.kv, draftKv, sessionMark: 'T1', idBase: 300 });
+  await a.typeText(SAME_TEXT);
+  await a.press('内容を確認する');
+  await a.tick();
+  await a.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  await a.flush();
+  late.release();
+  await other.flush();
+  assert.equal(other.state().phase, 'editing', 'U2 has nothing unresolved');
+  assert.equal(other.state().unresolved, null);
+  await tryToSendAgain(other);
+  assert.equal(fp.calls.send.length, 2);
+  assert.equal(fp.calls.send[1].targetId, ID(301), 'U2\'s own attempt');
+});
+
+test('STALE-NONE: a late failure of the read does not hide the unresolved attempt either', async () => {
+  const { late, b } = await staleNoneAfterEndedSend({ kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  late.failWhenReleased = true;
+  late.release();
+  await b.flush();
+  assert.equal(b.state().result.kind, 'uncertain', 'the memory wins over a snapshot that could not even be read');
+  assert.equal(b.state().store.kind, 'ready');
+});
+
+test('STALE-NONE: a screen that is opened while this process already knows an unresolved attempt shows it AT ONCE, without waiting for the device', async () => {
+  const late = lateReadKV();
+  late.holdNextReturn = true; // the device never answers during this test
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(4), contentSha256: sha('known'), text: 'known', kind: 'pending' });
+  const ui = await mount({ ...TWO, memory, inflight: realFlow.createInFlightSends(), kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  assert.equal(ui.state().store.kind, 'ready', 'no waiting for a snapshot of something the process already knows');
+  assert.equal(ui.state().result.kind, 'pending');
+  assert.equal(ui.state().unresolved.requestId, ID(4));
+  assert.equal(ui.all('TextInput')[0]?.props.editable ?? false, false);
 });
