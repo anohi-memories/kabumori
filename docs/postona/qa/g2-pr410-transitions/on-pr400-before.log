@@ -1,0 +1,15 @@
+# G2 #410 transitions test on #400 HEAD 39b9818b40fc7d10a8b9e70cd68fd02692874585 (BEFORE #410)
+✖ G2-410-1: a SIGNED_OUT gap while the request is out -- the signed-out screen shows nothing; the same person signing back in (new mark) gets "sending" (no verdict, no re-ask), then the real answer
+✔ G2-410-2: another person signs in while A's request is out and A's answer arrives meanwhile -- B never sees it; when A signs in again, A sees only what the answer left (posted -> a clean editor; uncertain -> uncertain, no re-ask)
+✖ FINDING G2-410-3 (P3, owner G1): a take-over of a same-id RE-ASK drops the "same content, same id" line the starting screen showed -- the take-over state is created with retrying:false
+✖ G2-410-4: after a taken-over send ends as posted, the next post gets a NEW request id
+✖ G2-410-5: a forced press of the send button on the take-over screen sends nothing (the gate says "sending")
+✖ negative controls: without the take-over branch, without registering the send, or with a take-over that never applies the answer, the SIGNED_OUT-gap scenario shows the regression
+ℹ tests 6
+ℹ pass 1
+ℹ fail 5
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  AssertionError [ERR_ASSERTION]: taken over
+  AssertionError [ERR_ASSERTION]: button "新しい投稿を作る" exists
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  AssertionError [ERR_ASSERTION]: exactly one take-over branch
