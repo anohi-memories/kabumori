@@ -11,6 +11,9 @@ needs the user's explicit approval.
 - **G5-13 update** (task `common-account-g5-data-api-cross-slot-inventory-integration-20261021`, Issue #320 task 13): section 4 now separates confirmed
   facts from estimates, sections 9-11 hold the integration log, the owners' next-TASK proposals and a dated risk report draft; the scanner gained the
   "created by no migration" list and no longer mistakes `grant option` text for a GRANT.
+- **G5-14 update** (task `common-account-g5-postona-base-tables-rebuild-risk-readonly-evidence-20261021`, Issue #320 task 14): section 12 holds the
+  evidence on the four POSTONA base tables (provenance, dependants, the shape each rebuild must reproduce, an owner decision table, apply order and
+  conflicts, minimal follow-up TASKs) with two new read-only tools and an empty-database PG17 proof.
 - Stacked on PR #413 (G5-11). New G5-owned files only: this document, `supabase/tests/common_account_data_api_grants_{scan.py,scan_test.py,audit.sql,pg_run.sh,pg_test.ts}`
   and `supabase/preflight/managed_disposable/g5_12_data_api_grants_doc_test.ts`.
 
@@ -102,7 +105,7 @@ default-privilege statement; **0** files with a GRANT inside a function / DO bod
 | --- | --- | --- | --- | --- |
 | G5 | #320 6303406473 | — | this document | **done** (no impact, section 3) |
 | G3 | #318 6303404723 | #318 6315180962 (+ the G5-13 difference, section 9) | not yet | **未回答 — due 2026-10-27** |
-| G4 | #319 6303405548 | #319 6315181585 (+ the G5-13 difference, section 9) | not yet | **未回答 — due 2026-10-27** |
+| G4 | #319 6303405548 | #319 6315181585 (+ the G5-13 difference, section 9) | not yet; G4's TASK G4-17 (`postona-g4-data-api-20261030-social-account-schema-acl-impact-20261021`, ready) covers the four base tables | **未回答 — due 2026-10-27** |
 | G6 | #321 6303407251 | #321 6315182189 (+ the G5-13 closure of C-2, section 9) | not yet | **未回答 — due 2026-10-27** |
 | Kabumori report / AI Lab / MIC owners | (not named in the directive) | — | — | C-1 / C-3 / C-6: no 10/30 action; the 担当ちゃ decides whether a list is needed |
 
@@ -165,3 +168,86 @@ All commands ran in `/Users/yuya/Developer/kabumori-g5-12` (a clean worktree sta
 > candidate, PG17 proof and Sol review before 10/30. What 10/30 itself breaks: only **new** public tables / sequences created without explicit grants
 > (they answer 42501 — fail closed, an availability issue, not a leak). Asks: (1) G3 / G4 / G6 lists by 10/27; (2) G3 / G4 agree the owner of the
 > base tables; (3) the user decides whether to allow a read-only production ACL audit; (4) no new public table ships before 10/30 without R-2.
+
+## 12. The four POSTONA base tables — evidence for the owners' decision (G5-14, 2026-10-21 JST)
+
+Scope: `public.brands`, `public.social_accounts`, `public.social_account_oauth_states`, `public.published_content_fingerprints`. Evidence only; no
+owner is decided here, no DDL / grant is written, and nothing below is a statement about production unless labelled.
+
+### 12.1 Provenance (confirmed)
+
+| Fact | Evidence |
+| --- | --- |
+| No migration on main creates any of the four tables | [D] a file read of every migration (`common_account_base_tables_pg_test.ts`); the reference extractor finds CREATEs only in test fixtures |
+| Main's migrations depend on them: on an EMPTY database each refuses and leaves nothing | [D] PG17: `20260918120000` -> `PHASE4_PREFLIGHT_MISSING_TABLE:brands`; `20260919120000` and `20261007150000` -> `relation "public.social_accounts" does not exist`; `20260928160000` -> `SOCIAL_MOBILE_DELETION_PREREQUISITE_MISSING` and `20261006160000` -> `STAGE3B_PRECONDITION_MISSING` (both stop on an EARLIER prerequisite, recorded as such) |
+| They predate the migrations | [M] `20260918120000`'s header: it "targets the production schema confirmed in the Phase 3 inventory"; it keeps "existing admin policies intact" (a comment, not a catalog fact) |
+| G5's own chain depends on them | [M] `20261001150000` requires `brands.id` / `brands.code_profile_key` (text), `social_accounts.brand_id` / `connection_status`, `social_account_oauth_states.brand_id` (text) / `initiated_by_user_id` (uuid), and the FKs `social_accounts.brand_id -> brands` (no action), `social_account_oauth_states.brand_id -> brands` (no action), `social_account_oauth_states.initiated_by_user_id -> auth.users` (cascade) |
+| The test fixtures disagree on the shapes | [M] `brands`: from `(id)` only to 7 columns; `social_account_oauth_states`: one fixture lacks `initiated_by_user_id`; `published_content_fingerprints`: one fixture adds `x_post_id` |
+
+### 12.2 Who reads and writes them (confirmed, `common_account_base_tables_refs.py` over main)
+
+| Table | Migrations (files) | Data API as `authenticated` (product code) | Data API as `service_role` (product code) | Structural hooks in migrations |
+| --- | --- | --- | --- | --- |
+| `brands` | 11 | app `supabase-repository.ts` (`id, display_name, is_active, publish_mode`); Edge `social-mobile-history-learning/live_dependencies.ts` (`id`, with the caller's token) | Edge `_shared/brand/brand_context.ts` (REST, service key) | member SELECT policy + authenticated SELECT + anon SELECT revoked (`20260918120000`); `social_mobile_deletion_guard` trigger (`20260928160000`); FKs from `brand_memberships`, `social_accounts`, `social_account_oauth_states`, content settings |
+| `social_accounts` | 16 | app `supabase-repository.ts`, `onboarding-repository.ts` (`id, brand_id, platform, handle, connection_status, last_connection_error_code`); Edge `live_dependencies.ts` (caller's token) | Edge `brand_context.ts`, `ai_lab_vault_token_source.ts` (REST, service key) | the full contract of `20261007150000` (12.3); member SELECT policy; two triggers; columns / constraints / indexes added by `20260924023133`, `20261007150000` |
+| `social_account_oauth_states` | 4 | none | none (SQL functions only) | FK / alter in `20260919120000`; deletion guard trigger; read / write by the OAuth RPCs |
+| `published_content_fingerprints` | 2 | none | Edge `_shared/brand/ai_lab_brand_post_store.ts` (REST, service key) | deletion guard trigger; written by `20261006160000` (scheduled posting) |
+
+Consequence for a rebuild (R-5 / R-6): `authenticated` needs SELECT on `brands` / `social_accounts` (with the member policies), and `service_role`
+needs SELECT on `brands`, `social_accounts`, `published_content_fingerprints` for the three Edge readers above — each explicit and minimal. Test files
+that mock `/rest/v1/...` and one false positive (the English word in `company_alias_test.ts`) are not product paths.
+
+### 12.3 The shape a rebuild must reproduce
+
+| Table | Known exactly | Known in part | Unknown [U] |
+| --- | --- | --- | --- |
+| `social_accounts` | **the `20261007150000` precondition is a complete contract**: 14 columns (`brand_id`, `connection_status`, `created_at`, `handle`, `id`, `last_connection_error_code`, `oauth_client_ref`, `platform`, `platform_user_id`, `publish_enabled`, `updated_at`, `vault_access_token_secret_id`, `vault_refresh_token_secret_id`, `verified_at` with types, defaults and nullability), 6 constraints, 3 indexes, RLS on and not forced, exactly the member SELECT policy, two triggers, table ACL = owner + `authenticated` SELECT + `service_role` at most DML / TRUNCATE / REFERENCES / MAINTAIN, nothing for PUBLIC / anon, no column ACL | — | whether `20261007150000` is applied in production (if it is, its preconditions held there) |
+| `brands` | — | `id` text (PK; FKs point to it), `code_profile_key` text; the app reads `display_name`, `is_active`, `publish_mode`; member SELECT policy; authenticated SELECT; anon SELECT revoked; deletion guard trigger | the full column list, constraints, RLS flag (no migration enables it), the "admin policies", the full ACL |
+| `social_account_oauth_states` | — | `brand_id` text (FK -> brands, no action), `initiated_by_user_id` uuid (FK -> auth.users, cascade); the fixture's other columns; deletion guard trigger | RLS, ACL, constraints, indexes |
+| `published_content_fingerprints` | — | the fixtures' columns (`id`, `brand_id`, `social_account_id`, `post_type`, `normalized_text_sha256`, `published_at`, maybe `x_post_id`); deletion guard trigger | RLS, ACL, indexes, key type |
+
+Review point for whoever owns `social_accounts` (R-5): the contract grants `authenticated` SELECT on the whole row, so a member can read
+`vault_*_secret_id` (Vault references, not secrets); the app does not read those columns, so a column-level grant is possible.
+
+### 12.4 Owner decision table (evidence only; G3 / G4 decide; G5 is a dependant)
+
+| Table | Functional boundary (from the code) | Evidence points to | Open questions |
+| --- | --- | --- | --- |
+| `social_accounts` | OAuth connection, credentials (Vault ids), multi-provider contract; read by publishing and by G5 | **G4** (connection / credential; `20261007150000`'s contract; G4-17 already scopes it) | does G3 need write paths beyond publish flags? |
+| `social_account_oauth_states` | the OAuth state of a connection | **G4** | — |
+| `published_content_fingerprints` | publishing dedupe (written by scheduled posting) | **G3** (publishing) | the exact shape (`x_post_id`?) |
+| `brands` | the workspace root: rows created by the X OAuth begin flow (`20260919120000`), publish mode / settings read by publishing (`20261003090000`, `20261006160100`), the workspace kind / owner read by G5 (`20261001150000`, the owner epoch) | **shared**: one DDL owner is needed; G4 (creates the rows) or G3 (publish settings) | who owns the DDL; G5 must be consulted on any change to `id` / `code_profile_key` / FKs (common-account invariants) |
+
+### 12.5 Apply order and conflicts (for the owner TASK)
+
+- A fresh reset needs the four tables **before** `20260918120000` (their first dependant), i.e. a migration with an earlier timestamp than files
+  production has already applied — an out-of-order entry in the migration history. That needs a decision with the user (a repair of the history, or a
+  bootstrap file for local / preview only that production never runs). [U] how the managed history would react.
+- On production the tables exist: the file must be a strict no-op there (a `20261007150000`-style precondition that stops on any unknown shape), never
+  a silent normalization of grants or policies.
+- Order inside the file: `brands` first; then the tables that reference it; FKs, indexes, RLS + policies, `revoke all` then minimal grants (R-2 / R-3),
+  no anon, no TRUNCATE / TRIGGER / REFERENCES to API roles; the deletion guard triggers come later (`20260928160000`) and must not be duplicated.
+- Proof: from an empty database, every main migration then applies, `20261007150000`'s precondition passes on the rebuilt `social_accounts`, and the
+  G5 runners no longer need fixtures for these four tables.
+
+### 12.6 Minimal follow-up TASKs (proposals; no owner TASK is changed)
+
+| # | Owner | Scope | Gate |
+| --- | --- | --- | --- |
+| 1 | G4 (G4-17, in progress) | owner proposal for `social_accounts` / `social_account_oauth_states` in its 10/27 list; `20261007150000` as the `social_accounts` spec | 担当ちゃ |
+| 2 | G3 | owner proposal and shape for `published_content_fingerprints` in its 10/27 list | 担当ちゃ |
+| 3 | G3 + G4 | agree the DDL owner of `brands` (G5 consulted) | 担当ちゃ |
+| 4 | the agreed owner | an isolated base-tables migration candidate + PG17 from an empty database + the `20261007150000` precondition + a migration-history plan | Codex Sol (high); the user's approval for the history decision and for production |
+| 5 | user | whether to allow a read-only production audit of the four tables (ACL / RLS / columns) | explicit approval |
+
+### 12.7 The link to 2026-10-30 (stated honestly)
+
+The 10/30 change does not touch these existing tables. The risk is pre-existing: a reset / preview cannot rebuild them, and their production ACL / RLS is
+known only for `social_accounts` (and only if `20261007150000` is applied). If the rebuild migration is written after 10/30, its grants must be explicit
+(R-2) or the app's and `social-mobile-history-learning`'s Data API reads of `brands` / `social_accounts` would answer 42501 on a rebuilt database.
+
+| Check (G5-14) | Result |
+| --- | --- |
+| `common_account_base_tables_refs.py` over main + its offline test | brands 180 / social_accounts 379 / oauth_states 36 / fingerprints 19 references; created only in test fixtures; offline test `REFS_TEST_PASS 9 checks` |
+| `common_account_base_tables_pg_run.sh` (empty database, PG17) | 3 tests passed, 0 failed (three consecutive runs); nothing left behind |
+| regression + harness + checks | Data API PG17 6 passed; scanner test 10 checks; pure 42 passed; the whole harness **250 passed** (244 of PR #417 + 6 new); `deno check` / `deno lint` / `bash -n` / `git diff --check` clean; `supabase/migrations` and `supabase/candidates` unchanged |
