@@ -1,0 +1,24 @@
+# node --test tests/g2-pr410-transitions.test.mjs  (G1 PR #410 HEAD 99adbca172bc0c485939bfadf44cda23a441ce72 + this G2 test; node v24.19.0)
+✔ G2-410-1: a SIGNED_OUT gap while the request is out -- the signed-out screen shows nothing; the same person signing back in (new mark) gets "sending" (no verdict, no re-ask), then the real answer (58.170583ms)
+✔ G2-410-2: another person signs in while A's request is out and A's answer arrives meanwhile -- B never sees it; when A signs in again, A sees only what the answer left (posted -> a clean editor; uncertain -> uncertain, no re-ask) (42.129833ms)
+✔ FINDING G2-410-3 (P3, owner G1): a take-over of a same-id RE-ASK drops the "same content, same id" line the starting screen showed -- the take-over state is created with retrying:false (17.521333ms)
+✔ G2-410-4: after a taken-over send ends as posted, the next post gets a NEW request id (15.281333ms)
+✔ G2-410-5: a forced press of the send button on the take-over screen sends nothing (the gate says "sending") (14.449625ms)
+✔ negative controls: without the take-over branch, without registering the send, or with a take-over that never applies the answer, the SIGNED_OUT-gap scenario shows the regression (72.6325ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 423.322333
+
+# whole app suite on the same tree
+ℹ tests 527
+ℹ suites 0
+ℹ pass 526
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
