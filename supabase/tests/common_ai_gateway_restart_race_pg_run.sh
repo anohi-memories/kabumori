@@ -94,6 +94,7 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u ANTHRO
   deno test --cached-only --frozen --config "$CONFIG" \
     --deny-net --deny-write --allow-run=psql,deno \
     --allow-env=GRR_PGHOST,GRR_PGPORT,GRR_PGSUPER,GRR_DB,GRR_DENO_CONFIG,GRR_OWNER_HELD_SOURCE \
+    --allow-read="$HERE/../migrations/20261020154536_ai_calls_owner_held_rc_guard.sql" \
     "$HERE/$TEST" >"$WORK/test.log" 2>&1 \
   || { cat "$WORK/test.log" >&2; fail "gateway restart / concurrent recovery ($TEST)"; }
 if grep -q "[1-9][0-9]* ignored" "$WORK/test.log"; then cat "$WORK/test.log" >&2; fail "tests were ignored (environment not passed)"; fi

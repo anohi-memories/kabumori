@@ -5,6 +5,7 @@
 - 承認: G6 の継続チャットで、ユーザーが G6-13 の共有 SQL / RPC の修正を Draft PR まで明示承認（2026-10-21 登録）。
 - 元: G6-12 の案 A（H3 #330 の第 4 回のレビューで、別 TASK として先に進めるよう推奨）。案 B（`fence_seq` の列とトリガー）は採らない。
 - **実装のレビュー（Codex Sol（高））は未実施**。この文書と PR は、実装の完成や本番の安全を意味しない。
+- **G6-14 で更新**（H4 #331 の CHANGES_REQUIRED_P2）: `ai_calls` / `ai_ledger` の権限のずれを、前と後の両方で拒むようにした（§10）。
 
 ## 1. 変えるもの・変えないもの
 
@@ -167,3 +168,64 @@ migration の試験 6 件の中身:
 - `supabase/tests/common_ai_gateway_owner_held_fixture.ts`（migration と巻き戻しのパス、`psqlFile`、`read uncommitted`）
 - `supabase/tests/common_ai_gateway_restart_race_pg_run.sh`（新しいファイルと、2 つ目の引数 source）
 - `docs/ai-provider/G6_OWNER_HELD_RC_GUARD_SQL.md`（この文書）
+
+## 10. G6-14: 権限のずれ（ACL drift）を拒む（H4 #331 の P2）
+
+### 指摘
+
+- H4 の再現: 祖先の migration の後で、次の権限を付けてから G6-13 の migration を流すと、成功してしまい、権限は残った（true / true / true）。
+  - `service_role` に `ai_calls.consumer_calls` の SELECT / INSERT / UPDATE / DELETE
+  - `ai_calls.input_text` の EXECUTE
+- G6-13 の後の確認は、3 つの RPC の ACL とロールの到達だけを見ていた。スキーマ・表・helper の直接の権限は見ていなかった。
+- 「RPC からしか行に届かない」という境界が、すり抜けられる状態を見逃していた。
+
+### 直し（`20261020154536_ai_calls_owner_held_rc_guard.sql` だけ。関数の本体と指紋は変えていない）
+
+- **一時的な確認の関数** `pg_temp.ai_calls_owner_held_acl_check(stage)` を、`begin` の直後に作る。
+  - 前の確認の後に `PRESTATE` として、後の確認の後に `POST` として呼び、`commit` の前に消す。
+  - `pg_temp` なので、セッションの外には残らない。`ai_calls` に helper を足していない（試験で、適用の後に残っていないことを確認）。
+- 対象: `ai_calls` と `ai_ledger` の両方（復旧の判断は ledger に頼るので、同じ境界）。
+- 拒むもの（どれかがあれば P0001 `AI_CALLS_OWNER_HELD_<stage>: ACL drift: ...`、全体が巻き戻る）:
+  1. スキーマや、その中の表・関数の所有者が、アプリのロール（anon / authenticated / service_role）であるか、混在している。
+  2. 所有者以外への直接の付与。対象は、スキーマ・表・列・helper（PUBLIC と grant option を含む）。
+  3. SECURITY DEFINER の helper、そのスキーマの既定の権限（`pg_default_acl`）。
+  4. anon / authenticated / service_role の**実効**の権限（継承・PUBLIC を含む）。対象は、スキーマの USAGE / CREATE、表のすべての権限（PG17 は MAINTAIN も）、列、sequence、helper の EXECUTE。
+  5. それらのロールが、継承か SET ROLE で、所有者か superuser に届く。anon / authenticated が service_role に届く。
+- **修復はしない**（GRANT / REVOKE で「直す」ことはしない）。想定どおりの状態のときだけ適用できる。
+- 所有者や superuser 自身の操作までは防げない。また、適用の後で権限が変わるのを、恒久的に防ぐものでもない（適用の時点の確認）。
+
+### 試験（隔離 PG17、実際の migration を `psql -f`。`..._rc_guard_migration_pg_test.ts` は 8 PASS）
+
+- **ずれ 13 通り**: それぞれ新しい DB で付けてから適用すると、PRESTATE で P0001 になる。関数・行・トリガー・すべての ACL・既定の権限・ロールの付与が 1 つも変わらず、付けた権限も残る（修復しない）。
+  - H4 そのもの
+  - PUBLIC の表の SELECT
+  - anon のスキーマの USAGE だけ（表の付与なし）
+  - authenticated の列の SELECT
+  - PUBLIC の helper の EXECUTE
+  - grant option 付きの helper
+  - 継承するロール（ledger を読めるロールを authenticated に付ける）
+  - `ai_calls` の既定の権限
+  - service_role の ledger の UPDATE
+  - service_role が所有する ledger の表
+  - SECURITY DEFINER の helper
+  - service_role が所有者に届く
+  - authenticated が SET ROLE だけで service_role に届く（`WITH INHERIT FALSE`）
+- **実際の migration の文から作った probe**:
+  - PRESTATE の呼び出しを外すと、POST が同じずれを拒み、置き換えた本体と新しい関数を含めて全体が巻き戻る。
+  - 両方を外すと、H4 のずれが通ってしまう（＝この確認が効いている）。
+  - きれいな DB では通り、一時的な関数は残らない。
+- **後の確認だけが見つけられる失敗**: DDL のイベントトリガーが、migration の REVOKE の直後に、`claim_held` を authenticated に付け直す。後の確認（正確な ACL）が拒み、全体が巻き戻る。
+- G6-13 で認めていた「authenticated に service_role を付けた状態」は、今は PRESTATE で止まる（期待を更新した）。
+
+### わざと壊した写し（作業用の写しだけ）
+
+- G6-14 の確認の 12 項目を 1 つずつ外した写し: **9 種類を検出**。
+- 検出しなかった 3 種類（実効の表・列・helper の EXECUTE の確認）は、**実質同じ動き（二重目の防御）**。
+  - 直接の付与が無い状態で実効の権限だけが立つのは、所有者を継承する場合だけ。その場合は、先に実効のスキーマの USAGE か到達の確認で止まる。
+- G6-13 の 10 種類（ガード・持ち主・ID・状態・行の作成・revoke・ずれ・後の確認）: 最終の形で再実行。結果は REPORT に書く。
+
+### NOT_VERIFIED・残るもの
+
+- 本物の Supabase のロール（`supabase_admin`、`authenticator`、`postgres` など）と、ほかのスキーマへの継承。今回の確認の対象は anon / authenticated / service_role と、その継承・到達だけ。
+- 本物の適用の道で、一時的な関数（`pg_temp`）を作れるか。
+- 適用の後の権限の変化の監視（運用。この migration の範囲外）。
