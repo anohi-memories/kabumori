@@ -1,0 +1,33 @@
+#!/usr/bin/env python3
+"""S2（監視エージェント）の入口（実行側）。実運用では launchd の KeepAlive つき Daemon（未導入）。"""
+import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from g10runner import policy as policy_mod, signing, supervise  # noqa: E402
+from g10runner.agent import Agent  # noqa: E402
+from g10runner.layout import Layout  # noqa: E402
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--root", required=True)
+    p.add_argument("--interval", type=float, default=30.0)
+    p.add_argument("--once", action="store_true")
+    a = p.parse_args()
+    layout = Layout(a.root)
+    policy = policy_mod.load(layout.policy_pub)
+    signer, verifier = signing.agent_side(a.root)
+    agent = Agent(layout, signer, verifier, policy)
+    if a.once:
+        supervise.write_s2_heartbeat(layout)
+        supervise.watchdog_cycle(layout, policy, agent)
+        return 0
+    supervise.watchdog_loop(layout, policy, agent, a.interval)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
