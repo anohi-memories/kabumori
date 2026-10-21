@@ -238,17 +238,128 @@ Deno.test({ name: "lifecycle in fresh databases: apply / reapply are identical a
     } finally {
       await dbRows(db, `revoke create, usage on schema public from g6r13_not_owner; drop role g6r13_not_owner`);
     }
-    // A failure AFTER the bodies were replaced (the postcondition finds authenticated reaching service_role): all rolled back.
+    // authenticated reaching service_role: since G6-14 the PRESTATE ACL check refuses it before anything changes.
+    // (A failure AFTER the replacement, rolled back as a whole, is shown by the G6-14 probe test below.)
     const clean = await stateOf(db);
     await dbRows(db, `grant service_role to authenticated`);
     try {
       const r = await psqlFile(MIGRATION_PATH, db);
-      // The effective-privilege postcondition (authenticated now inherits service_role's EXECUTE) stops it first.
-      assert.deepEqual([r.ok, /P0001: AI_CALLS_OWNER_HELD_POST: EXECUTE of ai_calls_abandon\(jsonb\) for authenticated is wrong/.test(r.err)], [false, true], r.err);
-      assert.deepEqual(await stateOf(db), clean, "the replaced bodies and the new function were rolled back with it");
+      assert.deepEqual([r.ok, /P0001: AI_CALLS_OWNER_HELD_PRESTATE: ACL drift: authenticated reaches service_role/.test(r.err)], [false, true], r.err);
+      assert.deepEqual(await stateOf(db), clean, "nothing changed");
     } finally {
       await dbRows(db, `revoke service_role from authenticated`);
     }
+    // A failure only the POSTCONDITIONS can see: a DDL event trigger grants claim_held to authenticated right after
+    // the migration's own REVOKE. The exact-ACL postcondition refuses it and the whole migration rolls back.
+    await freshDb(db);
+    await dbRows(db, `create function public.g6r14_regrant() returns event_trigger language plpgsql as $f$
+        begin
+          if to_regprocedure('public.ai_calls_claim_held(jsonb)') is not null then
+            execute 'grant execute on function public.ai_calls_claim_held(jsonb) to authenticated';
+          end if;
+        end $f$;
+      create event trigger g6r14_regrant on ddl_command_end when tag in ('REVOKE') execute function public.g6r14_regrant();`);
+    const beforeTrigger = await stateOf(db);
+    const r = await psqlFile(MIGRATION_PATH, db);
+    assert.deepEqual([r.ok, /P0001: AI_CALLS_OWNER_HELD_POST: unexpected grant ai_calls_claim_held authenticated:EXECUTE/.test(r.err)], [false, true], r.err);
+    assert.deepEqual(await stateOf(db), beforeTrigger, "the replaced bodies and the new function were rolled back with it");
+  } finally {
+    await dropDb(db);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// G6-14 (H4 #331 P2): ACL drift on the call store / ledger must stop the migration, before and after, with no repair.
+// ---------------------------------------------------------------------------------------------------------
+
+/** Every privilege fact the drift tests compare: schema / relation / column / helper ACLs, default ACLs, app-role memberships. */
+const aclImage = (db: string) =>
+  dbRows(db, `select concat_ws(' || ',
+    (select string_agg(n.nspname || '=' || coalesce(n.nspacl::text, '-'), ';' order by n.nspname) from pg_namespace n where n.nspname in ('ai_calls', 'ai_ledger')),
+    (select string_agg(c.relname || '=' || coalesce(c.relacl::text, '-'), ';' order by c.relname) from pg_class c where c.relnamespace in ('ai_calls'::regnamespace, 'ai_ledger'::regnamespace)),
+    (select count(*)::text from pg_attribute a join pg_class c on c.oid = a.attrelid where c.relnamespace in ('ai_calls'::regnamespace, 'ai_ledger'::regnamespace) and a.attacl is not null),
+    (select string_agg(f.oid::regprocedure::text || '=' || coalesce(f.proacl::text, '-'), ';' order by f.oid::regprocedure::text) from pg_proc f where f.pronamespace in ('ai_calls'::regnamespace, 'ai_ledger'::regnamespace)),
+    (select coalesce(string_agg(d.defaclnamespace::regnamespace::text || '=' || d.defaclacl::text, ';'), '-') from pg_default_acl d),
+    (select coalesce(string_agg(m.roleid::regrole::text || '>' || m.member::regrole::text || ':' || m.inherit_option || m.set_option, ';' order by 1), '-')
+       from pg_auth_members m where m.member in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role'))))`);
+/** Feed a (mutated) migration text to psql on stdin, as the owner. */
+async function psqlText(sql: string, db: string) {
+  const child = new Deno.Command("psql", {
+    args: ["-X", "-h", Deno.env.get("GRR_PGHOST")!, "-p", Deno.env.get("GRR_PGPORT")!, "-U", Deno.env.get("GRR_PGSUPER")!, "-d", db, "-Atq", "-v", "ON_ERROR_STOP=1"],
+    env: { LC_ALL: "C" },
+    stdin: "piped",
+    stdout: "piped",
+    stderr: "piped",
+  }).spawn();
+  const w = child.stdin.getWriter();
+  await w.write(new TextEncoder().encode(sql));
+  await w.close();
+  const o = await child.output();
+  return { ok: o.success, err: new TextDecoder().decode(o.stderr) };
+}
+const H4_DRIFT = `grant select, insert, update, delete on ai_calls.consumer_calls to service_role;
+  grant execute on function ai_calls.input_text(jsonb, text, boolean, text) to service_role`;
+
+Deno.test({ name: "G6-14 ACL drift is refused before anything changes, with nothing repaired: H4's exact grants, PUBLIC, schema USAGE without a table grant, a column grant, a helper grant, a grant option, an inherited role, a default privilege, the ledger's tables, an application-role owner, a SECURITY DEFINER helper, a path to the owner, a SET-ROLE-only path", ...opts }, async () => {
+  const db = `g6r14_drift_${Deno.pid}`;
+  const owner = Deno.env.get("GRR_PGSUPER")!;
+  const drifts: Array<[string, string, string, RegExp]> = [
+    ["H4: service_role on the table and a helper", H4_DRIFT, "", /relation grants consumer_calls service_role:INSERT/],
+    ["PUBLIC reads the table", `grant select on ai_calls.consumer_calls to public`, "", /relation grants consumer_calls PUBLIC:SELECT/],
+    ["anon USAGE on the schema, no table grant", `grant usage on schema ai_calls to anon`, "", /schema ai_calls grants anon:USAGE/],
+    ["a column grant to authenticated", `grant select (user_id) on ai_calls.consumer_calls to authenticated`, "", /a column grant in ai_calls/],
+    ["PUBLIC executes a helper", `grant execute on function ai_calls.tombstone(jsonb) to public`, "", /helper grants tombstone PUBLIC:EXECUTE/],
+    ["a grant option on a helper", `grant execute on function ai_calls.input_uuid(jsonb, text, boolean) to service_role with grant option`, "", /helper grants input_uuid service_role:EXECUTE\+grant/],
+    ["an inherited role reading the ledger", `create role g6r14_reader nologin; grant select on ai_ledger.reservations to g6r14_reader; grant g6r14_reader to authenticated`,
+      `revoke g6r14_reader from authenticated; drop owned by g6r14_reader; drop role g6r14_reader`, /relation grants reservations g6r14_reader:SELECT/],
+    ["a default privilege in ai_calls", `alter default privileges in schema ai_calls grant select on tables to service_role`, "", /a default privilege in ai_calls/],
+    ["service_role writes the ledger", `grant update on ai_ledger.reservations to service_role`, "", /relation grants reservations service_role:UPDATE/],
+    ["a relation owned by service_role", `alter table ai_ledger.usage_events owner to service_role`, "", /ai_ledger has an application-role or mixed owner/],
+    ["a SECURITY DEFINER helper", `alter function ai_calls.tombstone(jsonb) security definer`, "", /a SECURITY DEFINER helper in ai_calls/],
+    ["service_role reaches the owner", `grant ${owner} to service_role`, `revoke ${owner} from service_role`, /service_role (can use schema ai_(calls|ledger)|reaches)/],
+    ["authenticated can SET ROLE service_role (no inheritance)", `grant service_role to authenticated with inherit false`, `revoke service_role from authenticated`, /authenticated reaches service_role/],
+  ];
+  try {
+    for (const [label, drift, undo, why] of drifts) {
+      await freshDb(db);
+      await dbRows(db, drift);
+      try {
+        const [fns, acls] = [await stateOf(db), await aclImage(db)];
+        const r = await psqlFile(MIGRATION_PATH, db);
+        assert.deepEqual([r.ok, r.sqlstate], [false, "P0001"], `${label}: ${r.err}`);
+        assert.match(r.err, /AI_CALLS_OWNER_HELD_PRESTATE: ACL drift: /, label);
+        assert.match(r.err, why, label);
+        assert.deepEqual([await stateOf(db), await aclImage(db)], [fns, acls], `${label}: nothing changed, nothing repaired`);
+      } finally {
+        if (undo) await dbRows(db, undo);
+      }
+    }
+  } finally {
+    await dropDb(db);
+  }
+});
+
+Deno.test({ name: "G6-14 probes on the REAL migration text: without the PRESTATE ACL check, the POST check refuses the same drift and the whole migration rolls back; without both, H4's drift passes (so the check is what stops it); on a clean database the checks pass and leave no temporary function", ...opts }, async () => {
+  const text = await Deno.readTextFile(MIGRATION_PATH);
+  const pre = "  perform pg_temp.ai_calls_owner_held_acl_check('PRESTATE');\n";
+  const post = "  perform pg_temp.ai_calls_owner_held_acl_check('POST');\n";
+  assert.equal(text.split(pre).length - 1, 1);
+  assert.equal(text.split(post).length - 1, 1);
+  const db = `g6r14_probe_${Deno.pid}`;
+  try {
+    await freshDb(db);
+    await dbRows(db, H4_DRIFT);
+    const [fns, acls] = [await stateOf(db), await aclImage(db)];
+    const noPre = await psqlText(text.replace(pre, "  null;\n"), db);
+    assert.ok(!noPre.ok && /AI_CALLS_OWNER_HELD_POST: ACL drift: relation grants consumer_calls service_role/.test(noPre.err), noPre.err);
+    assert.deepEqual([await stateOf(db), await aclImage(db)], [fns, acls], "the POST failure rolled back the replaced bodies and the new function");
+    const neither = await psqlText(text.replace(pre, "  null;\n").replace(post, "  null;\n"), db);
+    assert.ok(neither.ok, `without the two checks H4's drift is accepted: ${neither.err}`);
+    assert.equal(await dbRows(db, `select has_table_privilege('service_role', 'ai_calls.consumer_calls', 'SELECT')::text || (to_regprocedure('public.ai_calls_claim_held(jsonb)') is not null)::text`), "truetrue");
+    await freshDb(db);
+    const clean = await psqlFile(MIGRATION_PATH, db);
+    assert.ok(clean.ok, clean.err);
+    assert.equal(await dbRows(db, `select count(*) from pg_proc where proname = 'ai_calls_owner_held_acl_check'`), "0", "the temporary check is gone");
   } finally {
     await dropDb(db);
   }

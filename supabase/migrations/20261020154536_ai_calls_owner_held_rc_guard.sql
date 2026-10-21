@@ -35,6 +35,10 @@
 -- held" (send nothing). With the attempt reserved and the call store's mutators at READ COMMITTED, the row cannot be
 -- abandoned or forgotten until that attempt is finalised or released (and a released hold cannot be marked sent).
 --
+-- G6-14 (H4 #331 P2): it also refuses any direct privilege on the ai_calls / ai_ledger schemas, relations, columns,
+-- helpers or default privileges for anyone but their owner, any effective privilege of anon / authenticated /
+-- service_role there, and any path from those roles to the owner or a superuser, before AND after (no repair).
+--
 -- Fail closed: the migration checks first that the objects it replaces are exactly the known bodies (the original
 -- ones, or this migration's on a re-run), owned by the migrating role, with the expected grants, and afterwards that
 -- OIDs, owners, bodies, shapes, exact ACLs and the EFFECTIVE privileges of anon / authenticated / service_role are as
@@ -45,6 +49,119 @@
 -- See docs/ai-provider/G6_OWNER_HELD_RC_GUARD_SQL.md.
 
 begin;
+
+-- ---------------------------------------------------------------------------------------------------------
+-- G6-14 (H4 #331 P2): the access boundary of the call store and of the ledger it consults is their RPCs. A direct
+-- privilege on the ai_calls / ai_ledger schemas, relations, columns or helpers for anyone but their owner (PUBLIC,
+-- anon, authenticated, service_role, a role they inherit, a default privilege), or an application role that can
+-- reach the owner or a superuser, makes "only the RPCs reach the rows" untrue, and with it the owner-held and
+-- READ COMMITTED reasoning. This TEMPORARY function (pg_temp: gone at the end of the session, never in ai_calls)
+-- checks it before anything changes and again at the end. A violation raises and the whole migration rolls back.
+-- Nothing is granted or revoked to "repair" it. It cannot exclude what the owner or a superuser itself does.
+-- ---------------------------------------------------------------------------------------------------------
+create function pg_temp.ai_calls_owner_held_acl_check(p_stage text)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_schemas constant text[] := array['ai_calls', 'ai_ledger'];
+  v_roles constant text[] := array['anon', 'authenticated', 'service_role'];
+  v_table_privs text[] := array['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
+  v_set_check constant text := case when current_setting('server_version_num')::int >= 160000 then 'SET' else 'MEMBER' end;
+  v_ns record;
+  v_rel record;
+  v_role text;
+  v_priv text;
+  v_extra text;
+begin
+  if current_setting('server_version_num')::int >= 170000 then
+    v_table_privs := array_append(v_table_privs, 'MAINTAIN');
+  end if;
+  if (select count(*) from pg_namespace n where n.nspname = any(v_schemas)) <> 2 then
+    raise exception 'AI_CALLS_OWNER_HELD_%: the ai_calls and ai_ledger schemas must exist', p_stage using errcode = 'P0001';
+  end if;
+  for v_ns in select n.oid, n.nspname, n.nspowner, n.nspacl from pg_namespace n where n.nspname = any(v_schemas) order by n.nspname loop
+    -- One owner for the schema and everything in it, and not an application role.
+    if (select r.rolname from pg_roles r where r.oid = v_ns.nspowner) = any(v_roles)
+       or exists (select 1 from pg_class c where c.relnamespace = v_ns.oid and c.relowner <> v_ns.nspowner)
+       or exists (select 1 from pg_proc f where f.pronamespace = v_ns.oid and f.proowner <> v_ns.nspowner) then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % has an application-role or mixed owner', p_stage, v_ns.nspname using errcode = 'P0001';
+    end if;
+    -- Direct ACLs: nothing for anyone but the owner (PUBLIC and grant options included).
+    select string_agg(format('%s:%s%s', coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ') into v_extra
+      from aclexplode(coalesce(v_ns.nspacl, acldefault('n', v_ns.nspowner))) a left join pg_roles r on r.oid = a.grantee
+     where a.grantee <> v_ns.nspowner;
+    if v_extra is not null then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: schema % grants %', p_stage, v_ns.nspname, v_extra using errcode = 'P0001';
+    end if;
+    select string_agg(format('%s %s:%s%s', c.relname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ') into v_extra
+      from pg_class c cross join lateral aclexplode(c.relacl) a left join pg_roles r on r.oid = a.grantee
+     where c.relnamespace = v_ns.oid and a.grantee <> c.relowner;
+    if v_extra is not null then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: relation grants %', p_stage, v_extra using errcode = 'P0001';
+    end if;
+    if exists (select 1 from pg_attribute att join pg_class c on c.oid = att.attrelid
+                where c.relnamespace = v_ns.oid and att.attnum > 0 and att.attacl is not null) then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a column grant in %', p_stage, v_ns.nspname using errcode = 'P0001';
+    end if;
+    select string_agg(format('%s %s:%s%s', f.proname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ') into v_extra
+      from pg_proc f cross join lateral aclexplode(coalesce(f.proacl, acldefault('f', f.proowner))) a left join pg_roles r on r.oid = a.grantee
+     where f.pronamespace = v_ns.oid and a.grantee <> f.proowner;
+    if v_extra is not null then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: helper grants %', p_stage, v_extra using errcode = 'P0001';
+    end if;
+    if exists (select 1 from pg_proc f where f.pronamespace = v_ns.oid and f.prosecdef) then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a SECURITY DEFINER helper in %', p_stage, v_ns.nspname using errcode = 'P0001';
+    end if;
+    if exists (select 1 from pg_default_acl d where d.defaclnamespace = v_ns.oid) then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a default privilege in %', p_stage, v_ns.nspname using errcode = 'P0001';
+    end if;
+  end loop;
+  -- Effective privileges (inheritance and PUBLIC included) of each application role, and whom it can reach.
+  foreach v_role in array v_roles loop
+    continue when to_regrole(v_role) is null;
+    for v_ns in select n.oid, n.nspname from pg_namespace n where n.nspname = any(v_schemas) loop
+      if has_schema_privilege(v_role, v_ns.oid, 'USAGE') or has_schema_privilege(v_role, v_ns.oid, 'CREATE') then
+        raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % can use schema %', p_stage, v_role, v_ns.nspname using errcode = 'P0001';
+      end if;
+      for v_rel in select c.oid, c.relname, c.relkind from pg_class c where c.relnamespace = v_ns.oid and c.relkind in ('r', 'p', 'S', 'v', 'm', 'f') loop
+        if v_rel.relkind = 'S' then
+          if has_sequence_privilege(v_role, v_rel.oid, 'USAGE') or has_sequence_privilege(v_role, v_rel.oid, 'SELECT')
+             or has_sequence_privilege(v_role, v_rel.oid, 'UPDATE') then
+            raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % can use sequence %', p_stage, v_role, v_rel.relname using errcode = 'P0001';
+          end if;
+          continue;
+        end if;
+        foreach v_priv in array v_table_privs loop
+          if has_table_privilege(v_role, v_rel.oid, v_priv) then
+            raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % holds % on %.%', p_stage, v_role, v_priv, v_ns.nspname, v_rel.relname using errcode = 'P0001';
+          end if;
+        end loop;
+        foreach v_priv in array array['SELECT', 'INSERT', 'UPDATE', 'REFERENCES'] loop
+          if has_any_column_privilege(v_role, v_rel.oid, v_priv) then
+            raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % has column % on %.%', p_stage, v_role, v_priv, v_ns.nspname, v_rel.relname using errcode = 'P0001';
+          end if;
+        end loop;
+      end loop;
+      select string_agg(f.proname, ', ') into v_extra from pg_proc f
+       where f.pronamespace = v_ns.oid and has_function_privilege(v_role, f.oid, 'EXECUTE');
+      if v_extra is not null then
+        raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % can execute % helper %', p_stage, v_role, v_ns.nspname, v_extra using errcode = 'P0001';
+      end if;
+    end loop;
+    select string_agg(r.rolname, ', ') into v_extra from pg_roles r
+     where r.rolname <> v_role
+       and (pg_has_role(v_role, r.oid, 'USAGE') or pg_has_role(v_role, r.oid, v_set_check))
+       and (r.rolsuper
+            or r.oid in (select n.nspowner from pg_namespace n where n.nspname = any(v_schemas))
+            or (v_role <> 'service_role' and r.rolname = 'service_role'));
+    if v_extra is not null then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % reaches %', p_stage, v_role, v_extra using errcode = 'P0001';
+    end if;
+  end loop;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------------------------------------
 -- Preconditions (catalog only; nothing is changed yet).
@@ -103,6 +220,13 @@ begin
   if v_extra is not null then
     raise exception 'AI_CALLS_OWNER_HELD_PRESTATE: unexpected grant %', v_extra using errcode = 'P0001';
   end if;
+end;
+$$;
+
+-- Direct and effective privileges of the call store and the ledger (G6-14), before anything changes.
+do $$
+begin
+  perform pg_temp.ai_calls_owner_held_acl_check('PRESTATE');
 end;
 $$;
 
@@ -350,5 +474,13 @@ begin
   end loop;
 end;
 $$;
+
+-- The same privileges again, after everything changed (G6-14); then the temporary check goes away.
+do $$
+begin
+  perform pg_temp.ai_calls_owner_held_acl_check('POST');
+end;
+$$;
+drop function pg_temp.ai_calls_owner_held_acl_check(text);
 
 commit;
