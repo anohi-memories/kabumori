@@ -41,6 +41,7 @@ def statements(sql):
 
 
 objects = {}
+touched = {}  # public objects a migration alters / grants / revokes / polices / references without any migration creating them
 schema_wide = []
 dynamic = []
 for name in sorted(os.listdir(root)):
@@ -48,7 +49,8 @@ for name in sorted(os.listdir(root)):
         continue
     text = strip_comments(open(os.path.join(root, name), encoding='utf-8').read())
     stmts, bodies = statements(text)
-    if re.search(r'\bgrant\b[^;]*\bon\b', bodies, re.I):
+    # a GRANT statement inside a body (`grant <privileges> on <object> to <role>`); a mere 'with grant option' / 'grant option' text is not one
+    if re.search(r"\bgrant\s+(?!option\b)[a-z_, ()]+\s+on\s+[^;']*?\s+to\s+", bodies, re.I):
         dynamic.append(name)
     for s in stmts:
         low = ' '.join(s.lower().split())
@@ -89,6 +91,11 @@ for name in sorted(os.listdir(root)):
                 t = t.replace('"', '').removeprefix('public.')
                 if t in objects:
                     objects[t]['dropped_in'] = name
+        for ref in re.findall(r'(?:alter\s+table\s+(?:if\s+exists\s+)?(?:only\s+)?|\bon\s+(?:table\s+)?|references\s+)public\.([a-z_][a-z0-9_]*)', low):
+            touched.setdefault(ref, name)
+        for many in re.findall(r'\bon\s+table\s+((?:public\.[a-z_][a-z0-9_]*\s*,\s*)+public\.[a-z_][a-z0-9_]*)', low):
+            for ref in re.findall(r'public\.([a-z_][a-z0-9_]*)', many):
+                touched.setdefault(ref, name)
         p = re.match(r'create\s+policy\s+\S+\s+on\s+(\S+)', low)
         if p:
             t = p.group(1).replace('"', '').removeprefix('public.')
@@ -108,8 +115,9 @@ for obj, o in sorted(objects.items()):
         verdict = 'IMPLICIT (default privileges only)'
     rows.append({'object': obj, **o, 'verdict': verdict})
 
+base = sorted(t for t in touched if t not in objects)
 if as_json:
-    print(json.dumps({'objects': rows, 'schema_wide': schema_wide, 'dynamic_grant_files': dynamic}, indent=1))
+    print(json.dumps({'objects': rows, 'schema_wide': schema_wide, 'dynamic_grant_files': dynamic, 'not_created_by_any_migration': base}, indent=1))
     sys.exit(0)
 print(f'{"object":48} {"kind":8} {"verdict":36} {"rls":4} {"pol":3} {"col":8} created_in')
 for r in rows:
@@ -122,3 +130,6 @@ print(f'schema-wide grant / default-privilege statements: {len(schema_wide)}')
 for f, s in schema_wide:
     print(f'  {f}: {s}')
 print(f'files with GRANT inside a dollar-quoted body (dynamic, not parsed): {len(dynamic)} {dynamic}')
+print(f'public objects changed / granted / referenced but created by NO migration (a db reset or preview cannot rebuild them): {len(base)}')
+for t in base:
+    print(f'  {t} (first touched in {touched[t]})')
