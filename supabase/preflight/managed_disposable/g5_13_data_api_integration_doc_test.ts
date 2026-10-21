@@ -33,9 +33,11 @@ test('section 4 separates confirmed facts from estimates; the four base tables a
   assert.ok(estimated.includes('NOT_VERIFIED') || s4.includes('NOT_VERIFIED'));
 });
 
-test('the owners table records only what arrived: G3 / G4 / G6 未回答 with the 2026-10-27 date; nothing filled in for them', () => {
+test('the owners table records only what arrived: G3 / G6 still 未回答 with the 2026-10-27 date (G4 received in G5-15); nothing filled in for them', () => {
   const s5 = section(5);
-  for (const owner of ['G3', 'G4', 'G6']) {
+  const g4 = s5.split('\n').find((l) => l.startsWith('| G4 |')) ?? '';
+  assert.ok(g4.includes('received') && g4.includes('6317104735'), `G4: ${g4}`);
+  for (const owner of ['G3', 'G6']) {
     const row = s5.split('\n').find((l) => l.startsWith(`| ${owner} |`)) ?? '';
     assert.ok(row.includes('未回答') && row.includes('2026-10-27') && row.includes('not yet'), `${owner}: ${row}`);
     assert.ok(!/done|no impact/iu.test(row), `${owner}: no answer is invented`);
