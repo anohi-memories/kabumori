@@ -13,7 +13,7 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
-import { attemptMemory, inFlightSends, loadPersistedAttempt, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
+import { attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
 import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
@@ -150,17 +150,18 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
     let cancelled = false;
     void loadPersistedAttempt(deps, userId).then((read) => {
       if (cancelled || !mountedRef.current) return;
-      // A send of this process began while the record was being read (another screen of this user): the record is that
-      // send's own, not an earlier run's -- wait for the send instead of calling it unconfirmed.
-      const meanwhile = inFlightSends.takeOver(userId);
-      if (meanwhile !== null) {
-        setTakenOver(meanwhile);
-        dispatch({ type: 'send_adopted', attempt: meanwhile.attempt, retrying: meanwhile.retry });
-        return;
-      }
-      if (read.kind === 'none') dispatch({ type: 'store_loaded', unresolved: null });
-      else if (read.kind === 'found') dispatch({ type: 'store_loaded', unresolved: restoredAttemptOf(read.attempt) });
-      else dispatch({ type: 'store_unreadable', reason: read.reason });
+      // The read is a snapshot of the moment it was taken; what this process knows NOW wins (see reconcileLoadedRead): a send
+      // of this user that is still out (wait for it, never call it unconfirmed), or an attempt that is already in the memory
+      // (an old "nothing" must not open an empty editor beside an unresolved attempt).
+      const view = reconcileLoadedRead(deps, userId, read);
+      if (view.kind === 'send') {
+        setTakenOver(view.takeOver);
+        dispatch({ type: 'send_adopted', attempt: view.takeOver.attempt, retrying: view.takeOver.retry });
+      } else if (view.kind === 'memory') {
+        dispatch({ type: 'store_loaded', unresolved: view.attempt });
+      } else if (view.read.kind === 'none') dispatch({ type: 'store_loaded', unresolved: null });
+      else if (view.read.kind === 'found') dispatch({ type: 'store_loaded', unresolved: restoredAttemptOf(view.read.attempt) });
+      else dispatch({ type: 'store_unreadable', reason: view.read.reason });
     });
     return () => { cancelled = true; };
   }, [storeKind, userId, deps]);

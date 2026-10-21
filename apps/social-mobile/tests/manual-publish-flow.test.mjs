@@ -145,7 +145,7 @@ test('send: a retry of the same attempt overwrites the same memory entry (same i
   await flow.runSend(h.deps, args());
   assert.equal(h.memory.get('U1').kind, 'pending');
   answer = { kind: 'published', marks: REAL, providerPostId: '77' };
-  await flow.runSend(h.deps, args());
+  await flow.runSend(h.deps, args({ retry: true })); // a send of the unresolved attempt's id is a re-ask, and says so
   assert.equal(h.memory.get('U1'), null);
 });
 
@@ -558,4 +558,79 @@ test('inflight: send_adopted switches only a visit that is still reading the rec
   assert.deepEqual(model.manualPublishReducer(result, { type: 'send_adopted', attempt, retrying: false }), result, 'a result is not replaced');
   const unreadable = model.manualPublishReducer(loading, { type: 'store_unreadable', reason: 'io' });
   assert.deepEqual(model.manualPublishReducer(unreadable, { type: 'send_adopted', attempt, retrying: false }), unreadable);
+});
+
+// ---- send time: an unresolved attempt of this process blocks a start with ANOTHER id (fail closed even if a screen is stale) ------------------------------------
+
+test('unresolved: a fresh start (another id) while this process has an unresolved attempt is refused before the port, the record and the memory', async () => {
+  for (const kind of ['uncertain', 'pending', 'unconfirmed']) {
+    const h = withRegistry(harness());
+    h.memory.mark('U1', { ...ATT(1), kind });
+    const outcome = await flow.runSend(h.deps, args({ requestId: ID(2) }));
+    assert.deepEqual(outcome, { kind: 'refused', targetId: ID(2), code: 'LOCAL_UNRESOLVED_ATTEMPT', retryable: false }, kind);
+    assert.equal(h.calls.send.length, 0, `${kind}: the port was not called`);
+    assert.equal(h.kv.data.size, 0, `${kind}: nothing was written to the device`);
+    assert.equal(h.memory.get('U1').requestId, ID(1), `${kind}: the unresolved attempt is untouched`);
+    assert.equal(h.deps.inflight.takeOver('U1'), null, `${kind}: nothing stays registered`);
+  }
+});
+
+test('unresolved: only a re-ask of THAT attempt may start; another id is refused whether it says "retry" or not, and a refusal frees the registry', async () => {
+  const h = withRegistry(harness());
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  const retryOther = await flow.runSend(h.deps, args({ requestId: ID(2), retry: true }));
+  assert.deepEqual(retryOther, { kind: 'unavailable', targetId: ID(2), code: 'LOCAL_UNRESOLVED_ATTEMPT' }, 'a re-ask with another id stays unresolved');
+  const freshSame = await flow.runSend(h.deps, args());
+  assert.deepEqual(freshSame, { kind: 'refused', targetId: ID(1), code: 'LOCAL_UNRESOLVED_ATTEMPT', retryable: false }, 'a "fresh" send with the unresolved id is not a re-ask');
+  assert.equal(h.calls.send.length, 0);
+  assert.equal(h.kv.data.size, 0);
+  assert.equal(h.deps.inflight.takeOver('U1'), null, 'the refusal frees the registry');
+  assert.equal(h.deps.inflight.isOut('U1', ID(2)), false);
+  const reAsk = await flow.runSend(h.deps, args({ retry: true }));
+  assert.equal(reAsk.kind, 'published', 'the re-ask of the same attempt goes out');
+  assert.equal(h.calls.send.length, 1);
+  assert.equal(h.calls.send[0].targetId, ID(1));
+});
+
+test('unresolved: the refusal happens with and without a registry, and another user is never refused by it', async () => {
+  const bare = harness();
+  bare.memory.mark('U1', { ...ATT(1), kind: 'uncertain' });
+  assert.equal((await flow.runSend(bare.deps, args({ requestId: ID(2) }))).code, 'LOCAL_UNRESOLVED_ATTEMPT');
+  assert.equal(bare.calls.send.length, 0);
+  assert.equal((await flow.runSend(bare.deps, args({ userId: 'U2', requestId: ID(3) }))).kind, 'published', 'another user');
+  const sends = [];
+  const busy = withRegistry(harness({ send: (t) => new Promise((resolve) => { sends.push({ t, resolve }); }) }));
+  const first = flow.runSend(busy.deps, args());
+  for (let i = 0; i < 20 && sends.length === 0; i += 1) await later();
+  const second = await flow.runSend(busy.deps, args({ requestId: ID(2) }));
+  assert.equal(second.code, 'LOCAL_SEND_IN_PROGRESS', 'while a send is unfinished, THAT is the reason given');
+  sends[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  assert.equal((await first).kind, 'uncertain');
+  const third = await flow.runSend(busy.deps, args({ requestId: ID(2) }));
+  assert.equal(third.code, 'LOCAL_UNRESOLVED_ATTEMPT', 'after it ended unresolved, a start with another id is refused');
+  assert.equal(sends.length, 1);
+});
+
+test('reconcile: what the process knows NOW wins over a snapshot -- a send that is out, then the memory, only then the snapshot', async () => {
+  const none = { kind: 'none' };
+  const found = { kind: 'found', attempt: { v: 1, accountId: 'X_A', requestId: ID(9), contentSha256: sha('older'), kind: 'pending', savedAt: 1 } };
+  const unreadable = { kind: 'unreadable', reason: 'io' };
+  const h = withRegistry(harness());
+  for (const read of [none, found, unreadable]) {
+    assert.deepEqual(flow.reconcileLoadedRead(h.deps, 'U1', read), { kind: 'record', read }, 'the process knows nothing: the snapshot as it is');
+  }
+  h.memory.mark('U1', { ...ATT(2), kind: 'uncertain' });
+  for (const read of [none, found, unreadable]) {
+    assert.deepEqual(flow.reconcileLoadedRead(h.deps, 'U1', read), { kind: 'memory', attempt: { ...ATT(2), kind: 'uncertain' } }, 'the memory beats the snapshot');
+  }
+  assert.deepEqual(flow.reconcileLoadedRead(h.deps, 'U2', none), { kind: 'record', read: none }, 'another user is not affected');
+  const handle = h.deps.inflight.begin('U1', ATT(3), true);
+  const view = flow.reconcileLoadedRead(h.deps, 'U1', none);
+  assert.equal(view.kind, 'send', 'a send that is out beats the memory');
+  assert.equal(view.takeOver.attempt.requestId, ID(3));
+  assert.equal(view.takeOver.retry, true);
+  h.deps.inflight.end(handle, { kind: 'uncertain', targetId: ID(3), code: 'X' });
+  assert.equal(flow.reconcileLoadedRead(h.deps, 'U1', none).kind, 'memory');
+  const bare = harness();
+  assert.deepEqual(flow.reconcileLoadedRead(bare.deps, 'U1', none), { kind: 'record', read: none }, 'without a registry too');
 });
