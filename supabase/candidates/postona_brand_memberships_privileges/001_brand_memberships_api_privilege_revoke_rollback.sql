@@ -1,17 +1,22 @@
--- G3 SOURCE CANDIDATE ROLLBACK (2026-10-20, Issue #318 TASK 8/50; rewritten in TASK 16/50 for H3 C3 R1; post-lock checks + row claim in TASK 17/50). NOT in supabase/migrations/.
+-- G3 SOURCE CANDIDATE ROLLBACK (2026-10-20, Issue #318 TASK 8/50; rewritten in TASK 16/50 for H3 C3 R1; post-lock checks + row claim in TASK 17/50; ACL-free claim + column ACLs in TASK 18/50). NOT in supabase/migrations/.
 -- Same review / GO / window / read-back as the candidate.
 --
 -- Puts back EXACTLY what one run of 001 took away, and nothing else. Its only input is the prestate line that run printed:
---   psql -v bm_prestate='v1|<database>|<table oid>|<ACL before the run>|<sha256>' -f 001_brand_memberships_api_privilege_revoke_rollback.sql
+--   psql -X -v ON_ERROR_STOP=1 -v bm_prestate='v2|<database>|<table oid>|<ACL before the run>|<sha256>' -f 001_brand_memberships_api_privilege_revoke_rollback.sql
 -- (the text after "BM_PRIV_PRESTATE " in 001's output, as kept in the mutation window's read-back). It does NOT infer from the current ACL what
 -- 001 removed (a table that was already hardened before 001 looks the same as one 001 hardened): without the line it refuses.
+-- It takes the same lock and the same ACL-free claim as 001 (see 001's header: what the claim serialises and what it does not).
 --
 -- Refused (nothing changes) when:
 --   BM_PRIV_ROLLBACK_PRESTATE_REQUIRED          no prestate line given
---   BM_PRIV_ROLLBACK_PRESTATE_CORRUPT           malformed, or the sha256 does not match the four fields
+--   BM_PRIV_ROLLBACK_PRESTATE_CORRUPT           malformed, the sha256 does not match the four fields, or not a v2 line (a v1 line of the TASK 16/17
+--                                               builds does not say that the column ACLs were empty)
 --   BM_PRIV_ROLLBACK_PRESTATE_OTHER_OBJECT      the line is of another database or another table (checked AFTER the lock, on the locked table)
 --   BM_PRIV_ROLLBACK_TABLE_REPLACED             the name points at another relation after the lock than before it (renamed / replaced while waiting)
---   BM_PRIV_ROLLBACK_OWNER_ACL_INCOMPLETE       the owner's own SELECT is missing (the ACL-neutral row claim would not be neutral)
+--   BM_PRIV_ROLLBACK_CLAIM_NOT_TAKEN            the claim did not rewrite the rows (an engine that skips no-op rewrites)
+--   BM_PRIV_ROLLBACK_CLAIM_NOT_NEUTRAL          the claim changed the reloptions / a statistics target
+--   BM_PRIV_ROLLBACK_CLAIM_UNSUPPORTED          fillfactor, autovacuum_enabled, parallel_workers and toast_tuple_target are all set (no unset option to reset)
+--   BM_PRIV_ROLLBACK_COLUMN_ACL_UNSUPPORTED     a column of the table (user or system) carries an ACL: 001 left none, so something changed since
 --   BM_PRIV_ROLLBACK_NOT_TABLE_OWNER            not run by the table owner
 --   BM_PRIV_ROLLBACK_REFUSED_OWNER_EPOCH_INSTALLED  G5's owner epoch (PR #303) or anything built on it is installed: roll G5 back first
 --   BM_PRIV_ROLLBACK_PRESTATE_MISMATCH          the current ACL is not what 001 would have left from that prestate (something changed since,
@@ -71,27 +76,46 @@ begin
     raise exception 'BM_PRIV_ROLLBACK_PRESTATE_REQUIRED';
   end if;
   v_parts := pg_catalog.string_to_array(v_raw, '|');
-  if pg_catalog.cardinality(v_parts) <> 5 or v_parts[1] <> 'v1' or v_parts[5] !~ '^[0-9a-f]{64}$'
+  if pg_catalog.cardinality(v_parts) <> 5 or v_parts[1] <> 'v2' or v_parts[5] !~ '^[0-9a-f]{64}$'
      or v_parts[5] <> pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(pg_catalog.array_to_string(v_parts[1:4], '|'), 'UTF8')), 'hex') then
     raise exception 'BM_PRIV_ROLLBACK_PRESTATE_CORRUPT';
   end if;
   if v_parts[2] is distinct from pg_catalog.current_database() or v_parts[3] is distinct from v_table::oid::text then
     raise exception 'BM_PRIV_ROLLBACK_PRESTATE_OTHER_OBJECT';
   end if;
-  if not exists (select 1 from pg_catalog.pg_class c,
-                   pg_catalog.aclexplode(coalesce(c.relacl, pg_catalog.acldefault('r', c.relowner))) a
-                  where c.oid = v_table and a.grantor = v_me and a.grantee = v_me and a.privilege_type = 'SELECT') then
-    raise exception 'BM_PRIV_ROLLBACK_OWNER_ACL_INCOMPLETE';
-  end if;
 end $$;
 
--- the claim of the table's pg_class row (ACL-neutral: the owner already holds SELECT): from here to COMMIT no other GRANT / REVOKE / ALTER of
--- this table can commit, so the ACL read below is the one the GRANTs apply to
+-- the claim of the table's pg_class row and of every user column's pg_attribute row (TASK 18/50; the same statement as 001): rewritten with
+-- their current values, no ACL is computed; from here to COMMIT no other table- or column-level GRANT / REVOKE of this table can commit, so the
+-- ACL read below is the one the GRANTs apply to (a change that committed before the claim is in that ACL and is refused as MISMATCH)
 do $$
+declare
+  v_table constant regclass := 'public.brand_memberships'::regclass;
+  v_xid xid := pg_catalog.pg_current_xact_id()::xid;
+  v_opts text[] := (select c.reloptions from pg_catalog.pg_class c where c.oid = v_table);
+  -- the first of these (all SHARE UPDATE EXCLUSIVE) that is NOT set: RESET of an unset option leaves reloptions exactly as they are
+  v_reset text := (select n.o from pg_catalog.unnest(array['fillfactor', 'autovacuum_enabled', 'parallel_workers', 'toast_tuple_target']) with ordinality n(o, i)
+                    where not exists (select 1 from pg_catalog.pg_options_to_table(v_opts) t where t.option_name = n.o) order by n.i limit 1);
+  v_stats text := (select pg_catalog.string_agg(a.attnum || ':' || coalesce(a.attstattarget::text, '-1'), ',' order by a.attnum)
+                     from pg_catalog.pg_attribute a where a.attrelid = v_table and a.attnum > 0 and not a.attisdropped);
+  v_cols text := (select pg_catalog.string_agg(pg_catalog.format('alter column %I set statistics %s', a.attname, coalesce(a.attstattarget::int, -1)), ', ' order by a.attnum)
+                    from pg_catalog.pg_attribute a where a.attrelid = v_table and a.attnum > 0 and not a.attisdropped);
 begin
-  execute pg_catalog.format('grant select on table public.brand_memberships to %I', current_user);
+  if v_reset is null then
+    raise exception 'BM_PRIV_ROLLBACK_CLAIM_UNSUPPORTED';
+  end if;
+  execute pg_catalog.format('alter table public.brand_memberships %s', pg_catalog.concat_ws(', ', pg_catalog.format('reset (%I)', v_reset), v_cols));
+  if (select c.xmin from pg_catalog.pg_class c where c.oid = v_table) is distinct from v_xid
+     or exists (select 1 from pg_catalog.pg_attribute a where a.attrelid = v_table and a.attnum > 0 and not a.attisdropped and a.xmin is distinct from v_xid) then
+    raise exception 'BM_PRIV_ROLLBACK_CLAIM_NOT_TAKEN';
+  end if;
+  if (select c.reloptions from pg_catalog.pg_class c where c.oid = v_table) is distinct from v_opts
+     or (select pg_catalog.string_agg(a.attnum || ':' || coalesce(a.attstattarget::text, '-1'), ',' order by a.attnum)
+           from pg_catalog.pg_attribute a where a.attrelid = v_table and a.attnum > 0 and not a.attisdropped) is distinct from v_stats then
+    raise exception 'BM_PRIV_ROLLBACK_CLAIM_NOT_NEUTRAL';
+  end if;
 end $$;
--- (claimed: the ACL below cannot change under this transaction)
+-- (claimed: the table's and its user columns' ACLs cannot change under this transaction)
 
 do $$
 declare
@@ -105,6 +129,10 @@ declare
   v_cur aclitem[];
   v_item record;
 begin
+  -- 001 leaves no column ACL (v2 line); one now means something changed since, and column ACLs are not restored by this file
+  if exists (select 1 from pg_catalog.pg_attribute a where a.attrelid = v_table and a.attacl is not null) then
+    raise exception 'BM_PRIV_ROLLBACK_COLUMN_ACL_UNSUPPORTED';
+  end if;
   begin
     v_pre := case when v_acl = '' then pg_catalog.acldefault('r', v_owner) else ('{' || v_acl || '}')::aclitem[] end;
   exception when others then
@@ -140,7 +168,8 @@ begin
                from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a where c.oid = v_table
              except select * from bm_rb_pre)
      or exists (select * from bm_rb_pre except select a.grantor, a.grantee, a.privilege_type, a.is_grantable
-                  from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a where c.oid = v_table) then
+                  from pg_catalog.pg_class c, pg_catalog.aclexplode(c.relacl) a where c.oid = v_table)
+     or exists (select 1 from pg_catalog.pg_attribute a where a.attrelid = v_table and a.attacl is not null) then
     raise exception 'BM_PRIV_ROLLBACK_POSTCONDITION_NOT_PRESTATE';
   end if;
 end $$;

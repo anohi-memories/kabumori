@@ -9,6 +9,8 @@
 #   BM_G5_TREE    a read-only copy of G5's PR #358 tree (git archive 4f4ece89af51a345c0e71cb3876278789a4f3896): adds the apply-order section
 #                 (G3 candidate -> G5 PR #303 install -> G5 PR #358 install, and the rollback order) with G5's REAL candidate files, unedited.
 #   BM_CANDIDATE / BM_ROLLBACK  another copy of the two files (the mutation script points them at mutants).
+# Sections: C (candidate), K (locks), P (prestate / rollback, TASK 16), Q (H3 C3 TASK 6: concurrency + identity, TASK 17), T (H3 C3 TASK 7: the claim
+# must not change the ACL, column ACLs, TASK 18), O (G5 apply order). Earlier heads are read with git show only to reproduce reviewed findings.
 set -euo pipefail
 export LC_ALL=C PGTZ=UTC PGOPTIONS='-c client_min_messages=warning'
 host="${BM_PGHOST:?BM_PGHOST required}"; port="${BM_PGPORT:?BM_PGPORT required}"; super="${BM_PGSUPER:?BM_PGSUPER required}"
@@ -78,6 +80,10 @@ baseline "${prefix}_tpl" yes
 # The prestate artifact (TASK 16/50): 001 prints "BM_PRIV_PRESTATE <line>"; the rollback takes that line as -v bm_prestate.
 apply_cand() { local d="$1" out="$tmp/apply_$RANDOM"
   psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$cand" >"$out" 2>&1 || { cat "$out" >&2; return 1; }
+  sed -n 's/^BM_PRIV_PRESTATE //p' "$out" | tail -1; }
+# the same for an earlier head's forward (its own line format, for its own rollback)
+apply_file() { local d="$1" f="$2" out="$tmp/apply_$RANDOM"
+  psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$f" >"$out" 2>&1 || { cat "$out" >&2; return 1; }
   sed -n 's/^BM_PRIV_PRESTATE //p' "$out" | tail -1; }
 rollback_with() { local d="$1" a="$2"; shift 2; psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$rb" "$@"; }
 rb_fail() { local d="$1" a="$2" code="$3" label="$4"
@@ -213,7 +219,7 @@ pass "C3 normal paths: authenticated own-row SELECT, service_role insert/update/
 
 # ---- C4: idempotent re-apply, and two applies at the same time ----
 B_DB="$(apply_cand "$db")"
-[[ "$A_DB" == v1\|* && "$B_DB" == v1\|* && "$A_DB" != "$B_DB" ]] || fail "C4 the two runs did not print two different prestate lines"
+[[ "$A_DB" == v2\|* && "$B_DB" == v2\|* && "$A_DB" != "$B_DB" ]] || fail "C4 the two runs did not print two different prestate lines"
 expect "C4 re-apply same acl" "$(acl "$db")" "$POST_ACL"
 own "$db" -f "$cand" >"$tmp/c4a" 2>&1 & c4a=$!
 own "$db" -f "$cand" >"$tmp/c4b" 2>&1 & c4b=$!
@@ -310,8 +316,10 @@ last="${b: -1}"; flip=0; [[ "$last" == 0 ]] && flip=1   # always a DIFFERENT las
 rb_fail "$d" "${b%?}$flip" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 tampered sha"
 rb_fail "$d" "$(sed 's/|\([0-9a-f]\{64\}\)$/,anon=t\/'"$owner"'|\1/' <<<"$b")" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 an added item without a matching sha"
 rb_fail "$d" "v1|garbage" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 garbage"
+v1body="v1|${b#v2|}"; v1body="${v1body%|*}"   # the same four fields as a v1 line (TASK 16/17 format) with a matching sha
+rb_fail "$d" "$v1body|$(printf '%s' "$v1body" | shasum -a 256 | cut -d' ' -f1)" BM_PRIV_ROLLBACK_PRESTATE_CORRUPT "P7 a v1 line (no column attestation)"
 expect "P7 unchanged" "$(priv "$d")" "$POST_PRIV"
-pass "P7 another database's line -> OTHER_OBJECT; tampered / garbage lines -> CORRUPT; nothing changes"
+pass "P7 another database's line -> OTHER_OBJECT; tampered / garbage / v1 lines -> CORRUPT; nothing changes"
 # P8 a prestate that gave anon TRIGGER: the forward removes it; the rollback never gives anything to anon / PUBLIC
 d="$(newdb p8)"; own "$d" -c "grant trigger on table public.brand_memberships to anon" >/dev/null
 a="$(apply_cand "$d")"; expect "P8 forward" "$(priv "$d")" "$POST_PRIV"
@@ -321,7 +329,7 @@ pass "P8 anon / PUBLIC are never given anything back"
 # P9 a line NOT printed by a successful run (made by hand, valid sha): another grantor's item that has since gone -> MISMATCH, nothing granted
 d="$(newdb p9)"; own "$d" -c "grant trigger on table public.brand_memberships to $grantor with grant option" >/dev/null
 own "$d" -c "begin" -c "set local role $grantor" -c "grant trigger on table public.brand_memberships to authenticated" -c "commit" >/dev/null
-body="v1|$d|$(val "$d" -c "select 'public.brand_memberships'::regclass::oid")|$(val "$d" -c "select array_to_string(relacl, ',') from pg_class where oid = 'public.brand_memberships'::regclass")"
+body="v2|$d|$(val "$d" -c "select 'public.brand_memberships'::regclass::oid")|$(val "$d" -c "select array_to_string(relacl, ',') from pg_class where oid = 'public.brand_memberships'::regclass")"
 line="$body|$(printf '%s' "$body" | shasum -a 256 | cut -d' ' -f1)"
 own "$d" -c "begin" -c "set local role $grantor" -c "revoke trigger on table public.brand_memberships from authenticated" -c "commit" >/dev/null
 own "$d" -c "$HARDEN" >/dev/null; P9NOW="$(acl "$d")"
@@ -383,7 +391,7 @@ expect "Q3 rollback = the prestate exactly" "$(acl "$d")" "$Q3PRE"
 pass "Q3 R1 on the rollback side: a concurrent REVOKE times out; the rollback's result is exactly the prestate"
 
 # Q4 R2 reproduced on the reviewed head: while the old rollback waits for the table lock, the table is renamed and replaced; it grants on the new one
-d="$(newdb q4)"; a="$(apply_cand "$d")"
+d="$(newdb q4)"; a="$(apply_file "$d" "$tmp/fwd_old.sql")"
 psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -c "begin" -c "lock table public.brand_memberships in access exclusive mode" -c "select pg_sleep(2)" -c "$REPLACE_TABLE" -c "commit" >"$tmp/q4h" 2>&1 & h=$!
 ae_held "$d" || fail "Q4 the replacing session never held the lock"
 own "$d" -v bm_prestate="$a" -f "$tmp/rb_old.sql" >"$tmp/q4.out" 2>&1 & bg=$!
@@ -444,12 +452,220 @@ sleeping_in "$d" || fail "Q9 the paused forward never paused"
 own "$d" -c "set lock_timeout = '1s'" -c "begin" -c "set local role authenticated" -c "select count(*) from public.brand_memberships" -c "commit" >"$tmp/q9r" 2>&1 || fail "Q9 a reader was blocked: $(cat "$tmp/q9r")"
 wait "$bg" || fail "Q9 forward: $(cat "$tmp/q9.out")"
 pass "Q9 readers are not blocked by the row claim (writers still wait for the table lock, as K1)"
-# Q10 the claim must be ACL-neutral: an owner that revoked its own SELECT is refused before the claim (the claim would have changed the ACL)
+# Q10 (rewritten in TASK 18/50) the owner's own SELECT missing: the claim no longer depends on it -- the forward runs, adds nothing for the owner,
+# and the rollback gives back exactly that prestate (TASK 17 refused here with OWNER_ACL_INCOMPLETE because its claim was a self-GRANT)
+owner_sel() { val "$1" -c "select exists (select 1 from pg_class c, aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) a
+  where c.oid = 'public.brand_memberships'::regclass and a.grantee = c.relowner and a.privilege_type = 'SELECT')"; }
 d="$(newdb q10)"; own "$d" -c "revoke select on table public.brand_memberships from $owner" >/dev/null; Q10PRE="$(acl "$d")"
-if psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$cand" >"$tmp/q10.out" 2>&1; then fail "Q10 the forward ran with the owner's SELECT missing"; fi
-grep -q BM_PRIV_PRECONDITION_OWNER_ACL_INCOMPLETE "$tmp/q10.out" || fail "Q10 wrong refusal: $(grep ERROR "$tmp/q10.out" | head -1)"
-expect "Q10 unchanged" "$(acl "$d")" "$Q10PRE"
-pass "Q10 the owner's own SELECT missing -> OWNER_ACL_INCOMPLETE before the claim; the ACL is unchanged"
+a="$(apply_cand "$d")" || fail "Q10 the forward refused with the owner's SELECT missing"
+expect "Q10 the owner's SELECT stays absent" "$(owner_sel "$d")" "f"
+expect "Q10 API roles hardened" "$(priv "$d")" "$POST_PRIV"
+rollback_with "$d" "$a" >/dev/null
+expect "Q10 rollback = that prestate" "$(acl "$d")" "$Q10PRE"
+pass "Q10 the owner's own SELECT missing: the forward runs and does not add it back; the rollback restores exactly that prestate"
+
+# ---- T: H3 C3 (TASK 7) counterexamples, TASK 18/50 -- the claim must not change the ACL (R1); column ACLs (R2) ----
+T17=f3e14bcb631b994b2b1128e92fd20643c463163a
+git -C "$repo" show "$T17:supabase/candidates/postona_brand_memberships_privileges/001_brand_memberships_api_privilege_revoke.sql" >"$tmp/fwd_17.sql"
+git -C "$repo" show "$T17:supabase/candidates/postona_brand_memberships_privileges/001_brand_memberships_api_privilege_revoke_rollback.sql" >"$tmp/rb_17.sql"
+colacl() { val "$1" -c "select coalesce(string_agg(attname || '=' || array_to_string(attacl, ','), ' ' order by attnum), '-') from pg_attribute
+  where attrelid = 'public.brand_memberships'::regclass and attacl is not null"; }
+colpriv() { val "$1" -c "select has_any_column_privilege('$2', 'public.brand_memberships', '$3')"; }
+REVOKE_OWNER_SELECT="revoke select on table public.brand_memberships from $owner"
+COL_REF="grant references (brand_id) on table public.brand_memberships to authenticated"
+LAST_REVOKE="revoke trigger on table public.brand_memberships from service_role;"
+
+# T1 R1 reproduced on f3e14bcb (forward): another owner session revokes the owner's SELECT between the check and the self-GRANT claim; the claim re-grants it
+d="$(newdb t1)"; pause_before "$tmp/fwd_17.sql" "-- the claim of" 3 >"$tmp/t1.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t1.sql" >"$tmp/t1.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T1 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$REVOKE_OWNER_SELECT" >"$tmp/t1o" 2>&1 || fail "T1 the REVOKE was blocked before the claim: $(cat "$tmp/t1o")"
+expect "T1 the owner's SELECT is gone before the claim" "$(owner_sel "$d")" "f"
+wait "$bg" || fail "T1 the TASK 17 forward: $(cat "$tmp/t1.out")"
+expect "T1 the TASK 17 claim re-granted the owner's SELECT" "$(owner_sel "$d")" "t"
+pass "T1 H3 TASK 7 R1 reproduced on f3e14bcb (forward): the self-GRANT claim re-adds a SELECT another session revoked after the check"
+
+# T2 R1 fixed (forward): the same REVOKE before the claim is kept; the ACL-free claim adds nothing; the rollback gives back exactly that state
+d="$(newdb t2)"; pause_before "$cand" "-- the claim of" 3 >"$tmp/t2.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t2.sql" >"$tmp/t2.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T2 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$REVOKE_OWNER_SELECT" >"$tmp/t2o" 2>&1 || fail "T2 the REVOKE was blocked before the claim: $(cat "$tmp/t2o")"
+T2MID="$(acl "$d")"
+wait "$bg" || fail "T2 forward: $(cat "$tmp/t2.out")"
+expect "T2 the other session's REVOKE is kept" "$(owner_sel "$d")" "f"
+expect "T2 forward result" "$(priv "$d")" "$POST_PRIV"
+rollback_with "$d" "$(sed -n 's/^BM_PRIV_PRESTATE //p' "$tmp/t2.out")" >/dev/null
+expect "T2 rollback = the state the claim found (owner's SELECT still absent)" "$(acl "$d")" "$T2MID"
+pass "T2 R1 fixed (forward): a REVOKE that commits before the claim stays; the claim adds nothing; the rollback restores exactly what the claim found"
+
+# T3 R1 reproduced on f3e14bcb (rollback): the same race inside the TASK 17 rollback; it re-grants the owner's SELECT and commits
+d="$(newdb t3)"; a="$(apply_file "$d" "$tmp/fwd_17.sql")"; pause_before "$tmp/rb_17.sql" "-- the claim of" 3 >"$tmp/t3.sql"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$tmp/t3.sql" >"$tmp/t3.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T3 the paused rollback never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$REVOKE_OWNER_SELECT" >"$tmp/t3o" 2>&1 || fail "T3 the REVOKE was blocked before the claim: $(cat "$tmp/t3o")"
+wait "$bg" || fail "T3 the TASK 17 rollback refused (expected it to run): $(cat "$tmp/t3.out")"
+expect "T3 the TASK 17 rollback re-granted the owner's SELECT" "$(owner_sel "$d")" "t"
+pass "T3 H3 TASK 7 R1 reproduced on f3e14bcb (rollback): the self-GRANT claim re-adds the revoked SELECT and the rollback commits"
+
+# T4 R1 fixed (rollback): the same race -> the claim adds nothing, the rollback sees an ACL 001 did not leave and refuses as a whole
+d="$(newdb t4)"; a="$(apply_cand "$d")"; pause_before "$rb" "-- the claim of" 3 >"$tmp/t4.sql"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$tmp/t4.sql" >"$tmp/t4.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T4 the paused rollback never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$REVOKE_OWNER_SELECT" >"$tmp/t4o" 2>&1 || fail "T4 the REVOKE was blocked before the claim: $(cat "$tmp/t4o")"
+T4MID="$(acl "$d")"
+if wait "$bg"; then fail "T4 the rollback ran over a concurrent REVOKE"; fi
+grep -q BM_PRIV_ROLLBACK_PRESTATE_MISMATCH "$tmp/t4.out" || fail "T4 wrong refusal: $(grep ERROR "$tmp/t4.out" | head -1)"
+expect "T4 the other session's REVOKE is kept" "$(owner_sel "$d")" "f"
+expect "T4 unchanged" "$(acl "$d")" "$T4MID"
+pass "T4 R1 fixed (rollback): a REVOKE that commits before the claim is kept; the rollback refuses (MISMATCH), nothing granted"
+
+# T5 R2 reproduced on f3e14bcb: a column-only REFERENCES GRANT does not touch the pg_class row; it commits inside the forward, which then commits
+d="$(newdb t5)"; pause_after "$tmp/fwd_17.sql" "$LAST_REVOKE" 3 >"$tmp/t5.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t5.sql" >"$tmp/t5.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T5 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$COL_REF" >"$tmp/t5o" 2>&1 || fail "T5 the column GRANT was blocked on f3e14bcb: $(cat "$tmp/t5o")"
+wait "$bg" || fail "T5 the TASK 17 forward: $(cat "$tmp/t5.out")"
+expect "T5 table-level REFERENCES" "$(has_priv "$d" authenticated REFERENCES)" "f"
+expect "T5 authenticated still reaches REFERENCES through a column" "$(colpriv "$d" authenticated REFERENCES)" "t"
+pass "T5 H3 TASK 7 R2 reproduced on f3e14bcb: a column-only REFERENCES GRANT commits inside the forward and survives its table-only postconditions"
+
+# T6 R2 fixed: the user columns are claimed too; the same column GRANT times out, a waiting one fails after COMMIT; rollback exact
+d="$(newdb t6)"; T6PRE="$(acl "$d")"; pause_after "$cand" "$LAST_REVOKE" 3 >"$tmp/t6.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t6.sql" >"$tmp/t6.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T6 the paused forward never paused"
+if own "$d" -c "set lock_timeout = '1s'" -c "$COL_REF" >"$tmp/t6o" 2>&1; then fail "T6 a column GRANT committed inside the forward"; fi
+grep -q "lock timeout" "$tmp/t6o" || fail "T6 the column GRANT did not wait: $(cat "$tmp/t6o")"
+own "$d" -c "$COL_REF" >"$tmp/t6w" 2>&1 & w=$!
+wait "$bg" || fail "T6 forward: $(cat "$tmp/t6.out")"
+if wait "$w"; then fail "T6 the waiting column GRANT committed after the forward"; fi
+grep -q "tuple concurrently updated" "$tmp/t6w" || fail "T6 the waiting column GRANT: $(cat "$tmp/t6w")"
+expect "T6 no column ACL" "$(colacl "$d")" "-"
+expect "T6 no column REFERENCES" "$(colpriv "$d" authenticated REFERENCES)" "f"
+rollback_with "$d" "$(sed -n 's/^BM_PRIV_PRESTATE //p' "$tmp/t6.out")" >/dev/null
+expect "T6 rollback = the prestate exactly" "$(acl "$d")" "$T6PRE"
+expect "T6 rollback: no column ACL" "$(colacl "$d")" "-"
+pass "T6 R2 fixed: inside the forward a column GRANT times out, a waiting one fails with 'tuple concurrently updated'; rollback exact"
+
+# T7 a column GRANT that commits BEFORE the claim: the forward refuses (COLUMN_ACL_UNSUPPORTED); the other session's GRANT is kept as it is
+d="$(newdb t7)"; T7PRE="$(acl "$d")"; pause_before "$cand" "-- the claim of" 3 >"$tmp/t7.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t7.sql" >"$tmp/t7.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T7 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$COL_REF" >"$tmp/t7o" 2>&1 || fail "T7 the column GRANT was blocked before the claim: $(cat "$tmp/t7o")"
+T7COL="$(colacl "$d")"
+if wait "$bg"; then fail "T7 the forward ran over a column ACL"; fi
+grep -q BM_PRIV_PRECONDITION_COLUMN_ACL_UNSUPPORTED "$tmp/t7.out" || fail "T7 wrong refusal: $(grep ERROR "$tmp/t7.out" | head -1)"
+expect "T7 table ACL unchanged" "$(acl "$d")" "$T7PRE"
+expect "T7 the column GRANT kept" "$(colacl "$d")" "$T7COL"
+pass "T7 a column GRANT before the claim: the forward refuses as a whole; table ACL and the other session's column ACL unchanged"
+
+# T8 a column ACL already there (any privilege, grantee, grantor, grant option, user or system column): refused, nothing changes. On f3e14bcb
+# the owner's column REFERENCES was silently removed (and its v1 line could not give it back) and another grantor's survived.
+t8() { local tag="$1" setup="$2" d; d="$(newdb "t8$tag")"; own "$d" -c "$setup" >/dev/null; local pa pc; pa="$(acl "$d")"; pc="$(colacl "$d")"
+  [ "$pc" != "-" ] || fail "T8$tag the setup left no column ACL"
+  apply_fail "$d" BM_PRIV_PRECONDITION_COLUMN_ACL_UNSUPPORTED "T8$tag"
+  expect "T8$tag table ACL unchanged" "$(acl "$d")" "$pa"; expect "T8$tag column ACL unchanged" "$(colacl "$d")" "$pc"; }
+t8 a "$COL_REF"
+t8 b "grant references (brand_id) on table public.brand_memberships to $grantor with grant option; set role $grantor; $COL_REF; reset role"
+t8 c "grant select (brand_id) on table public.brand_memberships to anon"
+t8 d "grant references (user_id) on table public.brand_memberships to authenticated with grant option"
+t8 e "grant references (xmin) on table public.brand_memberships to authenticated"
+t8 f "grant update (role) on table public.brand_memberships to service_role"
+d="$(newdb t8old_a)"; own "$d" -c "$COL_REF" >/dev/null; a="$(apply_file "$d" "$tmp/fwd_17.sql")"
+expect "T8 f3e14bcb: the owner's column REFERENCES silently removed" "$(colacl "$d")" "-"
+own "$d" -v bm_prestate="$a" -f "$tmp/rb_17.sql" >/dev/null
+expect "T8 f3e14bcb: its rollback does not give the column REFERENCES back" "$(colacl "$d")" "-"
+d="$(newdb t8old_b)"; own "$d" -c "grant references (brand_id) on table public.brand_memberships to $grantor with grant option; set role $grantor; $COL_REF; reset role" >/dev/null
+apply_file "$d" "$tmp/fwd_17.sql" >/dev/null
+expect "T8 f3e14bcb: another grantor's column REFERENCES survives the forward" "$(colpriv "$d" authenticated REFERENCES)" "t"
+pass "T8 existing column ACLs (owner / other grantor / anon SELECT / grant option / system column / service_role UPDATE): refused, nothing changes (f3e14bcb: lossy or kept REFERENCES)"
+
+# T9 the rollback and column ACLs: one that appeared after the forward -> refused; a column GRANT during the claimed rollback times out;
+# one that commits before the rollback's claim -> refused, kept
+d="$(newdb t9)"; T9PRE="$(acl "$d")"; a="$(apply_cand "$d")"; own "$d" -c "$COL_REF" >/dev/null
+rb_fail "$d" "$a" BM_PRIV_ROLLBACK_COLUMN_ACL_UNSUPPORTED "T9 a column ACL after the forward"
+expect "T9 unchanged" "$(priv "$d")" "$POST_PRIV"
+own "$d" -c "revoke references (brand_id) on table public.brand_memberships from authenticated" >/dev/null
+pause_after "$rb" "-- (claimed" 3 >"$tmp/t9.sql"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$tmp/t9.sql" >"$tmp/t9.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T9 the paused rollback never paused"
+if own "$d" -c "set lock_timeout = '1s'" -c "$COL_REF" >"$tmp/t9o" 2>&1; then fail "T9 a column GRANT committed inside the rollback"; fi
+grep -q "lock timeout" "$tmp/t9o" || fail "T9 the column GRANT did not wait: $(cat "$tmp/t9o")"
+wait "$bg" || fail "T9 rollback: $(cat "$tmp/t9.out")"
+expect "T9 rollback = the prestate exactly" "$(acl "$d")" "$T9PRE"; expect "T9 no column ACL" "$(colacl "$d")" "-"
+d="$(newdb t9b)"; a="$(apply_cand "$d")"; pause_before "$rb" "-- the claim of" 3 >"$tmp/t9b.sql"
+psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -v bm_prestate="$a" -f "$tmp/t9b.sql" >"$tmp/t9b.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T9b the paused rollback never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "$COL_REF" >"$tmp/t9bo" 2>&1 || fail "T9b the column GRANT was blocked before the claim: $(cat "$tmp/t9bo")"
+T9BCOL="$(colacl "$d")"
+if wait "$bg"; then fail "T9b the rollback ran over a column ACL"; fi
+grep -q BM_PRIV_ROLLBACK_COLUMN_ACL_UNSUPPORTED "$tmp/t9b.out" || fail "T9b wrong refusal: $(grep ERROR "$tmp/t9b.out" | head -1)"
+expect "T9b unchanged" "$(priv "$d")" "$POST_PRIV"; expect "T9b the column GRANT kept" "$(colacl "$d")" "$T9BCOL"
+pass "T9 rollback: a column ACL after the forward -> refused; a column GRANT inside the claimed rollback times out (result exact); one before the claim -> refused, kept"
+
+# T10 / T11 the claim itself: run alone in a transaction (rolled back), it rewrites the pg_class row and every user column's pg_attribute row
+# (their xmin is this transaction) and takes SHARE UPDATE EXCLUSIVE on top of the table lock, nothing stronger
+claim_probe() { val "$1" -c "begin" -c "lock table public.brand_memberships in share row exclusive mode" \
+  -c "$(awk '/^-- the claim of/ { on = 1 } on { print } on && /^end \$\$;$/ { exit }' "$cand")" \
+  -c "select (select c.xmin = pg_current_xact_id()::xid from pg_class c where c.oid = 'public.brand_memberships'::regclass)::text || '/' ||
+       (select bool_and(a.xmin = pg_current_xact_id()::xid) from pg_attribute a where a.attrelid = 'public.brand_memberships'::regclass and a.attnum > 0 and not a.attisdropped)::text || '/' ||
+       (select string_agg(mode, ',' order by mode) from pg_locks where relation = 'public.brand_memberships'::regclass and pid = pg_backend_pid())" -c "rollback" | /usr/bin/grep -v '^$' | tail -1; }
+settings() { val "$1" -c "select coalesce(array_to_string(c.reloptions, ','), '-') || ' ' || (select string_agg(a.attname || ':' || coalesce(a.attstattarget::text, 'default'), ',' order by a.attnum)
+  from pg_attribute a where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped) from pg_class c where c.oid = 'public.brand_memberships'::regclass"; }
+CLAIMED="true/true/ShareRowExclusiveLock,ShareUpdateExclusiveLock"
+
+# T10 the claim changes no setting: non-default reloptions (fillfactor set, so another unset option is reset) and a statistics target survive
+# the forward and the rollback byte for byte (order included); all four candidate options set -> CLAIM_UNSUPPORTED, nothing changes
+d="$(newdb t10)"; own "$d" -c "alter table public.brand_memberships set (fillfactor = 70, autovacuum_enabled = false)" -c "alter table public.brand_memberships alter column role set statistics 500" >/dev/null
+T10SET="$(settings "$d")"; T10PRE="$(acl "$d")"; echo "T10 settings: $T10SET"
+expect "T10 claim probe with fillfactor set" "$(claim_probe "$d")" "$CLAIMED"
+a="$(apply_cand "$d")"; expect "T10 settings after the forward" "$(settings "$d")" "$T10SET"
+rollback_with "$d" "$a" >/dev/null; expect "T10 settings after the rollback" "$(settings "$d")" "$T10SET"; expect "T10 rollback acl" "$(acl "$d")" "$T10PRE"
+d="$(newdb t10b)"; own "$d" -c "alter table public.brand_memberships set (fillfactor = 70, autovacuum_enabled = false, parallel_workers = 2, toast_tuple_target = 4000)" >/dev/null
+T10BSET="$(settings "$d")"; T10BPRE="$(acl "$d")"
+apply_fail "$d" BM_PRIV_PRECONDITION_CLAIM_UNSUPPORTED "T10b all four options set"
+expect "T10b unchanged" "$(acl "$d")|$(settings "$d")" "$T10BPRE|$T10BSET"
+pass "T10 the claim leaves reloptions (order included) and statistics targets exactly as they were (forward and rollback); no unset option -> CLAIM_UNSUPPORTED"
+
+# T11 the claim on the default table: rows rewritten in this transaction, SHARE ROW EXCLUSIVE + SHARE UPDATE EXCLUSIVE only
+expect "T11 claim probe" "$(claim_probe "$(newdb t11)")" "$CLAIMED"
+pass "T11 the claim rewrites the pg_class row and every user column's pg_attribute row in this transaction; locks: SHARE ROW EXCLUSIVE + SHARE UPDATE EXCLUSIVE only"
+
+# T12 RESIDUAL (measured, not fixed): a SYSTEM-column GRANT is not serialised -- after the last check it can still commit before COMMIT. Of what
+# 001 revokes only REFERENCES is a column privilege, and a system column cannot back a foreign key (no unique index on it; owner probe below).
+# The rollback then refuses (COLUMN_ACL_UNSUPPORTED), as for any column ACL.
+d="$(newdb t12)"; pause_before "$cand" "select 'BM_PRIV_PRESTATE '" 3 >"$tmp/t12.sql"
+psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t12.sql" >"$tmp/t12.out" 2>&1 & bg=$!
+sleeping_in "$d" || fail "T12 the paused forward never paused"
+own "$d" -c "set lock_timeout = '1s'" -c "grant references (xmin) on table public.brand_memberships to authenticated" >"$tmp/t12o" 2>&1 || fail "T12 the system-column GRANT was blocked: $(cat "$tmp/t12o")"
+wait "$bg" || fail "T12 forward: $(cat "$tmp/t12.out")"
+expect "T12 the system-column ACL that committed after the last check" "$(colacl "$d")" "xmin=authenticated=x/$owner"
+expect "T12 has_any_column_privilege does not count system columns" "$(colpriv "$d" authenticated REFERENCES)" "f"
+if own "$d" -c "create unique index on public.brand_memberships (ctid)" >"$tmp/t12u" 2>&1; then fail "T12 a unique index on a system column was created"; fi
+grep -q "index creation on system columns is not supported" "$tmp/t12u" || fail "T12 owner probe: $(cat "$tmp/t12u")"
+rb_fail "$d" "$(sed -n 's/^BM_PRIV_PRESTATE //p' "$tmp/t12.out")" BM_PRIV_ROLLBACK_COLUMN_ACL_UNSUPPORTED "T12 rollback over a system-column ACL"
+pass "T12 RESIDUAL measured: a system-column GRANT can commit after the forward's last check (not serialisable by the owner); no FK can target a system column; the rollback refuses"
+
+# T13 system-column GRANTs inside the forward but BEFORE its last check (between the prestate and the REVOKE):
+#  a) one the REVOKE does not remove (anon SELECT (ctid)): the forward refuses as a whole (COLUMN_ACL_PRESENT); table ACL unchanged, GRANT kept
+#  b) one the REVOKE does remove (authenticated REFERENCES (xmin), owner-granted): a table-level REVOKE also revokes that privilege on every
+#     column, system columns included, so the forward removes it and commits (narrowing only); it was not in the prestate, so the rollback
+#     does not give it back
+t13() { local tag="$1" g="$2" d; d="$(newdb "t13$tag")"; T13PRE="$(acl "$d")"; pause_after "$cand" "-- (prestate taken" 3 >"$tmp/t13.sql"
+  psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$d" -f "$tmp/t13.sql" >"$tmp/t13.out" 2>&1 & bg=$!
+  sleeping_in "$d" || fail "T13$tag the paused forward never paused"
+  own "$d" -c "set lock_timeout = '1s'" -c "$g" >"$tmp/t13o" 2>&1 || fail "T13$tag the system-column GRANT was blocked: $(cat "$tmp/t13o")"
+  T13D="$d"; }
+t13 a "grant select (ctid) on table public.brand_memberships to anon"
+if wait "$bg"; then fail "T13a the forward committed over a system-column ACL it could see"; fi
+grep -q BM_PRIV_POSTCONDITION_COLUMN_ACL_PRESENT "$tmp/t13.out" || fail "T13a wrong refusal: $(grep ERROR "$tmp/t13.out" | head -1)"
+expect "T13a table ACL unchanged" "$(acl "$T13D")" "$T13PRE"
+expect "T13a the system-column GRANT kept" "$(colacl "$T13D")" "ctid=anon=r/$owner"
+t13 b "grant references (xmin) on table public.brand_memberships to authenticated"
+wait "$bg" || fail "T13b forward: $(cat "$tmp/t13.out")"
+expect "T13b the forward's REVOKE removed it too" "$(colacl "$T13D")" "-"
+rollback_with "$T13D" "$(sed -n 's/^BM_PRIV_PRESTATE //p' "$tmp/t13.out")" >/dev/null
+expect "T13b rollback = the prestate, without that GRANT" "$(acl "$T13D")|$(colacl "$T13D")" "$T13PRE|-"
+pass "T13 system-column GRANTs before the last check: one the REVOKE keeps -> refused (COLUMN_ACL_PRESENT); owner-granted REFERENCES -> removed by the REVOKE, not given back"
 
 # ---- O: apply order with G5's REAL candidate files (optional) ----
 if [ -n "$g5" ]; then
