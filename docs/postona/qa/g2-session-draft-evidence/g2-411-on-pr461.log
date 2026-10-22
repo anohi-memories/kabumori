@@ -1,0 +1,43 @@
+✔ FIXED-SM1: with no usable last_sign_in_at nothing is kept and a new session gets nothing back (115.18025ms)
+✔ FIXED-SM3: a new sign-in of the same person while the screen is open re-creates it -- the old text is neither shown nor saved under the new mark (18.323292ms)
+✔ FIXED-X1: a first send does not say "same content, same id" (16.662083ms)
+✔ FIXED-HOLD: sign-out + sign-in gets nothing back; a refresh that keeps the mark keeps the open text; an account removed during a pending restore is not restored (55.562458ms)
+✔ FINDING-SM2 (MOCK): the same person signing in elsewhere changes the mark on refresh -- this device's stored draft is discarded (12.865292ms)
+✔ FINDING-SM3R-T (since #398, MOCK): a refresh with a changed mark re-creates the OPEN screen and the typed text is gone at once (14.677709ms)
+✖ FINDING-SM3R-S (since #398, MOCK): the same change while a send is out shows the attempt as "unconfirmed" and offers a same-id re-ask before the first answer (15.026416ms)
+✔ FINDING-SM4: sign-out leaves the text on the device and 24 hours are only checked when the same person reads it again (16.401625ms)
+✔ FINDING-SM4-D (static): the account-deletion clean-up removes the onboarding state but nothing of the manual post (0.322125ms)
+✔ NC-1: the route keyed by the user only (AST) carries the text into a new sign-in (25.509625ms)
+✔ NC-2: a constant session mark (AST) brings the old text back after sign-out + sign-in (23.496583ms)
+✔ NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send (19.518584ms)
+✔ NC-4: the restore without its cancel check (AST) restores a draft whose account was removed meanwhile (24.8905ms)
+✔ NC-5: a draft store whose decideRestore ignores the session mark (AST) brings the old text back after sign-out + sign-in (20.235875ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 13
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 612.977333
+
+✖ failing tests:
+
+test at tests/zz-411.test.mjs:322:1
+✖ FINDING-SM3R-S (since #398, MOCK): the same change while a send is out shows the attempt as "unconfirmed" and offers a same-id re-ask before the first answer (15.026416ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'in_flight'
+  - 'unconfirmed'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-draft/apps/social-mobile/tests/zz-411.test.mjs:329:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'in_flight',
+    expected: 'unconfirmed',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
