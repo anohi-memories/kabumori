@@ -1,0 +1,15 @@
+✔ G2-DR1: a send removes the stored draft at its start; a screen re-opened while the send is out shows "sending" and no draft; after an uncertain end and "I checked X", a screen opened again has an empty editor and nothing stored (71.282625ms)
+✔ G2-DR2: a send the server refused keeps the text ("本文は残してあります"); back in the editor it is stored again and comes back in the SAME session -- but not after a new sign-in (30.345084ms)
+✔ G2-DR3: "下書きを消す" removes the stored draft at once; a screen opened again is empty (22.754958ms)
+✔ G2-DR4: text typed while the restore read is still pending wins -- the old draft is not put over it and what is stored is the new text (17.901709ms)
+✔ G2-DR5: while the restore read is pending the screen claims nothing -- no result card, no consent, nothing sendable; afterwards the text is back with no consent (18.503541ms)
+✔ OBSERVATION G2-DR6 (by design, not a finding): a data source that is BLOCKED when the screen opens restores nothing, and the stored draft is removed (19.735083ms)
+✔ negative controls: (1) without both send-time clears the draft survives a send (DR1 fails); removing only the explicit one is still covered by the save effect (layered, measured). (DR4 rests on the reducer's own guard, which G1's draft tests mutate.) (40.281083ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 441.850833

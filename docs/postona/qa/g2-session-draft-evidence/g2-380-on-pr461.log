@@ -1,0 +1,79 @@
+✔ G2-S1 token-only refresh (MOCK: same last_sign_in_at): the draft and the account come back, nothing is removed (69.749208ms)
+✔ G2-S2 sign-out then a new sign-in of the same person: nothing comes back and the old text is removed from the device (26.092917ms)
+✔ G2-S3 a new sign-in of the same person without a SIGNED_OUT in between (screen closed): nothing comes back, removed (22.971583ms)
+✔ G2-S4 another person signs in while the screen is open: a fresh screen, nothing of A is shown or written under B; A keeps its own record (16.555125ms)
+✔ G2-S5 app restart with the stored session (INITIAL_SESSION / recovered SIGNED_IN, user object as stored): restored (39.622958ms)
+✔ G2-S6 ABA: a restore read that answers after a NEW sign-in of the same person is not applied; the record is removed (15.584208ms)
+✔ G2-S7 ABA: a restore read that answers after ANOTHER person signed in (or after sign-out) shows nothing (39.124459ms)
+✔ G2-S8 a last_sign_in_at that cannot be a mark (not a string, longer than 64) is never restored -- fail closed (35.215542ms)
+✖ FINDING G2-SM1 (P3, owner G1 route / G5 auth): with no last_sign_in_at the mark is "" for every session, so a NEW sign-in of the same person gets the old draft back (14.945416ms)
+✔ FINDING G2-SM2 (P3, MOCK server semantics): the same person signing in on ANOTHER device makes this device lose its draft at the next refresh / restart (48.717ms)
+✖ FINDING G2-SM3 (P3, owner G1): a new sign-in of the same person while the screen stays mounted keeps the open text and re-saves it under the NEW mark (16.638875ms)
+✔ FINDING G2-SM4 (P3, owner G1 / G5): signing out leaves the text on the device, and "24 hours" is only checked when the same person reads it again (14.667375ms)
+✖ negative controls: route without the per-user key, a constant mark, a restore without its cancel check, and a store that ignores the mark each LEAK the old text in the very scenario that passes unmutated (0.369792ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 10
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 601.309292
+
+✖ failing tests:
+
+test at tests/zz-380.test.mjs:339:1
+✖ FINDING G2-SM1 (P3, owner G1 route / G5 auth): with no last_sign_in_at the mark is "" for every session, so a NEW sign-in of the same person gets the old draft back (14.945416ms)
+  AssertionError [ERR_ASSERTION]: restored across sessions (undefined): the gap still exists
+  
+  '' !== '印のない下書き'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-draft/apps/social-mobile/tests/zz-380.test.mjs:350:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: '印のない下書き',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/zz-380.test.mjs:388:1
+✖ FINDING G2-SM3 (P3, owner G1): a new sign-in of the same person while the screen stays mounted keeps the open text and re-saves it under the NEW mark (16.638875ms)
+  AssertionError [ERR_ASSERTION]: the screen was not re-created
+  
+  '' !== '開いたままの下書き'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-draft/apps/social-mobile/tests/zz-380.test.mjs:396:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: '開いたままの下書き',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/zz-380.test.mjs:445:1
+✖ negative controls: route without the per-user key, a constant mark, a restore without its cancel check, and a store that ignores the mark each LEAK the old text in the very scenario that passes unmutated (0.369792ms)
+  AssertionError [ERR_ASSERTION]: the mutation target occurs exactly once: key={userId ?? 'signed-out'}
+  
+  0 !== 1
+  
+      at mutate (file://~/Developer/kabumori-g2-draft/apps/social-mobile/tests/zz-380.test.mjs:426:10)
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-draft/apps/social-mobile/tests/zz-380.test.mjs:448:27)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
