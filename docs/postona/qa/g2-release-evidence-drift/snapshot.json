@@ -1,0 +1,172 @@
+{
+  "collectedAt": "2026-10-22T11:57:42+09:00",
+  "source": "gh pr view / git ls-remote / Issue comments (read-only), saved for offline evaluation",
+  "main": "0c42933ca5030ab31a56267529430d0473d9b155",
+  "prs": {
+    "348": {
+      "head": "e3963e1167aecfe349315428c317a1441257ac83",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "353": {
+      "head": "4d42b5c7a511831151bd98a34e473866dea43173",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "362": {
+      "head": "a2145eed2abda32b6f545c529b5b11a39c0d1e2c",
+      "base": "claude/f4-postona-pr251-android-intent-filter-p2-20261017",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "369": {
+      "head": "6c363afeec63327deeedeec4ee37ae8f3206fa96",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "381": {
+      "head": "8eefb3b63f4efba0727e99de980e0d56733d1d8e",
+      "base": "claude/g4-postona-threads-common-service-key-20261020",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "387": {
+      "head": "d6ff02f54199d98364232e8f729670d5982c765c",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "391": {
+      "head": "e729b2f253b228208ecd4448e3dc65acf0530eb2",
+      "base": "claude/g4-postona-threads-account-id-worker-code-20261020",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "393": {
+      "head": "2f3182319b3e7c2617c5429e5c1269371f3121e6",
+      "base": "claude/g4-postona-threads-account-id-worker-code-20261020",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "397": {
+      "head": "a0f66c77e8f7fb978bae0a1a02873ec91d07be61",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "401": {
+      "head": "22e574f869ded0763b6d246117f5d84660ae3eed",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "410": {
+      "head": "99adbca172bc0c485939bfadf44cda23a441ce72",
+      "base": "claude/g1-postona-mock-preview-send-gate-n2-20261020",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "416": {
+      "head": "c1e79c0fb65be97f8e39481c3ae5b6b92d28b056",
+      "base": "claude/g1-postona-sm3r-inflight-send-adopt-20261021",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "419": {
+      "head": "1ffd1b20f195d07fcc1b4beda3ea0f271c63aef3",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "425": {
+      "head": "811801a764784ff5b4d672dc5e774e25350855ca",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "426": {
+      "head": "03968e5cab5e5bc462fe585d1a72b81c81e43657",
+      "base": "main",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "427": {
+      "head": "38bf60cd215c2005c49facc1d2d47e8cb0131acc",
+      "base": "claude/g1-postona-pr410-inflight-reservation-aba-p2-20261021",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "430": {
+      "head": "30fbbfba336945ccf960d5c10ab0c355eca75322",
+      "base": "claude/g1-postona-pr410-inflight-reservation-aba-p2-20261021",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "433": {
+      "head": "129287609375da9e173438620a7e0fd7b4d43240",
+      "base": "claude/g4-x-connect-owner-session-failclosed-20261022",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "435": {
+      "head": "5a6c51ca8441c636cec10a451cc7ab5356b823a9",
+      "base": "claude/g1-postona-stale-none-after-uncertain-p2-20261021",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "436": {
+      "head": "898a551d3ba4cefc4f82853339d690f309703e20",
+      "base": "claude/g4-x-connect-owner-session-failclosed-20261022",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "439": {
+      "head": "94b3e09b2abbe15963cc60ae21c55c0b4cae30ed",
+      "base": "claude/g4-postona-threads-account-id-worker-code-20261020",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    },
+    "442": {
+      "head": "d2845005fbe6b0fccc30ec9553c4d76e669626d8",
+      "base": "claude/g4-postona-threads-account-id-worker-code-20261020",
+      "draft": true,
+      "state": "OPEN",
+      "mergedAt": null
+    }
+  },
+  "baseTips": {
+    "claude/f4-postona-pr251-android-intent-filter-p2-20261017": "8e1534f2fa1d39f8f1c321ed2cf69705fddf1421",
+    "claude/g1-postona-mock-preview-send-gate-n2-20261020": "39b9818b40fc7d10a8b9e70cd68fd02692874585",
+    "claude/g1-postona-pr410-inflight-reservation-aba-p2-20261021": "c1e79c0fb65be97f8e39481c3ae5b6b92d28b056",
+    "claude/g1-postona-sm3r-inflight-send-adopt-20261021": "99adbca172bc0c485939bfadf44cda23a441ce72",
+    "claude/g1-postona-stale-none-after-uncertain-p2-20261021": "38bf60cd215c2005c49facc1d2d47e8cb0131acc",
+    "claude/g4-postona-threads-account-id-worker-code-20261020": "8eefb3b63f4efba0727e99de980e0d56733d1d8e",
+    "claude/g4-postona-threads-common-service-key-20261020": "61e94a10026df2eb6aa5f3acdc4f4512c4cb96fd",
+    "claude/g4-x-connect-owner-session-failclosed-20261022": "03968e5cab5e5bc462fe585d1a72b81c81e43657",
+    "main": "0c42933ca5030ab31a56267529430d0473d9b155"
+  }
+}

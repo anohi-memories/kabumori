@@ -1,0 +1,24 @@
+✔ G2-RE1: on the 2026-10-22 snapshot the release is NO_GO, and every gate is held for its real reasons (1.531583ms)
+✔ G2-RE2: the snapshot is what the ledger says -- every fix / QA PR is OPEN and Draft, none merged; the ledger's QA heads are the PRs' heads (0.104667ms)
+✔ G2-RE3 (positive control): a gate that is really done lifts -- the decision is not a constant NO_GO (0.154ms)
+✔ G2-RE4 D1 review made at an OLDER head; the PR moved since: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.135667ms)
+✔ G2-RE4 D2 the PARENT branch moved after the review: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.096958ms)
+✔ G2-RE4 D3 accepted but still Draft / not merged: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.075292ms)
+✔ G2-RE4 D4 the review says CHANGES_REQUIRED at the current head: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.084333ms)
+✔ G2-RE4 D5 an owner ACCEPT that still requires a re-review counts as the review: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.075333ms)
+✔ G2-RE4 D6 a G2 QA PASS stands in for the product fix: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.079334ms)
+✔ G2-RE4 D7 source / offline evidence stands in for the real-API run: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.471125ms)
+✔ G2-RE4 D8 a QA gate is still red (todo failing): NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.079667ms)
+✔ G2-RE4 D9 a known failing test is still there: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.067667ms)
+✔ G2-RE4 D10 an open finding is still on the gate: NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.059209ms)
+✔ G2-RE4 D11 QA measured on the PREVIOUS fix PR (#427 -> #435 style): NO_GO with that reason (the naive "some PASS" rule would have lifted it) (0.071667ms)
+✔ negative controls: each strict rule, removed, lets at least one drift lift the gate -- the drift cases really depend on it (0.842166ms)
+✔ G2-RE5 (offline): the file imports only node:test / node:assert / node:fs, and the decision runs with every network door shut (11.197208ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 58.809125
