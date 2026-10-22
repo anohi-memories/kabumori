@@ -109,7 +109,8 @@ test_('Q6: G3 001 (pinned 547d9f92) and G5 001 (PR #303) in the two worlds', asy
   }
 });
 
-test_('Q2: the L-1 exposure check sees table grants, not column grants (per read, on the installed candidate)', async () => {
+// G5-20: the candidate's exposure check now sees the column grants G5-19 found invisible (this test asserted the gap until then)
+test_('Q2 (fixed by G5-20): the L-1 exposure check sees column grants as well as table grants (per read, on the installed candidate)', async () => {
   const e1 = await epoch(PRE, B1);
   const columnGrants: Array<[string, string]> = [
     ['REFERENCES', 'grant references (brand_id, user_id)'], ['UPDATE', 'grant update (role)'], ['INSERT', 'grant insert (brand_id, user_id, role)'],
@@ -118,9 +119,10 @@ test_('Q2: the L-1 exposure check sees table grants, not column grants (per read
     await sql(PRE, `${grant} on ${T} to authenticated`);
     assert.equal(await priv(PRE, 'authenticated', p), 'f', `${p}: has_table_privilege`);
     assert.equal(await anyCol(PRE, 'authenticated', p), 't', `${p}: has_any_column_privilege`);
-    assert.equal(await exposure(PRE), 'NULL', `${p}: the column grant is not seen`);
-    assert.equal(await epoch(PRE, B1), e1, `${p}: the getter keeps answering`);
+    assert.equal(await exposure(PRE), 'API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN', `${p}: the column grant is seen`);
+    assert.equal(await epoch(PRE, B1), 'NULL', `${p}: the getter refuses`);
     await sql(PRE, `revoke all (brand_id, user_id, role) on ${T} from authenticated`);
+    assert.equal(await epoch(PRE, B1), e1, `${p}: the same number after the revoke`);
   }
   assert.equal(await columnAcls(PRE), '0');
   // the same privilege at table level is seen at the very next read, and the getter refuses
@@ -132,18 +134,19 @@ test_('Q2: the L-1 exposure check sees table grants, not column grants (per read
 });
 
 test_('Q2: a column REFERENCES on the key columns = an FK onto memberships: existence oracle past RLS, and the deletion cascade blocked', async () => {
+  const e2 = await epoch(PRE, B2);
   await sql(PRE, `grant references (brand_id, user_id) on ${T} to authenticated`);
   const asAtt = (body: string) => `begin; set local role ${att}; ${body}; commit`;
   await sql(PRE, asAtt(`create table att.probe (brand_id text, user_id uuid, foreign key (brand_id, user_id) references ${T} (brand_id, user_id))`), superUser);
   assert.equal(await sql(PRE, asAtt(`select count(*) from ${T}`), superUser), '0', 'RLS shows the attacker no membership');
   await sql(PRE, asAtt(`insert into att.probe values ('${B2}', '${U2}')`), superUser);
   await fails(PRE, asAtt(`insert into att.probe values ('${B2}', '${U1}')`), /23503/u, superUser);
-  const e2 = await epoch(PRE, B2);
   await fails(PRE, `delete from public.brands where id = '${B2}'`, /23503[\s\S]*still referenced from table "probe"/u);
   await fails(PRE, `update ${T} set user_id = '${U1}' where brand_id = '${B2}'`, /23503/u);
-  assert.equal(await epoch(PRE, B2), e2, 'nothing moved');
+  assert.equal(await epoch(PRE, B2), 'NULL', '(G5-20) the getter refuses while the column grant is there');
   await sql(PRE, 'drop table att.probe', superUser);
   await sql(PRE, `revoke references (brand_id, user_id) on ${T} from authenticated`);
+  assert.equal(await epoch(PRE, B2), e2, 'nothing moved');
   // without the column grant the FK cannot be made
   await fails(PRE, asAtt(`create table att.probe2 (brand_id text, user_id uuid, foreign key (brand_id, user_id) references ${T} (brand_id, user_id))`), /42501/u, superUser);
   assert.equal(await columnAcls(PRE), '0');
@@ -170,8 +173,9 @@ test_('Q3: system-column grants are recorded but give nothing L-1 guards: no wri
     if (p !== 'SELECT') assert.equal(await anyCol(PRE, 'authenticated', p), 'f', `authenticated ${p}`);
   }
   assert.equal(await sql(PRE, `select has_column_privilege('anon', '${T}', 'ctid', 'SELECT')`), 't');
-  assert.equal(await exposure(PRE), 'NULL');
-  assert.equal(await epoch(PRE, B1), e1);
+  // (G5-20) the empty column-ACL allowlist makes them fail closed although they grant nothing useful
+  assert.equal(await exposure(PRE), 'API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL');
+  assert.equal(await epoch(PRE, B1), 'NULL');
   // what the grants allow
   assert.equal(await sql(PRE, `begin; set local role anon; select count(*) from (select ctid from ${T}) s; commit`), '0', 'anon: RLS, no anon policy');
   await fails(PRE, `begin; set local role anon; select count(*) from ${T}; commit`, /42501/u);
@@ -181,46 +185,31 @@ test_('Q3: system-column grants are recorded but give nothing L-1 guards: no wri
   await fails(PRE, `create unique index on ${T} (xmin)`, /no default operator class/u);
   await sql(PRE, `revoke all (${SYS}) on ${T} from anon, authenticated`);
   assert.equal(await columnAcls(PRE), '0');
+  assert.equal(await epoch(PRE, B1), e1);
   // authenticated already reads the system columns of its own rows through the table SELECT, with no column grant at all
   assert.equal(await sql(PRE, asUser(U1, `select count(*) || ':' || bool_and(ctid is not null and xmin is not null) from ${T}`)), '1:true');
 });
 
-test_('model only (not a candidate): a widened L-1 sees every gap above and stays quiet on the clean world and on owner->owner entries', async () => {
-  await sql(PRE, `create schema g519_model; create function g519_model.exposure() returns text language sql stable security definer set search_path = '' as $f$
-    with reach as (
-      select a.rolname as api, r.oid as role_oid from pg_catalog.pg_roles a join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.oid, r.oid, 'MEMBER')
-       where a.rolname in ('anon', 'authenticated', 'service_role', 'authenticator'))
-    select coalesce(private.account_lifecycle_owner_epoch_exposure(), case
-      when exists (select 1 from reach x where x.api in ('anon', 'authenticated')
-                    and (pg_catalog.has_any_column_privilege(x.role_oid, '${T}', 'INSERT')
-                      or pg_catalog.has_any_column_privilege(x.role_oid, '${T}', 'UPDATE')
-                      or pg_catalog.has_any_column_privilege(x.role_oid, '${T}', 'REFERENCES'))) then 'API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN'
-      when exists (select 1 from pg_catalog.pg_attribute a, pg_catalog.aclexplode(a.attacl) e
-                    where a.attrelid = '${T}'::regclass and a.attnum < 0
-                      and (e.grantee = 0 or e.grantee in (select x.role_oid from reach x))) then 'API_ROLE_HAS_SYSTEM_COLUMN_ACL'
-      else null end)
-  $f$`);
-  const model = () => sql(PRE, 'select coalesce(g519_model.exposure(), \'NULL\')');
-  assert.equal(await model(), 'NULL', 'clean world');
+// G5-19 measured these cases against a test-only model; G5-20 put the same rules into the candidate (the model is gone)
+test_('(G5-20) the candidate catches every case of the G5-19 model and stays quiet on the clean world and on owner->owner entries', async () => {
+  assert.equal(await exposure(PRE), 'NULL', 'clean world');
   const cases: Array<[string, string]> = [
     [`grant references (brand_id, user_id) on ${T} to authenticated`, 'API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN'],
     [`grant update (role) on ${T} to authenticated`, 'API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN'],
     [`grant insert (brand_id) on ${T} to authenticated`, 'API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN'],
-    [`grant select (ctid) on ${T} to anon`, 'API_ROLE_HAS_SYSTEM_COLUMN_ACL'],
-    [`grant references (xmin) on ${T} to authenticated`, 'API_ROLE_HAS_SYSTEM_COLUMN_ACL'],
-    [`grant select (ctid) on ${T} to public`, 'API_ROLE_HAS_SYSTEM_COLUMN_ACL'],
-    [`grant select (xmin) on ${T} to service_role`, 'API_ROLE_HAS_SYSTEM_COLUMN_ACL'],
+    [`grant select (ctid) on ${T} to anon`, 'API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL'],
+    [`grant references (xmin) on ${T} to authenticated`, 'API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL'],
+    [`grant select (ctid) on ${T} to public`, 'API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL'],
+    [`grant select (xmin) on ${T} to service_role`, 'API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL'],
   ];
   for (const [grant, code] of cases) {
     await sql(PRE, grant);
-    assert.equal(await model(), code, grant);
-    assert.equal(await exposure(PRE), 'NULL', `the real check misses: ${grant}`);
+    assert.equal(await exposure(PRE), code, grant);
     await sql(PRE, `revoke all (brand_id, user_id, role, ${SYS}) on ${T} from public, anon, authenticated, service_role`);
   }
   await sql(PRE, `grant select (xmin) on ${T} to ${owner}`);
-  assert.equal(await model(), 'NULL', 'an owner->owner entry is not an API role');
+  assert.equal(await exposure(PRE), 'NULL', 'an owner->owner entry is not an API role');
   await sql(PRE, `revoke select (xmin) on ${T} from ${owner}`);
-  await sql(PRE, 'drop schema g519_model cascade');
   assert.equal(await columnAcls(PRE), '0');
 });
 

@@ -42,12 +42,13 @@ test('decisions stay with the user; production NO_GO; G5 takes on no G3 SQL; man
   }
 });
 
-test('the gap described is the candidate on this branch: L-1 is table-level only (flip this test with the Q2 TASK)', () => {
+// flipped by G5-20 (the Q2 TASK): the gap G5-19 described is closed in the candidate, and the suite now asserts the finding
+test('the gap described is closed by the G5-20 candidate: L-1 sees column and system-column ACLs; the suite asserts the findings', () => {
   const body = candidate.slice(candidate.indexOf('create function private.account_lifecycle_owner_epoch_exposure()'), candidate.indexOf('revoke all on function private.account_lifecycle_owner_epoch_exposure()'));
   assert.ok(body.length > 0);
   assert.ok(body.includes("has_table_privilege(x.role_oid, 'public.brand_memberships', 'REFERENCES')"));
-  assert.ok(!body.includes('has_any_column_privilege') && !body.includes('attacl'), 'no column / system-column predicate yet');
-  assert.ok(suite.includes("'the column grant is not seen'") || suite.includes('the column grant is not seen'), 'the suite measures the gap');
+  assert.ok(body.includes("has_any_column_privilege(x.role_oid, 'public.brand_memberships', 'REFERENCES')") && body.includes('aclexplode(a.attacl)'), 'column / system-column predicates');
+  assert.ok(suite.includes('the column grant is seen') && !suite.includes('the column grant is not seen'), 'the suite asserts the finding');
 });
 
 test('the PG17 suite stays local: socket-only guard, no network, G3 file read from the pinned commit, never copied', () => {
