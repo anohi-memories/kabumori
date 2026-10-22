@@ -1,0 +1,48 @@
+✔ G2-UC sent: the copy contract, measured (63.712708ms)
+ℹ sent: kind=sent violations=[] lines=["Xが投稿を受け付けました","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","Xが投稿を受け付けました","Xから返された投稿ID: 1850000000000000001","新しい投稿を作る"]
+✔ G2-UC simulated: the copy contract, measured (24.36225ms)
+ℹ simulated: kind=simulated violations=[] lines=["送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","サーバーはこの結果を模擬として返しました。実際のXへの投稿としては扱いません。","模擬の結果は、実際にXへ投稿された証拠でも、投稿されていない証拠でもありません。Xで確認するまで、同じ内容を再送信しないでください。","Xで確認しました（この下書きを破棄）","「Xで確認しました」を押すと、この記録は消え、同じ内容も新しい投稿として送れるようになります。Xで確認してから押してください。"]
+✔ G2-UC failed: the copy contract, measured (23.30875ms)
+ℹ failed: kind=failed violations=[] lines=["投稿されませんでした","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","投稿されませんでした","Xに投稿される前に止まりました。本文は残してあります。"]
+✔ G2-UC refused_by_server: the copy contract, measured (16.779625ms)
+ℹ refused_by_server: kind=refused violations=[] lines=["送信は受け付けられませんでした","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","送信は受け付けられませんでした","サーバーは何も記録していません。本文は残してあります。"]
+✔ G2-UC pending: the copy contract, measured (16.730958ms)
+ℹ pending: kind=pending violations=["R2"] lines=["まだ送信されていません（処理中の可能性）","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","まだ送信されていません","混み合っているか、処理中の可能性があります。投稿済みとは扱いません。別の内容を送る前に、同じ内容で結果を確認してください。","同じ内容・同じ送信IDで確認し直す","Xで確認しました（この下書きを破棄）"]
+✔ G2-UC unconfirmed: the copy contract, measured (15.868708ms)
+ℹ unconfirmed: kind=unconfirmed violations=[] lines=["結果を確認できません","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","結果を確認できません","通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。","同じ内容・同じ送信IDで確認し直す","Xで確認しました（この下書きを破棄）"]
+✔ G2-UC uncertain: the copy contract, measured (13.825292ms)
+ℹ uncertain: kind=uncertain violations=[] lines=["投稿されたか確認できません","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","投稿されたか確認できません","Xに投稿された可能性があります。Xで確認するまで、同じ内容を再送信しないでください。","Xで確認しました（この下書きを破棄）","「Xで確認しました」を押すと、この記録は消え、同じ内容も新しい投稿として送れるようになります。Xで確認してから押してください。"]
+✔ G2-UC sn5_wall_refusal: the copy contract, measured (19.607542ms)
+ℹ sn5_wall_refusal: kind=refused violations=["R4"] lines=["送信は受け付けられませんでした","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","送信は受け付けられませんでした","サーバーは何も記録していません。本文は残してあります。"]
+✔ G2-UC rk3_old_posted_attempt: the copy contract, measured (20.43075ms)
+ℹ rk3_old_posted_attempt: kind=unconfirmed violations=["R5"] lines=["結果を確認できません","送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。","結果を確認できません","通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。","同じ内容・同じ送信IDで確認し直す","Xで確認しました（この下書きを破棄）"]
+✔ G2-UC-P: another person signs in on top of an uncertain result -- none of A's result words or actions are shown to B (17.703083ms)
+⚠ RELEASE GATE G2-UC1 (P3, owner G1, new): a PENDING result does not say "not sent" -- the server holds the request and the post may still appear (13.777167ms) # copy gate: red until the pending heading stops asserting "not sent"
+✔ negative controls: (1) an uncertain heading that says "投稿しました" breaks R1; (2) an uncertain card that offers "新しい投稿を作る" breaks R3; (3) a pending heading that no longer says "not sent" turns the G2-UC1 gate green (44.404459ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 504.9425
+
+✖ failing tests:
+
+test at tests/g2-x-result-copy.test.mjs:338:1
+⚠ RELEASE GATE G2-UC1 (P3, owner G1, new): a PENDING result does not say "not sent" -- the server holds the request and the post may still appear (13.777167ms) # copy gate: red until the pending heading stops asserting "not sent"
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-copy/apps/social-mobile/tests/g2-x-result-copy.test.mjs:340:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
