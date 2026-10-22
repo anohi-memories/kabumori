@@ -279,8 +279,8 @@ const aclImage = (db: string) =>
     (select string_agg(c.relname || '=' || coalesce(c.relacl::text, '-'), ';' order by c.relname) from pg_class c where c.relnamespace in ('ai_calls'::regnamespace, 'ai_ledger'::regnamespace)),
     (select count(*)::text from pg_attribute a join pg_class c on c.oid = a.attrelid where c.relnamespace in ('ai_calls'::regnamespace, 'ai_ledger'::regnamespace) and a.attacl is not null),
     (select string_agg(f.oid::regprocedure::text || '=' || coalesce(f.proacl::text, '-'), ';' order by f.oid::regprocedure::text) from pg_proc f where f.pronamespace in ('ai_calls'::regnamespace, 'ai_ledger'::regnamespace)),
-    (select coalesce(string_agg(d.defaclnamespace::regnamespace::text || '=' || d.defaclacl::text, ';'), '-') from pg_default_acl d),
-    (select coalesce(string_agg(m.roleid::regrole::text || '>' || m.member::regrole::text || ':' || m.inherit_option || m.set_option, ';' order by 1), '-')
+    (select coalesce(string_agg(d.defaclrole::regrole::text || '@' || d.defaclnamespace::regnamespace::text || '/' || d.defaclobjtype::text || '=' || d.defaclacl::text, ';' order by d.defaclrole::regrole::text, d.defaclnamespace, d.defaclobjtype), '-') from pg_default_acl d),
+    (select coalesce(string_agg(m.roleid::regrole::text || '>' || m.member::regrole::text || ':' || m.inherit_option || m.set_option, ';' order by m.roleid::regrole::text, m.member::regrole::text), '-')
        from pg_auth_members m where m.member in (select oid from pg_roles where rolname in ('anon', 'authenticated', 'service_role'))))`);
 /** Feed a (mutated) migration text to psql on stdin, as the owner. */
 async function psqlText(sql: string, db: string) {
@@ -304,7 +304,7 @@ Deno.test({ name: "G6-14 ACL drift is refused before anything changes, with noth
   const db = `g6r14_drift_${Deno.pid}`;
   const owner = Deno.env.get("GRR_PGSUPER")!;
   const drifts: Array<[string, string, string, RegExp]> = [
-    ["H4: service_role on the table and a helper", H4_DRIFT, "", /relation grants consumer_calls service_role:INSERT/],
+    ["H4: service_role on the table and a helper", H4_DRIFT, "", /relation grants (\S+ \S+, )*consumer_calls service_role:INSERT/],
     ["PUBLIC reads the table", `grant select on ai_calls.consumer_calls to public`, "", /relation grants consumer_calls PUBLIC:SELECT/],
     ["anon USAGE on the schema, no table grant", `grant usage on schema ai_calls to anon`, "", /schema ai_calls grants anon:USAGE/],
     ["a column grant to authenticated", `grant select (user_id) on ai_calls.consumer_calls to authenticated`, "", /a column grant in ai_calls/],
@@ -327,8 +327,8 @@ Deno.test({ name: "G6-14 ACL drift is refused before anything changes, with noth
         const [fns, acls] = [await stateOf(db), await aclImage(db)];
         const r = await psqlFile(MIGRATION_PATH, db);
         assert.deepEqual([r.ok, r.sqlstate], [false, "P0001"], `${label}: ${r.err}`);
-        assert.match(r.err, /AI_CALLS_OWNER_HELD_PRESTATE: ACL drift: /, label);
-        assert.match(r.err, why, label);
+        assert.match(r.err, /AI_CALLS_OWNER_HELD_PRESTATE: ACL drift: /, `${label}: ${r.err}`);
+        assert.match(r.err, why, `${label}: ${r.err}`);
         assert.deepEqual([await stateOf(db), await aclImage(db)], [fns, acls], `${label}: nothing changed, nothing repaired`);
       } finally {
         if (undo) await dbRows(db, undo);
@@ -360,6 +360,120 @@ Deno.test({ name: "G6-14 probes on the REAL migration text: without the PRESTATE
     const clean = await psqlFile(MIGRATION_PATH, db);
     assert.ok(clean.ok, clean.err);
     assert.equal(await dbRows(db, `select count(*) from pg_proc where proname = 'ai_calls_owner_held_acl_check'`), "0", "the temporary check is gone");
+  } finally {
+    await dropDb(db);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// G6-15 (H4 #331 P2): a GLOBAL default privilege (pg_default_acl, defaclnamespace = 0) of a role that can create
+// objects in ai_calls / ai_ledger sets the ACL of every object it creates there later. Refused like any other drift.
+// ---------------------------------------------------------------------------------------------------------
+
+const H4_GLOBAL = (owner: string) => `alter default privileges for role ${owner} grant select on tables to service_role`;
+/** As the owner: a table, a sequence and a function created in ai_calls AFTER the migration, and what each grants. */
+async function futureObjects(db: string) {
+  await dbRows(db, `create table ai_calls.g6r15_future_t (x int); create sequence ai_calls.g6r15_future_s;
+    create function ai_calls.g6r15_future_f() returns int language sql as $f$ select 1 $f$`);
+  return dbRows(db, `select concat_ws(' ',
+    coalesce((select relacl::text from pg_class where oid = 'ai_calls.g6r15_future_t'::regclass), 'default'),
+    coalesce((select relacl::text from pg_class where oid = 'ai_calls.g6r15_future_s'::regclass), 'default'),
+    coalesce((select proacl::text from pg_proc where oid = 'ai_calls.g6r15_future_f()'::regprocedure), 'default'),
+    has_table_privilege('service_role', 'ai_calls.g6r15_future_t', 'SELECT')::text,
+    has_sequence_privilege('service_role', 'ai_calls.g6r15_future_s', 'USAGE')::text)`);
+}
+
+Deno.test({ name: "G6-15 global default privileges are refused before anything changes, with nothing repaired: H4's owner SELECT ON TABLES to service_role, sequences, functions (beyond the built-in PUBLIC EXECUTE), a grant option, PUBLIC on tables, types, an inherited role, a member of the owner, another superuser, global + schema-scoped together", ...opts }, async () => {
+  const db = `g6r15_global_${Deno.pid}`;
+  const owner = Deno.env.get("GRR_PGSUPER")!;
+  const drifts: Array<[string, string, string, RegExp]> = [
+    ["H4: the owner's tables to service_role", H4_GLOBAL(owner), "", new RegExp(`reaching ai_calls grants ${owner} r service_role:SELECT`)],
+    ["sequences USAGE / UPDATE to service_role", `alter default privileges for role ${owner} grant usage, update on sequences to service_role`, "", / S service_role:(USAGE|UPDATE)/],
+    ["functions to service_role (PUBLIC is the built-in default)", `alter default privileges for role ${owner} grant execute on functions to service_role`, "", / f service_role:EXECUTE/],
+    ["functions to authenticated with a grant option", `alter default privileges for role ${owner} grant execute on functions to authenticated with grant option`, "", / f authenticated:EXECUTE\+grant/],
+    ["tables to PUBLIC", `alter default privileges for role ${owner} grant select on tables to public`, "", / r PUBLIC:SELECT/],
+    ["types to anon", `alter default privileges for role ${owner} grant usage on types to anon`, "", / T anon:USAGE/],
+    ["an inherited role", `create role g6r15_reader nologin; alter default privileges for role ${owner} grant select on tables to g6r15_reader; grant g6r15_reader to authenticated`,
+      `revoke g6r15_reader from authenticated; drop owned by g6r15_reader; drop role g6r15_reader`, / r g6r15_reader:SELECT/],
+    ["a member of the owner (it can create there)", `create role g6r15_member nologin; grant ${owner} to g6r15_member; alter default privileges for role g6r15_member grant select on tables to service_role`,
+      `drop owned by g6r15_member; revoke ${owner} from g6r15_member; drop role g6r15_member`, /grants g6r15_member r service_role:SELECT/],
+    ["another superuser", `create role g6r15_super superuser nologin; alter default privileges for role g6r15_super grant execute on functions to authenticated`,
+      `drop owned by g6r15_super; drop role g6r15_super`, /grants g6r15_super f authenticated:EXECUTE/],
+    ["global and schema-scoped together", `${H4_GLOBAL(owner)}; alter default privileges for role ${owner} in schema ai_ledger grant select on tables to service_role`, "",
+      /(a global default privilege reaching ai_calls|a default privilege in ai_ledger)/],
+  ];
+  try {
+    for (const [label, drift, undo, why] of drifts) {
+      await freshDb(db);
+      await dbRows(db, drift);
+      try {
+        const [fns, acls] = [await stateOf(db), await aclImage(db)];
+        const r = await psqlFile(MIGRATION_PATH, db);
+        assert.deepEqual([r.ok, r.sqlstate], [false, "P0001"], `${label}: ${r.err}`);
+        assert.match(r.err, /AI_CALLS_OWNER_HELD_PRESTATE: ACL drift: /, `${label}: ${r.err}`);
+        assert.match(r.err, why, `${label}: ${r.err}`);
+        assert.doesNotMatch(r.err, / f PUBLIC:EXECUTE/, `${label}: the built-in PUBLIC EXECUTE is not the drift`);
+        assert.deepEqual([await stateOf(db), await aclImage(db)], [fns, acls], `${label}: nothing changed, nothing repaired`);
+      } finally {
+        if (undo) await dbRows(db, undo);
+      }
+    }
+  } finally {
+    await dropDb(db);
+  }
+});
+
+Deno.test({ name: "G6-15 what stays accepted and what later objects get: a clean database applies and re-applies, and a table / sequence created later grants nothing (a function only the built-in PUBLIC EXECUTE, unusable without the schema); stricter global rows and a role that cannot create there are accepted untouched; a global default added DURING the migration is refused by POST with everything rolled back; without the new check H4's global default passes and a later table is readable", ...opts }, async () => {
+  const db = `g6r15_accept_${Deno.pid}`;
+  const owner = Deno.env.get("GRR_PGSUPER")!;
+  try {
+    // Clean: apply, re-apply, then later objects.
+    await freshDb(db);
+    for (const run of ["apply", "re-apply"]) {
+      const r = await psqlFile(MIGRATION_PATH, db);
+      assert.ok(r.ok, `${run}: ${r.err}`);
+    }
+    assert.equal(await futureObjects(db), "default default default false false");
+    for (const role of ["service_role", "anon", "authenticated"]) {
+      const call = await psqlText(`set role ${role}; select ai_calls.g6r15_future_f();`, db);
+      assert.ok(!call.ok && /permission denied for schema ai_calls/.test(call.err), `${role}: ${call.err}`);
+    }
+    // Stricter rows (REVOKE) of the owner and of another superuser, that superuser's grant option to itself (its own
+    // objects' rights), and a grant by a role that cannot create here.
+    await freshDb(db);
+    await dbRows(db, `alter default privileges for role ${owner} revoke execute on functions from public;
+      create role g6r15_super superuser nologin; alter default privileges for role g6r15_super revoke execute on functions from public;
+      alter default privileges for role g6r15_super grant select on tables to g6r15_super with grant option;
+      create role g6r15_other nologin; alter default privileges for role g6r15_other grant select on tables to service_role`);
+    try {
+      assert.equal(await dbRows(db, `select has_schema_privilege('g6r15_other', 'ai_calls', 'CREATE')::text || has_schema_privilege('g6r15_other', 'ai_ledger', 'CREATE')::text`), "falsefalse");
+      const acls = await aclImage(db);
+      const r = await psqlFile(MIGRATION_PATH, db);
+      assert.ok(r.ok, r.err);
+      assert.equal((await aclImage(db)).split(" || ")[4], acls.split(" || ")[4], "the global rows are left as they were");
+      assert.equal(await futureObjects(db), `default default {${owner}=X/${owner}} false false`, "the owner's REVOKE applies: no PUBLIC EXECUTE");
+    } finally {
+      await dbRows(db, `drop owned by g6r15_super, g6r15_other; drop role g6r15_super; drop role g6r15_other`);
+    }
+    // POST: a DDL event trigger adds H4's global default right after the migration's REVOKE.
+    await freshDb(db);
+    await dbRows(db, `create function public.g6r15_add_global() returns event_trigger language plpgsql as $f$
+        begin execute '${H4_GLOBAL(owner)}'; end $f$;
+      create event trigger g6r15_add_global on ddl_command_end when tag in ('REVOKE') execute function public.g6r15_add_global();`);
+    const [fns, acls] = [await stateOf(db), await aclImage(db)];
+    const post = await psqlFile(MIGRATION_PATH, db);
+    assert.ok(!post.ok && /P0001: AI_CALLS_OWNER_HELD_POST: ACL drift: a global default privilege reaching ai_calls grants \S+ r service_role:SELECT/.test(post.err), post.err);
+    assert.deepEqual([await stateOf(db), await aclImage(db)], [fns, acls], "the new global row, the replaced bodies and claim_held were all rolled back");
+    // The counterexample, kept: the REAL migration text without the new check accepts H4's global default.
+    const text = await Deno.readTextFile(MIGRATION_PATH);
+    const check = "    if v_extra is not null then\n      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a global default privilege";
+    assert.equal(text.split(check).length - 1, 1);
+    await freshDb(db);
+    await dbRows(db, H4_GLOBAL(owner));
+    const without = await psqlText(text.replace(check, check.replace("if v_extra is not null then", "if false then")), db);
+    assert.ok(without.ok, `without the G6-15 check H4's global default is accepted: ${without.err}`);
+    assert.equal(await dbRows(db, `select (to_regprocedure('public.ai_calls_claim_held(jsonb)') is not null)::text`), "true");
+    assert.match(await futureObjects(db), / true false$/, "and a table created later is readable by service_role");
   } finally {
     await dropDb(db);
   }

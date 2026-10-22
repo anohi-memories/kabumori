@@ -38,6 +38,8 @@
 -- G6-14 (H4 #331 P2): it also refuses any direct privilege on the ai_calls / ai_ledger schemas, relations, columns,
 -- helpers or default privileges for anyone but their owner, any effective privilege of anon / authenticated /
 -- service_role there, and any path from those roles to the owner or a superuser, before AND after (no repair).
+-- G6-15 (H4 #331 P2): that includes the GLOBAL default privileges (pg_default_acl, defaclnamespace = 0) of every role
+-- that can create objects in those schemas: beyond the role itself and PostgreSQL's built-in default, refused.
 --
 -- Fail closed: the migration checks first that the objects it replaces are exactly the known bodies (the original
 -- ones, or this migration's on a re-run), owned by the migrating role, with the expected grants, and afterwards that
@@ -89,13 +91,13 @@ begin
       raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % has an application-role or mixed owner', p_stage, v_ns.nspname using errcode = 'P0001';
     end if;
     -- Direct ACLs: nothing for anyone but the owner (PUBLIC and grant options included).
-    select string_agg(format('%s:%s%s', coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ') into v_extra
+    select string_agg(format('%s:%s%s', coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ' order by coalesce(r.rolname, 'PUBLIC'), a.privilege_type) into v_extra
       from aclexplode(coalesce(v_ns.nspacl, acldefault('n', v_ns.nspowner))) a left join pg_roles r on r.oid = a.grantee
      where a.grantee <> v_ns.nspowner;
     if v_extra is not null then
       raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: schema % grants %', p_stage, v_ns.nspname, v_extra using errcode = 'P0001';
     end if;
-    select string_agg(format('%s %s:%s%s', c.relname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ') into v_extra
+    select string_agg(format('%s %s:%s%s', c.relname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ' order by c.relname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type) into v_extra
       from pg_class c cross join lateral aclexplode(c.relacl) a left join pg_roles r on r.oid = a.grantee
      where c.relnamespace = v_ns.oid and a.grantee <> c.relowner;
     if v_extra is not null then
@@ -105,7 +107,7 @@ begin
                 where c.relnamespace = v_ns.oid and att.attnum > 0 and att.attacl is not null) then
       raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a column grant in %', p_stage, v_ns.nspname using errcode = 'P0001';
     end if;
-    select string_agg(format('%s %s:%s%s', f.proname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ') into v_extra
+    select string_agg(format('%s %s:%s%s', f.proname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ' order by f.proname, coalesce(r.rolname, 'PUBLIC'), a.privilege_type) into v_extra
       from pg_proc f cross join lateral aclexplode(coalesce(f.proacl, acldefault('f', f.proowner))) a left join pg_roles r on r.oid = a.grantee
      where f.pronamespace = v_ns.oid and a.grantee <> f.proowner;
     if v_extra is not null then
@@ -116,6 +118,23 @@ begin
     end if;
     if exists (select 1 from pg_default_acl d where d.defaclnamespace = v_ns.oid) then
       raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a default privilege in %', p_stage, v_ns.nspname using errcode = 'P0001';
+    end if;
+    -- G6-15 (H4 #331 P2): a GLOBAL default privilege (defaclnamespace = 0) of the owner, or of any role that can
+    -- create here (a superuser, a member of the owner), sets the ACL of every table / sequence / function / type it
+    -- creates in this schema too. Every item for anyone but the role itself must be exactly an item of PostgreSQL's
+    -- built-in default for that kind (PUBLIC EXECUTE on functions, PUBLIC USAGE on types, which apply without any row
+    -- too; never a grant option); a stricter row (a REVOKE) is fine. pg_default_acl says 'S' for sequences where
+    -- acldefault wants 's'.
+    select string_agg(format('%s %s %s:%s%s', d.defaclrole::regrole, d.defaclobjtype, coalesce(r.rolname, 'PUBLIC'), a.privilege_type, case when a.is_grantable then '+grant' else '' end), ', ' order by d.defaclrole::regrole::text, d.defaclobjtype, coalesce(r.rolname, 'PUBLIC'), a.privilege_type) into v_extra
+      from pg_default_acl d cross join lateral aclexplode(d.defaclacl) a left join pg_roles r on r.oid = a.grantee
+     where d.defaclnamespace = 0
+       and d.defaclobjtype in ('r', 'S', 'f', 'T')
+       and (d.defaclrole = v_ns.nspowner or has_schema_privilege(d.defaclrole, v_ns.oid, 'CREATE'))
+       and a.grantee <> d.defaclrole
+       and not exists (select 1 from aclexplode(acldefault(case when d.defaclobjtype = 'S' then 's'::"char" else d.defaclobjtype end, d.defaclrole)) b
+                        where (b.grantee, b.grantor, b.privilege_type, b.is_grantable) = (a.grantee, a.grantor, a.privilege_type, a.is_grantable));
+    if v_extra is not null then
+      raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: a global default privilege reaching % grants %', p_stage, v_ns.nspname, v_extra using errcode = 'P0001';
     end if;
   end loop;
   -- Effective privileges (inheritance and PUBLIC included) of each application role, and whom it can reach.
@@ -144,13 +163,13 @@ begin
           end if;
         end loop;
       end loop;
-      select string_agg(f.proname, ', ') into v_extra from pg_proc f
+      select string_agg(f.proname, ', ' order by f.proname) into v_extra from pg_proc f
        where f.pronamespace = v_ns.oid and has_function_privilege(v_role, f.oid, 'EXECUTE');
       if v_extra is not null then
         raise exception 'AI_CALLS_OWNER_HELD_%: ACL drift: % can execute % helper %', p_stage, v_role, v_ns.nspname, v_extra using errcode = 'P0001';
       end if;
     end loop;
-    select string_agg(r.rolname, ', ') into v_extra from pg_roles r
+    select string_agg(r.rolname, ', ' order by r.rolname) into v_extra from pg_roles r
      where r.rolname <> v_role
        and (pg_has_role(v_role, r.oid, 'USAGE') or pg_has_role(v_role, r.oid, v_set_check))
        and (r.rolsuper
