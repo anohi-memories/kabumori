@@ -6,6 +6,7 @@
 - 元: G6-12 の案 A（H3 #330 の第 4 回のレビューで、別 TASK として先に進めるよう推奨）。案 B（`fence_seq` の列とトリガー）は採らない。
 - **実装のレビュー（Codex Sol（高））は未実施**。この文書と PR は、実装の完成や本番の安全を意味しない。
 - **G6-14 で更新**（H4 #331 の CHANGES_REQUIRED_P2）: `ai_calls` / `ai_ledger` の権限のずれを、前と後の両方で拒むようにした（§10）。
+- **G6-15 で更新**（H4 #331 の CHANGES_REQUIRED_P2_GLOBAL_DEFAULT_ACL）: スキーマを限らない（グローバルな）既定の権限も、前と後の両方で拒むようにした（§11）。
 
 ## 1. 変えるもの・変えないもの
 
@@ -222,10 +223,65 @@ migration の試験 6 件の中身:
 - G6-14 の確認の 12 項目を 1 つずつ外した写し: **9 種類を検出**。
 - 検出しなかった 3 種類（実効の表・列・helper の EXECUTE の確認）は、**実質同じ動き（二重目の防御）**。
   - 直接の付与が無い状態で実効の権限だけが立つのは、所有者を継承する場合だけ。その場合は、先に実効のスキーマの USAGE か到達の確認で止まる。
-- G6-13 の 10 種類（ガード・持ち主・ID・状態・行の作成・revoke・ずれ・後の確認）: 最終の形で再実行。結果は REPORT に書く。
+- G6-13 の 10 種類（ガード・持ち主・ID・状態・行の作成・revoke・ずれ・後の確認）: 最終の形で **10/10 を検出**。
 
 ### NOT_VERIFIED・残るもの
 
 - 本物の Supabase のロール（`supabase_admin`、`authenticator`、`postgres` など）と、ほかのスキーマへの継承。今回の確認の対象は anon / authenticated / service_role と、その継承・到達だけ。
 - 本物の適用の道で、一時的な関数（`pg_temp`）を作れるか。
 - 適用の後の権限の変化の監視（運用。この migration の範囲外）。
+
+## 11. G6-15: グローバルな既定の権限も拒む（H4 #331 の P2_GLOBAL_DEFAULT_ACL）
+
+### 指摘
+
+- G6-14 の確認は、スキーマを限った既定の権限（`pg_default_acl` の `defaclnamespace` がそのスキーマ）しか見ていなかった。
+- スキーマを限らない既定の権限（`defaclnamespace = 0`）は、そのロールが**どのスキーマに作る物にも**効く。スキーマを限った既定の権限は、その上に足される。
+- H4 の反例: `ALTER DEFAULT PRIVILEGES FOR ROLE <所有者> GRANT SELECT ON TABLES TO service_role` のある DB で、#422 の migration は成功した。その後で `ai_calls` に作った表を、service_role が直接読めた。
+- この worktree の隔離 PG17 でも、直す前の migration で同じ結果を再現した。この反例は、試験の中の probe に残している（下）。
+
+### 直し（`20261020154536_ai_calls_owner_held_rc_guard.sql` の一時的な確認の関数だけ。RPC の本体と指紋は変えていない）
+
+- PRESTATE と POST の確認に、次を足した。
+  - 対象: グローバルな既定の権限の行（`defaclnamespace = 0`）。種類は表など（`r`）、sequence（`S`）、関数（`f`）、型（`T`）。
+  - 誰の行か: `ai_calls` / `ai_ledger` の所有者と、そこに物を**作れる**ロール（`has_schema_privilege(..., 'CREATE')`。superuser と、所有者を継承するロールを含む）。そこに作れないロールの行は、そのスキーマの物には効かないので見ない。
+  - 拒むもの: その行のロール自身以外への項目で、PostgreSQL の組み込みの既定（`acldefault`）の項目と完全には一致しないもの。PUBLIC・anon・authenticated・service_role・継承されるロールへの付与と、grant option を含む（組み込みの既定に grant option は無い）。
+  - 認めるもの: 組み込みの既定そのもの（関数の PUBLIC EXECUTE、型の PUBLIC USAGE。行が無くても効くもの）と、それより狭い行（`REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` など）。
+- 違反があれば、P0001 `AI_CALLS_OWNER_HELD_<stage>: ACL drift: a global default privilege reaching <schema> grants ...` で止まり、全体が巻き戻る。**既定の権限を自動で変えたり外したりはしない。**
+- 確認のエラー文の並びを、決まった順（`order by`）にした。G6-14 の試験の正規表現は、並びが「INSERT が先頭」のときだけ一致していた。作業用の写しでは、その試験が落ちていた（並びの順番が決まっていなかった）。正規表現も、並びに依存しない形にした。
+
+### 試験（隔離 PG17、実際の migration を `psql -f`。`..._rc_guard_migration_pg_test.ts` は 10 PASS）
+
+- **拒む 10 通り**（それぞれ新しい DB で）。PRESTATE で P0001 になり、関数・行・トリガー・ACL・既定の権限・ロールの付与が 1 つも変わらない（直さない）。
+  1. H4 そのもの（所有者の表の既定を service_role に）
+  2. sequence の USAGE / UPDATE
+  3. 関数の EXECUTE を service_role に（組み込みの PUBLIC EXECUTE は理由として挙げないことも確認）
+  4. 関数の EXECUTE を authenticated に grant option 付きで
+  5. 表を PUBLIC に
+  6. 型を anon に
+  7. 継承されるロール（authenticated がそのロールを持つ）
+  8. 所有者を継承するロール（そこに作れる）
+  9. 別の superuser
+  10. グローバルとスキーマを限った既定の両方
+- **認めるもの・後から作る物**:
+  - きれいな DB: 適用と再適用が通る。その後で所有者が `ai_calls` に作った表と sequence は、所有者以外に何も付かない。
+  - 後から作る関数には、組み込みの PUBLIC EXECUTE が付く。ただし anon / authenticated / service_role はスキーマを使えないので、呼べない（`permission denied for schema ai_calls`）。
+  - より狭い行（所有者と別の superuser の `REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`）、その superuser の自分自身への grant option（自分が持つ物の権限）、そこに作れないロールの行は認める。どの行も変えない。所有者の REVOKE は、後から作る関数に効く（PUBLIC が付かない）。
+- **後の確認**: DDL のイベントトリガーが、migration の REVOKE の直後に H4 のグローバルな既定を足す。POST が P0001 で拒み、足された行・置き換えた本体・`claim_held` が全部巻き戻る。
+- **反例の保存**: 実際の migration の文から、新しい確認だけを外した写しを作る。その写しは H4 のグローバルな既定を通し、後から作った表を service_role が読める。
+
+### わざと壊した写し（作業用の写しだけ）
+
+- G6-15 の確認の 12 種類: **10 種類を検出**。
+  - 検出したもの: 確認そのもの、グローバルではなくスキーマの行を見る、表・sequence・関数・型のどれかを外す、所有者の行だけ見る、全ロールの行を見る、行のロールではなくスキーマの所有者と比べる、組み込みの既定を認めない。
+  - 検出しなかった 2 種類は、**実質同じ動き**。
+    - 組み込みとの一致で grant option を比べない: PostgreSQL は PUBLIC に grant option を付けられず、組み込みの既定にロールの項目は所有者だけなので、結果が変わらない。
+    - sequence を `acldefault('s')` に読み替えない: `'S'`（外部サーバー）と `'s'`（sequence）の既定は、どちらも所有者以外の項目を持たないので、結果が変わらない。
+- G6-13 の 10 種類は、最終の形で再実行した（結果は REPORT）。
+- 作業用の写しで G6-14 の試験が時々落ちたのは、確認のエラー文の並びが決まっていなかったため（上の「直し」）。並びを固定した後は、リポジトリでも写しでも安定して通る。
+
+### NOT_VERIFIED・残るもの
+
+- 本物の Supabase のロール（`supabase_admin` など）のグローバルな既定の権限。そこに作れるロールに、組み込みを超える行があれば、この migration は止まる（fail closed）。本番の DB は照会していない。
+- 後から作る関数への組み込みの PUBLIC EXECUTE は、PostgreSQL の既定そのもので、拒んでいない。作る migration が、関数ごとに REVOKE する決まりは変わらない（既存の helper はそうしている。次の適用では helper の確認が拒む）。
+- 適用の後に既定の権限が変わるのは防げない（運用の監視。範囲外）。
