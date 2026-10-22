@@ -9,7 +9,7 @@ import os
 import time
 import uuid
 
-from . import jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state
+from . import binding, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state
 from .chainlog import ChainError, ChainLog
 from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex
 from .stub import tree_digest
@@ -103,18 +103,42 @@ class Control:
         return {"resolved": not problems, "problems": problems, "event": event}
 
     def completion_problems(self):
-        """H3の完了条件（非終了のランなし・識別子に一致するプロセスなし・登録簿の不整合なし）。"""
+        """H3の完了条件（非終了のランなし・識別子に一致するプロセスなし・登録簿の不整合なし）。
+
+        H3 R2: 制御側が自分でプロセスを観測する。観測できなければ「未確認」として問題に数える
+        （不在とはみなさない）。実行側の停止記録（supervisor.log）と食い違えば、それも問題にする。
+        """
+        from . import supervise
         problems = []
         problems += ["registry: " + p for p in registry.inconsistencies(self.layout)]
         for entry in registry.non_terminal(self.layout):
             problems.append("non-terminal run: %s (%s)" % (entry["run_id"], entry["state"]))
+        claimed_absent = {}
+        try:
+            with open(self.layout.supervisor_log, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                    except ValueError:
+                        problems.append("supervisor log unreadable")
+                        break
+                    claimed_absent[rec.get("run_id")] = bool(rec.get("absent"))
+        except FileNotFoundError:
+            pass
         for run_id in registry.all_entries(self.layout):
             try:
                 entry = registry.load(self.layout, run_id)
-            except registry.RegistryError:
+            except (registry.RegistryError, ValueError):
                 continue
-            if entry and procs.find_by_marker(registry.marker(entry)):
+            if not entry:
+                continue
+            present = supervise.run_processes_present(self.layout, entry)
+            if present is None:
+                problems.append("process observation unavailable: " + run_id)
+            elif present:
                 problems.append("process still present: " + run_id)
+                if claimed_absent.get(run_id):
+                    problems.append("evidence mismatch (supervisor reported absent): " + run_id)
         return problems
 
     def unhalt(self, ack_reason):
@@ -242,12 +266,12 @@ class Control:
                 return False, "halted/stopped"
             return True, None
 
-        claim, reason = self.ledger.append_if("CLAIM", {"run_id": run_id, "request_id": request_id,
-                                                        "approval_id": base["approval_id"],
-                                                        "task_id": base["task_id"], "task_sha256": computed,
-                                                        "authorization": base["authorization"],
-                                                        "envelope_id": base.get("envelope_id")},
-                                              self.signer, "runner", local_now, gate)
+        claim_payload = {"run_id": run_id, "request_id": request_id, "authorization": base["authorization"],
+                         "envelope_id": base.get("envelope_id")}
+        for key in ("approval_id", "task_id", "task_sha256", "model", "model_id", "effort", "max_minutes",
+                    "max_budget_usd", "base_ref", "base_sha", "policy_sha256"):
+            claim_payload[key] = base[key]
+        claim, reason = self.ledger.append_if("CLAIM", claim_payload, self.signer, "runner", local_now, gate)
         if claim is None:
             if reason and reason.startswith("rate guard"):
                 self.alert("hold", "起動を保留（起動が多すぎる）", reason)
@@ -279,10 +303,26 @@ class Control:
         checks["result_json_present"] = bool(parsed)
         checks["is_error_false"] = parsed.get("is_error") is False
         checks["terminal_reason_completed"] = parsed.get("terminal_reason") == "completed"
+        # H3 R1: 要求の自己申告ではなく、台帳の CLAIM（承認済みTASKから記録した内容）を基準にする
+        claim = None
+        for r in self._claims(self.ledger.read_all()):
+            if r["payload"]["run_id"] == run_id:
+                claim = r["payload"]
+        checks["request_matches_claim"] = bool(claim) and binding.request_matches_claim(req, claim)
+        if not checks["request_matches_claim"]:
+            violations.append("request differs from the CLAIM (approved content)")
+        breason, _ = binding.check_request(req, self.policy)
+        checks["request_binding_valid"] = breason is None
+        if breason:
+            violations.append("request binding invalid: " + breason)
+        approved_model_id = claim.get("model_id") if claim else None
+        if claim and self.policy.get("models", {}).get(claim.get("model")) != approved_model_id:
+            approved_model_id = None
         usage = parsed.get("modelUsage")
-        allowed = {req["model_id"]} | set(self.policy.get("allowed_secondary_models", []))
-        model_ok = isinstance(usage, dict) and req["model_id"] in usage and set(usage) <= allowed \
-            and len(set(usage) - set(self.policy.get("allowed_secondary_models", []))) == 1
+        secondary = set(self.policy.get("allowed_secondary_models", []))
+        model_ok = (approved_model_id is not None and isinstance(usage, dict) and approved_model_id in usage
+                    and set(usage) <= ({approved_model_id} | secondary)
+                    and len(set(usage) - secondary) == 1)
         checks["model_matches"] = model_ok
         if parsed and not model_ok:
             violations.append("model mismatch or unverifiable")
@@ -314,8 +354,12 @@ class Control:
             checks["ledger_valid"] = False
             violations.append("ledger invalid")
 
+        from . import supervise
         st_name = entry["state"] if entry else "unknown"
-        absent = not (entry and procs.find_by_marker(registry.marker(entry)))
+        present = supervise.run_processes_present(self.layout, entry) if entry else None
+        if present is None:
+            violations.append("process observation unavailable")
+        absent = present is False
         if st_name == "stop_unconfirmed" or not absent:
             status = "stop_unconfirmed"
             violations.append("stop unconfirmed")
@@ -393,7 +437,7 @@ class Control:
             if not supervise.heartbeat_fresh(hb, reaper_age, now):
                 dead.append(entry["run_id"])
         if not s2_ok and dead:
-            remaining = [e["run_id"] for e in running if procs.find_by_marker(registry.marker(e))]
+            remaining = [e["run_id"] for e in running if supervise.run_processes_present(self.layout, e) is not False]
             self.halt("hard", "supervisors down (S1 and S2)", wait_sync=0)
             self.alert("halt", "監督機構が停止しています",
                        "Claudeが止まっていない可能性があります（%s）。手順書の最終手段で停止してください" % ", ".join(remaining))

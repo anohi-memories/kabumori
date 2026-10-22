@@ -4,8 +4,26 @@
 試験では1つの一時フォルダの下に、同じ区分で作る。
 """
 import os
+import re
 
 from .fsutil import touch
+
+RUN_ID_RE = re.compile(r"^run-[0-9a-f]{16}$")
+
+
+class LayoutError(ValueError):
+    pass
+
+
+def _contained(base, name):
+    """base の直下の name だけを許す（絶対パス・..・区切り文字・シンボリックリンクでの逸脱を拒否）。H3 R1。"""
+    if not isinstance(name, str) or not RUN_ID_RE.match(name):
+        raise LayoutError("invalid run id")
+    path = os.path.join(base, name)
+    real_base = os.path.realpath(base)
+    if os.path.dirname(os.path.realpath(path)) != real_base:
+        raise LayoutError("path escapes its base directory")
+    return path
 
 
 class Layout:
@@ -44,13 +62,13 @@ class Layout:
         return self
 
     def run_dir(self, run_id):
-        return os.path.join(self.runs, run_id)
+        return _contained(self.runs, run_id)
 
     def work_dir(self, run_id):
-        return os.path.join(self.work, run_id)
+        return _contained(self.work, run_id)
 
     def proc_file(self, run_id):
-        return os.path.join(self.proc, run_id + ".json")
+        return _contained(self.proc, run_id) + ".json"
 
     def request_file(self, run_id):
-        return os.path.join(self.requests, run_id + ".json")
+        return _contained(self.requests, run_id) + ".json"

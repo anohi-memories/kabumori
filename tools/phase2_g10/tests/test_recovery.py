@@ -48,7 +48,7 @@ class TestCrashPoints(EnvTestCase):
         self.assertEqual(self.env.agent.used_state(run_id), ["ACCEPTED", "SPAWNING", "ABORTED"])
         e = registry.load(self.env.layout, run_id)
         self.assertIn(e["state"], ("runner_crashed", "interrupted"))
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
 
     def test_crash_after_spawn(self):
         run_id, stub, body = self.claim_and_run(scenario={"sleep": 0.5}, hooks={"after_spawn": {"exit": True}},
@@ -56,7 +56,7 @@ class TestCrashPoints(EnvTestCase):
         stub.wait(timeout=30)
         e = self.wait_terminal(run_id)
         self.assertEqual(e["state"], "runner_crashed")
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
         status, _ = self.env.control.finalize(run_id, current_body=body)
         self.assertEqual(status, "runner_crashed")
 
@@ -92,7 +92,7 @@ class TestOrphansAndTamper(EnvTestCase):
         e = registry.load(self.env.layout, run_id)
         scen = os.path.join(self.env.tmp, "orphan_scen.json")
         json.dump({"sleep": 30}, open(scen, "w"))
-        p = subprocess.Popen([sys.executable, "-I", FAKE_CLAUDE, "--session-id", e["session_id"], "--settings", "x",
+        p = subprocess.Popen([sys.executable, "-I", FAKE_CLAUDE, "--session-id", e["session_id"], "--settings", e["settings_path"],
                               "--model", "m", "--effort", "low", "--output-format", "json",
                               "--max-budget-usd", "0.01"], env={"FAKE_CLAUDE_SCENARIO": scen},
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

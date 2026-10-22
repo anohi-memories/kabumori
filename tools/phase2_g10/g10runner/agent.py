@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-from . import jstclock, logs, policy as policy_mod, procs, registry, state
+from . import binding, jstclock, logs, policy as policy_mod, procs, registry, state
 from .chainlog import ChainError, record_hash
 from .fsutil import atomic_write_json, canonical, read_json, touch
 
@@ -67,14 +67,21 @@ class Agent:
         if not isinstance(doc, dict) or "request" not in doc or "sig" not in doc:
             return None, "malformed request"
         req = doc["request"]
-        if not self.verifier.verify("runner", canonical(req), doc["sig"]):
+        if not isinstance(req, dict) or not self.verifier.verify("runner", canonical(req), doc["sig"]):
             return None, "bad request signature"
         for key in REQUIRED_REQUEST_FIELDS:
             if key not in req:
                 return None, "request missing field: " + key
+        # H3 R1: runner の署名だけを信用せず、承認済みTASK・インストール済みポリシーとの結合を検証する
+        reason, _ = binding.check_request(req, policy_mod.load(self.layout.policy_pub))
+        if reason:
+            return None, reason
         return req, None
 
     def verify_request(self, req, local_now):
+        reason, _ = binding.check_request(req, policy_mod.load(self.layout.policy_pub))
+        if reason:
+            return reason
         if not (req["issued_at"] - jstclock.CLOCK_TOLERANCE_SECONDS <= local_now < req["expires_at"]):
             return "request expired or not yet valid"
         if req["policy_sha256"] != policy_mod.load(self.layout.policy_pub)["_digest"]:
@@ -163,15 +170,24 @@ class Agent:
             entry = None
             try:
                 entry = registry.load(self.layout, run_id)
-            except registry.RegistryError:
+            except (registry.RegistryError, ValueError):
                 entry = None
-            stub_alive = bool(entry and procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start")))
+            try:
+                stub_alive = bool(entry and procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start")))
+            except procs.ObservationError:
+                actions.append((run_id, "observation_unavailable", False))
+                continue  # 観測できない間は、中止も再実行もしない
             if stub_alive:
                 continue
             if "SPAWNING" in types:
-                marker = ("--session-id " + entry["session_id"]) if entry else None
-                absent, details = procs.terminate(None, marker, policy_mod.timing(self.policy, "grace_seconds"),
-                                                  policy_mod.timing(self.policy, "confirm_seconds"))
+                from . import supervise
+                if entry:
+                    details = procs.terminate(supervise.collector(self.layout, entry),
+                                              policy_mod.timing(self.policy, "grace_seconds"),
+                                              policy_mod.timing(self.policy, "confirm_seconds"))
+                else:
+                    details = {"absent": False, "unknown": True, "error": "no registry entry"}
+                absent = details["absent"]
                 self.mark("ABORTED", req_like, {"reason": "runner_crashed_spawning", "absent": absent})
                 if entry and entry["state"] in registry.NON_TERMINAL:
                     registry.update(self.layout, run_id, "runner_crashed" if absent else "stop_unconfirmed",

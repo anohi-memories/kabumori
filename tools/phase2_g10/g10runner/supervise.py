@@ -21,33 +21,53 @@ def write_s2_heartbeat(layout, now=None):
 
 
 def heartbeat_fresh(path, max_age, now=None):
+    """新しく、記録された pid・開始時刻のプロセスが生存しているときだけ True（観測できなければ False）。"""
     hb = read_json(path)
     if not hb:
         return False
     now = time.time() if now is None else now
     if now - float(hb.get("ts", 0)) > max_age:
         return False
-    return procs.identity_ok(hb.get("pid"), hb.get("start"))
+    try:
+        return procs.identity_ok(hb.get("pid"), hb.get("start"))
+    except procs.ObservationError:
+        return False
 
 
 def s2_fresh(layout, policy, now=None):
     return heartbeat_fresh(layout.s2_heartbeat, policy_mod.timing(policy, "s2_heartbeat_max_age"), now)
 
 
-def group_of(entry):
-    """停止してよいプロセスグループ（スタブの識別が一致したときだけ、スタブの pgid）。"""
-    stub_pid = entry.get("stub_pid")
-    if stub_pid and procs.identity_ok(stub_pid, entry.get("stub_start")):
-        return stub_pid  # スタブは start_new_session で起動されるため pgid＝pid
-    return None
+def collector(layout, entry):
+    """停止の対象を集める関数を返す（H3 R3）: 正確な識別子に一致するランのプロセスと、
+    識別（pid・開始時刻・uid・`--run-id`・`--root`）が一致した起動スタブだけ。観測できなければ例外。"""
+    ident = registry.identity(entry)
+
+    def collect():
+        targets = {}
+        stub_pid, stub_start = entry.get("stub_pid"), entry.get("stub_start")
+        if stub_pid and stub_start and procs.stub_matches(stub_pid, stub_start, entry["run_id"],
+                                                          entry["root"], entry["uid"]):
+            targets[stub_pid] = stub_start  # 先頭: 親（スタブ）を先に止め、子の終了を「exited」と記録させない
+        for pid, start in procs.find_run_processes(ident):
+            targets.setdefault(pid, start)
+        return targets
+    return collect
+
+
+def run_processes_present(layout, entry):
+    """識別子に一致するプロセスがあるか。True／False、観測できなければ None。"""
+    try:
+        return bool(collector(layout, entry)())
+    except procs.ObservationError:
+        return None
 
 
 def stop_run(layout, policy, agent, entry, reason, by):
-    """識別を確認してから停止し、不在を確認する。確認できなければ stop_unconfirmed と HALT_AGENT。"""
-    marker = registry.marker(entry)
-    pgid = group_of(entry)
-    absent, details = procs.terminate(pgid, marker, policy_mod.timing(policy, "grace_seconds"),
-                                      policy_mod.timing(policy, "confirm_seconds"))
+    """識別を確認してから停止し、不在を確認する。確認できない（観測不能を含む）なら stop_unconfirmed と HALT_AGENT。"""
+    details = procs.terminate(collector(layout, entry), policy_mod.timing(policy, "grace_seconds"),
+                              policy_mod.timing(policy, "confirm_seconds"))
+    absent = details["absent"] and not details["unknown"]
     run_id = entry["run_id"]
     if absent:
         target = "runner_crashed" if reason.startswith("runner_crashed") else "interrupted"
@@ -63,7 +83,8 @@ def stop_run(layout, policy, agent, entry, reason, by):
         except registry.RegistryError:
             pass
         if agent is not None:
-            agent.halt_agent("stop_unconfirmed", {"run_id": run_id, "remaining": details.get("remaining")})
+            agent.halt_agent("stop_unconfirmed", {"run_id": run_id, "remaining": details.get("remaining"),
+                                                  "observation_unknown": details.get("unknown")})
     supervisor_log(layout, {"run_id": run_id, "by": by, "reason": reason, "absent": absent,
                             "ts": time.time(), "details": details})
     return absent
@@ -110,11 +131,16 @@ def reaper_loop(layout, policy, agent, run_id):
         if hard_halt_requested(layout, agent):
             stop_run(layout, policy, agent, entry, "emergency_stop", "S1")
             return 0
-        stub_ok = procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start"))
+        try:
+            stub_ok = procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start"))
+            child_ok = procs.identity_ok(entry.get("child_pid"), entry.get("child_start"))
+        except procs.ObservationError:
+            time.sleep(interval)  # 観測できない間は、クラッシュと判定しない（停止は期限・HALTで行う）
+            continue
         if st == "starting" and not stub_ok and now - started > interval * 2:
             stop_run(layout, policy, agent, entry, "runner_crashed_spawning", "S1")
             return 0
-        if st == "running" and not stub_ok and not procs.alive(entry.get("child_pid")):
+        if st == "running" and not stub_ok and not child_ok:
             stop_run(layout, policy, agent, entry, "runner_crashed_running", "S1")
             return 0
         time.sleep(interval)
@@ -135,16 +161,25 @@ def watchdog_cycle(layout, policy, agent, now=None):
     for entry in registry.non_terminal(layout):
         run_id = entry["run_id"]
         if entry["state"] == "stop_unconfirmed":
-            absent, _ = procs.terminate(group_of(entry), registry.marker(entry),
-                                        policy_mod.timing(policy, "grace_seconds"),
-                                        policy_mod.timing(policy, "confirm_seconds"))
+            details = procs.terminate(collector(layout, entry), policy_mod.timing(policy, "grace_seconds"),
+                                      policy_mod.timing(policy, "confirm_seconds"))
+            absent = details["absent"] and not details["unknown"]
             if absent:
                 registry.update(layout, run_id, "interrupted", recovered_by="S2")
                 actions.append((run_id, "stop_confirmed_later"))
             continue
         hb = os.path.join(layout.run_dir(run_id), "reaper_heartbeat.json")
         reaper_ok = heartbeat_fresh(hb, reaper_max_age, now)
-        stub_ok = procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start"))
+        try:
+            stub_ok = procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start"))
+            child_ok = procs.identity_ok(entry.get("child_pid"), entry.get("child_start"))
+        except procs.ObservationError:
+            if hard or now >= entry["hard_deadline"]:
+                stop_run(layout, policy, agent, entry, "emergency_stop" if hard else "timed_out", "S2")
+                actions.append((run_id, "stop_attempt_under_unknown_observation"))
+            else:
+                actions.append((run_id, "observation_unavailable"))
+            continue
         if entry["state"] == "starting":
             created = float(entry.get("created_at", now))
             if not stub_ok or now - created > starting_timeout:
@@ -161,22 +196,25 @@ def watchdog_cycle(layout, policy, agent, now=None):
         elif now >= entry["hard_deadline"] + slack or (now >= entry["hard_deadline"] and not reaper_ok):
             stop_run(layout, policy, agent, entry, "timed_out", "S2")
             actions.append((run_id, "timed_out"))
-        elif not stub_ok and not procs.alive(entry.get("child_pid")):
+        elif not stub_ok and not child_ok:
             stop_run(layout, policy, agent, entry, "runner_crashed_running", "S2")
             actions.append((run_id, "crashed"))
     # 終了済みのランの識別子を持つプロセスが残っていないか（孤立したプロセス）
     for run_id in registry.all_entries(layout):
         try:
             entry = registry.load(layout, run_id)
-        except registry.RegistryError:
+        except (registry.RegistryError, ValueError):
             continue
         if entry and entry["state"] in registry.TERMINAL:
-            leftovers = procs.find_by_marker(registry.marker(entry))
-            if leftovers:
-                absent, _ = procs.terminate(None, registry.marker(entry),
-                                            policy_mod.timing(policy, "grace_seconds"),
-                                            policy_mod.timing(policy, "confirm_seconds"))
-                agent.halt_agent("orphan_process", {"run_id": run_id, "absent": absent})
+            present = run_processes_present(layout, entry)
+            if present is None:
+                agent.halt_agent("observation_unavailable", {"run_id": run_id})
+                actions.append((run_id, "observation_unavailable"))
+            elif present:
+                details = procs.terminate(collector(layout, entry), policy_mod.timing(policy, "grace_seconds"),
+                                          policy_mod.timing(policy, "confirm_seconds"))
+                agent.halt_agent("orphan_process", {"run_id": run_id, "absent": details["absent"],
+                                                    "observation_unknown": details["unknown"]})
                 actions.append((run_id, "orphan"))
     return actions
 

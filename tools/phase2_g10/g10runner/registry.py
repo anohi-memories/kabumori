@@ -9,7 +9,7 @@ import os
 from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex, touch
 
 IMMUTABLE = ("run_id", "session_id", "settings_path", "hard_deadline", "policy_sha256",
-             "request_id", "approval_id", "task_id")
+             "request_id", "approval_id", "task_id", "uid", "root")
 NON_TERMINAL = ("starting", "running")
 TERMINAL = ("exited", "interrupted", "aborted_before_spawn", "aborted_by_halt", "runner_crashed")
 UNRESOLVED = ("stop_unconfirmed",)
@@ -29,9 +29,10 @@ def _immutable_digest(entry):
     return sha256_hex(canonical({k: entry.get(k) for k in IMMUTABLE}))
 
 
-def marker(entry):
-    """プロセスの識別子（起動引数に含まれる、そのランだけの session_id）。"""
-    return "--session-id " + entry["session_id"]
+def identity(entry):
+    """プロセスの識別子（正確な session_id・ランの settings の正規化パス・uid）。H3 R3。"""
+    from .procs import RunIdentity
+    return RunIdentity(entry["session_id"], entry["settings_path"], entry["uid"])
 
 
 def create(layout, fields):

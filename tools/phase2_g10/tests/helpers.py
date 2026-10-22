@@ -127,10 +127,17 @@ def kill_leftovers(layout):
         except Exception:
             continue
         if e:
-            procs.terminate(None, registry.marker(e), 0.3, 1.0)
+            try:
+                procs.terminate(supervise.collector(layout, e), 0.3, 1.0)
+            except (procs.ObservationError, KeyError):
+                pass
             for key in ("reaper_pid", "stub_pid"):
                 pid = e.get(key)
-                if pid and procs.identity_ok(pid, e.get(key.replace("pid", "start"))):
+                try:
+                    ok = pid and procs.identity_ok(pid, e.get(key.replace("pid", "start")))
+                except procs.ObservationError:
+                    ok = False
+                if ok:
                     try:
                         os.kill(pid, 9)
                     except OSError:

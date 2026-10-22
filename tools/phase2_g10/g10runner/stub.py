@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from . import adapter as adapter_mod, ifaces, policy as policy_mod, procs, registry, signing, state, supervise
+from . import adapter as adapter_mod, binding, ifaces, policy as policy_mod, procs, registry, signing, state, supervise
 from .agent import Agent
 from .chainlog import ChainError
 from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex
@@ -62,8 +62,11 @@ def tree_digest(path):
     return sha256_hex(canonical(items))
 
 
-def final_check(agent, layout, req):
+def final_check(agent, layout, req, policy):
     """臨界区間の中での最終判定（v5.4 §2-1）。問題があれば理由を返す。"""
+    reason, _ = binding.check_request(req, policy)  # H3 R1: 承認済みTASK・ポリシーとの結合を再確認
+    if reason:
+        return reason
     try:
         st = agent.current_state(update_seen=True)
     except (ChainError, state.RewindError) as exc:
@@ -95,6 +98,10 @@ def run(root, run_id):
     if not verifier.verify("runner", canonical(req), doc["sig"]) or req["run_id"] != run_id:
         agent.mark("ABORTED", req, {"reason": "request signature invalid at stub"})
         return 3
+    reason, _ = binding.check_request(req, policy)
+    if reason:
+        agent.mark("ABORTED", req, {"reason": "request binding invalid at stub: " + reason})
+        return 3
     if agent.used_state(run_id) != ["ACCEPTED"]:
         return 3  # 二度目のスタブ起動・再送では何もしない
 
@@ -118,6 +125,7 @@ def run(root, run_id):
         "hard_deadline": now + minutes * policy_mod.timing(policy, "minute_seconds"),
         "policy_sha256": policy["_digest"], "request_id": req["request_id"],
         "approval_id": req["approval_id"], "task_id": req["task_id"],
+        "uid": os.getuid(), "root": os.path.realpath(root),
         "stub_pid": os.getpid(), "stub_start": procs.start_time(os.getpid()), "created_at": now,
     })
     _hook(hooks, "after_T2", run_dir)
@@ -168,7 +176,7 @@ def run(root, run_id):
                   abort_check=lambda: state.flags_say_halt(layout)) as lock:
         if not lock.acquired:
             return abort("halted_while_waiting_for_lock", True, "aborted_by_halt")
-        reason = final_check(agent, layout, req)
+        reason = final_check(agent, layout, req, policy)
         if reason:
             return abort(reason, True, "aborted_by_halt" if reason == "halted" else "aborted_before_spawn")
         agent.mark("SPAWNING", req)
@@ -190,12 +198,18 @@ def run(root, run_id):
 
     # T9: 解放後の再確認（保険）
     if supervise.hard_halt_requested(layout, agent):
-        procs.terminate(None, registry.marker(registry.load(layout, run_id)),
-                        policy_mod.timing(policy, "grace_seconds"), policy_mod.timing(policy, "confirm_seconds"))
+        entry = registry.load(layout, run_id)
+        ident = registry.identity(entry)
+        details = procs.terminate(lambda: dict(procs.find_run_processes(ident)),
+                                  policy_mod.timing(policy, "grace_seconds"), policy_mod.timing(policy, "confirm_seconds"))
+        absent = details["absent"] and not details["unknown"]
         try:
-            registry.update(layout, run_id, "interrupted", stop_reason="emergency_stop", stop_by="stub_T9")
+            registry.update(layout, run_id, "interrupted" if absent else "stop_unconfirmed",
+                            stop_reason="emergency_stop", stop_by="stub_T9", stop_details=details)
         except registry.RegistryError:
             pass
+        if not absent:
+            agent.halt_agent("stop_unconfirmed", {"run_id": run_id, "by": "stub_T9"})
 
     rc = child.wait()
     with open(os.path.join(run_dir, "claude.stdout"), "rb") as f:

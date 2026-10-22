@@ -34,7 +34,7 @@ class TestRace(EnvTestCase):
 
     def assert_no_live_claude(self, run_id):
         e = registry.load(self.env.layout, run_id)
-        self.assertFalse(procs.find_by_marker(registry.marker(e)), "fake Claude still alive after stop")
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False, "fake Claude still alive after stop")
         return e
 
     def test_halt_while_stub_inside_critical_section(self):
@@ -143,7 +143,7 @@ class TestRace(EnvTestCase):
                                                 wait=False)
         stub.wait(timeout=30)
         e = registry.load(self.env.layout, run_id)
-        self.assertTrue(procs.find_by_marker(registry.marker(e)), "fake Claude should still be running")
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), True, "fake Claude should still be running")
         with FileLock(self.env.layout.halt_lock, "ex", timeout=2.0) as lock:
             self.assertTrue(lock.acquired, "exclusive lock blocked by the fake Claude (lock fd inherited)")
         self.wait_terminal(run_id)
@@ -171,9 +171,10 @@ class TestHaltUnhalt(EnvTestCase):
         # 実行中のランを模擬（登録簿にrunningがある）
         run_id, stub, body = self.claim_and_run(scenario={"sleep": 30}, wait=False) if False else (None, None, None)
         from g10runner import registry as reg
-        reg.create(self.env.layout, {"run_id": "run-fake", "session_id": "s-fake", "settings_path": "x",
+        reg.create(self.env.layout, {"run_id": "run-00000000000000fa", "session_id": "s-fake", "settings_path": "x",
                                      "hard_deadline": time.time() + 100, "policy_sha256": "p", "request_id": "r",
                                      "approval_id": "a", "task_id": "t", "stub_pid": 0, "stub_start": None,
+                                     "uid": os.getuid(), "root": os.path.realpath(self.env.tmp),
                                      "created_at": time.time()})
         rec, problems = self.env.control.unhalt("try")
         self.assertIsNone(rec)
@@ -182,14 +183,15 @@ class TestHaltUnhalt(EnvTestCase):
     def test_unhalt_refused_on_stop_unconfirmed_and_registry_tamper(self):
         from g10runner import registry as reg
         self.env.control.halt("soft", "x", wait_sync=0)
-        reg.create(self.env.layout, {"run_id": "run-u", "session_id": "s-u", "settings_path": "x",
+        reg.create(self.env.layout, {"run_id": "run-0000000000000a0b", "session_id": "s-u", "settings_path": "x",
                                      "hard_deadline": time.time() + 100, "policy_sha256": "p", "request_id": "r",
                                      "approval_id": "a", "task_id": "t", "stub_pid": 0, "stub_start": None,
+                                     "uid": os.getuid(), "root": os.path.realpath(self.env.tmp),
                                      "created_at": time.time()})
-        reg.update(self.env.layout, "run-u", "stop_unconfirmed")
+        reg.update(self.env.layout, "run-0000000000000a0b", "stop_unconfirmed")
         self.assertIsNone(self.env.control.unhalt("try")[0])
         # 不変項目の改ざん
-        path = self.env.layout.proc_file("run-u")
+        path = self.env.layout.proc_file("run-0000000000000a0b")
         d = json.load(open(path))
         d["hard_deadline"] = 1
         json.dump(d, open(path, "w"))
@@ -257,7 +259,7 @@ class TestSupervisors(EnvTestCase):
         self.assertIn((run_id, "timed_out"), actions)
         e = registry.load(self.env.layout, run_id)
         self.assertEqual(e["stop_by"], "S2")
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
 
     def test_both_supervisors_down_control_halts_and_alerts(self):
         run_id, stub, body = self.claim_and_run(scenario={"sleep": 30}, max_minutes="60", wait=False)
@@ -272,7 +274,7 @@ class TestSupervisors(EnvTestCase):
         # 人の最終手段の代わりに、ここでは S2 を再開（launchd の KeepAlive の代わり）して回収する
         self.env.s2_heartbeat()
         supervise.watchdog_cycle(self.env.layout, self.env.policy, self.env.agent)
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
 
     def test_s2_only_lost_is_soft_halt(self):
         run_id, stub, body = self.claim_and_run(scenario={"sleep": 5}, max_minutes="60", wait=False)

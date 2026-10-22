@@ -3,7 +3,7 @@ import json
 import os
 import time
 
-from g10runner import procs, registry
+from g10runner import procs, registry, supervise
 from helpers import EnvTestCase, TRUSTED_ISSUE, make_body
 
 
@@ -30,7 +30,7 @@ class TestLaunch(EnvTestCase):
         self.assertTrue(any("K10は担当ちゃの判定" in m for _, m in self.env.notifier.sent))
         e = registry.load(self.env.layout, run_id)
         self.assertEqual(e["state"], "exited")
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
 
     def test_work_folder_is_read_only(self):
         run_id, stub, body = self.claim_and_run()
@@ -79,7 +79,7 @@ class TestLaunch(EnvTestCase):
         self.assertEqual(e["state"], "interrupted")
         self.assertEqual(e["stop_reason"], "timed_out")
         self.assertEqual(e["stop_by"], "S1")
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
         self.assertTrue(os.path.isdir(self.env.layout.work_dir(run_id)))  # 作業フォルダは保護
         status, _ = self.finalize(run_id, body)
         self.assertEqual(status, "interrupted")
@@ -90,7 +90,7 @@ class TestLaunch(EnvTestCase):
         e = registry.load(self.env.layout, run_id)
         self.assertEqual(e["state"], "interrupted")
         self.assertTrue(e["stop_details"]["kill_targets"])
-        self.assertFalse(procs.find_by_marker(registry.marker(e)))
+        self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
 
     def test_children_and_escaped_child_are_stopped(self):
         for escape in (False, True):
@@ -101,7 +101,7 @@ class TestLaunch(EnvTestCase):
                     max_minutes="1")
                 e = registry.load(self.env.layout, run_id)
                 self.assertEqual(e["state"], "interrupted")
-                self.assertFalse(procs.find_by_marker(registry.marker(e)))
+                self.assertIs(supervise.run_processes_present(self.env.layout, e), False)
 
     def test_s2_unavailable_blocks_spawn(self):
         self.env.s2_heartbeat(fresh=False)
@@ -120,6 +120,7 @@ class TestLaunch(EnvTestCase):
         from helpers import Env, test_policy, FAST_TIMING
         t = dict(FAST_TIMING, reaper_confirm_timeout=0.0)
         self.env = Env(policy=test_policy(timing=t))
+        self.addCleanup(self.env.cleanup)  # 差し替えた環境も片付ける（TASK 1 では残っていた）
         self.env.envelope()
         self.env.s2_heartbeat()
         marker = os.path.join(self.env.tmp, "started")
