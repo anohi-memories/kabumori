@@ -38,6 +38,16 @@
 -- MAINTAIN; a global or schema default privilege that granted one is caught at the install's postcondition). It is evaluated on every read, like
 -- the rest of the coverage. Not covered (and not claimed): MAINTAIN on public.brand_memberships, other tables, the role graph between two reads.
 --
+-- G5-21 REVISION (2026-10-22, Issue #320 task 21; H3 proxy review R1 on PR #446, Issue #330 comment 6332954454): a trigger made on the history while
+-- a role held TRIGGER on it survives the revoke and the rollback, runs as the owner inside every bump, and a BEFORE UPDATE one held the number still
+-- while the getter answered again. Now (1) the history's non-internal triggers must be EXACTLY its two guards
+-- (private.account_lifecycle_owner_epoch_history_triggers(): HISTORY_FOREIGN_TRIGGER / HISTORY_GUARD_TRIGGER_NOT_EXACT / HISTORY_MISSING), checked by
+-- the coverage on every read, by every bump BEFORE it writes (OWNER_EPOCH_HISTORY_TRIGGERS_NOT_EXACT: the owner-membership write is refused, no
+-- foreign code runs), by the install before and after (OWNER_EPOCH_PRECONDITION_HISTORY_*, OWNER_EPOCH_POSTCONDITION_HISTORY_TRIGGERS) and by the
+-- rollback file; (2) every bump checks the row as stored is exactly the one it wrote (OWNER_EPOCH_BUMP_NOT_RECORDED: a trigger committed while the
+-- bump waited for the history lock cannot hold the number still). No file here drops a trigger it did not create. The triggers of
+-- public.brand_memberships other than this file's two are NOT checked (other features own some; see the document, section 13).
+--
 -- Lock order: the writer's own rows first, then ONE row of the epoch table (inside the AFTER trigger); the owner set is read AFTER that row lock,
 -- so a concurrent owner change of another membership row of the same workspace is always recorded by whichever bump commits last.
 -- Readers take no lock. The one new
@@ -71,7 +81,8 @@ begin
   if exists (select 1 from pg_catalog.pg_trigger t where t.tgrelid = 'public.brand_memberships'::regclass
               and t.tgname in ('account_lifecycle_owner_epoch_row', 'account_lifecycle_owner_epoch_truncate'))
      or to_regprocedure('private.account_lifecycle_brand_owner_epoch(text)') is not null
-     or to_regprocedure('private.account_lifecycle_owner_epoch_exposure()') is not null then
+     or to_regprocedure('private.account_lifecycle_owner_epoch_exposure()') is not null
+     or to_regprocedure('private.account_lifecycle_owner_epoch_history_triggers()') is not null then
     raise exception 'OWNER_EPOCH_ALREADY_APPLIED';
   end if;
 end $$;
@@ -134,6 +145,40 @@ returns text language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function private.account_lifecycle_owner_epoch_exposure() from public, anon, authenticated, service_role;
 
+-- (G5-21, H3 proxy review R1 on PR #446) The history's own triggers must be EXACTLY the two guards this file creates. A trigger made on the history
+-- while some role held TRIGGER on it SURVIVES the revoke and the rollback (the table and its guards are kept on purpose); it runs inside every bump
+-- as the owner, and a BEFORE UPDATE one can hold the number still (owner -> admin -> owner leaving it unchanged). Null = exact; otherwise a fixed
+-- code. Internal (foreign-key) triggers are not counted: an FK onto the history needs REFERENCES, which the exposure check refuses, and the history
+-- key never changes. This file never drops a trigger it did not create: it refuses instead.
+create function private.account_lifecycle_owner_epoch_history_triggers()
+returns text language sql stable security definer set search_path = '' as $$
+  with h as (
+    select pg_catalog.to_regclass('private.account_lifecycle_brand_owner_epochs') as oid
+  ), t as (
+    select t.* from pg_catalog.pg_trigger t, h where t.tgrelid = h.oid and not t.tgisinternal
+  ), exact as (
+    select t.oid from t
+      join pg_catalog.pg_proc f on f.oid = t.tgfoid
+     where t.tgfoid = pg_catalog.to_regprocedure('private.account_lifecycle_owner_epoch_history_guard()')
+       and t.tgenabled in ('O', 'A') and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and t.tgnargs = 0
+       and t.tgoldtable is null and t.tgnewtable is null
+       and f.proowner = (select c.relowner from pg_catalog.pg_class c, h where c.oid = h.oid)
+       and f.prosecdef and f.proconfig @> array['search_path=""']
+       -- row, BEFORE, UPDATE + DELETE = 27; statement, BEFORE, TRUNCATE = 34
+       and ((t.tgname = 'account_lifecycle_owner_epoch_history_row' and t.tgtype = 27)
+         or (t.tgname = 'account_lifecycle_owner_epoch_history_truncate' and t.tgtype = 34))
+  )
+  select case
+    when (select h.oid from h) is null then 'HISTORY_MISSING'
+    when exists (select 1 from t where t.tgname not in ('account_lifecycle_owner_epoch_history_row', 'account_lifecycle_owner_epoch_history_truncate'))
+      then 'HISTORY_FOREIGN_TRIGGER'
+    -- (trigger names are unique per table, so with no foreign name at most the two guards are left: both must be exact)
+    when (select pg_catalog.count(*) from exact) <> 2 then 'HISTORY_GUARD_TRIGGER_NOT_EXACT'
+    else null
+  end
+$$;
+revoke all on function private.account_lifecycle_owner_epoch_history_triggers() from public, anon, authenticated, service_role;
+
 do $$
 declare
   v_code text := private.account_lifecycle_owner_epoch_exposure();
@@ -142,6 +187,13 @@ begin
   -- it refuses to install while they are there
   if v_code is not null then
     raise exception 'OWNER_EPOCH_PRECONDITION_%', v_code;
+  end if;
+  -- (G5-21) a re-install over a kept history: any trigger that is not one of its two exact guards refuses the install (it is not dropped)
+  if to_regclass('private.account_lifecycle_brand_owner_epochs') is not null then
+    v_code := private.account_lifecycle_owner_epoch_history_triggers();
+    if v_code is not null then
+      raise exception 'OWNER_EPOCH_PRECONDITION_%', v_code;
+    end if;
   end if;
 end $$;
 
@@ -181,16 +233,27 @@ returns bigint language plpgsql volatile security definer set search_path = '' a
 declare
   v_owners uuid[];
   v_epoch bigint;
-  v_created integer;
+  v_got_epoch bigint;
+  v_got_owner uuid;
+  v_got_count integer;
 begin
+  -- (G5-21) no foreign trigger may run inside a bump: refuse BEFORE writing the history, so its code never runs as the owner
+  if private.account_lifecycle_owner_epoch_history_triggers() is not null then
+    raise exception 'OWNER_EPOCH_HISTORY_TRIGGERS_NOT_EXACT' using errcode = '42501';
+  end if;
   -- a new workspace: no one else can hold its row yet (a concurrent creator waits on the key, then takes the update path below)
   select coalesce(pg_catalog.array_agg(m.user_id order by m.user_id), '{}'::uuid[]) into v_owners
     from public.brand_memberships m where m.brand_id = p_brand_id and m.role = 'owner';
   insert into private.account_lifecycle_brand_owner_epochs (brand_id, epoch, owner_user_id, owner_count)
   values (p_brand_id, 1, case when pg_catalog.cardinality(v_owners) = 1 then v_owners[1] end, pg_catalog.cardinality(v_owners))
-  on conflict (brand_id) do nothing;
-  get diagnostics v_created = row_count;
-  if v_created = 1 then
+  on conflict (brand_id) do nothing
+  returning epoch, owner_user_id, owner_count into v_got_epoch, v_got_owner, v_got_count;
+  if found then
+    -- (G5-21) the row as stored (after any BEFORE trigger) is exactly the one written
+    if v_got_epoch is distinct from 1 or v_got_owner is distinct from (case when pg_catalog.cardinality(v_owners) = 1 then v_owners[1] end)
+       or v_got_count is distinct from pg_catalog.cardinality(v_owners) then
+      raise exception 'OWNER_EPOCH_BUMP_NOT_RECORDED' using errcode = '42501';
+    end if;
     return 1;
   end if;
   -- an existing workspace: lock its row FIRST, then read the owners with a fresh snapshot
@@ -199,7 +262,15 @@ begin
     from public.brand_memberships m where m.brand_id = p_brand_id and m.role = 'owner';
   update private.account_lifecycle_brand_owner_epochs
      set epoch = v_epoch + 1, owner_user_id = case when pg_catalog.cardinality(v_owners) = 1 then v_owners[1] end, owner_count = pg_catalog.cardinality(v_owners)
-   where brand_id = p_brand_id;
+   where brand_id = p_brand_id
+  returning epoch, owner_user_id, owner_count into v_got_epoch, v_got_owner, v_got_count;
+  -- (G5-21) a trigger committed while this bump waited for the history lock (after the check above) cannot hold the number still or skip the row;
+  -- "not found" also covers a new workspace whose row a BEFORE INSERT trigger dropped (then no row was locked above either)
+  if not found or v_got_epoch is distinct from v_epoch + 1
+     or v_got_owner is distinct from (case when pg_catalog.cardinality(v_owners) = 1 then v_owners[1] end)
+     or v_got_count is distinct from pg_catalog.cardinality(v_owners) then
+    raise exception 'OWNER_EPOCH_BUMP_NOT_RECORDED' using errcode = '42501';
+  end if;
   return v_epoch + 1;
 end $$;
 
@@ -227,8 +298,22 @@ end $$;
 -- TRUNCATE has no row events: treat it as a change of every recorded workspace.
 create function private.account_lifecycle_owner_epoch_truncated()
 returns trigger language plpgsql volatile security definer set search_path = '' as $$
+declare
+  v_row record;
+  v_got bigint;
 begin
-  update private.account_lifecycle_brand_owner_epochs set epoch = epoch + 1, owner_user_id = null, owner_count = 0;
+  -- (G5-21) the same refusal and the same written-exactly check as the bump, row by row
+  if private.account_lifecycle_owner_epoch_history_triggers() is not null then
+    raise exception 'OWNER_EPOCH_HISTORY_TRIGGERS_NOT_EXACT' using errcode = '42501';
+  end if;
+  for v_row in select e.brand_id, e.epoch from private.account_lifecycle_brand_owner_epochs e order by e.brand_id for update loop
+    update private.account_lifecycle_brand_owner_epochs set epoch = v_row.epoch + 1, owner_user_id = null, owner_count = 0
+     where brand_id = v_row.brand_id
+    returning epoch into v_got;
+    if not found or v_got is distinct from v_row.epoch + 1 then
+      raise exception 'OWNER_EPOCH_BUMP_NOT_RECORDED' using errcode = '42501';
+    end if;
+  end loop;
   return null;
 end $$;
 
@@ -239,6 +324,8 @@ create function private.account_lifecycle_brand_owner_epoch_covered()
 returns boolean language sql stable security definer set search_path = '' as $$
   select pg_catalog.current_setting('session_replication_role') = 'origin'
      and private.account_lifecycle_owner_epoch_exposure() is null
+     -- (G5-21) and the history's own triggers are exactly its two guards (a foreign one survives any revoke)
+     and private.account_lifecycle_owner_epoch_history_triggers() is null
      and (select pg_catalog.count(*) from pg_catalog.pg_trigger t
            join pg_catalog.pg_proc f on f.oid = t.tgfoid
            where t.tgrelid = 'public.brand_memberships'::regclass and not t.tgisinternal and t.tgenabled in ('O', 'A')
@@ -325,7 +412,8 @@ begin
     'private.account_lifecycle_owner_epoch_history_guard()'::regprocedure, 'private.account_lifecycle_owner_epoch_bump(text)'::regprocedure,
     'private.account_lifecycle_owner_epoch_record()'::regprocedure, 'private.account_lifecycle_owner_epoch_truncated()'::regprocedure,
     'private.account_lifecycle_brand_owner_epoch_covered()'::regprocedure, 'private.account_lifecycle_brand_owner_epoch(text)'::regprocedure,
-    'private.account_lifecycle_brand_owner_epoch_resync(text)'::regprocedure, 'private.account_lifecycle_owner_epoch_exposure()'::regprocedure] loop
+    'private.account_lifecycle_brand_owner_epoch_resync(text)'::regprocedure, 'private.account_lifecycle_owner_epoch_exposure()'::regprocedure,
+    'private.account_lifecycle_owner_epoch_history_triggers()'::regprocedure] loop
     if (select array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn)
          is distinct from format('%s=X/%s', quote_ident(current_user), quote_ident(current_user))
        or not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.prosecdef and p.proconfig @> array['search_path=""']) then
@@ -348,6 +436,9 @@ begin
   end if;
   if private.account_lifecycle_owner_epoch_exposure() is not null then
     raise exception 'OWNER_EPOCH_POSTCONDITION_EXPOSURE';
+  end if;
+  if private.account_lifecycle_owner_epoch_history_triggers() is not null then
+    raise exception 'OWNER_EPOCH_POSTCONDITION_HISTORY_TRIGGERS';
   end if;
   if not private.account_lifecycle_brand_owner_epoch_covered() then
     raise exception 'OWNER_EPOCH_POSTCONDITION_COVERAGE';

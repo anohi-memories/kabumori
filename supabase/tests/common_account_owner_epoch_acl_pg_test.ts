@@ -160,7 +160,8 @@ test_('the epoch history: any privilege for PUBLIC or a reached role -- table, T
   await asSuper(MAIN, `revoke ${mid} from authenticated`);
 });
 
-test_('why the history matters: a trigger of a reached role on it runs AS THE OWNER inside every bump; the getter refuses while it exists', async () => {
+// G5-20 showed the reached role's code running as the owner inside a bump; since G5-21 the bump refuses before it writes the history, so it never runs
+test_('why the history matters: a trigger of a reached role on it would run AS THE OWNER inside a bump; since G5-21 the write is refused and it never runs', async () => {
   await asSuper(MAIN, `grant ${mid} to authenticated`);
   await sql(MAIN, `grant trigger on ${H} to ${mid}`);
   await asSuper(MAIN, `set role ${mid}; create table att.log (who text); grant insert on att.log to public;
@@ -168,8 +169,9 @@ test_('why the history matters: a trigger of a reached role on it runs AS THE OW
     create trigger spy after insert or update on ${H} for each row execute function att.spy()`);
   assert.equal(await exposure(), 'API_ROLE_CAN_REACH_OWNER_EPOCH_HISTORY');
   assert.equal(await epoch(), 'NULL');
-  await sql(MAIN, `update ${T} set role = 'admin' where brand_id = '${B2}'; update ${T} set role = 'owner' where brand_id = '${B2}'`);
-  assert.equal(await asSuper(MAIN, 'select string_agg(distinct who, \',\') from att.log'), owner, 'the reached role\'s code ran as the owner');
+  const r = await psql(MAIN, `update ${T} set role = 'admin' where brand_id = '${B2}'`);
+  assert.ok(!r.ok && r.error.includes('OWNER_EPOCH_HISTORY_TRIGGERS_NOT_EXACT'), r.error);
+  assert.equal(await asSuper(MAIN, 'select count(*) from att.log'), '0', 'the reached role\'s code never ran');
   await asSuper(MAIN, `drop trigger spy on ${H}; drop table att.log; drop function att.spy()`);
   await sql(MAIN, cleanHistory);
   await asSuper(MAIN, `revoke ${mid} from authenticated`);

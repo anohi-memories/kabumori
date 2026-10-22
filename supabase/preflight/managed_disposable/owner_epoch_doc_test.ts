@@ -58,7 +58,9 @@ test('the J1 V1 R1-R3 fixes are in the source: an unconditional re-start fence, 
   // R1: the install bumps every workspace it loops over, with no condition; the rollback moves every recorded number
   assert.ok(code.includes('  loop\n    perform private.account_lifecycle_owner_epoch_bump(v_brand);\n  end loop;'), 'the install bumps unconditionally');
   assert.ok(code.includes('    union\n    select e.brand_id from private.account_lifecycle_brand_owner_epochs e\n'), 'every recorded workspace is in the loop');
-  assert.ok(noComments(read(ROLLBACK)).includes('update private.account_lifecycle_brand_owner_epochs set epoch = epoch + 1;'), 'the rollback moves every number');
+  // (G5-21: row by row, each move checked)
+  assert.ok(noComments(read(ROLLBACK)).includes('update private.account_lifecycle_brand_owner_epochs set epoch = v_row.epoch + 1 where brand_id = v_row.brand_id returning epoch into v_got;')
+    && noComments(read(ROLLBACK)).includes('from private.account_lifecycle_brand_owner_epochs e order by e.brand_id for update loop'), 'the rollback moves every number');
   // R2: the exact identity of both triggers
   for (const piece of ["t.tgtype = 29", "t.tgtype = 32", "t.tgfoid = 'private.account_lifecycle_owner_epoch_record()'::regprocedure", "t.tgfoid = 'private.account_lifecycle_owner_epoch_truncated()'::regprocedure",
     't.tgqual is null', 'pg_catalog.cardinality(t.tgattr::int2[]) = 0', 't.tgconstraint = 0', 't.tgnargs = 0', "t.tgenabled in ('O', 'A')", 'and private.account_lifecycle_owner_epoch_exposure() is null']) {
