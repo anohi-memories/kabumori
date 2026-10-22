@@ -256,6 +256,20 @@ MUTANTS = [
     ("revoked run counted as success", "g10runner/control.py",
      'checks["issue_not_revoked"] = not revoked', 'checks["issue_not_revoked"] = True',
      "test_issue_freshness.RevokeAfterSpawn.test_revoke_while_stub_holds_lock_lands_after_spawn_and_stops_the_run"),
+    # --- 遅延する再取得の後の再判定（TASK 6）---
+    ("no re-check of stop/expiry/authorization after the spawn-time re-fetch", "g10runner/stub.py",
+     '    reason = _local_gate(agent, layout, req)\n    if reason:\n        return reason\n'
+     '    atomic_write_json(os.path.join(layout.run_dir(req["run_id"]), "spawn_evidence.json"), doc)',
+     '    atomic_write_json(os.path.join(layout.run_dir(req["run_id"]), "spawn_evidence.json"), doc)',
+     "test_review_regressions_delayed_fetch.ExpiryDuringFetch.test_request_expires_during_delayed_fetch"),
+    ("stop/expiry gate ignores HALT flags", "g10runner/stub.py",
+     '    if st.halted or state.flags_say_halt(layout):\n        return "halted"',
+     '    if st.halted:\n        return "halted"',
+     "test_review_regressions_delayed_fetch.HaltDuringFetch.test_hard_halt_during_delayed_fetch"),
+    ("stop/expiry gate ignores STOP flags", "g10runner/stub.py",
+     '    if st.stopped or state.flags_say_stop(layout):\n        return "stopped"',
+     '    if st.stopped:\n        return "stopped"',
+     "test_review_regressions_delayed_fetch.HaltDuringFetch.test_stop_during_delayed_fetch"),
 ]
 
 

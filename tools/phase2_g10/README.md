@@ -5,6 +5,7 @@ H3 レビュー指摘 R1（P1）・R2（P1）・R3（P2）の修正は TASK `g10
 H4 再レビュー指摘 P1×2・P2×1 の修正は TASK `g10-phase2-pr423-h4-c4-issue-binding-partial-ps-signal-20261022`（下の「H4 レビュー修正」）。
 H3 第10TASK（C3）指摘 P1・P2 の修正は TASK `g10-phase2-pr423-h3-c3-identity-drift-nan-evidence-fix-20261022`（下の「H3 C3 レビュー修正」）。
 Issue の鮮度・取消の起動直前安全契約は TASK `g10-phase2-pr423-issue-freshness-revoke-fake-gate-20261022`（下の「Issue の鮮度・取消の契約」）。
+H4 C4 P2（遅延する再取得の後の HALT・期限の再判定）の修正は TASK `g10-phase2-pr423-h4-c4-delayed-fetch-halt-expiry-p2-fix-20261022`（同じ節の「再取得の後の再判定」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -111,6 +112,12 @@ CLAIM 時の証拠（最大 `issue_evidence_max_age`＝120秒前の写し）は�
 3. **finalize の再照合**: 終了判定で Issue を再取得し（`purpose: postflight`）、OPEN・本文・世代が CLAIM 時と同じことを確かめる。
    **CLOSED だけ（本文は不変）の変更もここで検出**し、安全違反として HALT・通知する。取得できない・検証できないものも成功にしない。
    取消されたランの結果は成功にしない（`issue_not_revoked: false`）。
+
+**再取得の後の再判定（TASK 6・H4 C4 P2）**: 起動直前の再取得は最大 `issue_fetch_timeout` 秒かかるため、最終判定は
+停止（HALT／STOP のログとフラグ）・要求の期限・認可（CONFIRM／ENVELOPE と失効）・取消・受理状態の判定（`stub._local_gate`）を、
+再取得の**前と後の2回**行う。再取得の間に HALT・STOP のフラグが立つ（HALT・STOP はフラグを先に書いてから排他ロックを待つ）、
+または要求の期限が過ぎた場合は、SPAWNING・起動へ進まない（`aborted_by_halt`／`aborted_before_spawn`）。
+2回目の判定から実際の起動（Popen）までのごく短い間に立ったフラグは、起動の後に S1/S2 が止める（ハードHALT）。
 
 **線形化点**: 起動の可否は「スタブが共有ロックを保持して行う最終判定（取消イベントの確認と起動直前の再取得）」で決まる。
 取消（排他ロック）は、それより前なら起動しない、後なら起動の確定の後になり S1/S2 が止める（どちらの順序も試験で確認）。

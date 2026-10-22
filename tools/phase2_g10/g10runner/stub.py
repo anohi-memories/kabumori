@@ -62,14 +62,9 @@ def tree_digest(path):
     return sha256_hex(canonical(items))
 
 
-def final_check(agent, layout, req, policy):
-    """臨界区間の中での最終判定（v5.4 §2-1）。問題があれば理由を返す。"""
-    reason, _ = binding.check_request(req, policy)  # H3 R1: 承認済みTASK・ポリシーとの結合を再確認
-    if reason:
-        return reason
-    reason = issue_mod.check_request_evidence(req, agent.verifier, policy, time.time())  # H4 P1
-    if reason:
-        return "issue binding: " + reason
+def _local_gate(agent, layout, req):
+    """停止（HALT/STOP のログとフラグ）・要求の期限・認可（CONFIRM／ENVELOPE と失効）・取消・受理状態の判定。
+    問題があれば理由を返す。最終判定の中で、Issue の再取得の前と後の2回行う（TASK 6）。"""
     try:
         st = agent.current_state(update_seen=True)
     except (ChainError, state.RewindError) as exc:
@@ -86,8 +81,24 @@ def final_check(agent, layout, req, policy):
         return "not authorized at final check"
     if state.issue_revoked(st, req):
         return "issue revoked"
+    if agent.used_state(req["run_id"]) != ["ACCEPTED"]:
+        return "used_requests state is not ACCEPTED-only"
+    return None
+
+
+def final_check(agent, layout, req, policy):
+    """臨界区間の中での最終判定（v5.4 §2-1）。問題があれば理由を返す。"""
+    reason, _ = binding.check_request(req, policy)  # H3 R1: 承認済みTASK・ポリシーとの結合を再確認
+    if reason:
+        return reason
+    reason = issue_mod.check_request_evidence(req, agent.verifier, policy, time.time())  # H4 P1
+    if reason:
+        return "issue binding: " + reason
+    reason = _local_gate(agent, layout, req)
+    if reason:
+        return reason
     accepted = [r for r in agent.used.read_all() if r["type"] == "ACCEPTED" and r["payload"]["run_id"] == req["run_id"]]
-    if agent.used_state(req["run_id"]) != ["ACCEPTED"] or len(accepted) != 1:
+    if len(accepted) != 1:
         return "used_requests state is not ACCEPTED-only"
     # TASK 5: ACCEPTED 後・起動直前に Issue #323 を再取得し、CLAIM 時から state・本文・世代が変わっていないこと。
     # CLAIM 時の（最大120秒前の）証拠は、起動時の最新性の証明として扱わない。取得の失敗・遅れも起動しない。
@@ -104,6 +115,12 @@ def final_check(agent, layout, req, policy):
                                             accepted[0]["ts"])
     if reason:
         return "issue changed or unverifiable at spawn: " + reason
+    # TASK 6（H4 C4 P2）: 再取得は最大で issue_fetch_timeout 秒かかる。その間に HALT／STOP のフラグが立つ・
+    # 要求の期限が過ぎる・認可が失効することがあるので、再取得の後に、現在時刻と最新の状態でもう一度判定する。
+    # （HALT・STOP は、まずフラグを書いてから排他ロックを待つ。共有ロックを持つこのスタブはフラグで気づく。）
+    reason = _local_gate(agent, layout, req)
+    if reason:
+        return reason
     atomic_write_json(os.path.join(layout.run_dir(req["run_id"]), "spawn_evidence.json"), doc)
     return None
 
