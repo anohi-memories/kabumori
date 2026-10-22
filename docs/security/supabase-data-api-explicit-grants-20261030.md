@@ -17,6 +17,9 @@ needs the user's explicit approval.
 - **G5-15 update** (task `common-account-g5-data-api-g4-impact-integration-owner-boundaries-20261021`, Issue #320 task 15): section 13 integrates
   G4's impact list (Issue #320 comment 6317104735, G4 Draft PR #420) — G4's proven facts, measurements, hypotheses and owner proposals kept apart — with
   G5's own read-only checks; the object set grows to `brand_settings`, `daily_content_plans` and `brand_id` on four operational tables.
+- **G5-16 update** (task `common-account-g5-data-api-owner-inventory-d2-readonly-gate-20261022`, Issue #320 task 16): section 14 records the owners'
+  status on 2026-10-22 (G3 / G6 have **no assigned inventory TASK**), proves D-2 on PG17 with the `20261007150000` ACL precondition taken verbatim,
+  and lays out D-2's options, migration order and denial tests for G4.
 - Stacked on PR #413 (G5-11). New G5-owned files only: this document, `supabase/tests/common_account_data_api_grants_{scan.py,scan_test.py,audit.sql,pg_run.sh,pg_test.ts}`
   and `supabase/preflight/managed_disposable/g5_12_data_api_grants_doc_test.ts`.
 
@@ -107,9 +110,9 @@ default-privilege statement; **0** files with a GRANT inside a function / DO bod
 | Owner | Directive received | G5 notice (once each) | Impact list on #320 | Status (2026-10-21 JST) |
 | --- | --- | --- | --- | --- |
 | G5 | #320 6303406473 | — | this document | **done** (no impact, section 3) |
-| G3 | #318 6303404723 | #318 6315180962 (+ the G5-13 difference, section 9) | not yet | **未回答 — due 2026-10-27** |
+| G3 | #318 6303404723 | #318 6315180962 (+ the G5-13 difference, section 9) | not yet; **no inventory TASK assigned to this owner yet** (section 14.1) | **未回答 — due 2026-10-27** |
 | G4 | #319 6303405548 | #319 6315181585 (+ the G5-13 difference, section 9) | **received** 2026-10-21 JST: #320 6317104735 (G4-17, Draft PR #420); integrated in section 13 | **received** (owner proposals pending G3) |
-| G6 | #321 6303407251 | #321 6315182189 (+ the G5-13 closure of C-2, section 9) | not yet | **未回答 — due 2026-10-27** |
+| G6 | #321 6303407251 | #321 6315182189 (+ the G5-13 closure of C-2, section 9) | not yet; **no inventory TASK assigned to this owner yet** (section 14.1) | **未回答 — due 2026-10-27** |
 | Kabumori report / AI Lab / MIC owners | (not named in the directive) | — | — | C-1 / C-3 / C-6: no 10/30 action; the 担当ちゃ decides whether a list is needed |
 
 When a list arrives, G5 adds only its confirmed rows here (object, schema, path, roles, grants, RLS, sequence, rebuild result, owner's proposed change
@@ -314,3 +317,70 @@ Separate gates, unchanged: everything in sections 10 / 12.6; production stays **
 | --- | --- |
 | `common_account_base_tables_pg_run.sh` (two empty databases, PG17) | **5 tests** passed, 0 failed (three consecutive runs; 3 of G5-14 + the `brand_id` proof + the `brand_settings` / `daily_content_plans` file read); nothing left behind |
 | regression + harness + checks | Data API PG17 6 passed; scanner test 10 checks; refs test 9 checks; pure 42 passed; the whole harness **255 passed** (250 of PR #421 + 5 new); `deno check` / `deno lint` / `bash -n` / `git diff --check` clean; `supabase/migrations` and `supabase/candidates` unchanged |
+
+## 14. Owner status, D-2 proven, and what each owner still owes (G5-16, 2026-10-22 JST)
+
+### 14.1 Owner status
+
+| Owner | Impact list | What the owner said most recently | Consequence |
+| --- | --- | --- | --- |
+| G4 | **received** (#320 6317104735; integrated in section 13 — not counted twice) | REPORT #319 6328444274 (G4-18): acknowledges D-2 ("the 2a-2 contract must be fixed together with a rebuild"); waits for G3 on ownership | D-2 is G4's to fix in its own TASK |
+| G3 | **未回答** (due 2026-10-27) | REPORT #318 6328926559 (G3-18): the Data API coordination is **outside its current TASK; it waits for a separate assignment** | **no G3 inventory TASK exists** — the 担当ちゃ / 総合指令 must assign one for the 10/27 date |
+| G6 | **未回答** (due 2026-10-27) | TASK #321 G6-15: the Data API work is "a distinct pending inventory task to G5, not bundled" into the current patch | **no G6 inventory TASK exists** — same; G5's C-2 already shows `ai_ledger` has no 10/30 impact, so G6's list can be short |
+| G5 | done (no impact) | — | — |
+
+G5 does not assign another slot's TASK; this row is the request to the 担当ちゃ.
+
+### 14.2 D-2, proven on the SQL text (PG17)
+
+`common_account_d2_column_acl_pg_test.ts` runs the **verbatim** ACL precondition of `20261007150000` (`:280-294`, `POSTONA_ACCOUNTS_PRECONDITION_ACL`)
+against a stand-in `public.social_accounts` with the contract's 14 columns [D]:
+
+| Layout | Precondition | `authenticated` can read |
+| --- | --- | --- |
+| the contract: table-level SELECT for `authenticated`; service_role SELECT / INSERT / UPDATE / DELETE | **accepted** | every column, **including `vault_access_token_secret_id`** (D-3) |
+| G4's proposal: column SELECT for `authenticated` (8 columns, no Vault references, no `oauth_client_ref`); column SELECT for service_role (its readers' columns) | **refused** (`POSTONA_ACCOUNTS_PRECONDITION_ACL`) | the 8 columns; the Vault references, `oauth_client_ref` and `select *` are **denied**; **both of the app's real select lists still work**; service_role still reads the Vault reference |
+| table SELECT for `authenticated` + service_role SELECT / TRUNCATE / REFERENCES | **accepted** — the contract allows what R-7 forbids (D-1) | every column |
+
+And among main's migrations only `20261007150000` asserts a table / column ACL on `social_accounts` [D: file read], so the 2a-2 contract is the
+**only** ordering dependency of a column-level change.
+
+### 14.3 D-2: options and a proposal for G4's own TASK (not G5's decision; G4's current TASK G4-19 is not interrupted)
+
+| Option | Effect | Cost |
+| --- | --- | --- |
+| A. keep the contract | members keep reading the Vault references (references, not secrets) | an R-5 exception to record and accept explicitly |
+| **B. amend the contract** (G5's suggestion) | accept exactly the column-level SELECT for `authenticated`, forbid a table-level one; forbid TRUNCATE / REFERENCES / MAINTAIN for service_role (R-7) | a reviewed change of G4's 2a-2 text |
+| C. move the Vault references to a private table | the strongest separation | a schema change across G4's readers and writers |
+
+Order for B, depending on a fact G5 cannot see [U]: is `20261007150000` applied in production?
+- **not applied**: amend the candidate file itself before it is ever applied (it lives in main's migrations: a main change through G4's review);
+- **applied**: a new G4 migration whose precondition is the current contract, that revokes the table-level SELECT and grants the columns in one
+  transaction, and whose postcondition is the new contract; any later contract check must use the new one.
+
+Denial tests that G4's TASK should carry (the ones above, plus): the member read policy still filters rows under column grants; `select=*` through
+PostgREST answers 42501 (managed [U]); each Edge reader's column list works as service_role; the new precondition refuses the old table-level
+layout and any TRUNCATE / REFERENCES / MAINTAIN / TRIGGER for service_role; from an empty database and from a copy of the current shape. Review:
+Codex Sol (high); production: the user's approval and the production audit first.
+
+### 14.4 What each owner still owes (unchanged facts, new status)
+
+| Owner | Open items | Gate |
+| --- | --- | --- |
+| G3 (needs an assignment) | the 10/27 list; ownership answers for `published_content_fingerprints`, `brand_settings`, `daily_content_plans`, the `brand_id` columns; the `brands` DDL owner with G4 | 担当ちゃ / 総合指令 to assign |
+| G4 | D-2 (14.3); rebuild of `social_accounts` / `social_account_oauth_states` after the ownership agreement | its own TASK, Codex Sol (high) |
+| G6 (needs an assignment) | a short 10/27 list (`ai_ledger`: no 10/30 impact per C-2; exposed schemas [U]) | 担当ちゃ / 総合指令 to assign |
+| G3 + G4 (+ G5) | the `brands` DDL owner — **undecided** | agreement |
+| user | the production read-only audit (ACL, RLS, columns, applied migrations, default privileges incl. global `pg_default_acl` rows) | explicit approval |
+
+### 14.5 Until 2026-10-30: the rule for any new public table (unchanged)
+
+Every new public table or sequence ships in one migration with RLS, its policies, `revoke all` from the API roles and the minimal explicit grants
+(R-1..R-14); no anon by default; no service_role table grant for server-only tables; never TRUNCATE / TRIGGER / REFERENCES; identity rather than
+serial. Global default ACLs (`pg_default_acl` with no schema) can still grant new objects outside the 10/30 change: the read-only audit (R-14)
+sees the effective result; the managed state is [U].
+
+| Check (G5-16) | Result |
+| --- | --- |
+| `common_account_d2_column_acl_pg_run.sh` (PG17) | **4 tests** passed, 0 failed (three consecutive runs): `contract=accepted g4_column_proposal=POSTONA_ACCOUNTS_PRECONDITION_ACL r7_violation_allowed=accepted` |
+| regression + harness + checks | base tables PG17 5 passed; Data API PG17 6 passed; scanner test 10 checks; refs test 9 checks; pure 42 passed; the whole harness **260 passed** (255 of PR #424 + 5 new); `deno check` / `deno lint` / `bash -n` / `git diff --check` clean; `supabase/migrations` and `supabase/candidates` unchanged |
