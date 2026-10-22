@@ -13,7 +13,7 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
-import { attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
+import { attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, UNRESOLVED_REFUSAL_CODE, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
 import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
@@ -277,9 +277,15 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
     sendingRef.current = true;
     dispatch(start);
     void draftStore.clear(userId); // the text now lives only in this attempt
-    void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId, consent: given, retry: state.unresolved !== null }).then((outcome) => {
+    const retry = state.unresolved !== null;
+    void runSend(deps, { userId, accountId: account.id, text: checked.text, requestId, consent: given, retry }).then((outcome) => {
       sendingRef.current = false;
-      if (mountedRef.current) dispatch({ type: 'send_settled', requestId, outcome });
+      if (!mountedRef.current) return;
+      // A re-ask that was not made because another screen already moved the attempt on (it is uncertain now): show the attempt as
+      // the process knows it, not what this screen believed (and not the refusal as if it were an answer about the attempt).
+      const current = retry && (outcome as { code?: unknown }).code === UNRESOLVED_REFUSAL_CODE ? attemptMemory.get(userId) : null;
+      if (current !== null) dispatch({ type: 'send_not_started', requestId, attempt: current });
+      else dispatch({ type: 'send_settled', requestId, outcome });
     });
   };
 

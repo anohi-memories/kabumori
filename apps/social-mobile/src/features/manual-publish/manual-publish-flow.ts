@@ -3,7 +3,7 @@
 // unresolved attempt, the durable record of it) is injected; this file imports no network client.
 
 import { sha256Hex } from './manual-publish-hash.ts';
-import { buildTarget, isRequestId, resultOf, targetIsSendable, type UnresolvedAttempt } from './manual-publish-model.ts';
+import { buildTarget, isRequestId, mayRetryAttempt, resultOf, targetIsSendable, type UnresolvedAttempt } from './manual-publish-model.ts';
 import type { ManualPublishConsent, ManualPublishOutcome, ManualPublishPort, PortReadiness, ReadinessRecord } from './manual-publish-port.ts';
 import type { AttemptStore, PersistedAttempt, StoreRead } from './manual-publish-store.ts';
 
@@ -169,6 +169,13 @@ export async function loadPersistedAttempt(deps: FlowDeps, userId: string): Prom
   return read;
 }
 
+/**
+ * The code of a start that `runSend` did not make because this process already knows an unresolved attempt of the user that this
+ * start may not re-ask (another id, not declared as a re-ask, or an attempt that is uncertain now). The screen that gets it shows
+ * the attempt as the process knows it (see `send_not_started`) instead of what it believed.
+ */
+export const UNRESOLVED_REFUSAL_CODE = 'LOCAL_UNRESOLVED_ATTEMPT';
+
 /** What a visit shows once its read of the device record is back. */
 export type LoadedView =
   | Readonly<{ kind: 'send'; takeOver: InFlightTakeOver }>
@@ -251,12 +258,17 @@ export async function runSend(
     // Nothing was changed: the earlier send keeps its memory, its record and its waiters. A retry stays unresolved.
     if (handle === null) return notStarted('LOCAL_SEND_IN_PROGRESS');
   }
-  // Whatever a screen believes (it may be showing an old snapshot), this process may already know an unresolved attempt of
-  // this user. Only a re-ask of THAT attempt (same id) may start; anything else is refused before the port, the record and
-  // the memory are touched. (Still the same synchronous step as the registration above: nobody saw the entry in between.)
+  // Whatever a screen believes (it may be showing an old snapshot or an old confirmation), this process may already know an
+  // unresolved attempt of this user, in a state the screen has not seen. Only a re-ask of THAT attempt -- the same id AND an
+  // attempt that may be re-asked NOW (pending / unconfirmed, never uncertain) -- may start; anything else is refused before the
+  // port, the record and the memory are touched. (Still the same synchronous step as the registration above: nobody saw the
+  // entry in between.) A re-ask of an attempt that is uncertain now is answered as what it is -- uncertain -- never as a
+  // refusal or "unavailable", which a caller could apply as a downgrade to unconfirmed (re-askable).
   const unresolved = deps.memory.get(userId);
-  if (unresolved !== null && (!retry || unresolved.requestId !== requestId)) {
-    const refusal = notStarted('LOCAL_UNRESOLVED_ATTEMPT');
+  if (unresolved !== null && (!retry || unresolved.requestId !== requestId || !mayRetryAttempt(unresolved))) {
+    const refusal: ManualPublishOutcome = retry && unresolved.requestId === requestId
+      ? { kind: 'uncertain', targetId: requestId, code: UNRESOLVED_REFUSAL_CODE }
+      : notStarted(UNRESOLVED_REFUSAL_CODE);
     if (handle !== null) deps.inflight?.end(handle, refusal);
     return refusal;
   }
