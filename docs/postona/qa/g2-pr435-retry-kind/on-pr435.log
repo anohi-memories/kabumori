@@ -1,0 +1,16 @@
+✔ G2-HP1 (evidence heads): G2 #430 was measured on #427, #435 sits on #427, and H1 refused both -- #430 is not #435 evidence, and no head here is accepted (0.550417ms)
+✔ G2-RK1: B's stale re-ask (B still shows "pending") after A's re-ask ended uncertain -- tapped three times, twice over: no request, B is brought to "uncertain" with no re-ask, the code of the refusal is not shown as an answer (93.046958ms)
+✔ G2-RK2: a sign-out and the same person signing in again between A's uncertain re-ask and B's stale view -- B is re-created and shows "uncertain" from the memory; nothing to re-ask, no request (36.756209ms)
+✔ OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted (38.186417ms)
+✔ KNOWN H1 P2, another entrance (H1 #306 6331763149 "ack while out", not a new finding): from that stale screen of RK3, "Xで確認しました" removes the record and memory of A's NEW post while it is still out (37.81475ms)
+✔ KNOWN gate (H1 #306 6331763149, not a new finding): A's re-ask ends POSTED (memory and record cleared) -- B's stale re-ask of the same id goes out again; measured, safe only if the server's same-id idempotency holds (NOT_VERIFIED) (30.178833ms)
+✔ negative controls (heads with #435's kind check): (1) without "may be re-asked NOW", RK1 sees a second same-id request after uncertain; (2) without the screen re-sync, RK1 shows the refusal code as the answer (107.414041ms)
+✔ negative control (re-anchored G2 #430 NC1 on #435): #435 names the refusal code as a constant, so #430's anchor no longer matches -- here the same wall is found by its condition and removed, and a screen loaded before the send again sends a NEW id after uncertain (SN1 turns red) (48.530875ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 642.844042
