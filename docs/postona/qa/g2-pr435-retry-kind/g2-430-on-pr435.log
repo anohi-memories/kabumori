@@ -1,0 +1,39 @@
+✔ RELEASE GATE G2-SN1: a screen that loaded BEFORE the send (no stale read at all) must not send a NEW id after the send ended uncertain / pending (327.418167ms) # RELEASE GATE (H1 residual P2): red until a reviewed fix lands
+✔ RELEASE GATE G2-SN2: the stale screen picks ANOTHER X account for its new id -- still no second request while the first attempt is unresolved (79.90625ms) # RELEASE GATE (H1 residual P2): red until a reviewed fix lands
+✔ G2-SN3: no over-block -- after the other proven ends (rejected, refused) and after the user's "I checked X", the stale screen CAN send a new id (196.126916ms)
+✔ G2-SN4: a sign-out and the same person signing in again (a new session) re-create the stale screen -- its old read lands nowhere, and the new screen shows the unresolved attempt, so no new id can go out (55.302709ms)
+✔ OBSERVATION G2-SN5 (heads with the send-entry wall only): what a screen that loaded before the send shows when the wall refuses its new id (74.728ms)
+✖ negative control NC1 (heads with the send-entry wall): without the wall, the gates turn red again (SN1 and SN2 each see a second request) (21.677291ms)
+✔ negative control NC2: a proven end that keeps the attempt (memory.clear dropped from the proven-end branch) over-blocks on heads with the wall (SN3 turns red), and changes nothing on heads without (76.748459ms)
+✔ negative control NC3: an "uncertain" answer treated as a proven end (memory and record cleared) turns SN4 red on every head; removing the session defences one or two at a time does NOT (layered: re-created screen, cancelled read ignored, and a read applied only while loading) (354.249125ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 5
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 2
+ℹ duration_ms 1735.779542
+
+✖ failing tests:
+
+test at tests/zz-g2-430.test.mjs:298:1
+✖ negative control NC1 (heads with the send-entry wall): without the wall, the gates turn red again (SN1 and SN2 each see a second request) (21.677291ms)
+  AssertionError [ERR_ASSERTION]: exactly one wall
+  
+  0 !== 1
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-rk/apps/social-mobile/tests/zz-g2-430.test.mjs:300:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1382:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+      at Test.postRun (node:internal/test_runner/test:1522:19)
+      at Test.run (node:internal/test_runner/test:1447:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
