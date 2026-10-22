@@ -1,0 +1,14 @@
+✔ QA GATE G2-TG0: the manual-publish sources are the ones G2-T1 / T2 were measured on (a change = a fix candidate or a regression: re-run G2 #391 / #393 and this file before connecting any send port) (3.568291ms) # QA GATE: red means re-QA required, not a product failure
+✔ G2-TG1: while A's attempt is still open (uncertain / publishing, answer lost), the stale screen B sending the same text is refused by the server (PUBLISH_IN_PROGRESS) -- no second attempt, no post; B then shows A's open attempt and hides its editor (89.020167ms)
+✔ KNOWN G2-T1 (P2, same root, another entrance -- not a new finding): once A's attempt is resolved as published, the stale screen B still holds the same text and its new key makes a SECOND post (no check on the text, protection only while open) (22.392833ms)
+✔ G2-TG2: the credential expires or the manual permission is withdrawn while B waits -- B's send is refused with that reason, nothing is posted, nothing says posted (18.794083ms)
+✔ harness control G2-TH: with React-like useCallback, a screen loaded before the send does NOT re-read the account state on its own (stale, as on a device); the #391-style runtime re-reads on every render (16.765334ms)
+✔ negative controls: (1) a server stand-in WITHOUT the one-open-attempt rule lets G2-TG1 make a second post (so TG1 really rests on that rule); (2) the pinned-source gate notices a one-byte change (20.71ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 356.691125

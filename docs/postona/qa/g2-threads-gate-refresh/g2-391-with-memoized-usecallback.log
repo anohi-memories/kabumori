@@ -1,0 +1,17 @@
+✔ FINDING G2-T1-U (P2 path, owner G4): lost answer -> server "uncertain" (composer hidden, safe) -> 確認する says published -> the OLD text is back in the composer -> a re-confirm makes a SECOND post with a NEW key (54.464584ms)
+✔ FINDING G2-T1-PU (P2 path, owner G4): lost answer -> server "published_unidentified" (posted, link unknown) -> the old text stays -> a re-confirm makes a SECOND post (12.758292ms)
+✔ G2-T1-F (guard for the fix): lost answer -> server "failed" (nothing public) -> sending the same text again is a legitimate retry: 2 requests, 1 post (12.083292ms)
+✔ G2-T1-W (window): a re-confirm made while the first attempt is still open is refused by the server (PUBLISH_IN_PROGRESS) -- the protection only lasts while the attempt is open (13.748791ms)
+✔ FINDING G2-T1-A (P3, owner G4): the typed text belongs to the card, not to the account -- when the same card shows another account, the text (even one already posted) is offered for that account (12.740833ms)
+✔ FINDING G2-T1-P (P3, owner G4): the typed text survives a change of the signed-in person while the card stays mounted (the confirmation does not, as #342 pins) (10.426917ms)
+✔ G2-T1-R: a re-check answer about ANOTHER attempt id is not taken as the answer; nothing is published (9.084875ms)
+✔ the stand-in follows the database candidate: replay on the same key, PUBLISH_IN_PROGRESS while open, one open attempt per account, and no check on the text (0.673167ms)
+✔ negative control: re-using the last unanswered key for the same text (a naive fix) stops both second posts, and G2-T1-F catches that it also blocks the retry after "failed" (27.756666ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 340.257833
