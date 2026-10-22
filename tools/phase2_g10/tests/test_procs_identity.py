@@ -99,12 +99,12 @@ class TestIdentity(unittest.TestCase):
         p = _sleeper("--session-id", SESSION, "--settings", settings)
         decoy = _sleeper("--session-id", SESSION + "-DIFFERENT", "--settings", settings)
         try:
+            # どのプロセスも持たない uid の識別子: 一致なし（自分の uid のプロセスは uid の照合で除外される）
+            self.assertFalse(procs.run_process_matches(p.pid, procs.RunIdentity(SESSION, settings, 2 ** 31 - 7)))
             self.assertEqual(procs.argv(p.pid)[-4:], ["--session-id", SESSION, "--settings", settings])
             found = [pid for pid, _ in procs.find_run_processes(procs.RunIdentity(SESSION, settings, os.getuid()))]
             self.assertEqual(found, [p.pid])
-            # どのプロセスも持たない uid の識別子: 一致なし（自分の uid のプロセスは uid の照合で除外される）
             self.assertEqual(procs.find_run_processes(procs.RunIdentity(SESSION, settings, 2 ** 31 - 7)), [])
-            self.assertFalse(procs.run_process_matches(p.pid, procs.RunIdentity(SESSION, settings, 2 ** 31 - 7)))
         finally:
             for q in (p, decoy):
                 q.kill()

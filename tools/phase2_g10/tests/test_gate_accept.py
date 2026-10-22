@@ -128,7 +128,9 @@ class TestClaim(unittest.TestCase):
         for i in range(3):
             self.c.ledger.append("END", {"run_id": "x%d" % i, "status": "ended_checks_failed",
                                          "absence_confirmed": True}, self.env.control_signer, "runner", time.time())
-        self.assertIn("breaker", self.claim(self.body())[1])
+        run_id, reason = self.claim(self.body())
+        self.assertIsNone(run_id, "the breaker did not stop the claim")
+        self.assertIn("breaker", reason)
 
     def test_breaker_counts_end_order_and_resets(self):
         recs = [{"type": "END", "payload": {"status": s}} for s in

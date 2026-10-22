@@ -9,7 +9,7 @@ import os
 from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex, touch
 
 IMMUTABLE = ("run_id", "session_id", "settings_path", "hard_deadline", "policy_sha256",
-             "request_id", "approval_id", "task_id", "uid", "root")
+             "request_id", "approval_id", "task_id", "uid", "root", "task_sha256")
 NON_TERMINAL = ("starting", "running")
 TERMINAL = ("exited", "interrupted", "aborted_before_spawn", "aborted_by_halt", "runner_crashed")
 UNRESOLVED = ("stop_unconfirmed",)

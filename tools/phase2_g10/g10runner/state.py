@@ -21,6 +21,7 @@ class ControlState:
         self.stopped = False
         self.envelope = None     # 有効なENVELOPE（失効は判定時に別途）
         self.confirms = {}       # approval_id -> payload
+        self.issue_revokes = []  # ISSUE_REVOKE の payload（取り消しは解除しない。UNHALT でも消えない）
         self.problems = []
         self.head = (0, None)
 
@@ -81,10 +82,26 @@ def derive(control_events, agent_events):
                 st.envelope = None
         elif t == "CONFIRM":
             st.confirms[p.get("approval_id")] = p
+        elif t == "ISSUE_REVOKE":
+            st.issue_revokes.append(p)
     st.agent_halts = {aid: v for aid, v in agent_halt_by_id.items() if aid not in covered_agent}
     if control_events:
         st.head = (control_events[-1]["seq"], record_hash(control_events[-1]))
     return st
+
+
+def issue_revoked(st, item):
+    """item（要求・登録簿の項目など: task_id・approval_id・task_sha256）が ISSUE_REVOKE の対象か。
+    取消の task_id は必須。approval_id・task_sha256 は指定されたときだけ照合する（指定が無ければ、その task_id 全体）。"""
+    for p in st.issue_revokes:
+        if not p.get("task_id") or p.get("task_id") != item.get("task_id"):
+            continue
+        if p.get("approval_id") is not None and p.get("approval_id") != item.get("approval_id"):
+            continue
+        if p.get("task_sha256") is not None and p.get("task_sha256") != item.get("task_sha256"):
+            continue
+        return True
+    return False
 
 
 def check_seen(layout, control_events, update=True):

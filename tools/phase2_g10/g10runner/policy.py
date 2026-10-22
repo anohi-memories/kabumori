@@ -28,6 +28,8 @@ DEFAULT_POLICY = {
         "halt_escalation": 10.0,
         "minute_seconds": 60.0,
         "issue_evidence_max_age": 120.0,  # Issue #323 の取得証拠の有効時間（H4 P1）
+        "spawn_evidence_max_age": 10.0,  # 起動直前・終了時の再取得証拠の有効時間（TASK 5）
+        "issue_fetch_timeout": 5.0,  # 再取得の打ち切り（TASK 5）
     },
     "rate_guard": {"window_seconds": 600, "max_starts": 10},
     "breaker_consecutive_failures": 3,

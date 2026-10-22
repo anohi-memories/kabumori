@@ -80,6 +80,8 @@ FAST_TIMING = {
     "halt_escalation": 10.0,
     "minute_seconds": 0.5,
     "issue_evidence_max_age": 120.0,
+    "spawn_evidence_max_age": 10.0,
+    "issue_fetch_timeout": 5.0,
 }
 TRUSTED_ISSUE = {"state": "OPEN", "number": 323, "author": "anohi-memories", "editor": None}
 
@@ -167,7 +169,8 @@ class Env:
         self.clock = now
         nowfn = (lambda: self.clock()) if callable(now) else time.time
         self.notifier = notifier or RecordingNotifier()
-        self.issue = issue_mod.MockIssueSource()  # 模擬の Issue #323（実際の GitHub には触れない）
+        # 模擬の Issue #323（ファイル。スタブ＝別プロセスの起動直前の再取得からも見える。実際の GitHub には触れない）
+        self.issue = issue_mod.FileIssueSource(issue_mod.mock_issue_path(self.tmp))
         self.witness_signer = signing.HmacTestSigner({"witness": keys["witness"]})
         self.witness = issue_mod.IssueWitness(self.issue, self.witness_signer, nowfn)
         self.control = Control(self.layout, self.control_signer, self.verifier, self.policy, self.notifier, nowfn,

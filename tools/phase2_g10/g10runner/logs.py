@@ -6,13 +6,14 @@ CONTROL_TYPES = {
     "HALT": {"runner", "human"},
     "STOP": {"runner", "human"},
     "ENVELOPE_REVOKE": {"runner", "human"},
+    "ISSUE_REVOKE": {"runner", "human"},  # 特定のTASKの取消（TASK 5）。取り消す方向なのでランナー鍵でもよい
     "ENVELOPE_APPROVE": "human",
     "ENVELOPE_SUPERSEDE": "human",
     "CONFIRM": "human",
     "UNHALT": "human",
     "STOP_OFF": "human",
 }
-STOP_DIRECTION = {"HALT", "STOP", "ENVELOPE_REVOKE", "ENVELOPE_SUPERSEDE"}
+STOP_DIRECTION = {"HALT", "STOP", "ENVELOPE_REVOKE", "ENVELOPE_SUPERSEDE", "ISSUE_REVOKE"}
 
 # 制御側の台帳（承認IDの消費・終了の事実・確認）
 LEDGER_TYPES = {

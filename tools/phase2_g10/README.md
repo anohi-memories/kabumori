@@ -4,6 +4,7 @@ G10 Issue #323 の TASK `g10-phase2-runner-fake-claude-impl-20261021` の成果�
 H3 レビュー指摘 R1（P1）・R2（P1）・R3（P2）の修正は TASK `g10-phase2-pr423-h3-c3-p1x2-p2-source-fix-20261022`（下の「H3 レビュー修正」）。
 H4 再レビュー指摘 P1×2・P2×1 の修正は TASK `g10-phase2-pr423-h4-c4-issue-binding-partial-ps-signal-20261022`（下の「H4 レビュー修正」）。
 H3 第10TASK（C3）指摘 P1・P2 の修正は TASK `g10-phase2-pr423-h3-c3-identity-drift-nan-evidence-fix-20261022`（下の「H3 C3 レビュー修正」）。
+Issue の鮮度・取消の起動直前安全契約は TASK `g10-phase2-pr423-issue-freshness-revoke-fake-gate-20261022`（下の「Issue の鮮度・取消の契約」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -95,24 +96,35 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 - 試験: `tests/test_review_regressions_h3c3.py`（H3 C3 の反例。修正前HEAD 75a4bf92 で 4件すべて失敗）、`tests/test_drift_and_finite.py`。
   変異試験に 12件を追加（合計 59件）。
 
-## Issue の鮮度（既知の設計限界）と、次段階の契約案（未実装・明示ゲート）
-現在の証拠は「取得した時点の Issue の写し」であり、「起動の時点で Issue が同じ」ことは保証しない。
-- `issue_evidence_max_age`（既定120秒）の間に、Issue が CLOSED になる・status が idle／review_required に変わる・本文が差し替わる、
-  のいずれが起きても、古い証拠のまま起動できる（H3 が独立に再現）。
-- 本文が変わる場合は finalize の本文照合で**事後に**検出して HALT する。**CLOSED だけ（本文は不変）の変更は、本文のハッシュ照合では
-  事後にも検出できない。**
-- GitHub と起動の間を完全に原子的にすることはできない（どの案でも、最後の確認から起動までの窓は残る）。
+## Issue の鮮度・取消の契約（TASK 5・2026-10-22。偽Claude・模擬 Issue のみ）
+CLAIM 時の証拠（最大 `issue_evidence_max_age`＝120秒前の写し）は、**起動時の最新性の証明として扱わない**。
 
-次段階で正式に決めるべき契約の案（今回は実装しない。実際の GitHub 接続・人の承認・無人実行は行わない）:
-1. **起動直前の再取得**: スタブの臨界区間の最終判定で、ACCEPTED より後に取得した2回目の証拠（短い有効時間、例: 30秒）を必須にし、
-   本文の SHA-256・state: OPEN・updated_at が1回目と同じであることを確かめる。取得できなければ起動しない。
-2. **世代（generation）の照合**: Issue の updated_at（または TASK のメタデータに置く世代番号）を証拠に含め、再取得で変わっていれば
-   「失効」とする。担当ちゃの取消は「status を変える＝本文が変わる」で表せる。
-3. **失効イベント**: 人または取得係の署名つき ISSUE_REVOKE（task_sha256 を指定）を制御ログに排他ロックの下で追記し、最終判定がそれを見る
-   （ENVELOPE_REVOKE と同じ直列化）。
-4. **postflight の state 確認**: finalize で Issue を再取得し、本文のハッシュに加えて state（OPEN）・updated_at を照合する。
-   CLOSED だけの変更もここで検出し、安全違反として記録・通知する。
-5. この契約の採否・有効時間・取得係の権限分離は、実Claude 試験より前の明示ゲートとして決める。
+1. **起動直前の再取得（必須）**: スタブは、共有ロックの下の最終判定の最後に、取得係から Issue #323 を再取得する
+   （`purpose: spawn`、`nonce = spawn:<run_id>:<request_id>:<ACCEPTED の event_id>`＝事前に作れず、別の起動に使い回せない）。
+   受理の条件: witness 署名・有効時間 `spawn_evidence_max_age`（10秒）・OPEN・作成者/編集者・本文の完全一致（生の SHA-256 と NORM-1）・
+   ACCEPTED より後の取得・**CLAIM 時から世代（updated_at）と本文が変わっていない**こと。取得の失敗・打ち切り（`issue_fetch_timeout`＝5秒）・
+   署名不正・古い時計は、すべて起動しない（`aborted_before_spawn`）。CLOSED・idle・review_required・本文の変更・同じ本文での世代の変更も起動しない
+   （idle・review_required は本文の変更として現れる）。再取得の証拠は `runs/<run_id>/spawn_evidence.json` に残す。
+2. **取消（ISSUE_REVOKE）**: 人またはランナー鍵の署名つきイベントを、制御ログに**排他ロックの下で**追記する（`Control.revoke_issue`）。
+   対象は task_id（必須）と、任意で approval_id・task_sha256（指定が無ければその task_id 全体）。取消は解除しない（UNHALT でも消えない）。
+   CLAIM・agent の受理・スタブの最終判定はいずれも取消済みのTASKを拒否し、起動後に取消されたランは S1（と S2）が `issue_revoked` で停止する。
+3. **finalize の再照合**: 終了判定で Issue を再取得し（`purpose: postflight`）、OPEN・本文・世代が CLAIM 時と同じことを確かめる。
+   **CLOSED だけ（本文は不変）の変更もここで検出**し、安全違反として HALT・通知する。取得できない・検証できないものも成功にしない。
+   取消されたランの結果は成功にしない（`issue_not_revoked: false`）。
+
+**線形化点**: 起動の可否は「スタブが共有ロックを保持して行う最終判定（取消イベントの確認と起動直前の再取得）」で決まる。
+取消（排他ロック）は、それより前なら起動しない、後なら起動の確定の後になり S1/S2 が止める（どちらの順序も試験で確認）。
+
+**残るリスク（隠さない）**:
+- GitHub と OS の起動は原子的にできない。起動直前の再取得から実際の起動（数ミリ秒〜）までの間の Issue の変化は、起動前には止められない
+  （その後の S1/S2 の取消確認・finalize の再照合で事後に止める・検出する）。
+- 再取得はロックの中で行うため、取得の遅れ（最大5秒）の間、HALT・取消の追記が待たされる（ハードHALT はフラグで S1/S2 がスタブも止める）。
+- 起動後の取消は、S1 の確認間隔（既定1秒）までは走り続ける。Issue 側の CLOSED・変更（取消イベントを伴わないもの）は起動後は finalize まで検出しない。
+- 取得係・witness 鍵・模擬の Issue はすべて試験用。実際の GitHub 取得・HTTP 参照時刻・編集者の判定・鍵の権限分離は未実装（次段階のゲート）。
+
+**人が止める手順**（模擬の範囲）: 特定のTASKを止める → `Control.revoke_issue(task_id, approval_id=..., reason=...)`（起動前なら起動しない、
+起動後なら S1/S2 が止める）。すべてを止める → ハードHALT（`Control.halt("hard", ...)`）。S1/S2 が両方止まっている場合は、
+手順書の最終手段（プロセスの手動停止）に従う。
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。
@@ -121,12 +133,13 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 - GitHub からの Issue の取得と HTTP `Date` ヘッダ（呼び出し側が本文・メタ情報・参照時刻を渡す形。Phase 1 の取得コードとは未接続）。
 - 作業フォルダの実際の `git` 取得（偽の作業フォルダのみ）。
 - `needs_input` の判定（自己申告の `pending_questions:` 行による暫定の判定）。
-- Issue の取得: 実際の GitHub からの取得（gh／API・HTTP Date・編集者の取得方法）は未実装。取得元は差し替え可能なインターフェースで、試験は模擬（MockIssueSource）。witness の鍵も試験用 HMAC。**witness 鍵を持つ者は任意の本文を「取得した」と署名できる**ため、実運用では取得係を runner と別の権限（別uid・別鍵）に置く必要がある（未実装）。
-- Issue の証拠は取得から最大 `issue_evidence_max_age` 秒有効。その間に Issue が書き換わっても、起動は止まらない（finalize の本文照合で事後に検出し HALT）。
+- Issue の取得: 実際の GitHub からの取得（gh／API・HTTP Date・編集者の取得方法）は未実装。取得元は差し替え可能なインターフェースで、試験は模擬（`FileIssueSource`／`MockIssueSource`）。起動直前の再取得（スタブ側）も、偽Claudeのアダプタのときだけ試験用の模擬と試験用の witness 鍵で行う（それ以外では取得係が無く、起動しない）。witness の鍵も試験用 HMAC。**witness 鍵を持つ者は任意の本文を「取得した」と署名できる**ため、実運用では取得係を runner と別の権限（別uid・別鍵）に置く必要がある（未実装）。
+- Issue の鮮度: 上の「Issue の鮮度・取消の契約」を参照（再取得から起動までの短い窓は残る）。
 - 照合と signal の間のごく短い時間の pid 再利用・exec は防げない（pidfd 相当が無い macOS の限界。照合はカーネルと sysctl だけで行い、外部コマンドを挟まない）。
 - カーネル一覧と ps の**両方**が同じプロセスを欠き、かつ登録簿に無い子孫（逃げた孫など）は見つけられない（両経路の同時の偽装が必要）。
-- argv・開始時刻の取得は同じuidのプロセスだけで可能。別uidのプロセスの argv は読めない（試験で確認: 読めないものは unknown）。専用macOSユーザー（別uid）で実行する設計では、監督側の権限が別途必要（未検証）。
+- 権限: **argv は同じuidのプロセスだけ**読める（別uidの argv は読めず、unknown として扱う。試験で確認）。**開始時刻は別uidのプロセスでも** sysctl KERN_PROC_PID の p_starttime で読める（同じuidなら libproc の値とも照合）。専用macOSユーザー（別uid）で実行する設計では、argv を読むための監督側の権限が別途必要（未検証）。
 - binding の model→model_id 照合は `meta.validate_task` の照合と二重（片方だけを壊す変異は検出されないため、変異試験の対象外）。
+- 変異試験の「検出」は、assert の失敗（AssertionError／FAIL）で落ちたときだけ数える（例外・起動不能だけで落ちたものは error-only として失敗にする。TASK 5 で厳しくした）。
 - ログと処理済み番号を一緒に古い状態へ戻すことの検出（既知の限界。試験 `test_whole_log_and_seen_rolled_back_together_is_a_known_limit` で記録）。
 
 ## 仕様との食い違い（担当ちゃの確認が必要）

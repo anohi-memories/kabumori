@@ -25,7 +25,9 @@ REPO = "anohi-memories/kabumori"
 ISSUE_NUMBER = 323
 TRUSTED_LOGIN = "anohi-memories"
 EVIDENCE_FIELDS = ("repo", "number", "state", "author", "editor", "updated_at", "fetched_at", "body_sha256",
-                   "task_sha256")
+                   "task_sha256", "purpose", "nonce")
+# 証拠の用途（TASK 5）: claim＝CLAIM 前の取得、spawn＝ACCEPTED 後・起動直前の再取得、postflight＝finalize での再取得
+PURPOSES = ("claim", "spawn", "postflight")
 
 
 class IssueSourceError(RuntimeError):
@@ -44,12 +46,58 @@ class MockIssueSource:
         self.snapshot = {"repo": repo, "number": number, "state": state, "author": author, "editor": editor,
                          "body": body, "updated_at": time.time() if updated_at is None else updated_at}
 
-    def fetch(self):
+    def fetch(self, timeout=None):
         if self.fail:
             raise IssueSourceError(self.fail)
         if self.snapshot is None:
             raise IssueSourceError("issue not available")
         return dict(self.snapshot)
+
+
+class FileIssueSource:
+    """試験用の取得元（ファイル）。制御側と実行側（スタブ＝別プロセス）が同じ模擬 Issue を見るために使う。
+
+    実際の GitHub には触れない。fail（取得の失敗）・delay（応答の遅れ。timeout を超えれば失敗）を模擬できる。
+    """
+
+    def __init__(self, path):
+        self.path = path
+
+    def _read(self):
+        from .fsutil import read_json
+        return read_json(self.path) or {}
+
+    def _write(self, doc):
+        from .fsutil import atomic_write_json
+        atomic_write_json(self.path, doc)
+
+    def publish(self, body, state="OPEN", author=TRUSTED_LOGIN, editor=None, number=ISSUE_NUMBER, repo=REPO,
+                updated_at=None):
+        self._write({"snapshot": {"repo": repo, "number": number, "state": state, "author": author,
+                                  "editor": editor, "body": body,
+                                  "updated_at": time.time() if updated_at is None else updated_at}})
+
+    def _set(self, key, value):
+        doc = self._read()
+        doc[key] = value
+        self._write(doc)
+
+    fail = property(lambda self: self._read().get("fail"), lambda self, v: self._set("fail", v))
+    delay = property(lambda self: self._read().get("delay", 0), lambda self, v: self._set("delay", v))
+
+    def fetch(self, timeout=None):
+        doc = self._read()
+        delay = float(doc.get("delay") or 0)
+        if delay:
+            if timeout is not None and delay > timeout:
+                time.sleep(timeout)
+                raise IssueSourceError("issue fetch timed out")
+            time.sleep(delay)
+        if doc.get("fail"):
+            raise IssueSourceError(doc["fail"])
+        if not doc.get("snapshot"):
+            raise IssueSourceError("issue not available")
+        return dict(doc["snapshot"])
 
 
 class IssueWitness:
@@ -62,11 +110,13 @@ class IssueWitness:
         self.signer = signer
         self.now = now
 
-    def observe(self):
+    def observe(self, purpose="claim", nonce=None, timeout=None):
+        if purpose not in PURPOSES or not (nonce is None or isinstance(nonce, str)):
+            raise ValueError("invalid evidence purpose/nonce")
         fetched_at = self.now()
         if not is_finite_number(fetched_at) or fetched_at <= 0:  # 時計が NaN・Infinity・0以下なら証拠を作らない
             raise IssueSourceError("witness clock is not a finite positive number")
-        snap = self.source.fetch()
+        snap = self.source.fetch(timeout=timeout)
         body = snap.get("body")
         if not isinstance(body, str):
             raise IssueSourceError("issue body missing")
@@ -77,7 +127,8 @@ class IssueWitness:
         evidence = {"repo": snap.get("repo"), "number": snap.get("number"), "state": snap.get("state"),
                     "author": snap.get("author"), "editor": snap.get("editor"),
                     "updated_at": snap.get("updated_at"), "fetched_at": fetched_at,
-                    "body_sha256": sha256_hex(body.encode("utf-8")), "task_sha256": task_sha}
+                    "body_sha256": sha256_hex(body.encode("utf-8")), "task_sha256": task_sha,
+                    "purpose": purpose, "nonce": nonce}
         return {"evidence": evidence, "sig": self.signer.sign("witness", canonical(evidence))}
 
 
@@ -85,8 +136,11 @@ def evidence_digest(doc):
     return sha256_hex(canonical(doc))
 
 
-def check_evidence(doc, verifier, body, now, max_age):
-    """証拠と本文の結合を検証する。問題があれば理由（文字列）、なければ None。"""
+def check_evidence(doc, verifier, body, now, max_age, purpose="claim", nonce=None):
+    """証拠と本文の結合を検証する。問題があれば理由（文字列）、なければ None。
+
+    purpose・nonce は、その用途・その起動のための取得であること（別の用途・別の起動の証拠の使い回しを拒否）。
+    """
     if not isinstance(doc, dict) or set(doc) != {"evidence", "sig"} or not isinstance(doc["evidence"], dict):
         return "issue evidence malformed"
     ev = doc["evidence"]
@@ -98,6 +152,8 @@ def check_evidence(doc, verifier, body, now, max_age):
         return "issue evidence contains non-finite numbers"
     if not verifier.verify("witness", signed, doc["sig"]):
         return "issue evidence signature invalid"
+    if ev["purpose"] != purpose or ev["nonce"] != nonce:
+        return "issue evidence is for another purpose or run"
     if ev["repo"] != REPO or ev["number"] != ISSUE_NUMBER:
         return "issue evidence is not for Issue #323"
     if ev["state"] != "OPEN":
@@ -134,3 +190,59 @@ def check_request_evidence(req, verifier, policy, now):
     if not (is_finite_number(max_age) and max_age > 0):
         return "issue evidence max age not configured"
     return check_evidence(req.get("issue_evidence"), verifier, req.get("prompt"), now, max_age)
+
+
+# --- 起動直前・終了時の再取得（TASK 5: Issue の鮮度・取消） ---
+def spawn_nonce(req, accepted_event_id):
+    """起動直前の再取得を、この要求・この ACCEPTED に結び付ける値（事前に作れない・使い回せない）。"""
+    return "spawn:%s:%s:%s" % (req["run_id"], req["request_id"], accepted_event_id)
+
+
+def postflight_nonce(run_id):
+    return "postflight:%s" % run_id
+
+
+def _same_generation(doc, claim_doc):
+    """CLAIM 時の証拠と、世代（updated_at）・本文・state が同じか。"""
+    ev, cev = doc["evidence"], (claim_doc or {}).get("evidence") or {}
+    if ev["updated_at"] != cev.get("updated_at"):
+        return "Issue #323 changed since CLAIM (generation/updated_at)"
+    if ev["body_sha256"] != cev.get("body_sha256") or ev["task_sha256"] != cev.get("task_sha256"):
+        return "Issue #323 body changed since CLAIM"
+    return None
+
+
+def check_spawn_evidence(doc, claim_doc, verifier, prompt, now, max_age, nonce, accepted_ts):
+    """起動直前の再取得証拠: 署名・短い有効時間・OPEN・作成者/編集者・本文の完全一致・この起動の nonce・
+    ACCEPTED より後の取得・CLAIM 時から世代が変わっていないこと。"""
+    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="spawn", nonce=nonce)
+    if reason:
+        return reason
+    if not (is_finite_number(accepted_ts) and doc["evidence"]["fetched_at"] >= accepted_ts):
+        return "spawn evidence was fetched before ACCEPTED"
+    return _same_generation(doc, claim_doc)
+
+
+def check_postflight(doc, claim_doc, verifier, prompt, now, max_age, nonce):
+    """finalize の再取得証拠: OPEN（CLOSED だけの変更も検出）・本文・世代が CLAIM 時と同じこと。"""
+    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="postflight", nonce=nonce)
+    if reason:
+        return reason
+    return _same_generation(doc, claim_doc)
+
+
+def mock_issue_path(root):
+    import os
+    return os.path.join(root, "mock_issue.json")
+
+
+def spawn_witness(root, policy):
+    """実行側（スタブ）が起動直前に使う取得係。偽Claudeのアダプタのときだけ、試験用の模擬（ファイル）と
+    試験用の witness 鍵で作る。実際の GitHub からの取得は未実装（None＝起動しない）。"""
+    if policy.get("adapter") != "fake":
+        return None
+    from . import signing
+    keys = signing.load_test_keys(root)
+    if "witness" not in keys:
+        return None
+    return IssueWitness(FileIssueSource(mock_issue_path(root)), signing.HmacTestSigner({"witness": keys["witness"]}))

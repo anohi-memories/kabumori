@@ -84,8 +84,27 @@ def final_check(agent, layout, req, policy):
     reference_now = req["reference_time"] + (local_now - req["issued_at"])
     if not state.authorization_ok(st, req, local_now, reference_now):
         return "not authorized at final check"
-    if agent.used_state(req["run_id"]) != ["ACCEPTED"]:
+    if state.issue_revoked(st, req):
+        return "issue revoked"
+    accepted = [r for r in agent.used.read_all() if r["type"] == "ACCEPTED" and r["payload"]["run_id"] == req["run_id"]]
+    if agent.used_state(req["run_id"]) != ["ACCEPTED"] or len(accepted) != 1:
         return "used_requests state is not ACCEPTED-only"
+    # TASK 5: ACCEPTED 後・起動直前に Issue #323 を再取得し、CLAIM 時から state・本文・世代が変わっていないこと。
+    # CLAIM 時の（最大120秒前の）証拠は、起動時の最新性の証明として扱わない。取得の失敗・遅れも起動しない。
+    witness = issue_mod.spawn_witness(layout.root, policy)
+    if witness is None:
+        return "no spawn-time issue witness (real GitHub fetch is not implemented)"
+    nonce = issue_mod.spawn_nonce(req, accepted[0]["event_id"])
+    try:
+        doc = witness.observe("spawn", nonce, timeout=policy_mod.timing(policy, "issue_fetch_timeout"))
+    except Exception as exc:
+        return "issue re-fetch failed at spawn: %s" % type(exc).__name__
+    reason = issue_mod.check_spawn_evidence(doc, req["issue_evidence"], agent.verifier, req["prompt"], time.time(),
+                                            policy_mod.timing(policy, "spawn_evidence_max_age"), nonce,
+                                            accepted[0]["ts"])
+    if reason:
+        return "issue changed or unverifiable at spawn: " + reason
+    atomic_write_json(os.path.join(layout.run_dir(req["run_id"]), "spawn_evidence.json"), doc)
     return None
 
 
@@ -129,7 +148,7 @@ def run(root, run_id):
         "run_id": run_id, "session_id": req["session_id"], "settings_path": settings_path,
         "hard_deadline": now + minutes * policy_mod.timing(policy, "minute_seconds"),
         "policy_sha256": policy["_digest"], "request_id": req["request_id"],
-        "approval_id": req["approval_id"], "task_id": req["task_id"],
+        "approval_id": req["approval_id"], "task_id": req["task_id"], "task_sha256": req["task_sha256"],
         "uid": os.getuid(), "root": os.path.realpath(root),
         "stub_pid": os.getpid(), "stub_start": procs.start_time(os.getpid()), "created_at": now,
     })

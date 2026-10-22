@@ -147,8 +147,14 @@ class TestState(unittest.TestCase):
         with open(self.env.layout.control_events, "w", encoding="utf-8") as f:
             f.write("\n".join(lines[:2]) + "\n")
         events2 = logs.control_log(self.env.layout, self.env.verifier).read_all()
-        with self.assertRaises(state.RewindError):
+        try:
             state.check_seen(self.env.layout, events2)
+        except state.RewindError:
+            pass
+        except Exception as exc:  # 別の例外で落ちるだけでは「巻き戻りを検知した」ことにならない
+            self.fail("rewind was not reported as RewindError: %r" % exc)
+        else:
+            self.fail("rewind was not detected")
 
     def test_whole_log_and_seen_rolled_back_together_is_a_known_limit(self):
         """ログと処理済み番号を一緒に古い状態へ戻すと、連鎖だけでは検出できない（v5.4 残存リスク）。

@@ -67,6 +67,16 @@ class Control:
     def revoke_envelope(self, envelope_id, role="runner"):
         return self.append_control("ENVELOPE_REVOKE", {"envelope_id": envelope_id}, role)
 
+    def revoke_issue(self, task_id, approval_id=None, task_sha256=None, reason="", role="human"):
+        """特定のTASKの取消（TASK 5）。排他ロックの下で制御ログに追記する（ENVELOPE_REVOKE と同じ直列化）。
+        線形化点: 起動スタブは共有ロックの下で最終判定を行うので、取消は「最終判定より前（起動しない）」か
+        「起動の確定より後（S1/S2 が停止し、finalize は成功にしない）」のどちらかになる。"""
+        if not isinstance(task_id, str) or not task_id:
+            raise ValueError("task_id is required")
+        payload = {"task_id": task_id, "approval_id": approval_id, "task_sha256": task_sha256,
+                   "reason": reason, "revoked_at": self.now()}
+        return self.append_control("ISSUE_REVOKE", payload, role)
+
     def confirm(self, approval_id, task_sha256):
         return self.append_control("CONFIRM", {"approval_id": approval_id, "task_sha256": task_sha256,
                                                "policy_sha256": self.policy["_digest"]}, "human")
@@ -242,6 +252,9 @@ class Control:
             return None, "halted"
         if st.stopped:
             return None, "stopped"
+        if state.issue_revoked(st, {"task_id": f["task_id"], "approval_id": f["phase2_approval_id"],
+                                    "task_sha256": computed}):
+            return None, "issue revoked"
         base = {
             "approval_id": f["phase2_approval_id"], "task_id": f["task_id"], "task_sha256": computed,
             "prompt": body, "base_ref": f["base_ref"], "base_sha": f["base_sha"], "model": f["model"],
@@ -360,6 +373,26 @@ class Control:
             checks["issue_body_unchanged"] = same
             if not same:
                 violations.append("issue body changed during run (observed)")
+        # TASK 5: Issue #323 を再取得し、state（OPEN）・本文・世代が CLAIM 時と同じか照合する（CLOSED だけの変更も検出）
+        if self.witness is None:
+            pf_reason = "no issue witness"
+        else:
+            try:
+                pf_doc = self.witness.observe("postflight", issue_mod.postflight_nonce(run_id),
+                                              timeout=policy_mod.timing(self.policy, "issue_fetch_timeout"))
+                pf_reason = issue_mod.check_postflight(
+                    pf_doc, req.get("issue_evidence"), self.verifier, req.get("prompt"), self.now(),
+                    policy_mod.timing(self.policy, "spawn_evidence_max_age"), issue_mod.postflight_nonce(run_id))
+            except Exception as exc:  # 取得できない・検証できないものを成功にしない
+                pf_reason = "issue fetch failed at finalize: %s" % type(exc).__name__
+        checks["issue_state_unchanged"] = pf_reason is None
+        if pf_reason:
+            violations.append("issue changed or unverifiable at finalize: " + pf_reason)
+        try:
+            revoked = state.issue_revoked(self.read_state(), req)
+        except ChainError:
+            revoked = True
+        checks["issue_not_revoked"] = not revoked  # 取消後の結果は成功にしない（停止できたなら interrupted）
         pol = policy_mod.load(self.layout.policy_priv)
         checks["policy_unchanged"] = pol["_digest"] == req["policy_sha256"]
         if not checks["policy_unchanged"]:

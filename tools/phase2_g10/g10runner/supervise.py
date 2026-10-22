@@ -153,6 +153,16 @@ def hard_halt_requested(layout, agent):
         return True
 
 
+def issue_revoked(agent, entry):
+    """登録簿のランが ISSUE_REVOKE の対象か（TASK 5）。ログが読めなければ False（ハードHALT の側で扱う）。"""
+    if agent is None:
+        return False
+    try:
+        return state.issue_revoked(agent.current_state(update_seen=False), entry)
+    except (ChainError, state.RewindError):
+        return False
+
+
 def reaper_loop(layout, policy, agent, run_id):
     """S1: 1つのランを期限まで監督する。実行係（スタブ）から独立したプロセスで動く。"""
     interval = policy_mod.timing(policy, "reaper_interval")
@@ -178,6 +188,9 @@ def reaper_loop(layout, policy, agent, run_id):
             return 0
         if hard_halt_requested(layout, agent):
             stop_run(layout, policy, agent, entry, "emergency_stop", "S1")
+            return 0
+        if st == "running" and issue_revoked(agent, entry):  # 起動後の取消: 止める
+            stop_run(layout, policy, agent, entry, "issue_revoked", "S1")
             return 0
         try:
             stub_ok = procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start"))
@@ -241,6 +254,9 @@ def watchdog_cycle(layout, policy, agent, now=None):
         if hard:
             stop_run(layout, policy, agent, entry, "emergency_stop", "S2")
             actions.append((run_id, "emergency_stop"))
+        elif issue_revoked(agent, entry):
+            stop_run(layout, policy, agent, entry, "issue_revoked", "S2")
+            actions.append((run_id, "issue_revoked"))
         elif now >= entry["hard_deadline"] + slack or (now >= entry["hard_deadline"] and not reaper_ok):
             stop_run(layout, policy, agent, entry, "timed_out", "S2")
             actions.append((run_id, "timed_out"))

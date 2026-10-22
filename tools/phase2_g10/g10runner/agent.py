@@ -102,6 +102,8 @@ class Agent:
             return "halted"
         if st.stopped or state.flags_say_stop(self.layout):
             return "stopped"
+        if state.issue_revoked(st, req):
+            return "issue revoked"
         reference_now = req["reference_time"] + (local_now - req["issued_at"])
         if not state.authorization_ok(st, req, local_now, reference_now):
             return "not authorized (envelope/confirm invalid, revoked, expired or out of range)"

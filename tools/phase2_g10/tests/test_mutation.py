@@ -2,6 +2,8 @@
 
 各ミューテーションは、パッケージの一時コピーに対して文字列の置換で作る（元のファイルは変更しない）。
 置換対象の文字列が見つからない場合も失敗にする（試験が古くなったことを検知するため）。
+「検出」は assert の失敗（AssertionError／FAIL）で落ちたときだけ。例外・起動不能だけで落ちたもの（error-only）は
+検出として数えない（H3 C3 の指摘。TASK 5）。
 """
 import os
 import shutil
@@ -210,6 +212,50 @@ MUTANTS = [
     ("policy numbers not validated", "g10runner/policy.py",
      "        if not positive(value):\n            raise PolicyError(\"policy timing value invalid: \" + key)",
      "        pass", "test_drift_and_finite.FiniteInputs.test_policy_rejects_bad_numbers"),
+    # --- Issue の鮮度・取消（TASK 5）---
+    ("spawn-time re-fetch result ignored", "g10runner/stub.py",
+     "    if reason:\n        return \"issue changed or unverifiable at spawn: \" + reason", "    pass",
+     "test_review_regressions_fresh.SpawnAfterIssueChange.test_closed_after_claim"),
+    ("spawn-time re-fetch failure ignored", "g10runner/stub.py",
+     '        return "issue re-fetch failed at spawn: %s" % type(exc).__name__',
+     "        return None",
+     "test_review_regressions_fresh.SpawnAfterIssueChange.test_issue_fetch_fails_after_claim"),
+    ("generation (updated_at) not compared", "g10runner/issue.py",
+     'if ev["updated_at"] != cev.get("updated_at"):', "if False:",
+     "test_review_regressions_fresh.SpawnAfterIssueChange.test_same_body_new_generation_after_claim"),
+    ("evidence purpose/nonce not checked", "g10runner/issue.py",
+     'if ev["purpose"] != purpose or ev["nonce"] != nonce:', "if False:",
+     "test_issue_freshness.SpawnEvidenceUnit.test_other_run_nonce_or_purpose"),
+    ("spawn evidence may predate ACCEPTED", "g10runner/issue.py",
+     'if not (is_finite_number(accepted_ts) and doc["evidence"]["fetched_at"] >= accepted_ts):', "if False:",
+     "test_issue_freshness.SpawnEvidenceUnit.test_fetched_before_accepted"),
+    ("finalize ignores the re-fetched Issue state", "g10runner/control.py",
+     '        if pf_reason:\n            violations.append("issue changed or unverifiable at finalize: " + pf_reason)',
+     "        pass",
+     "test_review_regressions_fresh.FinalizeIssueState.test_close_only_after_run_is_not_success"),
+    ("finalize treats an unfetchable Issue as unchanged", "g10runner/control.py",
+     '                pf_reason = "issue fetch failed at finalize: %s" % type(exc).__name__',
+     "                pf_reason = None",
+     "test_review_regressions_fresh.FinalizeIssueState.test_issue_unfetchable_at_finalize_is_not_success"),
+    ("ISSUE_REVOKE not derived into state", "g10runner/state.py",
+     '        elif t == "ISSUE_REVOKE":\n            st.issue_revokes.append(p)',
+     '        elif t == "ISSUE_REVOKE":\n            pass',
+     "test_issue_freshness.RevokeBeforeSpawn.test_new_claim_for_revoked_task_refused_even_after_unhalt"),
+    ("stub final check ignores ISSUE_REVOKE", "g10runner/stub.py",
+     '    if state.issue_revoked(st, req):\n        return "issue revoked"', "    pass",
+     "test_issue_freshness.RevokeBeforeSpawn.test_revoke_after_accept_before_final_check"),
+    ("agent ignores ISSUE_REVOKE", "g10runner/agent.py",
+     '        if state.issue_revoked(st, req):\n            return "issue revoked"', "        pass",
+     "test_issue_freshness.RevokeBeforeSpawn.test_revoke_after_claim_is_rejected_before_accept"),
+    ("S1 does not stop a revoked run", "g10runner/supervise.py",
+     '        if st == "running" and issue_revoked(agent, entry):', "        if False:",
+     "test_issue_freshness.RevokeAfterSpawn.test_revoke_while_stub_holds_lock_lands_after_spawn_and_stops_the_run"),
+    ("revoke scope widened (approval ignored)", "g10runner/state.py",
+     'if p.get("approval_id") is not None and p.get("approval_id") != item.get("approval_id"):', "if False:",
+     "test_issue_freshness.RevokeBeforeSpawn.test_revoke_scope"),
+    ("revoked run counted as success", "g10runner/control.py",
+     'checks["issue_not_revoked"] = not revoked', 'checks["issue_not_revoked"] = True',
+     "test_issue_freshness.RevokeAfterSpawn.test_revoke_while_stub_holds_lock_lands_after_spawn_and_stops_the_run"),
 ]
 
 
@@ -233,7 +279,13 @@ def run_mutant(rel, old, new, test_id):
             open(stub, "w", encoding="utf-8").write(s)
         proc = subprocess.run([sys.executable, os.path.join(dst, "run_tests.py"), test_id],
                               capture_output=True, text=True, timeout=300)
-        return "killed" if proc.returncode != 0 else "survived"
+        if proc.returncode == 0:
+            return "survived"
+        out = proc.stdout + proc.stderr
+        # 意味のある検出（assert の失敗）と、例外・起動不能だけで落ちたものを分ける（H3 C3 の指摘）
+        if "AssertionError" in out or "\nFAIL:" in out:
+            return "killed"
+        return "error-only"
     finally:
         for dirpath, dirnames, filenames in os.walk(tmp):
             try:
