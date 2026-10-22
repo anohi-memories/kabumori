@@ -1,0 +1,17 @@
+{
+  "recordedAt": "2026-10-22T12:45:00+09:00",
+  "note": "G2's native / identity / device evidence so far, copied from the READMEs and logs of the G2 PRs named in each record (read-only). Offline input of g2-native-device-evidence.test.mjs.",
+  "appJsonAtMain": { "head": "0c42933ca5030ab31a56267529430d0473d9b155", "blob": "c6a7e2a1fe33d308f88f373904e27298fcaa3af1" },
+  "records": [
+    { "id": "ID-R1", "gate": "IDENTITY", "pr": 401, "prHead": "22e574f869ded0763b6d246117f5d84660ae3eed", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "prebuild", "build": "generated", "order": "both", "login": "cached", "ios": "com.anohimemories.kabumorisocialmobile", "android": "com.anohimemories.kabumorisocialmobile", "trackedConfigCleanAfter": false },
+    { "id": "ID-R2", "gate": "IDENTITY", "pr": 401, "prHead": "22e574f869ded0763b6d246117f5d84660ae3eed", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "prebuild", "build": "generated", "order": "both", "login": "none", "ios": "com.anonymous.kabumorisocialmobile", "android": "com.anonymous.kabumorisocialmobile", "trackedConfigCleanAfter": false },
+    { "id": "ID-R3", "gate": "IDENTITY", "pr": 401, "prHead": "22e574f869ded0763b6d246117f5d84660ae3eed", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "prebuild", "build": "generated", "order": "ios-first", "login": "cached", "ios": "com.anohi-memories.kabumori-social-mobile", "android": "com.anohimemories.kabumorisocialmobile", "trackedConfigCleanAfter": false },
+    { "id": "IOS-STD", "gate": "IOS27", "pr": 348, "prHead": "e3963e1167aecfe349315428c317a1441257ac83", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "simulator", "platform": "ios", "os": "iOS 27", "build": "standard", "result": "CRASH_AT_LAUNCH" },
+    { "id": "IOS-FIXTURE", "gate": "IOS27", "pr": 348, "prHead": "e3963e1167aecfe349315428c317a1441257ac83", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "simulator", "platform": "ios", "os": "iOS 27", "build": "patched-fixture", "result": "LAUNCH_PASS" },
+    { "id": "IOS-FIXTURE-376", "gate": "IOS27", "pr": 376, "prHead": "66cce840924820bbd223e70071efbb4eb125ebcc", "appHead": "44ab2e6bb812f3484c85f847574de103757e3dfc", "env": "simulator", "platform": "ios", "os": "iOS 27", "build": "patched-fixture", "result": "LAUNCH_PASS" },
+    { "id": "IOS-SDK26", "gate": "IOS27", "pr": 348, "prHead": "e3963e1167aecfe349315428c317a1441257ac83", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "simulator", "platform": "ios", "os": "iOS 27", "build": "sdk26-relabel", "result": "LAUNCH_PASS" },
+    { "id": "IOS-GATE-397", "gate": "IOS27", "pr": 397, "prHead": "a0f66c77e8f7fb978bae0a1a02873ec91d07be61", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "source", "platform": "ios", "build": "none", "result": "GATE_DEFINED" },
+    { "id": "AND-362", "gate": "ANDROID_APP_LINKS", "pr": 362, "prHead": "a2145eed2abda32b6f545c529b5b11a39c0d1e2c", "appHead": "a2145eed2abda32b6f545c529b5b11a39c0d1e2c", "env": "source", "platform": "android", "build": "none", "linkKind": "custom-scheme", "result": "PASS_OFFLINE" },
+    { "id": "AND-419", "gate": "ANDROID_APP_LINKS", "pr": 419, "prHead": "1ffd1b20f195d07fcc1b4beda3ea0f271c63aef3", "appHead": "0c42933ca5030ab31a56267529430d0473d9b155", "env": "source", "platform": "android", "build": "none", "linkKind": "custom-scheme", "result": "PASS_OFFLINE" }
+  ]
+}
