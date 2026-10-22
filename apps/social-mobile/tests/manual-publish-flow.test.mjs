@@ -634,3 +634,74 @@ test('reconcile: what the process knows NOW wins over a snapshot -- a send that 
   const bare = harness();
   assert.deepEqual(flow.reconcileLoadedRead(bare.deps, 'U1', none), { kind: 'record', read: none }, 'without a registry too');
 });
+
+// ---- send time: the unresolved attempt must be RE-ASKABLE NOW, not only have the same id ----------------------------------------------------------------
+
+test('live kind: a re-ask of an attempt that is uncertain now is refused as uncertain (never downgraded) before the port, the record and the memory', async () => {
+  for (const withRegistry_ of [true, false]) {
+    const h = withRegistry_ ? withRegistry(harness()) : harness();
+    h.memory.mark('U1', { ...ATT(1), kind: 'uncertain' });
+    const outcome = await flow.runSend(h.deps, args({ retry: true }));
+    assert.deepEqual(outcome, { kind: 'uncertain', targetId: ID(1), code: 'LOCAL_UNRESOLVED_ATTEMPT' }, `registry=${withRegistry_}`);
+    assert.equal(h.calls.send.length, 0);
+    assert.equal(h.kv.data.size, 0);
+    assert.deepEqual(h.memory.get('U1'), { ...ATT(1), kind: 'uncertain' });
+    if (withRegistry_) assert.equal(h.deps.inflight.takeOver('U1'), null, 'the registry entry is released');
+  }
+});
+
+test('live kind: mayRetryAttempt is the rule of mayRetrySameId applied to the attempt -- pending / unconfirmed / an attempt left in_flight may be re-asked, uncertain never', () => {
+  assert.equal(model.mayRetryAttempt({ kind: 'pending' }), true);
+  assert.equal(model.mayRetryAttempt({ kind: 'unconfirmed' }), true);
+  assert.equal(model.mayRetryAttempt({ kind: 'in_flight' }), true, 'shown (and re-asked) as unconfirmed after a restart');
+  assert.equal(model.mayRetryAttempt({ kind: 'uncertain' }), false);
+  for (const kind of ['pending', 'unconfirmed', 'uncertain']) assert.equal(model.mayRetryAttempt({ kind }), model.mayRetrySameId(kind), kind);
+});
+
+test('live kind: a re-ask of an attempt that may be re-asked NOW goes out, with and without a registry, for every re-askable kind', async () => {
+  for (const kind of ['pending', 'unconfirmed', 'in_flight']) {
+    for (const registry of [true, false]) {
+      const h = registry ? withRegistry(harness()) : harness();
+      h.memory.mark('U1', { ...ATT(1), kind, ...(kind === 'in_flight' ? { text: null } : {}) });
+      const outcome = await flow.runSend(h.deps, args({ retry: true }));
+      assert.equal(outcome.kind, 'published', `${kind} / registry=${registry}`);
+      assert.equal(h.calls.send.length, 1, `${kind} / registry=${registry}`);
+      assert.equal(h.calls.send[0].targetId, ID(1), 'the SAME id');
+    }
+  }
+});
+
+test('live kind: the other refusals keep their shape -- another id (re-ask or not) and a "fresh" send with the uncertain id', async () => {
+  const h = withRegistry(harness());
+  h.memory.mark('U1', { ...ATT(1), kind: 'uncertain' });
+  assert.deepEqual(await flow.runSend(h.deps, args({ requestId: ID(2), retry: true })), { kind: 'unavailable', targetId: ID(2), code: 'LOCAL_UNRESOLVED_ATTEMPT' });
+  assert.deepEqual(await flow.runSend(h.deps, args({ requestId: ID(2) })), { kind: 'refused', targetId: ID(2), code: 'LOCAL_UNRESOLVED_ATTEMPT', retryable: false });
+  assert.deepEqual(await flow.runSend(h.deps, args()), { kind: 'refused', targetId: ID(1), code: 'LOCAL_UNRESOLVED_ATTEMPT', retryable: false });
+  assert.equal(h.calls.send.length, 0);
+  assert.equal(h.kv.data.size, 0);
+  assert.equal(h.memory.get('U1').kind, 'uncertain');
+  assert.equal(flow.UNRESOLVED_REFUSAL_CODE, 'LOCAL_UNRESOLVED_ATTEMPT');
+});
+
+test('live kind: send_not_started brings a sending screen to the attempt as the process knows it, and does nothing in any other state', () => {
+  const uncertain = { ...ATT(1), kind: 'uncertain' };
+  const confirming = (() => {
+    let s = model.createInitialState({ ...ATT(1), kind: 'pending' });
+    s = model.manualPublishReducer(s, { type: 'retry_requested' });
+    return s;
+  })();
+  assert.equal(confirming.phase, 'confirming');
+  const sending = model.createSendingState({ ...ATT(1), kind: 'pending' }, true);
+  const resynced = model.manualPublishReducer(sending, { type: 'send_not_started', requestId: ID(1), attempt: uncertain });
+  assert.equal(resynced.phase, 'result');
+  assert.equal(resynced.result.kind, 'uncertain');
+  assert.equal(resynced.unresolved.kind, 'uncertain', 'not downgraded');
+  assert.equal(resynced.unresolved.requestId, ID(1));
+  assert.equal(resynced.consent, null);
+  assert.equal(resynced.retrying, false);
+  assert.equal(resynced.draft, 'hello');
+  assert.deepEqual(model.manualPublishReducer(sending, { type: 'send_not_started', requestId: ID(2), attempt: uncertain }), sending, 'another request id');
+  assert.deepEqual(model.manualPublishReducer(confirming, { type: 'send_not_started', requestId: ID(1), attempt: uncertain }), confirming, 'not sending');
+  const done = model.manualPublishReducer(sending, { type: 'send_settled', requestId: ID(1), outcome: { kind: 'pending', targetId: ID(1), code: null } });
+  assert.deepEqual(model.manualPublishReducer(done, { type: 'send_not_started', requestId: ID(1), attempt: uncertain }), done, 'already settled');
+});

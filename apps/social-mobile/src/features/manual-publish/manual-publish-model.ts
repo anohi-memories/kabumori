@@ -256,6 +256,7 @@ export type ManualPublishAction =
   | Readonly<{ type: 'draft_restored'; text: string | null; accountId: string | null }>
   | Readonly<{ type: 'store_loaded'; unresolved: UnresolvedAttempt | null }>
   | Readonly<{ type: 'send_adopted'; attempt: UnresolvedAttempt & Readonly<{ text: string }>; retrying: boolean }>
+  | Readonly<{ type: 'send_not_started'; requestId: string; attempt: UnresolvedAttempt }>
   | Readonly<{ type: 'store_unreadable'; reason: 'io' | 'corrupt' | 'version' }>
   | Readonly<{ type: 'store_reload_requested' }>
   | Readonly<{ type: 'store_unreadable_acknowledged' }>
@@ -276,6 +277,15 @@ export function readinessIsFresh(record: ReadinessRecord | null, accountId: stri
 /** Pending and unconfirmed attempts may be retried -- with the SAME id. Uncertain ones never. */
 export function mayRetrySameId(kind: UnresolvedKind): boolean {
   return kind === 'pending' || kind === 'unconfirmed';
+}
+
+/**
+ * May this attempt, AS THE PROCESS KNOWS IT NOW, be re-asked? The same rule as `mayRetrySameId`, applied to the attempt itself:
+ * a screen's own state can be older than the attempt (another screen of the same user may have turned a pending attempt into an
+ * uncertain one). An attempt that was out when the process was left is shown -- and re-asked -- as unconfirmed.
+ */
+export function mayRetryAttempt(attempt: Readonly<{ kind: UnresolvedKind }>): boolean {
+  return mayRetrySameId(attempt.kind === 'in_flight' ? 'unconfirmed' : attempt.kind);
 }
 
 /**
@@ -405,6 +415,12 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
       // Only the answer to the read this visit started; the state is untouched until then (every input is blocked).
       if (state.store.kind !== 'loading') return state;
       return action.unresolved === null ? { ...state, store: STORE_READY } : createInitialState(action.unresolved);
+    case 'send_not_started':
+      // The re-ask was refused before anything was sent because the process knows the attempt in a state this screen had not
+      // seen (another screen moved it on, e.g. pending -> uncertain). The screen is brought to the attempt as it is NOW -- the
+      // same view a screen opened later would show -- never to what it believed and never to a downgraded kind.
+      if (state.phase !== 'sending' || state.requestId !== action.requestId) return state;
+      return createInitialState(action.attempt);
     case 'send_adopted':
       // A send of this process began while this visit was still reading the record of the device: that record is the
       // send's own, not an earlier run's. Only a visit that is still loading (nothing typed, nothing sendable) switches.

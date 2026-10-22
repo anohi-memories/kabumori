@@ -2407,3 +2407,136 @@ test('STALE-NONE: a screen that is opened while this process already knows an un
   assert.equal(ui.state().unresolved.requestId, ID(4));
   assert.equal(ui.all('TextInput')[0]?.props.editable ?? false, false);
 });
+
+// ---- H1 C1 10th review, residual P2: an OLD "pending" confirmation must not re-ask an attempt that is uncertain NOW -----------------------------------
+
+const TWO_SCREENS_TEXT = '二つの確認画面';
+
+/** Two screens of one user and session, both in the confirmation of a re-ask of the same pending attempt. */
+async function twoScreensConfirmingTheSameReAsk(userId = 'U1') {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark(userId, { accountId: 'X_A', requestId: ID(1), contentSha256: sha(TWO_SCREENS_TEXT), text: TWO_SCREENS_TEXT, kind: 'pending' });
+  const inflight = realFlow.createInFlightSends();
+  const kv = fakeKV();
+  kv.data.set(realStore.storeKeyOf(userId), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha(TWO_SCREENS_TEXT) })));
+  const fp = fakePort();
+  const a = await mount({ ...TWO, userId, port: fp, memory, inflight, kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  const b = await mount({ ...TWO, userId, port: fp, memory, inflight, kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  for (const ui of [a, b]) {
+    assert.equal(ui.state().result.kind, 'pending');
+    await ui.press('同じ内容・同じ送信IDで確認し直す');
+    await ui.tick();
+    assert.equal(ui.state().phase, 'confirming');
+    assert.equal(ui.state().unresolved.kind, 'pending', 'both screens believe it is pending');
+  }
+  return { memory, inflight, kv, fp, a, b };
+}
+
+const NOT_RE_ASKABLE_ANSWERS = [
+  ['uncertain / OFFLINE', { kind: 'uncertain', code: 'OFFLINE', marks: REAL }],
+  ['published without marks (a test result, kept as uncertain)', { kind: 'published', providerPostId: '1234567890' }],
+  ['a thrown port (SEND_THREW)', null],
+];
+
+test('LIVE-KIND: the other screen\'s re-ask ended UNCERTAIN -- the old "pending" confirmation cannot send again (port 1, not 2), and nothing is downgraded', async () => {
+  for (const [label, answer] of NOT_RE_ASKABLE_ANSWERS) {
+    const { memory, kv, fp, a, b } = await twoScreensConfirmingTheSameReAsk();
+    await a.press('Xに投稿する');
+    assert.equal(fp.calls.send.length, 1, `${label}: A's re-ask is out`);
+    if (answer === null) fp.pending[0].reject(new Error('socket closed'));
+    else fp.pending[0].resolve({ targetId: ID(1), ...answer });
+    await a.flush();
+    assert.equal(memory.get('U1').kind, 'uncertain', `${label}: the shared attempt is uncertain now`);
+    const recordBefore = kv.data.get(realStore.storeKeyOf('U1'));
+    await b.press('Xに投稿する'); // an ordinary tap on the button that was enabled when the page was drawn
+    assert.equal(fp.calls.send.length, 1, `${label}: ONE request in total`);
+    assert.equal(memory.get('U1').kind, 'uncertain', `${label}: the memory is not overwritten by a new in_flight`);
+    assert.equal(memory.get('U1').requestId, ID(1));
+    assert.equal(kv.data.get(realStore.storeKeyOf('U1')), recordBefore, `${label}: the record on the device is untouched`);
+    assert.equal(b.state().result.kind, 'uncertain', `${label}: the old screen now shows what it is`);
+    assert.equal(b.state().unresolved.kind, 'uncertain', `${label}: not downgraded to unconfirmed`);
+    assert.equal(b.button('同じ内容・同じ送信IDで確認し直す'), null, `${label}: no re-ask is offered`);
+    assertNoSentClaim(b);
+  }
+});
+
+test('LIVE-KIND: the other screen\'s re-ask ended UNCONFIRMED or PENDING again -- the old confirmation is still a legitimate re-ask with the SAME id', async () => {
+  for (const [label, answer, kind] of [
+    ['unavailable (-> unconfirmed)', { kind: 'unavailable', code: 'TRANSPORT_FAILED' }, 'unconfirmed'],
+    ['pending again', { kind: 'pending', code: 'IN_PROGRESS', marks: REAL }, 'pending'],
+  ]) {
+    const { memory, fp, a, b } = await twoScreensConfirmingTheSameReAsk();
+    await a.press('Xに投稿する');
+    fp.pending[0].resolve({ targetId: ID(1), ...answer });
+    await a.flush();
+    assert.equal(memory.get('U1').kind, kind, label);
+    await b.press('Xに投稿する');
+    assert.equal(fp.calls.send.length, 2, `${label}: the second re-ask goes out`);
+    assert.equal(fp.calls.send[1].targetId, ID(1), `${label}: with the SAME id`);
+    assert.equal(b.state().phase, 'sending', label);
+    fp.pending[1].resolve({ targetId: ID(1), kind: 'published', providerPostId: '4242', marks: REAL });
+    await b.flush();
+    assert.equal(b.state().result.kind, 'sent', label);
+  }
+});
+
+test('LIVE-KIND: the refused screen shows the same as a screen opened later; the record on the device keeps hash-only and no consent is carried', async () => {
+  const { memory, inflight, kv, fp, a, b } = await twoScreensConfirmingTheSameReAsk();
+  await a.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  await a.flush();
+  await b.press('Xに投稿する');
+  const fresh = await mount({ ...TWO, port: fp, memory, inflight, kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  for (const key of ['phase', 'draft', 'accountId', 'requestId']) assert.deepEqual(b.state()[key], fresh.state()[key], key);
+  assert.deepEqual(b.state().result, fresh.state().result);
+  assert.deepEqual(b.state().unresolved, fresh.state().unresolved);
+  assert.equal(b.state().consent, null);
+  assert.ok(!kv.data.get(realStore.storeKeyOf('U1')).includes(TWO_SCREENS_TEXT), 'hash-only');
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('LIVE-KIND: a screen that started a FRESH attempt and is refused keeps its typed text (nothing is resynced over it)', async () => {
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  const ui = await mount({ ...TWO, port: fp, memory, inflight, kv: fakeKV(), draftKv: fakeKV(), sessionMark: 'T1' });
+  await ui.typeText('新しく書いた本文');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  // another screen of this user leaves an unresolved attempt after this one was drawn
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(9), contentSha256: sha('他の試行'), text: '他の試行', kind: 'uncertain' });
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0, 'nothing is sent');
+  assert.equal(ui.state().result.kind, 'refused');
+  assert.equal(ui.state().result.code, 'LOCAL_UNRESOLVED_ATTEMPT');
+  assert.equal(ui.state().draft, '新しく書いた本文', 'the typed text is still there');
+  assert.equal(memory.get('U1').requestId, ID(9), 'the other attempt is untouched');
+  assertNoSentClaim(ui);
+});
+
+test('LIVE-KIND: another user and another account are not touched by the uncertain attempt of this user', async () => {
+  const { memory, inflight, fp, a } = await twoScreensConfirmingTheSameReAsk();
+  await a.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  await a.flush();
+  const other = await mount({ ...TWO, userId: 'U2', port: fp, memory, inflight, kv: fakeKV(), draftKv: fakeKV(), sessionMark: 'T1', idBase: 500 });
+  await other.typeText('別のユーザーの本文');
+  await other.press('内容を確認する');
+  await other.tick();
+  await other.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 2, 'U2 sends its own attempt');
+  assert.equal(fp.calls.send[1].targetId, ID(501));
+  assert.equal(memory.get('U1').kind, 'uncertain');
+});
+
+test('LIVE-KIND: the same holds for any user id -- the old confirmation of user U7 is brought to the attempt of U7, not to another user\'s', async () => {
+  const { memory, fp, a, b } = await twoScreensConfirmingTheSameReAsk('U7');
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(77), contentSha256: sha('他人'), text: '他人', kind: 'uncertain' });
+  await a.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  await a.flush();
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1);
+  assert.equal(b.state().unresolved.requestId, ID(1), 'its own attempt');
+  assert.equal(b.state().result.kind, 'uncertain');
+});
