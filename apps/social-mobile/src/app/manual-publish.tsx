@@ -13,7 +13,7 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
-import { acknowledgeAttempt, attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runReadinessCheck, runSend, UNRESOLVED_REFUSAL_CODE, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
+import { acknowledgeAttempt, attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runReadinessCheck, runSend, ATTEMPT_CLEARED_CODE, UNRESOLVED_REFUSAL_CODE, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
 import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
@@ -52,6 +52,7 @@ const SURFACE_PILL: Readonly<Record<Surface, { tone: 'neutral' | 'success' | 'wa
   uncertain: { tone: 'warning', label: '投稿されたか確認できません' },
 };
 
+const CLEARED_ELSEWHERE_NOTE = 'この送信記録は別の画面で確認済み（または完了）になっていたため、送信しませんでした。Xのプロフィールで投稿を確認してください。';
 const SIMULATED_NOTE = 'サーバーはこの結果を模擬（テスト用）として返しました。実際のXへの投稿の証拠ではありません。';
 const AFTER_FREEZE_NOTE = 'アカウントの停止または利用終了の手続きと重なって記録された結果です。';
 
@@ -117,6 +118,8 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   const [takenOver, setTakenOver] = useState<InFlightTakeOver | null>(() => inFlightSends.takeOver(userId));
   const [recheck, setRecheck] = useState(0);
   const [clearFailed, setClearFailed] = useState(false);
+  // A re-ask on this screen was not made because the attempt had been acknowledged or ended on another screen.
+  const [clearedElsewhere, setClearedElsewhere] = useState(false);
   const sendingRef = useRef(false);
   const clearingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -275,6 +278,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
     const start = { type: 'send_started', requestId, now: at } as const;
     if (manualPublishReducer(state, start).phase !== 'sending') return;
     sendingRef.current = true;
+    setClearedElsewhere(false);
     dispatch(start);
     void draftStore.clear(userId); // the text now lives only in this attempt
     const retry = state.unresolved !== null;
@@ -283,9 +287,16 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
       if (!mountedRef.current) return;
       // A re-ask that was not made because another screen already moved the attempt on (it is uncertain now): show the attempt as
       // the process knows it, not what this screen believed (and not the refusal as if it were an answer about the attempt).
-      const current = retry && (outcome as { code?: unknown }).code === UNRESOLVED_REFUSAL_CODE ? attemptMemory.get(userId) : null;
-      if (current !== null) dispatch({ type: 'send_not_started', requestId, attempt: current });
-      else dispatch({ type: 'send_settled', requestId, outcome });
+      // A re-ask of an attempt that was acknowledged or ended on another screen is not made either: the attempt is dropped here too.
+      const code = (outcome as { code?: unknown }).code;
+      if (retry && code === UNRESOLVED_REFUSAL_CODE && attemptMemory.get(userId) !== null) {
+        dispatch({ type: 'send_not_started', requestId, attempt: attemptMemory.get(userId) });
+      } else if (code === ATTEMPT_CLEARED_CODE) { // (only a re-ask is ever answered with it)
+        setClearedElsewhere(true);
+        dispatch({ type: 'send_not_started', requestId, attempt: attemptMemory.get(userId) });
+      } else {
+        dispatch({ type: 'send_settled', requestId, outcome });
+      }
     });
   };
 
@@ -331,6 +342,9 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
       >
         <Card>
           <Pill tone={pill.tone}>{pill.label}</Pill>
+          {clearedElsewhere ? (
+            <Text style={{ color: colors.warning, fontWeight: '700' }}>{CLEARED_ELSEWHERE_NOTE}</Text>
+          ) : null}
           <Text style={styles.muted}>
             送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。
           </Text>

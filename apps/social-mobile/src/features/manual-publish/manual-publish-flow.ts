@@ -199,6 +199,12 @@ export async function loadPersistedAttempt(deps: FlowDeps, userId: string): Prom
  */
 export const UNRESOLVED_REFUSAL_CODE = 'LOCAL_UNRESOLVED_ATTEMPT';
 
+/**
+ * The code of a re-ask that `runSend` did not make because the process no longer knows the attempt (it was acknowledged or
+ * ended on another screen). The screen that gets it drops the attempt it showed (see `send_not_started` with no attempt).
+ */
+export const ATTEMPT_CLEARED_CODE = 'LOCAL_ATTEMPT_CLEARED';
+
 /** What a visit shows once its read of the device record is back. */
 export type LoadedView =
   | Readonly<{ kind: 'send'; takeOver: InFlightTakeOver }>
@@ -328,7 +334,9 @@ export async function runSend(
   }
   let outcome: ManualPublishOutcome;
   try {
-    outcome = await prepareAndSend(deps, { userId, accountId, text, requestId, consent, retry, entry, target });
+    const send = { userId, accountId, text, requestId, consent, retry, entry, target };
+    // A re-ask the process memory knows nothing about is checked against the device record first (still under the reservation).
+    outcome = await (unresolved === null && retry ? reAskWithoutMemory(deps, send) : prepareAndSend(deps, send));
   } catch {
     // Never leave a waiter hanging, and never leave the attempt looking settled: whatever went wrong, the send may have gone out.
     try { deps.memory.mark(userId, { ...entry, kind: 'uncertain' }); } catch { /* the outcome below is still uncertain */ }
@@ -337,6 +345,41 @@ export async function runSend(
   // Only now, after the memory and the durable record say what the answer is, whoever waits for this send is told.
   if (handle !== null) deps.inflight?.end(handle, outcome);
   return outcome;
+}
+
+/**
+ * A re-ask exists only for an attempt that still exists. Every visit puts the attempt it shows into the memory first (from the
+ * memory, from the device record after a restart, or from its own send), so a re-ask with an EMPTY memory comes either from a
+ * caller that never loaded the record, or from an old screen whose attempt was acknowledged or ended elsewhere. The device
+ * record decides, read under the user's reservation (no acknowledge can run meanwhile):
+ *   - no record of THIS attempt: it is gone (the user checked X for it, or it ended). Nothing is sent, nothing is written, and
+ *     it is never re-created as a new in_flight from an old screen's state -- `refused` / `LOCAL_ATTEMPT_CLEARED`;
+ *   - the record cannot be read: fail closed, exactly as a failed write of a re-ask (`unavailable`, kept unresolved);
+ *   - the record is this attempt: it is put into the memory and the same rules as for a known attempt apply (it must be
+ *     re-askable now and be the same account and text); then the re-ask goes on as usual.
+ */
+async function reAskWithoutMemory(deps: FlowDeps, args: Parameters<typeof prepareAndSend>[1]): Promise<ManualPublishOutcome> {
+  const { userId, accountId, requestId, consent, entry } = args;
+  let read: StoreRead;
+  try {
+    read = await deps.store.read(userId);
+  } catch {
+    read = { kind: 'unreadable', reason: 'io' };
+  }
+  if (read.kind === 'unreadable') {
+    deps.memory.mark(userId, { ...entry, kind: 'unconfirmed' });
+    return { kind: 'unavailable', targetId: requestId, code: 'LOCAL_STORE_UNAVAILABLE' };
+  }
+  if (read.kind === 'none' || read.attempt.requestId !== requestId) {
+    return { kind: 'refused', targetId: requestId, code: ATTEMPT_CLEARED_CODE, retryable: false };
+  }
+  const restored = restoredAttemptOf(read.attempt);
+  deps.memory.mark(userId, restored);
+  if (!mayRetryAttempt(restored)) return { kind: 'uncertain', targetId: requestId, code: UNRESOLVED_REFUSAL_CODE };
+  if (restored.accountId !== accountId || restored.contentSha256 !== consent.contentSha256) {
+    return { kind: 'unavailable', targetId: requestId, code: UNRESOLVED_REFUSAL_CODE };
+  }
+  return prepareAndSend(deps, args);
 }
 
 async function prepareAndSend(
