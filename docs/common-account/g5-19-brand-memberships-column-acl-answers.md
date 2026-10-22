@@ -12,6 +12,11 @@ proposal for the user (or the delegate) to decide; G5 decides no other owner's o
 - Stacked on PR #438 (G5-18). New G5-owned files: this document, `supabase/tests/common_account_bm_column_acl_pg_{run.sh,test.ts}` and
   `supabase/preflight/managed_disposable/g5_19_bm_column_acl_doc_test.ts`.
 
+**G5-20 update** (task `common-account-g5-l1-brand-memberships-column-acl-exposure-source-candidate-20261022`, Issue #320 task 20): Q2.1 / Q2.2 and the empty
+allowlist of Q1 are now in the PR #303 candidate as a source revision (`docs/common-account/brand-owner-epoch.md` section 12), still awaiting its
+independent Codex Sol (high) review; the gap assertions of this document's suite were flipped accordingly. The answers below are the record of
+2026-10-22 and are otherwise unchanged.
+
 Evidence labels: **[S]** a source fact read in this repository at the commits above; **[D]** reproduced by this task's PG17 suite (section 8);
 **[P]** a decision candidate (G5's proposal); **[U]** NOT_VERIFIED on managed / production.
 

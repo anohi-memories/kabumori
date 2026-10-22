@@ -31,6 +31,13 @@
 -- session_replication_role, the TRIGGER privilege on public.brand_memberships, or (anon / authenticated) any write, TRUNCATE or REFERENCES on it.
 -- The install refuses under the same conditions.
 --
+-- G5-20 REVISION (2026-10-22, Issue #320 task 20; G5-19 Q1 / Q2, PR #441): has_table_privilege does not see column ACLs, so the exposure check also
+-- refuses while (a) anon / authenticated reach a COLUMN-level INSERT / UPDATE / REFERENCES on public.brand_memberships, (b) PUBLIC or any role an
+-- API role reaches holds ANY column ACL item on it -- user or system column (the table's column-ACL allowlist is empty), and (c) PUBLIC or any role an
+-- API role reaches holds ANY privilege on the history table private.account_lifecycle_brand_owner_epochs (table, column, TRIGGER, REFERENCES,
+-- MAINTAIN; a global or schema default privilege that granted one is caught at the install's postcondition). It is evaluated on every read, like
+-- the rest of the coverage. Not covered (and not claimed): MAINTAIN on public.brand_memberships, other tables, the role graph between two reads.
+--
 -- Lock order: the writer's own rows first, then ONE row of the epoch table (inside the AFTER trigger); the owner set is read AFTER that row lock,
 -- so a concurrent owner change of another membership row of the same workspace is always recorded by whichever bump commits last.
 -- Readers take no lock. The one new
@@ -83,6 +90,8 @@ returns text language sql stable security definer set search_path = '' as $$
       from api a join pg_catalog.pg_roles r on pg_catalog.pg_has_role(a.oid, r.oid, 'MEMBER')
   ), owner_role as (
     select c.relowner as oid from pg_catalog.pg_class c where c.oid = 'public.brand_memberships'::regclass
+  ), history as (
+    select pg_catalog.to_regclass('private.account_lifecycle_brand_owner_epochs') as oid
   )
   select case
     when exists (select 1 from reach x where x.super) then 'API_ROLE_CAN_BECOME_SUPERUSER'
@@ -98,6 +107,28 @@ returns text language sql stable security definer set search_path = '' as $$
                       or pg_catalog.has_table_privilege(x.role_oid, 'public.brand_memberships', 'DELETE')
                       or pg_catalog.has_table_privilege(x.role_oid, 'public.brand_memberships', 'TRUNCATE')
                       or pg_catalog.has_table_privilege(x.role_oid, 'public.brand_memberships', 'REFERENCES'))) then 'API_ROLE_CAN_WRITE_MEMBERSHIPS'
+    -- (G5-20) a COLUMN-level INSERT / UPDATE / REFERENCES is a write path has_table_privilege does not see; a REFERENCES on the key columns alone
+    -- lets an FK probe memberships past RLS and block the deletion cascade (G5-19 Q2)
+    when exists (select 1 from reach x
+                  where x.api in ('anon', 'authenticated')
+                    and (pg_catalog.has_any_column_privilege(x.role_oid, 'public.brand_memberships', 'INSERT')
+                      or pg_catalog.has_any_column_privilege(x.role_oid, 'public.brand_memberships', 'UPDATE')
+                      or pg_catalog.has_any_column_privilege(x.role_oid, 'public.brand_memberships', 'REFERENCES'))) then 'API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN'
+    -- (G5-20) the column-ACL allowlist of the table is EMPTY (G5-19 Q1): no column ACL item -- user or SYSTEM column (ctid, xmin, ...: has_any_column_privilege
+    -- ignores those), any privilege, any grantor -- for PUBLIC or for any role an API role reaches
+    when exists (select 1 from pg_catalog.pg_attribute a, pg_catalog.aclexplode(a.attacl) e
+                  where a.attrelid = 'public.brand_memberships'::regclass and a.attacl is not null
+                    and (e.grantee = 0 or e.grantee in (select x.role_oid from reach x))) then 'API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL'
+    -- (G5-20) the history the getter vouches for is server-only: no privilege at all -- table, column, TRIGGER (a trigger on it would run as the owner
+    -- inside every bump), REFERENCES, MAINTAIN -- for PUBLIC or any role an API role reaches, whoever granted it (a global default privilege included).
+    -- Before the first install the table does not exist and this is not evaluated. (A column privilege of a reached role is an attacl item of that
+    -- role, of PUBLIC or of a role it inherits from -- all in reach -- so the second test covers every column path, system columns included.)
+    when exists (select 1 from reach x, history h
+                  where h.oid is not null
+                    and pg_catalog.has_table_privilege(x.role_oid, h.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN'))
+      or exists (select 1 from history h, pg_catalog.pg_attribute a, pg_catalog.aclexplode(a.attacl) e
+                  where h.oid is not null and a.attrelid = h.oid and a.attacl is not null
+                    and (e.grantee = 0 or e.grantee in (select x.role_oid from reach x))) then 'API_ROLE_CAN_REACH_OWNER_EPOCH_HISTORY'
     else null
   end
 $$;

@@ -147,3 +147,62 @@ no network request of any kind, no real X / AI.
 
 Not run, on purpose: any managed or production access; applying the candidate anywhere but the throw-away database; F3's revoke (L-1, not edited here); G4's / F4's proofs (PR #287) against this
 revision; the independent Sol (high) re-review; the PR #233 limited recheck.
+
+## 12. G5-20 revision: column / system-column ACLs and every privilege on the history
+
+TASK `common-account-g5-l1-brand-memberships-column-acl-exposure-source-candidate-20261022` (Issue #320, G5-01 generation, task 20, completion K5).
+It implements G5-19's Q1 / Q2 proposals (PR #441, `docs/common-account/g5-19-brand-memberships-column-acl-answers.md`) in this candidate. Stacked on
+PR #441. **Source candidate only:**
+- it changes no migration, no G3 / G4 / G6 file and no existing grant;
+- it is not applied anywhere;
+- it needs the independent focused Codex Sol (high) review before it counts.
+
+Production stays **NO_GO**. G3's PR #370 race (system-column ACL between its last check and COMMIT) and the A1 / A2 / B risk decision are **not** part of this
+revision and are not treated as decided.
+
+| Finding before G5-20 | [D] evidence | What the exposure check now refuses (code) |
+| --- | --- | --- |
+| A **column-level** INSERT / UPDATE / REFERENCES of anon / authenticated was invisible: `has_table_privilege` ignores column ACLs; a REFERENCES on `(brand_id, user_id)` alone gives an FK onto memberships (existence probe past RLS, the deletion cascade blocked) | G5-19 suite rows 3-4 | `API_ROLE_CAN_WRITE_MEMBERSHIPS_BY_COLUMN` (via `has_any_column_privilege`, for every role anon / authenticated reach) |
+| Column ACLs of other API roles / PUBLIC, and **system-column** ACLs (`ctid`, `xmin`, …: `has_any_column_privilege` ignores them), were invisible | G5-19 suite row 6 | `API_ROLE_HAS_MEMBERSHIP_COLUMN_ACL`: the column-ACL allowlist of `public.brand_memberships` is **empty**. No `attacl` item, on a user or system column, for PUBLIC or any role anon / authenticated / service_role / authenticator reach. |
+| The **history** `private.account_lifecycle_brand_owner_epochs` was checked only at install, and only for SELECT .. TRUNCATE. TRIGGER / REFERENCES / MAINTAIN / column grants, grants to a reached role other than the four API roles (a global or schema default privilege), and anything granted later went unseen. A reached role with TRIGGER on it runs **its own code as the owner** inside every bump. | this revision's suite: "why the history matters" | `API_ROLE_CAN_REACH_OWNER_EPOCH_HISTORY`: no privilege of any kind (table, column, system column, TRIGGER, REFERENCES, MAINTAIN) for PUBLIC or any reached role |
+
+### How the revision behaves
+
+- **Same mechanics as before.** The three checks are in `private.account_lifecycle_owner_epoch_exposure()`, after the earlier findings, which keep
+  their codes and order. Like the rest of the coverage they run on **every read** of the getter: a grant committed by another session is refused by
+  the next statement of an open READ COMMITTED transaction [D].
+- **At install time:**
+  - a finding present before the install refuses it (`OWNER_EPOCH_PRECONDITION_<code>`), and nothing is left;
+  - a default privilege that would hand the new history to a reached role makes it refuse at the postcondition
+    (`OWNER_EPOCH_POSTCONDITION_EXPOSURE`, or the older `…_TABLE_ACL` for SELECT .. TRUNCATE);
+  - a default to PUBLIC or to the four API roles is removed by the install's own `revoke all`.
+- **After a rollback:** the history stays; a grant on it while uninstalled refuses the re-install
+  (`OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_REACH_OWNER_EPOCH_HISTORY`); after the revoke, the re-install moves every number on.
+- **Not findings:**
+  - the contract grants (`authenticated` table SELECT, `service_role` table DML);
+  - grants to roles no API role reaches;
+  - grants to a role that is a member **of** an API role;
+  - an owner → owner system-column entry (G3's A1 leaves none).
+- **Effect to accept:** a stray column or history grant makes every epoch consumer refuse until it is revoked. This is fail closed on availability.
+- **Not covered (and not claimed):**
+  - MAINTAIN on `public.brand_memberships` (G3's open MAINTAIN item; it does not let a role replace the fence or write);
+  - other tables;
+  - a role-graph or ACL change between a read and the statement that uses it (the consumer contract of G5-11 keeps verdict and use in one
+    statement);
+  - G3's system-column race in its own revoke file;
+  - managed / production (NOT_VERIFIED).
+
+### Tests of this revision ([D], throw-away PG17 17.11)
+
+| Suite | What |
+| --- | --- |
+| `supabase/tests/common_account_owner_epoch_acl_pg_run.sh` (13 tests) | the deny-net: column write paths (5); column ACL allowlist (6); system columns (6); NOINHERIT / SET-false / two-hop memberships; non-findings; the history (8 grant shapes); the owner-run trigger proof; install preconditions; global / schema default privileges; rollback + re-install; per-read under READ COMMITTED; code order |
+| `supabase/tests/common_account_owner_epoch_acl_mutations.py` | 16 mutants of the new rules; the deny-net must fail each one |
+| `supabase/tests/common_account_owner_epoch_run.sh` and its mutation script | the 19 earlier tests and their mutants, unchanged |
+| `supabase/tests/common_account_bm_column_acl_pg_run.sh` (G5-19) | its gap assertions flipped: the candidate now sees the grants G5-19 showed invisible |
+
+**Before any apply:**
+- the independent focused Codex Sol (high) review of this revision (the G5 担当ちゃ registers it on a free H slot after accepting this source REPORT);
+- G3's L-1 revoke;
+- the PR #233 limited recheck;
+- the user's explicit approval of a production mutation window with a read-back.
