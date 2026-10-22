@@ -1,0 +1,15 @@
+✔ G2-T1X-1 (cause, source): the handler imports logic.ts AND ./social_account_id.ts (added by #381); G4's parity stubs list only logic.ts; social_account_id.ts itself imports nothing (2.358208ms)
+✔ G2-T1X-2 (before, same head): the handler with G4's stubs fails at load time with exactly that import -- before any database row is tried (47.459417ms)
+✔ G2-T1X-3 (after, same head): with the REAL social_account_id.ts added, every row of G4's parity test parses in the app as G4 expects -- the contract is intact; T1-X is a test-harness import gap (13.855417ms)
+✔ G2-T1X-4 (new parity, same head): account ids the server refuses (#381 shape `^[a-z][a-z0-9_]{1,80}$`) are a refusal in the app too -- never "disconnected", and the database is not asked (7.23875ms)
+✔ harness control: the "after" run really goes through the id check -- with the pre-#381 UUID-only rule stubbed in, the real-shape account is refused and the parity rows FAIL; with an accept-all rule they pass but the refusals of G2-T1X-4 are no longer refusals (14.339083ms)
+✔ negative control (AST, product source in memory only): the handler without its id check accepts a refused id -- G2-T1X-4 would fail (10.207375ms)
+✔ G2-T1X-5 (gate): every app test that loads a server source through a strict stub map lists all of that source's relative imports -- today only the disconnect parity load misses one (T1-X) (10.54675ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 321.40525

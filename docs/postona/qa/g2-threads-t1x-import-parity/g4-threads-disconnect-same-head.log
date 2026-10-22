@@ -1,0 +1,51 @@
+✔ the release flag is OFF in source: "in preparation", a disabled button, nothing can start (1.007791ms)
+✔ the target is the shown Threads account (id + handle); anything else cannot be disconnected (0.236125ms)
+✔ the confirmation names the account, says X / POSTONA / common account stay, and that Threads keeps its own permission (0.095667ms)
+✔ results: the POSTONA line and the Threads line are separate; nothing ever says Threads revoked it (0.184625ms)
+✔ every failure code has safe Japanese copy; unknown codes fall back to "could not confirm" (0.098334ms)
+✔ parse: only the exact server answers; anything else (or a lost answer) is uncertain, never a success (0.205875ms)
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (49.603167ms)
+✔ golden path: the confirmed account, the person's own token, one request (5.348458ms)
+✔ another person signed in since the confirmation, or signed out: nothing is sent (8.152167ms)
+✔ a second tap while one runs sends nothing; a lost answer is not retried (4.584833ms)
+✔ nothing is logged and no result carries the token (6.388584ms)
+✔ card, flag OFF (default): "in preparation", disabled button; pressing it opens nothing and sends nothing (12.954375ms)
+✔ card: no Threads account and nothing pending -> nothing rendered (7.067209ms)
+✔ card, flag ON: confirm the exact account; "やめる" sends nothing; "解除する" sends once; disconnected only after the reload (7.074833ms)
+✔ card, flag ON: a post that may be in flight keeps the credential and says so; no reload claims a removal (8.723458ms)
+✔ card, flag ON: an uncertain answer reloads and asks the person to check; a refusal shows its copy (12.5015ms)
+✔ card: preview never starts (4.840917ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 16
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 340.581625
+
+✖ failing tests:
+
+test at tests/threads-disconnect.test.mjs:94:1
+✖ parity: the database's exact answers through the REAL server handler parse in the app as intended (49.603167ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import ./social_account_id.ts
+      at require (file://~/Developer/kabumori-g2-t1x/apps/social-mobile/tests/threads-disconnect.test.mjs:16:38)
+      at ../../supabase/functions/_shared/social/threads_disconnect.ts:32:32
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at load (file://~/Developer/kabumori-g2-t1x/apps/social-mobile/tests/threads-disconnect.test.mjs:17:6)
+      at async TestContext.<anonymous> (file://~/Developer/kabumori-g2-t1x/apps/social-mobile/tests/threads-disconnect.test.mjs:96:18)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
