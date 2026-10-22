@@ -1,0 +1,18 @@
+✔ R-CB5 (G2 #419): B signs in (real SDK) while A's X browser is open -- no exchange, no success, no reload (46.050042ms)
+✔ R-CB6 (G2 #419): A signs out (real SDK) while the browser is open -- no exchange with the signed-out token (8.753125ms)
+✔ R-CX1 (G2 #425): sign-out, then the browser is cancelled -- a cancel stays a cancel, no exchange (7.357375ms)
+✔ R-CX2 (G2 #425, was UNKNOWN): sign-out and the SAME person signs in again (a new session id) -- no exchange with either token, not connected (6.16325ms)
+✔ G2-OS1 (legitimate): the access token EXPIRES while the browser is open -- the real getSession refreshes it (same session id), the exchange carries the NEW token and the connect succeeds (5.969541ms)
+✔ G2-OS2: the token expires while the browser is open AND the session was ended elsewhere ("sign out everywhere") -- the refresh fails, nothing is exchanged, not connected (5.967042ms)
+✔ G2-OS3: the person or session changes DURING the exchange (real SDK, inside the server round trip) -- B / sign-out / a new session of A get no success and no reload; a refresh of the same session keeps the success (24.494ms)
+✔ G2-OS4 (recovery session): a password update in the recovery session keeps the session id -- the connect continues; a fresh sign-in after it is a new session -- refused (8.890167ms)
+✔ G2-OS5: denial at X after the person changed stays a cancel (no exchange); an expired-state answer from the server for the same session is an error, never a success (15.273625ms)
+✔ negative controls (heads with the owner checks): each removed check is caught -- the exchange-time check (R-CB5 sees an exchange), the success-time check (G2-OS3 sees a success for B), the current token (G2-OS1 sees the expired token) (44.892208ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 393.708375
