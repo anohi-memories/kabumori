@@ -24,7 +24,9 @@ M = [
     ('a no-op update of an owner row is recorded', C, "elsif (old.brand_id, old.user_id, old.role) is distinct from (new.brand_id, new.user_id, new.role) then", "elsif true then", RUNNER),
     ('a change of the owner person on the same row is not recorded', C, "elsif (old.brand_id, old.user_id, old.role) is distinct from (new.brand_id, new.user_id, new.role) then", "elsif (old.brand_id, old.role) is distinct from (new.brand_id, new.role) then", RUNNER),
     ('one change on the same workspace is counted twice', C, "if new.role = 'owner' and not (new.brand_id = any (v_brands)) then", "if new.role = 'owner' then", RUNNER),
-    ('a truncate is not recorded', C, "update private.account_lifecycle_brand_owner_epochs set epoch = epoch + 1, owner_user_id = null, owner_count = 0;", "null;", RUNNER),
+    # (G5-21: the truncate path and the rollback now move the numbers row by row and check each)
+    ('a truncate is not recorded', C, "  for v_row in select e.brand_id, e.epoch from private.account_lifecycle_brand_owner_epochs e order by e.brand_id for update loop\n    update private.account_lifecycle_brand_owner_epochs set epoch = v_row.epoch + 1, owner_user_id = null, owner_count = 0",
+     "  for v_row in select e.brand_id, e.epoch from private.account_lifecycle_brand_owner_epochs e where false for update loop\n    update private.account_lifecycle_brand_owner_epochs set epoch = v_row.epoch + 1, owner_user_id = null, owner_count = 0", RUNNER),
     ('a bump does not move the number', C, "set epoch = v_epoch + 1, owner_user_id = case", "set epoch = v_epoch, owner_user_id = case", RUNNER),
     ('a bump records the owners it read BEFORE the row lock (J1 V1 lock order)', C, "for update;\n  select coalesce(pg_catalog.array_agg(m.user_id order by m.user_id), '{}'::uuid[]) into v_owners\n    from public.brand_memberships m where m.brand_id = p_brand_id and m.role = 'owner';\n  update", "for update;\n  update", RUNNER),
     # ---- what the getter vouches for
@@ -32,16 +34,17 @@ M = [
     ('a write that got past the trigger is not detected', C, "or v_row.owner_user_id is distinct from v_owners[1] then\n    return null;", " then\n    return null;", RUNNER),
     ('a broken coverage is not checked by the getter', C, "if p_brand_id is null or not private.account_lifecycle_brand_owner_epoch_covered() then", "if p_brand_id is null then", RUNNER),
     ('a session that skips triggers reads a number', C, "select pg_catalog.current_setting('session_replication_role') = 'origin'\n     and", "select true\n     and", RUNNER),
-    ('a disabled trigger counts as covered', C, "t.tgenabled in ('O', 'A')", "true", RUNNER),
+    # (G5-21: the history-trigger function repeats these shapes; the sites below name the brand_memberships coverage lines)
+    ('a disabled trigger counts as covered', C, "and not t.tgisinternal and t.tgenabled in ('O', 'A')\n", "and not t.tgisinternal and true\n", RUNNER),
     ('one trigger is enough for the coverage', C, "'private.account_lifecycle_owner_epoch_truncated()'::regprocedure))) = 2", "'private.account_lifecycle_owner_epoch_truncated()'::regprocedure))) >= 1", RUNNER),
     ('the getter is not pinned to an empty search path', C, "create function private.account_lifecycle_brand_owner_epoch(p_brand_id text)\nreturns bigint language plpgsql stable security definer set search_path = '' as $$", "create function private.account_lifecycle_brand_owner_epoch(p_brand_id text)\nreturns bigint language plpgsql stable security definer as $$", RUNNER),
     # ---- J1 V1 R2: a same-named trigger must be exactly the candidate's
     ('R2: the row trigger function is not checked', C, "\n                   and t.tgfoid = 'private.account_lifecycle_owner_epoch_record()'::regprocedure)", ")", RUNNER),
     ('R2: the truncate trigger function is not checked', C, "\n                   and t.tgfoid = 'private.account_lifecycle_owner_epoch_truncated()'::regprocedure)", ")", RUNNER),
-    ('R2: a WHEN clause is accepted', C, "and t.tgqual is null and", "and", RUNNER),
-    ('R2: a column list is accepted', C, "and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and", "and", RUNNER),
-    ('R2: a constraint trigger is accepted', C, "and t.tgconstraint = 0 and", "and", RUNNER),
-    ('R2: trigger arguments are accepted', C, "and t.tgnargs = 0\n", "\n", RUNNER),
+    ('R2: a WHEN clause is accepted', C, "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and t.tgnargs = 0\n             and t.tgoldtable", "             and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and t.tgnargs = 0\n             and t.tgoldtable", RUNNER),
+    ('R2: a column list is accepted', C, "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and t.tgnargs = 0\n             and t.tgoldtable", "             and t.tgqual is null and t.tgconstraint = 0 and t.tgnargs = 0\n             and t.tgoldtable", RUNNER),
+    ('R2: a constraint trigger is accepted', C, "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and t.tgnargs = 0\n             and t.tgoldtable", "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgnargs = 0\n             and t.tgoldtable", RUNNER),
+    ('R2: trigger arguments are accepted', C, "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0 and t.tgnargs = 0\n             and t.tgoldtable", "             and t.tgqual is null and pg_catalog.cardinality(t.tgattr::int2[]) = 0 and t.tgconstraint = 0\n             and t.tgoldtable", RUNNER),
     ('R2: the row trigger timing is checked by bits only', C, "t.tgtype = 29", "t.tgtype & 29 = 29", RUNNER),
     ('R2: the truncate trigger timing is checked by bits only', C, "t.tgtype = 32", "t.tgtype & 32 = 32", RUNNER),
     ('R2: the coverage ignores what API roles can reach', C, "\n     and private.account_lifecycle_owner_epoch_exposure() is null\n", "\n", RUNNER),
@@ -58,7 +61,7 @@ M = [
     ('the number may go down', C, "if new.brand_id = old.brand_id and new.epoch > old.epoch then", "if new.brand_id = old.brand_id then", RUNNER),
     ('the history may be deleted or truncated', C, "  raise exception 'OWNER_EPOCH_HISTORY_IS_APPEND_ONLY' using errcode = '42501';\nend $$;", "  return old;\nend $$;", RUNNER),
     ('the rollback drops the history', RB, "drop function if exists private.account_lifecycle_owner_epoch_bump(text);", "drop function if exists private.account_lifecycle_owner_epoch_bump(text);\ndrop table if exists private.account_lifecycle_brand_owner_epochs;", RUNNER),
-    ('R1: the rollback does not move the numbers', RB, "    update private.account_lifecycle_brand_owner_epochs set epoch = epoch + 1;\n", "", RUNNER),
+    ('R1: the rollback does not move the numbers', RB, "from private.account_lifecycle_brand_owner_epochs e order by e.brand_id for update loop", "from private.account_lifecycle_brand_owner_epochs e where false for update loop", RUNNER),
     ('R1: the install only reconciles a CHANGED owner (the PR #285 head behaviour)', C,
      "  loop\n    perform private.account_lifecycle_owner_epoch_bump(v_brand);\n  end loop;",
      "  loop\n    if not exists (select 1 from private.account_lifecycle_brand_owner_epochs e, lateral (select coalesce(pg_catalog.array_agg(m.user_id), '{}'::uuid[]) o from public.brand_memberships m where m.brand_id = v_brand and m.role = 'owner') x\n"

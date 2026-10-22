@@ -41,7 +41,9 @@ M = [
     ('the history column ACLs are not checked', "      or exists (select 1 from history h, pg_catalog.pg_attribute a", "      or false and exists (select 1 from history h, pg_catalog.pg_attribute a"),
     ('a PUBLIC column ACL on the history is accepted', "where h.oid is not null and a.attrelid = h.oid and a.attacl is not null\n                    and (e.grantee = 0 or e.grantee in",
      "where h.oid is not null and a.attrelid = h.oid and a.attacl is not null\n                    and (e.grantee in"),
-    ('the history is never found', "select pg_catalog.to_regclass('private.account_lifecycle_brand_owner_epochs') as oid", "select pg_catalog.to_regclass('private.no_such_history') as oid"),
+    # (G5-21 added a second `to_regclass` of the history in another function; the site names the exposure's own CTE)
+    ('the history is never found', "  ), history as (\n    select pg_catalog.to_regclass('private.account_lifecycle_brand_owner_epochs') as oid",
+     "  ), history as (\n    select pg_catalog.to_regclass('private.no_such_history') as oid"),
     ('only the API roles themselves are checked on the history', "    when exists (select 1 from reach x, history h\n                  where h.oid is not null\n",
      "    when exists (select 1 from reach x, history h\n                  where h.oid is not null and x.api = pg_catalog.pg_get_userbyid(x.role_oid)\n"),
 ]

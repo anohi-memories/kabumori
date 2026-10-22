@@ -206,3 +206,72 @@ revision and are not treated as decided.
 - G3's L-1 revoke;
 - the PR #233 limited recheck;
 - the user's explicit approval of a production mutation window with a read-back.
+
+## 13. G5-21 revision: a trigger left on the history
+
+TASK `common-account-g5-owner-epoch-history-stale-trigger-p2-source-fix-20261022` (Issue #320, G5-01 generation, task 21, completion K5).
+- Finding: H3 proxy review R1 on PR #446 (Issue #330 comment 6332954454, by Claude as a proxy, **not** the independent Codex review; accepted as a
+  finding only, comment 6332985063).
+- Stacked on PR #446. **Source candidate only:**
+  - not applied anywhere;
+  - no migration, no G3 / G4 / G6 file, no existing grant changed;
+  - still needs the independent focused Codex Sol (high) review.
+- Production stays **NO_GO**.
+
+**The finding [D].** A role that held TRIGGER on `private.account_lifecycle_brand_owner_epochs` could create a trigger there. That trigger:
+- **survived the revoke**;
+- ran **as the owner** inside every bump;
+- as a BEFORE UPDATE trigger that sets `new.epoch := old.epoch`, held the number still (owner → admin → owner left it at 1). The getter answered
+  again (exposure `NONE`) as soon as the privilege was gone;
+- survived the rollback and the re-install, and held the re-start fence still too.
+
+The G5-20 check looked only at the privilege, never at the triggers it left behind.
+
+**The fix.**
+
+| Where | What | Code |
+| --- | --- | --- |
+| `private.account_lifecycle_owner_epoch_history_triggers()` (new, owner-only) | The history's **non-internal** triggers must be exactly its two guards. A guard is checked by name, `tgfoid` = the guard function, `tgtype` (27 row BEFORE UPDATE+DELETE / 34 statement BEFORE TRUNCATE), enabled, no WHEN, no column list, not a constraint trigger, no arguments, no transition tables; the function is owned by the table owner, SECURITY DEFINER, empty `search_path`. | `HISTORY_FOREIGN_TRIGGER` (any other name), `HISTORY_GUARD_TRIGGER_NOT_EXACT`, `HISTORY_MISSING`; NULL = exact |
+| coverage (`…_covered()`) — every read | also requires the function above to be NULL | the getter answers NULL; the resync raises `OWNER_EPOCH_COVERAGE_BROKEN` |
+| every bump, and the truncate path | refuse **before** writing the history, so no foreign code runs as the owner; the owner-membership write fails as a whole | `OWNER_EPOCH_HISTORY_TRIGGERS_NOT_EXACT` |
+| every bump, and the truncate path, after writing | the row as stored must be exactly the one written (number +1, the owner fields). This catches a trigger committed while the bump waited for the history lock, which the check before writing could not see. | `OWNER_EPOCH_BUMP_NOT_RECORDED` |
+| install, re-install over a kept history | refuse while the kept history has a foreign or inexact trigger (nothing is dropped, nothing is left) | `OWNER_EPOCH_PRECONDITION_HISTORY_FOREIGN_TRIGGER`, `OWNER_EPOCH_PRECONDITION_HISTORY_GUARD_TRIGGER_NOT_EXACT` |
+| install, after | exact again (defence in depth: during the install the history is locked against a new trigger) | `OWNER_EPOCH_POSTCONDITION_HISTORY_TRIGGERS` |
+| rollback file | refuse while a foreign trigger is there; each kept number must move by exactly one | `OWNER_EPOCH_ROLLBACK_HISTORY_FOREIGN_TRIGGER`, `OWNER_EPOCH_ROLLBACK_BUMP_NOT_RECORDED` |
+
+**Behaviour, and what stays out of scope:**
+- **Internal triggers are not counted.** An FK onto the history needs REFERENCES, which the exposure check refuses, and the history key never
+  changes.
+- **No file here drops a trigger it did not create.** Removing a left trigger is the owner's decision. Until then, every owner change is refused,
+  so no ABA can happen in the meantime, and the number the getter answers afterwards is still right [D].
+- **Owner-level maintenance of the guards** (disable, re-create, alter the function) stays the operator rule of L-6: run the rollback file and the
+  install.
+
+**`public.brand_memberships` (PR #303 scope, not changed here) — read-only assessment [D].**
+- The coverage there matches its two epoch triggers by identity, but does not require that **no other** trigger exists.
+- A trigger left by a role that once held TRIGGER keeps the coverage true. The **numbers stay right**: the AFTER row trigger sees the final row.
+  But the left trigger's code runs as the writer (the owner through the definer RPCs, or `service_role`).
+- Other features own legitimate triggers on this table: G3's `social_mobile_account_deletion_guard` (BEFORE INSERT / UPDATE). So a blanket refusal
+  would break them.
+- Proposal [P], for a separate G5 TASK agreed with G3 (the table's owner):
+  - an allowlist of the table's triggers, matched by function identity and owner (this file's two plus G3's deletion guard, and whatever else G3
+    lists);
+  - a fixed refusal code;
+  - the same "refuse before write" for the epoch path only;
+  - an independent Sol (high) review.
+- Nothing is decided or changed here.
+
+**Still not covered:**
+- MAINTAIN on `public.brand_memberships`;
+- other tables;
+- role-graph changes between two reads;
+- G3's PR #370 system-column race and the A1 / A2 / B / C choice;
+- the Q1 allowlist's formal approval;
+- managed (NOT_VERIFIED).
+
+| Suite | What |
+| --- | --- |
+| `supabase/tests/common_account_owner_epoch_history_trigger_pg_run.sh` (7 tests) | H3's Q0-Q4: **FAIL before** on PR #446's head `32b258ba` (read with `git show`) and **refused after**; 15 guard variants (14 by the owner, one function hand-over); foreign-name triggers; internal (FK) triggers not counted; truncate refused; three races (update path, insert path, rollback) caught by the written-row check; re-install refused by a left trigger or an inexact guard, then moving every number on; the `brand_memberships` observation |
+| `supabase/tests/common_account_owner_epoch_history_trigger_mutations.py` | 19 mutants of the new rules (three equivalent ones left out and named in the script) |
+| the G5-20 suite | its "why the history matters" test flipped: the write is now refused and the foreign code never runs |
+| the earlier mutation scripts | sites moved with the code: three in the owner-epoch script (the truncate path, the rollback, the lock order), five more there and one in the G5-20 script made unique because the new function repeats the trigger-shape text; every site of the three scripts occurs exactly once |
