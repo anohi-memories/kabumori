@@ -1,0 +1,33 @@
+⚠ RELEASE GATE G2-T2-TIME: "解除しました" appears only after a reload that started AFTER the answer has finished READY without the account -- never at the answer, never while that reload is still loading (52.992666ms) # RELEASE GATE (G2-T2, P3, owner G4): red until fixed
+✔ G2-T2T-1: before the answer -- while confirming and while the request waits -- nothing says "disconnected"; the waiting card says only "解除しています…" and a second press sends nothing (13.093834ms)
+✔ G2-T2T-2: the answer is LOST while waiting, and the server did remove it -- the card says the result is unknown, reloads, and even after the READY list lacks the account it never says "disconnected" (12.719208ms)
+✔ KNOWN G2-T2-P, another entrance (P3, owner G4, not a new finding): another person signs in WHILE the request waits (G2 #393 had it during "checking") -- the answer is A's, and B is told "解除しました" (10.251875ms)
+✔ G2-T2T-3: refusals and stops answered while waiting (PUBLISH_IN_FLIGHT stop, ACCOUNT_CHANGED, a failed HTTP answer) end without any success line, whatever the list does next (30.719667ms)
+✔ controls: the gate measures exactly the loading-empty boundary -- in a world whose provider kept the last list while loading the current card passes the gate; the real provider rule is what the source says; and in the real world the success line is there while loading (18.983542ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 334.848916
+
+✖ failing tests:
+
+test at tests/g2-threads-disconnect-time.test.mjs:100:1
+⚠ RELEASE GATE G2-T2-TIME: "解除しました" appears only after a reload that started AFTER the answer has finished READY without the account -- never at the answer, never while that reload is still loading (52.992666ms) # RELEASE GATE (G2-T2, P3, owner G4): red until fixed
+  AssertionError [ERR_ASSERTION]: not while the reload is loading (G2-T2)
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-t2t/apps/social-mobile/tests/g2-threads-disconnect-time.test.mjs:106:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
