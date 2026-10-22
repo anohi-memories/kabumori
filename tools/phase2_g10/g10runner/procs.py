@@ -129,6 +129,12 @@ _KERN_PROC, _KERN_PROC_PID, _KINFO_PROC_SIZE, _P_STAT_OFFSET, _P_PID_OFFSET = 14
 
 def _kern_proc_stat(pid):
     """sysctl KERN_PROC_PID の p_stat（不在なら None）。読めなければ ObservationError。"""
+    raw = _kern_proc(pid)
+    return None if raw is None else raw[_P_STAT_OFFSET]
+
+
+def _kern_proc(pid):
+    """sysctl KERN_PROC_PID の kinfo_proc（不在なら None）。読めなければ ObservationError。"""
     libc = _sysctl_libc()
     mib = (ctypes.c_int * 4)(_CTL_KERN, _KERN_PROC, _KERN_PROC_PID, pid)
     buf = ctypes.create_string_buffer(_KINFO_PROC_SIZE)
@@ -140,7 +146,7 @@ def _kern_proc_stat(pid):
     raw = buf.raw[:size.value]
     if size.value != _KINFO_PROC_SIZE or int.from_bytes(raw[_P_PID_OFFSET:_P_PID_OFFSET + 4], "little") != pid:
         raise ObservationError("unexpected kinfo_proc for pid %d" % pid)
-    return raw[_P_STAT_OFFSET]
+    return raw
 
 
 def pid_status(pid):
@@ -152,20 +158,29 @@ def pid_status(pid):
 
 
 def start_time(pid):
-    """開始時刻（`秒.マイクロ秒`、カーネル）。不在・ゾンビなら None。別uidなら 'foreign-uid'。
-    存在するのに読めなければ ObservationError。"""
+    """開始時刻（`秒.マイクロ秒`、カーネル）。不在・ゾンビなら None。存在するのに読めなければ ObservationError。
+
+    sysctl KERN_PROC_PID の p_starttime を使う（別uidのプロセスでも読める: uid が変わった既知のプロセスと、
+    pid が再利用された別のプロセスを区別するため。H3 C3 R1）。同じuidなら libproc の値とも照合し、
+    食い違えば ObservationError。
+    """
     info = kinfo(pid)
     if info is None or info["zombie"]:
         return None
-    if info["uid"] != os.getuid():
-        return "foreign-uid"  # 記録された開始時刻と一致することはない（別uidのプロセスは本人ではない）
-    b = _BsdInfo()
-    r = _libproc().proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(b), ctypes.sizeof(b))
-    if r != ctypes.sizeof(b):
+    raw = _kern_proc(pid)
+    if raw is None:
         if pid_status(pid) != "alive":
             return None
         raise ObservationError("cannot read start time of pid %d" % pid)
-    return "%d.%06d" % (b.start_tvsec, b.start_tvusec)
+    st = "%d.%06d" % (int.from_bytes(raw[0:8], "little"), int.from_bytes(raw[8:12], "little"))
+    if info["uid"] == os.getuid():
+        b = _BsdInfo()
+        r = _libproc().proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(b), ctypes.sizeof(b))
+        if r == ctypes.sizeof(b) and "%d.%06d" % (b.start_tvsec, b.start_tvusec) != st:
+            raise ObservationError("start time sources disagree for pid %d" % pid)
+        if r != ctypes.sizeof(b) and pid_status(pid) == "alive":
+            raise ObservationError("cannot read start time of pid %d" % pid)
+    return st
 
 
 def uid_of(pid):
@@ -379,23 +394,33 @@ def terminate(collect, grace, confirm):
     collect.verify(pid, 開始時刻) が必須（signal 直前の再照合）。無ければ何も送らず unknown。
     戻り値: {"absent": bool, "unknown": bool, ...}。観測できなければ unknown=True・absent=False。
     """
-    details = {"term_targets": [], "kill_targets": [], "remaining": [], "unknown": False, "absent": False}
+    details = {"term_targets": [], "kill_targets": [], "remaining": [], "unknown": False, "absent": False,
+               "identity_drift": []}
     verify = getattr(collect, "verify", None)
     if verify is None:
         details["unknown"] = True
         details["error"] = "no signal-time verifier"
         return details
+    drift = getattr(collect, "drift", None)
+
+    def gone(targets):
+        """対象が空で、かつ識別の変わった既知のプロセス（identity_drift）も無いときだけ「居ない」。"""
+        if targets:
+            return False
+        details["identity_drift"] = drift() if drift else []
+        return not details["identity_drift"]
+
     try:
         targets = collect()
         details["term_targets"] = list(targets)
-        if not targets:
+        if gone(targets):
             details["absent"] = not details["unknown"]
             return details
         _signal_verified(dict(targets), signal.SIGTERM, verify, details)
         deadline = time.monotonic() + grace
         while time.monotonic() < deadline:
             targets = collect()
-            if not targets:
+            if gone(targets):
                 details["absent"] = not details["unknown"]
                 return details
             time.sleep(0.05)
@@ -405,12 +430,12 @@ def terminate(collect, grace, confirm):
         deadline = time.monotonic() + confirm
         while time.monotonic() < deadline:
             targets = collect()
-            if not targets:
+            if gone(targets):
                 details["absent"] = not details["unknown"]
                 return details
             time.sleep(0.05)
         details["remaining"] = sorted(collect())
-        details["absent"] = not details["remaining"] and not details["unknown"]
+        details["absent"] = gone(details["remaining"]) and not details["unknown"]
         return details
     except ObservationError as exc:
         details["unknown"] = True

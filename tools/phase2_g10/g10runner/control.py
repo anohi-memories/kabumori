@@ -11,7 +11,7 @@ import uuid
 
 from . import binding, issue as issue_mod, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state
 from .chainlog import ChainError, ChainLog
-from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex
+from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
 from .stub import tree_digest
 
 TRUSTED_LOGIN = issue_mod.TRUSTED_LOGIN
@@ -119,7 +119,7 @@ class Control:
             with open(self.layout.supervisor_log, encoding="utf-8") as f:
                 for line in f:
                     try:
-                        rec = json.loads(line)
+                        rec = loads_strict(line)
                     except ValueError:
                         problems.append("supervisor log unreadable")
                         break
@@ -138,6 +138,10 @@ class Control:
                 problems.append("process observation unavailable: " + run_id)
             elif present:
                 problems.append("process still present: " + run_id)
+                drifted = supervise.identity_drift(self.layout, entry)
+                if drifted:
+                    problems.append("identity drift (known process alive, identity changed): %s %s"
+                                    % (run_id, [d["pid"] for d in drifted]))
                 if claimed_absent.get(run_id):
                     problems.append("evidence mismatch (supervisor reported absent): " + run_id)
         return problems

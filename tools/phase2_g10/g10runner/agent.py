@@ -63,7 +63,11 @@ class Agent:
 
     # --- 起動要求の検証（制御側を信用しない） ---
     def load_request(self, path):
-        doc = read_json(path)
+        try:
+            doc = read_json(path)
+            canonical(doc)  # 非有限の数（NaN・Infinity）を含む要求は、署名の検証より前に拒否
+        except ValueError:
+            return None, "malformed request"
         if not isinstance(doc, dict) or "request" not in doc or "sig" not in doc:
             return None, "malformed request"
         req = doc["request"]

@@ -3,6 +3,7 @@
 G10 Issue #323 の TASK `g10-phase2-runner-fake-claude-impl-20261021` の成果物。
 H3 レビュー指摘 R1（P1）・R2（P1）・R3（P2）の修正は TASK `g10-phase2-pr423-h3-c3-p1x2-p2-source-fix-20261022`（下の「H3 レビュー修正」）。
 H4 再レビュー指摘 P1×2・P2×1 の修正は TASK `g10-phase2-pr423-h4-c4-issue-binding-partial-ps-signal-20261022`（下の「H4 レビュー修正」）。
+H3 第10TASK（C3）指摘 P1・P2 の修正は TASK `g10-phase2-pr423-h3-c3-identity-drift-nan-evidence-fix-20261022`（下の「H3 C3 レビュー修正」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -77,6 +78,41 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
   （ランの識別子、またはスタブの識別子）を照合して、一致したときだけ送る。照合できなければ送らず unknown、一致しなければ skipped。
 - 試験: `tests/test_review_regressions_h4.py`（H4 の反例。修正前HEAD fa1967e8 で 4件すべて失敗）、`tests/test_issue_binding.py`、
   `tests/test_observation_h4.py`。変異試験に H4 用 15件を追加（合計 47件）。
+
+## H3 C3 レビュー修正（TASK 4・2026-10-22）
+- **P1 既知のプロセスの識別の変化（identity_drift）**: 登録簿の子・スタブが**同じ pid・同じ開始時刻で生存**しているのに、
+  argv・uid が一致しない、または照合できないときは、signal を送らない（pid だけでは止めない）うえで、
+  「居ない」の根拠にもしない（`collector().drift()`）。`terminate` は drift が残る限り absent にせず、
+  `run_processes_present` も drift を「居る」と数える。これにより stop_run・finalize（END の不在確認）・ハードHALT の解決・
+  UNHALT の完了条件・S1/S2・クラッシュ復旧のすべてで stop_unconfirmed／HALT 維持になる。完了条件には
+  `identity drift (known process alive, identity changed)` を出す。開始時刻が違う（本当に pid が再利用された別プロセス）・
+  不在・ゾンビは drift にせず、signal も送らない。開始時刻は sysctl KERN_PROC_PID の p_starttime から読む
+  （別uidのプロセスでも読めるため、uid の変化と pid の再利用を区別できる。同じuidなら libproc の値とも照合）。
+- **P2 時刻・数値の有限性**: 署名・ハッシュ用の正規化JSON・ファイル・ログの書き込みは NaN／Infinity を拒否（`allow_nan=False`）、
+  読み込み（`read_json`・ログ・偽Claudeの結果）も NaN／Infinity を拒否（`loads_strict`）。Issue 証拠の fetched_at・updated_at、
+  検証時刻、`issue_evidence_max_age`、起動要求の時刻、参照時計・ローカル時計・ENVELOPE の失効時刻、ポリシーの時間・回数は、
+  **有限の正の数**だけ許可（NaN・±Infinity・bool・欠損・文字列・0以下は fail-closed）。取得係も時計が非有限・0以下なら証拠を作らない。
+- 試験: `tests/test_review_regressions_h3c3.py`（H3 C3 の反例。修正前HEAD 75a4bf92 で 4件すべて失敗）、`tests/test_drift_and_finite.py`。
+  変異試験に 12件を追加（合計 59件）。
+
+## Issue の鮮度（既知の設計限界）と、次段階の契約案（未実装・明示ゲート）
+現在の証拠は「取得した時点の Issue の写し」であり、「起動の時点で Issue が同じ」ことは保証しない。
+- `issue_evidence_max_age`（既定120秒）の間に、Issue が CLOSED になる・status が idle／review_required に変わる・本文が差し替わる、
+  のいずれが起きても、古い証拠のまま起動できる（H3 が独立に再現）。
+- 本文が変わる場合は finalize の本文照合で**事後に**検出して HALT する。**CLOSED だけ（本文は不変）の変更は、本文のハッシュ照合では
+  事後にも検出できない。**
+- GitHub と起動の間を完全に原子的にすることはできない（どの案でも、最後の確認から起動までの窓は残る）。
+
+次段階で正式に決めるべき契約の案（今回は実装しない。実際の GitHub 接続・人の承認・無人実行は行わない）:
+1. **起動直前の再取得**: スタブの臨界区間の最終判定で、ACCEPTED より後に取得した2回目の証拠（短い有効時間、例: 30秒）を必須にし、
+   本文の SHA-256・state: OPEN・updated_at が1回目と同じであることを確かめる。取得できなければ起動しない。
+2. **世代（generation）の照合**: Issue の updated_at（または TASK のメタデータに置く世代番号）を証拠に含め、再取得で変わっていれば
+   「失効」とする。担当ちゃの取消は「status を変える＝本文が変わる」で表せる。
+3. **失効イベント**: 人または取得係の署名つき ISSUE_REVOKE（task_sha256 を指定）を制御ログに排他ロックの下で追記し、最終判定がそれを見る
+   （ENVELOPE_REVOKE と同じ直列化）。
+4. **postflight の state 確認**: finalize で Issue を再取得し、本文のハッシュに加えて state（OPEN）・updated_at を照合する。
+   CLOSED だけの変更もここで検出し、安全違反として記録・通知する。
+5. この契約の採否・有効時間・取得係の権限分離は、実Claude 試験より前の明示ゲートとして決める。
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。

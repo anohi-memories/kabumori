@@ -1,5 +1,6 @@
 """ポリシー（実行権限設定）。正規化したJSONのSHA-256がダイジェスト。仕様 v5 §6-8。"""
 import copy
+import math
 
 from .fsutil import canonical, read_json, sha256_hex
 
@@ -40,7 +41,31 @@ def digest(policy):
     return sha256_hex(canonical(clean))
 
 
+class PolicyError(ValueError):
+    pass
+
+
+def validate(policy):
+    """時間・回数の設定は、有限の正の数だけ（NaN・Infinity・bool・0以下・文字列は不可。H3 C3 R2）。"""
+    def positive(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0
+    timing_ = policy.get("timing")
+    if not isinstance(timing_, dict):
+        raise PolicyError("policy timing missing")
+    for key, value in timing_.items():
+        if not positive(value):
+            raise PolicyError("policy timing value invalid: " + key)
+    rate = policy.get("rate_guard", {})
+    for key in ("window_seconds", "max_starts"):
+        if not positive(rate.get(key)):
+            raise PolicyError("policy rate_guard value invalid: " + key)
+    for key in ("breaker_consecutive_failures", "max_concurrent"):
+        if not positive(policy.get(key)):
+            raise PolicyError("policy value invalid: " + key)
+
+
 def with_digest(policy):
+    validate(policy)
     p = copy.deepcopy(policy)
     p["_digest"] = digest(p)
     return p

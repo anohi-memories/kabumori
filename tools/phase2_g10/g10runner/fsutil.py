@@ -3,12 +3,28 @@ import fcntl
 import hashlib
 import json
 import os
+import math
 import time
 
 
+def _reject_constant(name):
+    raise ValueError("non-finite JSON number: %s" % name)
+
+
+def loads_strict(text):
+    """JSON の読み込み（NaN・Infinity・-Infinity を拒否。H3 C3 R2）。"""
+    return json.loads(text, parse_constant=_reject_constant)
+
+
+def is_finite_number(v):
+    """bool を除く int／float で、有限のときだけ True。"""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 def canonical(obj):
-    """署名・ハッシュ用の正規化JSON（キー順・区切り固定・UTF-8）。"""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    """署名・ハッシュ用の正規化JSON（キー順・区切り固定・UTF-8）。非有限の数は ValueError。"""
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                      allow_nan=False).encode("utf-8")
 
 
 def sha256_hex(data):
@@ -36,13 +52,14 @@ def atomic_write_bytes(path, data):
 
 
 def atomic_write_json(path, obj):
-    atomic_write_bytes(path, json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8") + b"\n")
+    atomic_write_bytes(path, json.dumps(obj, ensure_ascii=False, indent=2, sort_keys=True,
+                                        allow_nan=False).encode("utf-8") + b"\n")
 
 
 def read_json(path, default=None):
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return loads_strict(f.read())
     except FileNotFoundError:
         return default
 

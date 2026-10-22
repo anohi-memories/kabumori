@@ -19,7 +19,7 @@ runner 鍵だけでは、Issue に無いTASK・古い本文・別のIssueの本�
 import time
 
 from . import jstclock, norm
-from .fsutil import canonical, sha256_hex
+from .fsutil import canonical, is_finite_number, sha256_hex
 
 REPO = "anohi-memories/kabumori"
 ISSUE_NUMBER = 323
@@ -63,6 +63,9 @@ class IssueWitness:
         self.now = now
 
     def observe(self):
+        fetched_at = self.now()
+        if not is_finite_number(fetched_at) or fetched_at <= 0:  # 時計が NaN・Infinity・0以下なら証拠を作らない
+            raise IssueSourceError("witness clock is not a finite positive number")
         snap = self.source.fetch()
         body = snap.get("body")
         if not isinstance(body, str):
@@ -73,17 +76,13 @@ class IssueWitness:
             task_sha = None
         evidence = {"repo": snap.get("repo"), "number": snap.get("number"), "state": snap.get("state"),
                     "author": snap.get("author"), "editor": snap.get("editor"),
-                    "updated_at": snap.get("updated_at"), "fetched_at": self.now(),
+                    "updated_at": snap.get("updated_at"), "fetched_at": fetched_at,
                     "body_sha256": sha256_hex(body.encode("utf-8")), "task_sha256": task_sha}
         return {"evidence": evidence, "sig": self.signer.sign("witness", canonical(evidence))}
 
 
 def evidence_digest(doc):
     return sha256_hex(canonical(doc))
-
-
-def _is_number(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
 def check_evidence(doc, verifier, body, now, max_age):
@@ -93,7 +92,11 @@ def check_evidence(doc, verifier, body, now, max_age):
     ev = doc["evidence"]
     if set(ev) != set(EVIDENCE_FIELDS):
         return "issue evidence fields invalid"
-    if not verifier.verify("witness", canonical(ev), doc["sig"]):
+    try:
+        signed = canonical(ev)
+    except ValueError:  # NaN・Infinity を含む証拠（H3 C3 R2）: 署名の検証より前に拒否
+        return "issue evidence contains non-finite numbers"
+    if not verifier.verify("witness", signed, doc["sig"]):
         return "issue evidence signature invalid"
     if ev["repo"] != REPO or ev["number"] != ISSUE_NUMBER:
         return "issue evidence is not for Issue #323"
@@ -101,8 +104,14 @@ def check_evidence(doc, verifier, body, now, max_age):
         return "issue is not open"
     if ev["author"] != TRUSTED_LOGIN or ev["editor"] not in (None, TRUSTED_LOGIN):
         return "issue author/editor not trusted"
-    if not (_is_number(ev["fetched_at"]) and _is_number(ev["updated_at"])):
+    # H3 C3 R2: 時刻・期間は有限の正の数だけ（NaN では比較がすべて偽になり、鮮度の検査をすり抜ける）
+    if not (is_finite_number(ev["fetched_at"]) and is_finite_number(ev["updated_at"])
+            and ev["fetched_at"] > 0 and ev["updated_at"] > 0):
         return "issue evidence times invalid"
+    if not (is_finite_number(now) and now > 0):
+        return "verifier clock invalid"
+    if not (is_finite_number(max_age) and max_age > 0):
+        return "issue evidence max age invalid"
     if ev["updated_at"] > ev["fetched_at"] + jstclock.CLOCK_TOLERANCE_SECONDS:
         return "issue evidence times inconsistent"
     age = now - ev["fetched_at"]
@@ -121,7 +130,7 @@ def check_evidence(doc, verifier, body, now, max_age):
 
 def check_request_evidence(req, verifier, policy, now):
     """実行側の検証: 要求の prompt が、新しく取得された Issue #323 の本文と完全に同じであること。"""
-    max_age = float(policy["timing"].get("issue_evidence_max_age", 0))
-    if max_age <= 0:
+    max_age = policy["timing"].get("issue_evidence_max_age")
+    if not (is_finite_number(max_age) and max_age > 0):
         return "issue evidence max age not configured"
     return check_evidence(req.get("issue_evidence"), verifier, req.get("prompt"), now, max_age)

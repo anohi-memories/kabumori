@@ -11,6 +11,7 @@ runner の署名は「制御側が発行した」ことしか示さない。実�
 import re
 
 from . import meta, norm
+from .fsutil import is_finite_number
 from .layout import RUN_ID_RE
 
 REQUEST_ID_RE = re.compile(r"^req-[0-9a-f]{16}$")
@@ -39,7 +40,8 @@ NUMBER_FIELDS = ("issued_at", "reference_time", "expires_at")
 
 
 def _is_number(v):
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    """有限の正の数（NaN・Infinity・bool・0以下は不可。H3 C3 R2）。"""
+    return is_finite_number(v) and v > 0
 
 
 def check_request(req, policy):

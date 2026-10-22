@@ -150,6 +150,13 @@ class Env:
 
     def __init__(self, policy=None, now=None, notifier=None):
         self.tmp = tempfile.mkdtemp(prefix="g10t-", dir="/tmp")
+        try:
+            self._setup(policy, now, notifier)
+        except BaseException:
+            shutil.rmtree(self.tmp, ignore_errors=True)  # 途中で失敗しても一時フォルダを残さない
+            raise
+
+    def _setup(self, policy, now, notifier):
         self.layout = Layout(self.tmp).ensure()
         signing.write_test_keys(self.tmp)
         keys = signing.test_keys()

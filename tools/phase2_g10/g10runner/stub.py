@@ -15,7 +15,7 @@ import time
 from . import adapter as adapter_mod, binding, ifaces, issue as issue_mod, policy as policy_mod, procs, registry, signing, state, supervise
 from .agent import Agent
 from .chainlog import ChainError
-from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex
+from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
 from .layout import Layout
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -224,7 +224,7 @@ def run(root, run_id):
         raw = f.read()
     parsed = None
     try:
-        parsed = json.loads(raw.decode("utf-8")) if raw else None
+        parsed = loads_strict(raw.decode("utf-8")) if raw else None
     except (ValueError, UnicodeDecodeError):
         parsed = None
     atomic_write_json(os.path.join(run_dir, "result.json"), {

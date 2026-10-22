@@ -71,14 +71,41 @@ def collector(layout, entry):
         for pid, start in procs.find_run_processes(ident):
             targets.setdefault(pid, start)
         return targets
+    def drift():
+        """識別の変わった既知のプロセス（H3 C3 R1）: 登録簿の pid・開始時刻が一致して生存しているのに、
+        argv・uid などが一致しない、または照合できないもの。signal は送らない（PID だけでは止めない）が、
+        「居ない」の根拠にもしない。開始時刻が違う（pid の再利用）・不在・ゾンビなら含めない。"""
+        out = []
+        for role, pid, start in (("stub", stub_pid, stub_start), ("child", child_pid, child_start)):
+            if not pid or not start or not procs.identity_ok(pid, start):
+                continue
+            try:
+                ok = is_stub(pid, start) if role == "stub" else procs.run_process_matches(pid, ident)
+                reason = None if ok else "identity_drift"
+            except procs.ObservationError as exc:
+                reason = "identity_unverifiable: %s" % exc
+            if reason:
+                out.append({"pid": pid, "role": role, "reason": reason})
+        return out
+
     collect.verify = verify
+    collect.drift = drift
     return collect
 
 
 def run_processes_present(layout, entry):
-    """識別子に一致するプロセスがあるか。True／False、観測できなければ None。"""
+    """識別子に一致するプロセス、または識別の変わった既知のプロセスがあるか。True／False、観測できなければ None。"""
     try:
-        return bool(collector(layout, entry)())
+        collect = collector(layout, entry)
+        return bool(collect()) or bool(collect.drift())
+    except procs.ObservationError:
+        return None
+
+
+def identity_drift(layout, entry):
+    """識別の変わった既知のプロセスの一覧（観測できなければ None）。"""
+    try:
+        return collector(layout, entry).drift()
     except procs.ObservationError:
         return None
 
@@ -104,7 +131,8 @@ def stop_run(layout, policy, agent, entry, reason, by):
             pass
         if agent is not None:
             agent.halt_agent("stop_unconfirmed", {"run_id": run_id, "remaining": details.get("remaining"),
-                                                  "observation_unknown": details.get("unknown")})
+                                                  "observation_unknown": details.get("unknown"),
+                                                  "identity_drift": details.get("identity_drift")})
     supervisor_log(layout, {"run_id": run_id, "by": by, "reason": reason, "absent": absent,
                             "ts": time.time(), "details": details})
     return absent

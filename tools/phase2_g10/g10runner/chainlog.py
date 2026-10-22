@@ -9,7 +9,7 @@ import json
 import os
 import uuid
 
-from .fsutil import FileLock, canonical, fsync_dir, sha256_hex, touch
+from .fsutil import FileLock, canonical, fsync_dir, loads_strict, sha256_hex, touch
 
 GENESIS = "0" * 64
 
@@ -47,7 +47,7 @@ class ChainLog:
         seen_ids = set()
         for n, line in enumerate(raw.splitlines(), start=1):
             try:
-                rec = json.loads(line)
+                rec = loads_strict(line)
             except ValueError:
                 raise ChainError("unparseable record at line %d" % n)
             if not isinstance(rec, dict):
@@ -96,7 +96,7 @@ class ChainLog:
         body["sig"] = signer.sign(role, canonical(body))
         new = not os.path.exists(self.path)
         with open(self.path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(body, ensure_ascii=False, sort_keys=True) + "\n")
+            f.write(json.dumps(body, ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
         if new:

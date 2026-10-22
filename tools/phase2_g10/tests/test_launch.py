@@ -118,7 +118,7 @@ class TestLaunch(EnvTestCase):
     def test_s1_unconfirmed_blocks_spawn(self):
         self.env.cleanup()
         from helpers import Env, test_policy, FAST_TIMING
-        t = dict(FAST_TIMING, reaper_confirm_timeout=0.0)
+        t = dict(FAST_TIMING, reaper_confirm_timeout=1e-6)  # 0以下はポリシーで不可（H3 C3 R2）
         self.env = Env(policy=test_policy(timing=t))
         self.addCleanup(self.env.cleanup)  # 差し替えた環境も片付ける（TASK 1 では残っていた）
         self.env.envelope()
