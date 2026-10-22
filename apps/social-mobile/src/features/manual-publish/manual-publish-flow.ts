@@ -68,12 +68,20 @@ export interface InFlightSends {
   end(handle: InFlightHandle, outcome: ManualPublishOutcome): void;
   /** True only while this user's send with this attempt id is not finished. */
   isOut(userId: string | null, requestId: string): boolean;
-  /** This user's unfinished send, to wait for its answer; null when there is none. */
+  /** This user's unfinished send, to wait for its answer; null when there is none (an acknowledge in progress is not a send). */
   takeOver(userId: string | null): InFlightTakeOver | null;
+  /**
+   * Reserve the user's one operation for an ACKNOWLEDGE (clear the record on the device, then the memory). Null while this
+   * user has any unfinished operation -- a send or another acknowledge. While it is held, `begin` refuses too, so a send can
+   * neither start under a clear that is still running nor be cleared away by it.
+   */
+  beginAcknowledge(userId: string): InFlightHandle | null;
+  /** Finish the acknowledge of this handle (a handle that is not the current operation, or a send's, is ignored). */
+  release(handle: InFlightHandle): void;
 }
 
 export function createInFlightSends(): InFlightSends {
-  type Entry = { handle: InFlightHandle; attempt: InFlightAttempt; retry: boolean; promise: Promise<ManualPublishOutcome>; settle: (outcome: ManualPublishOutcome) => void };
+  type Entry = { handle: InFlightHandle; op: 'send' | 'acknowledge'; attempt: InFlightAttempt | null; retry: boolean; promise: Promise<ManualPublishOutcome>; settle: (outcome: ManualPublishOutcome) => void };
   const entries = new Map<string, Entry>();
   let generation = 0;
   return {
@@ -83,22 +91,37 @@ export function createInFlightSends(): InFlightSends {
       const promise = new Promise<ManualPublishOutcome>((resolve) => { settle = resolve; });
       generation += 1;
       const handle: InFlightHandle = { userId, requestId: attempt.requestId, generation };
-      entries.set(userId, { handle, attempt, retry, promise, settle });
+      entries.set(userId, { handle, op: 'send', attempt, retry, promise, settle });
       return handle;
+    },
+    beginAcknowledge(userId) {
+      if (entries.has(userId)) return null;
+      let settle: (outcome: ManualPublishOutcome) => void = () => {};
+      const promise = new Promise<ManualPublishOutcome>((resolve) => { settle = resolve; });
+      generation += 1;
+      const handle: InFlightHandle = { userId, requestId: '', generation };
+      entries.set(userId, { handle, op: 'acknowledge', attempt: null, retry: false, promise, settle });
+      return handle;
+    },
+    release(handle) {
+      const entry = entries.get(handle.userId);
+      if (entry === undefined || entry.op !== 'acknowledge' || entry.handle.generation !== handle.generation) return;
+      entries.delete(handle.userId);
+      entry.settle({ kind: 'unavailable', targetId: '', code: 'RELEASED' });
     },
     end(handle, outcome) {
       const entry = entries.get(handle.userId);
-      if (entry === undefined || entry.handle.generation !== handle.generation) return;
+      if (entry === undefined || entry.op !== 'send' || entry.handle.generation !== handle.generation) return;
       entries.delete(handle.userId);
       entry.settle(outcome);
     },
     isOut: (userId, requestId) => {
       const entry = userId === null ? undefined : entries.get(userId);
-      return entry !== undefined && entry.handle.requestId === requestId;
+      return entry !== undefined && entry.op === 'send' && entry.handle.requestId === requestId;
     },
     takeOver: (userId) => {
       const entry = userId === null ? undefined : entries.get(userId);
-      return entry === undefined ? null : { attempt: entry.attempt, retry: entry.retry, answer: entry.promise };
+      return entry === undefined || entry.op !== 'send' || entry.attempt === null ? null : { attempt: entry.attempt, retry: entry.retry, answer: entry.promise };
     },
   };
 }
@@ -202,20 +225,51 @@ export function reconcileLoadedRead(deps: FlowDeps, userId: string, read: StoreR
   return { kind: 'record', read };
 }
 
+/** The result of an acknowledge. `refused` means NOTHING was cleared: the screen must show the attempt as it is now. */
+export type AcknowledgeResult =
+  | Readonly<{ kind: 'cleared' }>
+  | Readonly<{ kind: 'failed' }>
+  | Readonly<{ kind: 'refused'; reason: 'in_progress' | 'stale' }>;
+
 /**
- * The user's explicit "I checked X": forget the unresolved attempt. Only when the durable record is really gone is
- * the process memory cleared too; a record that cannot be removed keeps blocking (fail closed) and `false` is returned.
+ * The user's explicit "I checked X": forget the unresolved attempt. Only when the durable record is really gone is the
+ * process memory cleared too; a record that cannot be removed keeps blocking (fail closed) and `failed` is returned.
+ *
+ * It is an operation on the user's record, so it takes the same per-user reservation as a send, for the whole of the
+ * clear, the read-back and the memory update:
+ *   - while a send (or another acknowledge) of this user is unfinished it is REFUSED -- the screen that asks may be showing
+ *     an old result, and the answer to the send that is out is not known: its record must stay;
+ *   - while it runs, a send cannot start (the registry refuses), so a clear can never remove the record of a send that
+ *     began after the check;
+ *   - when the screen names the attempt it shows (`expectedRequestId`) and the process knows another one, it is REFUSED:
+ *     an old screen cannot erase a newer attempt.
  */
-export async function runAcknowledge(deps: FlowDeps, userId: string): Promise<boolean> {
-  let cleared: boolean;
-  try {
-    cleared = await deps.store.clear(userId);
-  } catch {
-    cleared = false;
+export async function acknowledgeAttempt(deps: FlowDeps, userId: string, expectedRequestId: string | null): Promise<AcknowledgeResult> {
+  let handle: InFlightHandle | null = null;
+  if (deps.inflight !== undefined) {
+    handle = deps.inflight.beginAcknowledge(userId);
+    if (handle === null) return { kind: 'refused', reason: 'in_progress' };
   }
-  if (!cleared) return false;
-  deps.memory.clear(userId);
-  return true;
+  try {
+    const known = deps.memory.get(userId);
+    if (expectedRequestId !== null && known !== null && known.requestId !== expectedRequestId) return { kind: 'refused', reason: 'stale' };
+    let cleared: boolean;
+    try {
+      cleared = await deps.store.clear(userId);
+    } catch {
+      cleared = false;
+    }
+    if (!cleared) return { kind: 'failed' };
+    deps.memory.clear(userId);
+    return { kind: 'cleared' };
+  } finally {
+    if (handle !== null) deps.inflight?.release(handle);
+  }
+}
+
+/** `acknowledgeAttempt` for a caller that names no attempt: true only if the record is really gone. */
+export async function runAcknowledge(deps: FlowDeps, userId: string): Promise<boolean> {
+  return (await acknowledgeAttempt(deps, userId, null)).kind === 'cleared';
 }
 
 // ---- send -----------------------------------------------------------------------------------------------------------

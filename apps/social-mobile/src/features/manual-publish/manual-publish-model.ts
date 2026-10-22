@@ -257,6 +257,7 @@ export type ManualPublishAction =
   | Readonly<{ type: 'store_loaded'; unresolved: UnresolvedAttempt | null }>
   | Readonly<{ type: 'send_adopted'; attempt: UnresolvedAttempt & Readonly<{ text: string }>; retrying: boolean }>
   | Readonly<{ type: 'send_not_started'; requestId: string; attempt: UnresolvedAttempt }>
+  | Readonly<{ type: 'ack_refused'; send: Readonly<{ attempt: UnresolvedAttempt & Readonly<{ text: string }>; retry: boolean }> | null; attempt: UnresolvedAttempt | null }>
   | Readonly<{ type: 'store_unreadable'; reason: 'io' | 'corrupt' | 'version' }>
   | Readonly<{ type: 'store_reload_requested' }>
   | Readonly<{ type: 'store_unreadable_acknowledged' }>
@@ -421,6 +422,13 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
       // same view a screen opened later would show -- never to what it believed and never to a downgraded kind.
       if (state.phase !== 'sending' || state.requestId !== action.requestId) return state;
       return createInitialState(action.attempt);
+    case 'ack_refused':
+      // The acknowledge was refused and nothing was cleared: the screen showed an attempt the process knows differently now.
+      // It is brought to the attempt as it is NOW -- sending (a send of this user is out), or the unresolved attempt of the
+      // memory -- and is never released to an empty editor.
+      if (state.phase !== 'result' || state.unresolved === null) return state;
+      if (action.send !== null) return createSendingState(action.send.attempt, action.send.retry);
+      return action.attempt !== null ? createInitialState(action.attempt) : state;
     case 'send_adopted':
       // A send of this process began while this visit was still reading the record of the device: that record is the
       // send's own, not an earlier run's. Only a visit that is still loading (nothing typed, nothing sendable) switches.
