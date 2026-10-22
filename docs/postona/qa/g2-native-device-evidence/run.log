@@ -1,0 +1,28 @@
+✔ G2-NV1: on the tracked app.json and G2's recorded evidence, all three native gates are NO_GO for their real reasons (0.947958ms)
+✔ G2-NV2 (inputs): the tracked app.json pins neither identifier and has no android section; the evidence was recorded on this app.json head; the fixture / relabel PASSes exist and are not standard builds (0.110042ms)
+✔ G2-NV3 (positive control): when everything is really met, all three gates lift -- the decision is not a constant NO_GO (0.173167ms)
+✔ G2-NV4 M1 identifiers disagree between prebuild runs (generation order): IDENTITY stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.178417ms)
+✔ G2-NV4 M2 identifiers disagree with the login state (anonymous): IDENTITY stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.088167ms)
+✔ G2-NV4 M3 the identifier is read from a working copy a prebuild just wrote (G2-ID5), not from the tracked config: IDENTITY stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.074ms)
+✔ G2-NV4 M4 a prebuild still writes the tracked files: IDENTITY stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.069666ms)
+✔ G2-NV4 M5 only some order / login combinations were run (partial PASS): IDENTITY stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.058333ms)
+✔ G2-NV4 M6 identity runs from an older head: IDENTITY stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.070458ms)
+✔ G2-NV4 M7 a patched fixture launch taken for the standard build: IOS27 stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.094875ms)
+✔ G2-NV4 M8 an SDK-26-relabelled launch taken for the standard build: IOS27 stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.067584ms)
+✔ G2-NV4 M9 a Simulator launch taken for a device launch: IOS27 stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.0575ms)
+✔ G2-NV4 M10 a standard launch on another OS (not iOS 27): IOS27 stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.046125ms)
+✔ G2-NV4 M11 a standard PASS from an older head while the current standard build crashes: IOS27 stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.436042ms)
+✔ G2-NV4 M12 an offline / custom-scheme link test taken for App Links on a device: ANDROID_APP_LINKS stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.074083ms)
+✔ G2-NV4 M13 App Links "verified" on an emulator: ANDROID_APP_LINKS stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.054833ms)
+✔ G2-NV4 M14 the https intent filter without autoVerify: ANDROID_APP_LINKS stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.034916ms)
+✔ G2-NV4 M15 App Links verified but the package not pinned: ANDROID_APP_LINKS stays NO_GO with that reason (the naive "there is a PASS" rule would lift it) (0.036ms)
+✔ negative controls: each rule, weakened, lets its mis-join through -- build kind (M7/M8), environment (M9/M12/M13), head (M6/M11), agreement (M1/M2) (0.697333ms)
+✔ G2-NV5 (offline): the file imports only node:test / node:assert / node:fs and reads only local files (2.916334ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 20
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 52.595041
