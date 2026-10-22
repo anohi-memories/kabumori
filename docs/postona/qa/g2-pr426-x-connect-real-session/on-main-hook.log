@@ -1,0 +1,138 @@
+✖ R-CB5 (G2 #419): B signs in (real SDK) while A's X browser is open -- no exchange, no success, no reload (48.732875ms)
+✖ R-CB6 (G2 #419): A signs out (real SDK) while the browser is open -- no exchange with the signed-out token (9.801625ms)
+✔ R-CX1 (G2 #425): sign-out, then the browser is cancelled -- a cancel stays a cancel, no exchange (6.508041ms)
+✖ R-CX2 (G2 #425, was UNKNOWN): sign-out and the SAME person signs in again (a new session id) -- no exchange with either token, not connected (7.769583ms)
+✖ G2-OS1 (legitimate): the access token EXPIRES while the browser is open -- the real getSession refreshes it (same session id), the exchange carries the NEW token and the connect succeeds (5.566833ms)
+✖ G2-OS2: the token expires while the browser is open AND the session was ended elsewhere ("sign out everywhere") -- the refresh fails, nothing is exchanged, not connected (5.465291ms)
+✖ G2-OS3: the person or session changes DURING the exchange (real SDK, inside the server round trip) -- B / sign-out / a new session of A get no success and no reload; a refresh of the same session keeps the success (6.98275ms)
+✖ G2-OS4 (recovery session): a password update in the recovery session keeps the session id -- the connect continues; a fresh sign-in after it is a new session -- refused (10.4625ms)
+✔ G2-OS5: denial at X after the person changed stays a cancel (no exchange); an expired-state answer from the server for the same session is an error, never a success (16.852291ms)
+﹣ negative controls (heads with the owner checks): each removed check is caught -- the exchange-time check (R-CB5 sees an exchange), the success-time check (G2-OS3 sees a success for B), the current token (G2-OS1 sees the expired token) (0.142708ms) # no owner checks on this head
+ℹ tests 10
+ℹ suites 0
+ℹ pass 2
+ℹ fail 7
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 342.464375
+
+✖ failing tests:
+
+test at tests/g2-x-connect-real-session.test.mjs:146:1
+✖ R-CB5 (G2 #419): B signs in (real SDK) while A's X browser is open -- no exchange, no success, no reload (48.732875ms)
+  AssertionError [ERR_ASSERTION]: no exchange
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:154:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-real-session.test.mjs:160:1
+✖ R-CB6 (G2 #419): A signs out (real SDK) while the browser is open -- no exchange with the signed-out token (9.801625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:167:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-real-session.test.mjs:182:1
+✖ R-CX2 (G2 #425, was UNKNOWN): sign-out and the SAME person signs in again (a new session id) -- no exchange with either token, not connected (7.769583ms)
+  AssertionError [ERR_ASSERTION]: neither the old nor the new session exchanges a code started by the old one
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:192:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-real-session.test.mjs:199:1
+✖ G2-OS1 (legitimate): the access token EXPIRES while the browser is open -- the real getSession refreshes it (same session id), the exchange carries the NEW token and the connect succeeds (5.566833ms)
+  AssertionError [ERR_ASSERTION]: not the expired token
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:210:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWEiLCJzZXNzaW9uX2lkIjoic2Vzcy11c2VyLWEtMSIsImV4cCI6MTc5MjYzNTg4MywiYXVkIjoiYXV0aGVudGljYXRlZCIsInJvbGUiOiJhdXRoZW50aWNhdGVkIiwibiI6MX0.sig',
+    expected: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLWEiLCJzZXNzaW9uX2lkIjoic2Vzcy11c2VyLWEtMSIsImV4cCI6MTc5MjYzNTg4MywiYXVkIjoiYXV0aGVudGljYXRlZCIsInJvbGUiOiJhdXRoZW50aWNhdGVkIiwibiI6MX0.sig',
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-real-session.test.mjs:216:1
+✖ G2-OS2: the token expires while the browser is open AND the session was ended elsewhere ("sign out everywhere") -- the refresh fails, nothing is exchanged, not connected (5.465291ms)
+  AssertionError [ERR_ASSERTION]: no exchange with a token the server no longer refreshes
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:225:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-real-session.test.mjs:230:1
+✖ G2-OS3: the person or session changes DURING the exchange (real SDK, inside the server round trip) -- B / sign-out / a new session of A get no success and no reload; a refresh of the same session keeps the success (6.98275ms)
+  AssertionError [ERR_ASSERTION]: B signs in: state connected
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:245:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-real-session.test.mjs:251:1
+✖ G2-OS4 (recovery session): a password update in the recovery session keeps the session id -- the connect continues; a fresh sign-in after it is a new session -- refused (10.4625ms)
+  AssertionError [ERR_ASSERTION]: updated, then signed in again
+  + actual - expected
+  
+  + 'connected'
+  - 'session_changed'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-426/apps/social-mobile/tests/g2-x-connect-real-session.test.mjs:262:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'connected',
+    expected: 'session_changed',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
