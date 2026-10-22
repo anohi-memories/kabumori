@@ -452,6 +452,7 @@ test('inflight: a record that cannot be written releases the waiters with the re
   assert.equal(fresh.deps.inflight.isOut('U1', ID(1)), false, 'the user is free again');
   assert.equal(fresh.memory.get('U1'), null);
   const retry = withRegistry(harness());
+  retry.memory.mark('U1', { ...ATT(1), kind: 'pending' }); // a re-ask is of an attempt the process knows
   const d2 = heldKV(retry);
   d2.holdSet = true;
   const done2 = flow.runSend(retry.deps, args({ retry: true }));
@@ -851,4 +852,105 @@ test('ack_refused: brings a result screen to the attempt as the process knows it
   const editing = model.createInitialState(null);
   assert.deepEqual(model.manualPublishReducer(editing, { type: 'ack_refused', send, attempt: null }), editing, 'not a result screen');
   assert.deepEqual(model.manualPublishReducer(sending, { type: 'ack_refused', send: null, attempt: { ...ATT(2), kind: 'uncertain' } }), sending, 'a sending screen is left alone');
+});
+
+// ---- send time: a re-ask needs the attempt in the memory of THIS process now (acknowledged or ended elsewhere = gone) -----------------------------------
+
+test('post-ack: a re-ask while the process memory has no attempt of this user is refused before the port, the record and the memory (with and without a registry)', async () => {
+  for (const registry of [true, false]) {
+    const h = registry ? withRegistry(harness()) : harness();
+    const outcome = await flow.runSend(h.deps, args({ retry: true }));
+    assert.deepEqual(outcome, { kind: 'refused', targetId: ID(1), code: 'LOCAL_ATTEMPT_CLEARED', retryable: false }, `registry=${registry}`);
+    assert.equal(h.calls.send.length, 0);
+    assert.equal(h.kv.data.size, 0);
+    assert.equal(h.memory.get('U1'), null);
+    if (registry) assert.equal(h.deps.inflight.takeOver('U1'), null, 'the reservation is released');
+  }
+});
+
+const RECORD = (over = {}) => JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), kind: 'pending', savedAt: 1, ...over });
+
+test('post-ack: with an empty memory the DEVICE record decides -- this attempt re-askable -> it goes out; none / another id -> refused as cleared', async () => {
+  for (const kind of ['pending', 'unconfirmed', 'in_flight']) {
+    const h = withRegistry(harness());
+    h.kv.data.set(storeKeyOf('U1'), RECORD({ kind }));
+    const outcome = await flow.runSend(h.deps, args({ retry: true }));
+    assert.equal(outcome.kind, 'published', `${kind}: a restart re-ask of the recorded attempt goes out`);
+    assert.equal(h.calls.send.length, 1, kind);
+    assert.equal(h.calls.send[0].targetId, ID(1), `${kind}: the SAME id`);
+  }
+  for (const [label, record] of [['none', null], ['another id', RECORD({ requestId: ID(7) })]]) {
+    const h = withRegistry(harness());
+    if (record !== null) h.kv.data.set(storeKeyOf('U1'), record);
+    const outcome = await flow.runSend(h.deps, args({ retry: true }));
+    assert.deepEqual(outcome, { kind: 'refused', targetId: ID(1), code: 'LOCAL_ATTEMPT_CLEARED', retryable: false }, label);
+    assert.equal(h.calls.send.length, 0, label);
+    assert.equal(h.kv.data.get(storeKeyOf('U1')) ?? null, record, `${label}: the device is untouched`);
+    assert.equal(h.memory.get('U1'), null, `${label}: the memory stays empty`);
+    assert.equal(h.deps.inflight.takeOver('U1'), null, `${label}: the reservation is released`);
+  }
+  assert.equal(flow.ATTEMPT_CLEARED_CODE, 'LOCAL_ATTEMPT_CLEARED');
+});
+
+test('post-ack: a recorded attempt that is uncertain, or of another account or text, is not re-asked; it is put into the memory as it is', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), RECORD({ kind: 'uncertain' }));
+  assert.deepEqual(await flow.runSend(h.deps, args({ retry: true })), { kind: 'uncertain', targetId: ID(1), code: 'LOCAL_UNRESOLVED_ATTEMPT' });
+  assert.equal(h.calls.send.length, 0);
+  assert.equal(h.memory.get('U1').kind, 'uncertain', 'the process now knows the attempt (text-less, as after a restart)');
+  assert.equal(h.memory.get('U1').text, null);
+  assert.equal(JSON.parse(h.kv.data.get(storeKeyOf('U1'))).kind, 'uncertain', 'the record is untouched');
+  for (const [label, over] of [['another text', { contentSha256: sha('other') }], ['another account', { accountId: 'X_B' }]]) {
+    const w = withRegistry(harness());
+    w.kv.data.set(storeKeyOf('U1'), RECORD(over));
+    assert.deepEqual(await flow.runSend(w.deps, args({ retry: true })), { kind: 'unavailable', targetId: ID(1), code: 'LOCAL_UNRESOLVED_ATTEMPT' }, label);
+    assert.equal(w.calls.send.length, 0, label);
+    assert.equal(w.memory.get('U1').requestId, ID(1), label);
+  }
+});
+
+test('post-ack: an unreadable device record fails closed (unavailable, kept unresolved), nothing is sent or written', async () => {
+  for (const mode of ['get-throws', 'corrupt']) {
+    const h = withRegistry(harness());
+    if (mode === 'get-throws') h.kv.fail.get = true;
+    else h.kv.data.set(storeKeyOf('U1'), '{not json');
+    const before = h.kv.data.get(storeKeyOf('U1'));
+    assert.deepEqual(await flow.runSend(h.deps, args({ retry: true })), { kind: 'unavailable', targetId: ID(1), code: 'LOCAL_STORE_UNAVAILABLE' }, mode);
+    assert.equal(h.calls.send.length, 0, mode);
+    assert.equal(h.memory.get('U1').kind, 'unconfirmed', `${mode}: blocks like a failed write of a re-ask`);
+    assert.equal(h.kv.data.get(storeKeyOf('U1')), before, `${mode}: the device is untouched`);
+    assert.equal(h.deps.inflight.takeOver('U1'), null);
+  }
+  const thrown = withRegistry(harness());
+  thrown.deps.store = { ...thrown.store, read: async () => { throw new Error('boom'); } };
+  assert.equal((await flow.runSend(thrown.deps, args({ retry: true }))).code, 'LOCAL_STORE_UNAVAILABLE', 'a thrown read too');
+  assert.equal(thrown.calls.send.length, 0);
+});
+
+test('post-ack: the device check runs under the reservation -- an acknowledge cannot run while it reads, and a fresh send is unaffected', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), RECORD());
+  const realGet = h.kv.getItem;
+  const held = [];
+  let hold = true;
+  h.kv.getItem = async (key) => { if (hold) { hold = false; await new Promise((resolve) => { held.push(resolve); }); } return realGet(key); };
+  const reAsk = flow.runSend(h.deps, args({ retry: true }));
+  for (let i = 0; i < 20 && held.length === 0; i += 1) await later();
+  assert.equal(held.length, 1, 'the record is being read');
+  assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'refused', reason: 'in_progress' }, 'no clear meanwhile');
+  for (const resolve of held.splice(0)) resolve();
+  assert.equal((await reAsk).kind, 'published');
+  assert.equal(h.calls.send.length, 1);
+  const fresh = withRegistry(harness());
+  assert.equal((await flow.runSend(fresh.deps, args())).kind, 'published', 'a fresh attempt never reads the record first');
+});
+
+test('post-ack: the device check reads the record of THIS user only -- another user\'s record of the same id never lets a re-ask through', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), RECORD());
+  const outcome = await flow.runSend(h.deps, args({ userId: 'U2', retry: true }));
+  assert.deepEqual(outcome, { kind: 'refused', targetId: ID(1), code: 'LOCAL_ATTEMPT_CLEARED', retryable: false });
+  assert.equal(h.calls.send.length, 0);
+  assert.equal(h.memory.get('U2'), null);
+  assert.equal(h.memory.get('U1'), null, 'the other user\'s record is not put into any memory');
 });

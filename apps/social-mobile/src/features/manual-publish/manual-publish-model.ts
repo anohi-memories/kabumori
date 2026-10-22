@@ -256,7 +256,7 @@ export type ManualPublishAction =
   | Readonly<{ type: 'draft_restored'; text: string | null; accountId: string | null }>
   | Readonly<{ type: 'store_loaded'; unresolved: UnresolvedAttempt | null }>
   | Readonly<{ type: 'send_adopted'; attempt: UnresolvedAttempt & Readonly<{ text: string }>; retrying: boolean }>
-  | Readonly<{ type: 'send_not_started'; requestId: string; attempt: UnresolvedAttempt }>
+  | Readonly<{ type: 'send_not_started'; requestId: string; attempt: UnresolvedAttempt | null }>
   | Readonly<{ type: 'ack_refused'; send: Readonly<{ attempt: UnresolvedAttempt & Readonly<{ text: string }>; retry: boolean }> | null; attempt: UnresolvedAttempt | null }>
   | Readonly<{ type: 'store_unreadable'; reason: 'io' | 'corrupt' | 'version' }>
   | Readonly<{ type: 'store_reload_requested' }>
@@ -420,8 +420,10 @@ export function manualPublishReducer(state: ManualPublishState, action: ManualPu
       // The re-ask was refused before anything was sent because the process knows the attempt in a state this screen had not
       // seen (another screen moved it on, e.g. pending -> uncertain). The screen is brought to the attempt as it is NOW -- the
       // same view a screen opened later would show -- never to what it believed and never to a downgraded kind.
+      // With no attempt, the process no longer knows the one this screen showed (it was acknowledged or ended on another
+      // screen): it is dropped -- an empty editor, as on the screen that acknowledged it; no text, consent or id is kept.
       if (state.phase !== 'sending' || state.requestId !== action.requestId) return state;
-      return createInitialState(action.attempt);
+      return action.attempt !== null ? createInitialState(action.attempt) : { ...createInitialState(null), draftRestore: 'done' };
     case 'ack_refused':
       // The acknowledge was refused and nothing was cleared: the screen showed an attempt the process knows differently now.
       // It is brought to the attempt as it is NOW -- sending (a send of this user is out), or the unresolved attempt of the

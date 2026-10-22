@@ -2713,3 +2713,112 @@ test('ACK-INFLIGHT: the stale refusal brings the screen to the attempt of ITS OW
   assert.equal(b.state().result.kind, 'uncertain');
   assert.ok(device.kv.data.has(realStore.storeKeyOf('U6')), 'nothing was cleared');
 });
+
+// ---- post-acknowledge: an OLD re-ask confirmation must not send the acknowledged attempt again ---------------------------------------------------------
+
+test('POST-ACK: A acknowledged the attempt (record and memory gone) -- B\'s old re-ask confirmation sends NOTHING, and B is not left believing it is unresolved', async () => {
+  const { device, memory, fp, a, b } = await twoScreensShowingTheSamePending();
+  await b.press('同じ内容・同じ送信IDで確認し直す');
+  await b.tick();
+  assert.equal(b.state().phase, 'confirming', 'B holds the old re-ask confirmation');
+  await a.press(ACK_LABEL);
+  assert.equal(a.state().phase, 'editing', 'A acknowledged normally');
+  assert.equal(memory.get('U1'), null);
+  assert.equal(device.kv.data.has(realStore.storeKeyOf('U1')), false);
+  await b.press('Xに投稿する'); // the button B shows is still enabled
+  assert.equal(fp.calls.send.length, 0, 'the acknowledged attempt is not sent again from the old screen');
+  assert.equal(memory.get('U1'), null, 'the memory stays empty (no new in_flight)');
+  assert.equal(device.kv.data.has(realStore.storeKeyOf('U1')), false, 'nothing is written to the device');
+  assert.notEqual(b.state().phase, 'sending');
+  assert.equal(b.state().unresolved, null, 'B does not keep a re-askable attempt that no longer exists');
+  assert.equal(b.button('同じ内容・同じ送信IDで確認し直す'), null);
+  assert.equal(b.state().consent, null, 'no consent is carried');
+  assertNoSentClaim(b);
+});
+
+const CLEARED_NOTE = 'この送信記録は別の画面で確認済み（または完了）になっていたため、送信しませんでした。Xのプロフィールで投稿を確認してください。';
+
+test('POST-ACK: the dropped screen says why nothing was sent, offers an empty editor, and a NEW attempt from it goes out with a new id', async () => {
+  const { fp, a, b } = await twoScreensShowingTheSamePending();
+  await b.press('同じ内容・同じ送信IDで確認し直す');
+  await b.tick();
+  await a.press(ACK_LABEL);
+  await b.press('Xに投稿する');
+  assert.equal(b.state().phase, 'editing');
+  assert.equal(b.state().draft, '', 'no old text is kept');
+  assert.ok(b.text().includes(CLEARED_NOTE), 'it says why');
+  await b.typeText('確認後の新しい本文');
+  await b.press('内容を確認する');
+  await b.tick();
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1, 'a new attempt is a normal send');
+  assert.equal(fp.calls.send[0].targetId, ID(101), 'with a new id');
+  assert.ok(!b.text().includes(CLEARED_NOTE), 'the note is gone once a new send starts');
+});
+
+test('POST-ACK: after the acknowledge, another screen started a NEW attempt -- the old re-ask is brought to the new attempt, not sent', async () => {
+  const { memory, fp, a, b } = await twoScreensShowingTheSamePending();
+  await b.press('同じ内容・同じ送信IDで確認し直す');
+  await b.tick();
+  await a.press(ACK_LABEL);
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(2), contentSha256: sha('次の試行'), text: '次の試行', kind: 'pending' });
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0);
+  assert.equal(b.state().unresolved.requestId, ID(2), 'the attempt the process knows now');
+  assert.equal(b.state().result.kind, 'pending');
+  assert.equal(memory.get('U1').requestId, ID(2), 'untouched');
+});
+
+test('POST-ACK: a re-ask pressed while the acknowledge is still clearing, and again after it finished -- nothing is ever sent', async () => {
+  const { device, memory, fp, a, b } = await twoScreensShowingTheSamePending();
+  await b.press('同じ内容・同じ送信IDで確認し直す');
+  await b.tick();
+  device.holdRemove = true;
+  a.button(ACK_LABEL).props.onPress();
+  await a.flush();
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0, 'not while the clear runs');
+  device.release();
+  await a.flush();
+  await b.flush();
+  assert.equal(memory.get('U1'), null);
+  if (b.button('同じ内容・同じ送信IDで確認し直す') !== null) {
+    await b.press('同じ内容・同じ送信IDで確認し直す');
+    await b.tick();
+    await b.press('Xに投稿する');
+  }
+  assert.equal(fp.calls.send.length, 0, 'not after it finished either');
+  assert.equal(device.kv.data.has(realStore.storeKeyOf('U1')), false);
+  assert.equal(memory.get('U1'), null);
+});
+
+test('POST-ACK: the same holds for any user id, and the acknowledge of one user never drops another user\'s re-ask', async () => {
+  const u7 = await twoScreensShowingTheSamePending('U7');
+  await u7.b.press('同じ内容・同じ送信IDで確認し直す');
+  await u7.b.tick();
+  u7.memory.mark('U1', { accountId: 'X_A', requestId: ID(1), contentSha256: sha(ACK_TEXT), text: ACK_TEXT, kind: 'pending' });
+  await u7.a.press(ACK_LABEL);
+  assert.equal(u7.memory.get('U1').requestId, ID(1), 'U1 is untouched by U7\'s acknowledge');
+  await u7.b.press('Xに投稿する');
+  assert.equal(u7.fp.calls.send.length, 0, 'U7\'s acknowledged attempt is not sent');
+  assert.equal(u7.b.state().phase, 'editing');
+  const other = await twoScreensShowingTheSamePending('U8');
+  await other.b.press('同じ内容・同じ送信IDで確認し直す');
+  await other.b.tick();
+  await other.b.press('Xに投稿する');
+  assert.equal(other.fp.calls.send.length, 1, 'U8 was not acknowledged: its re-ask goes out');
+  assert.equal(other.fp.calls.send[0].targetId, ID(1));
+});
+
+test('POST-ACK: a legitimate re-ask after a restart (text-less record, retyped text) still goes out with the same id', async () => {
+  const kv = deviceWith(RESTORED({ kind: 'pending', requestId: ID(9), contentSha256: sha('earlier text') }));
+  const fp = fakePort();
+  const ui = await mount({ kv, port: fp, memory: realFlow.createAttemptMemory(), inflight: realFlow.createInFlightSends() });
+  assert.equal(ui.state().result.kind, 'pending');
+  await ui.press('前回と同じ本文を入力して確認し直す');
+  await ui.typeText('earlier text');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1);
+  assert.equal(fp.calls.send[0].targetId, ID(9), 'the SAME id as the record');
+});
