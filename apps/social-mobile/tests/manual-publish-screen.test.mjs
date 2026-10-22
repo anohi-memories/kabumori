@@ -2540,3 +2540,176 @@ test('LIVE-KIND: the same holds for any user id -- the old confirmation of user 
   assert.equal(b.state().unresolved.requestId, ID(1), 'its own attempt');
   assert.equal(b.state().result.kind, 'uncertain');
 });
+
+// ---- H1 C1 11th review, P2: the acknowledge of an OLD result screen must not erase the record of a send that is out -----------------------------------
+
+const ACK_TEXT = '送信中に確認される本文';
+const ACK_LABEL = 'Xで確認しました（この下書きを破棄）';
+
+/** A device storage whose removal can be held back and whose writes are logged, to see what is on the device at any moment. */
+function removalKV() {
+  const kv = fakeKV();
+  const realRemove = kv.removeItem;
+  const ctl = { kv, holdRemove: false, held: [], removed: 0 };
+  kv.removeItem = async (key) => {
+    if (ctl.holdRemove) { ctl.holdRemove = false; await new Promise((resolve) => { ctl.held.push(resolve); }); }
+    ctl.removed += 1;
+    return realRemove(key);
+  };
+  ctl.release = () => { for (const resolve of ctl.held.splice(0)) resolve(); };
+  return ctl;
+}
+
+/** Screens A and B of one user and session, both showing the same pending attempt R1 (memory and device record agree). */
+async function twoScreensShowingTheSamePending(userId = 'U1') {
+  const device = removalKV();
+  const memory = realFlow.createAttemptMemory();
+  memory.mark(userId, { accountId: 'X_A', requestId: ID(1), contentSha256: sha(ACK_TEXT), text: ACK_TEXT, kind: 'pending' });
+  const inflight = realFlow.createInFlightSends();
+  device.kv.data.set(realStore.storeKeyOf(userId), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha(ACK_TEXT) })));
+  const fp = fakePort();
+  const a = await mount({ ...TWO, userId, port: fp, memory, inflight, kv: device.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  const b = await mount({ ...TWO, userId, port: fp, memory, inflight, kv: device.kv, draftKv: fakeKV(), sessionMark: 'T1', idBase: 100 });
+  for (const ui of [a, b]) assert.equal(ui.state().result.kind, 'pending');
+  return { device, memory, inflight, fp, a, b, userId };
+}
+
+async function aStartsTheReAsk(a) {
+  await a.press('同じ内容・同じ送信IDで確認し直す');
+  await a.tick();
+  await a.press('Xに投稿する');
+}
+
+test('ACK-INFLIGHT: the old result screen\'s acknowledge does not erase the record or the memory of the re-ask that is out', async () => {
+  const { device, memory, inflight, fp, a, b } = await twoScreensShowingTheSamePending();
+  await aStartsTheReAsk(a);
+  assert.equal(fp.calls.send.length, 1, 'A\'s re-ask is out');
+  assert.equal(inflight.isOut('U1', ID(1)), true);
+  await b.press(ACK_LABEL); // an ordinary tap on the button B shows
+  const record = device.kv.data.get(realStore.storeKeyOf('U1'));
+  assert.ok(record !== undefined, 'the record of the send that is out is still on the device');
+  assert.equal(JSON.parse(record).kind, 'in_flight');
+  assert.equal(JSON.parse(record).requestId, ID(1));
+  assert.ok(memory.get('U1') !== null, 'the memory still knows the attempt');
+  assert.equal(inflight.isOut('U1', ID(1)), true, 'the send is still out');
+  assert.notEqual(b.state().phase, 'editing', 'the screen is not released to an empty editor');
+  assert.ok(b.state().unresolved !== null, 'it still shows an unresolved attempt');
+});
+
+test('ACK-INFLIGHT (cold start): after the old screen\'s acknowledge, a restart cannot send ANOTHER id while the first request is still on its way', async () => {
+  const { device, fp, a, b } = await twoScreensShowingTheSamePending();
+  await aStartsTheReAsk(a);
+  assert.equal(fp.calls.send.length, 1, 'A\'s re-ask is out');
+  await b.press(ACK_LABEL);
+  // the app is closed before the answer: a new process reads the same device (its own memory and registry), the request is still on its way
+  const cold = await mount({ ...TWO, port: fp, memory: realFlow.createAttemptMemory(), inflight: realFlow.createInFlightSends(), kv: device.kv, draftKv: fakeKV(), sessionMark: 'T9', idBase: 200 });
+  await tryToSendAgain(cold);
+  assert.equal(fp.calls.send.length, 1, 'no other request can be started after a restart');
+  assert.equal(cold.state().result.kind, 'unconfirmed');
+});
+
+test('ACK-INFLIGHT: an acknowledge that is still clearing cannot be overtaken by a send that starts meanwhile (the reverse order)', async () => {
+  const { device, memory, inflight, fp, a, b } = await twoScreensShowingTheSamePending();
+  await a.press('同じ内容・同じ送信IDで確認し直す');
+  await a.tick();
+  device.holdRemove = true;
+  device.holdRemove = true;
+  void b.button(ACK_LABEL).props.onPress(); // B's acknowledge starts clearing and is held on the device
+  await b.flush();
+  await a.press('Xに投稿する'); // A's re-ask starts while the clear is not finished
+  const outstanding = fp.calls.send.length - fp.pending.filter((p) => p.settled === true).length;
+  const recordNow = device.kv.data.get(realStore.storeKeyOf('U1'));
+  device.release();
+  await b.flush();
+  await a.flush();
+  const recordAfter = device.kv.data.get(realStore.storeKeyOf('U1'));
+  if (fp.calls.send.length > 0) assert.ok(recordAfter !== undefined, 'a request is on the wire, so its record must be on the device');
+  assert.equal(fp.calls.send.length, 0, 'the send did not start while the acknowledge was clearing');
+  assert.ok(outstanding >= 0 && (recordNow === undefined || recordNow !== null));
+  assert.ok(memory !== null && inflight !== null);
+});
+
+test('ACK-INFLIGHT: the refused screen waits for the re-ask that is out and shows ITS answer; nothing is released to an empty editor', async () => {
+  const { memory, fp, a, b } = await twoScreensShowingTheSamePending();
+  await aStartsTheReAsk(a);
+  await b.press(ACK_LABEL);
+  assert.equal(b.state().phase, 'sending', 'B follows the send that is out');
+  assert.ok(!b.text().includes('記録を消去できませんでした'), 'a refusal is not a failed clear');
+  assert.equal(b.state().retrying, true);
+  assert.equal(b.button(ACK_LABEL), null, 'nothing to acknowledge while it is out');
+  assert.equal(b.button('同じ内容・同じ送信IDで確認し直す'), null);
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  await b.flush();
+  await a.flush();
+  assert.equal(b.state().result.kind, 'uncertain');
+  assert.equal(memory.get('U1').kind, 'uncertain');
+  assert.equal(fp.calls.send.length, 1);
+});
+
+test('ACK-INFLIGHT: after the send ended, the same acknowledge works -- the record and the memory are cleared and the editor is empty', async () => {
+  const { device, memory, fp, a, b } = await twoScreensShowingTheSamePending();
+  await aStartsTheReAsk(a);
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '8675309', marks: REAL });
+  await a.flush();
+  assert.equal(memory.get('U1'), null, 'a proven end leaves nothing unresolved');
+  const single = await twoScreensShowingTheSamePending('U5');
+  await single.b.press(ACK_LABEL);
+  assert.equal(single.b.state().phase, 'editing');
+  assert.equal(single.b.state().unresolved, null);
+  assert.equal(single.memory.get('U5'), null);
+  assert.equal(single.device.kv.data.has(realStore.storeKeyOf('U5')), false);
+  assert.equal(b.state().result.kind, 'pending', 'B is not changed by the answer of A (it shows the earlier result until it looks again)');
+  assert.ok(device.kv.data.size === 0, 'the device holds nothing after the proven end');
+});
+
+test('ACK-INFLIGHT: an OLD result screen\'s acknowledge cannot erase a NEWER unresolved attempt -- it is brought to the newer one', async () => {
+  const { device, memory, b } = await twoScreensShowingTheSamePending();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(2), contentSha256: sha('newer'), text: 'newer', kind: 'uncertain' });
+  device.kv.data.set(realStore.storeKeyOf('U1'), JSON.stringify(RESTORED({ kind: 'uncertain', requestId: ID(2), contentSha256: sha('newer') })));
+  await b.press(ACK_LABEL);
+  assert.equal(memory.get('U1').requestId, ID(2), 'the newer attempt is still known');
+  assert.equal(JSON.parse(device.kv.data.get(realStore.storeKeyOf('U1'))).requestId, ID(2), 'and its record is still on the device');
+  assert.equal(b.state().unresolved.requestId, ID(2));
+  assert.equal(b.state().result.kind, 'uncertain');
+  assert.equal(b.state().phase, 'result', 'not an empty editor');
+  assert.ok(!b.text().includes('記録を消去できませんでした'), 'a refusal is not a failed clear');
+});
+
+test('ACK-INFLIGHT: a record that cannot be removed keeps the screen where it is and says so; another user\'s acknowledge touches nothing of this user', async () => {
+  const { device, memory, a, b } = await twoScreensShowingTheSamePending();
+  device.kv.fail.remove = true;
+  await b.press(ACK_LABEL);
+  assert.equal(b.state().phase, 'result');
+  assert.equal(b.state().unresolved.requestId, ID(1));
+  assert.ok(b.text().includes('記録を消去できませんでした。送信は引き続きできません。'), 'it says so');
+  assert.equal(memory.get('U1').requestId, ID(1));
+  device.kv.fail.remove = false;
+  const other = await twoScreensShowingTheSamePending('U6');
+  await other.b.press(ACK_LABEL);
+  assert.equal(memory.get('U1').requestId, ID(1), 'U1 is untouched by the acknowledge of U6');
+  assert.ok(device.kv.data.has(realStore.storeKeyOf('U1')));
+  assert.equal(a.state().unresolved.requestId, ID(1));
+});
+
+test('ACK-INFLIGHT: the refusal follows the send of the screen\'s OWN user (any user id), and the answer reaches the screen', async () => {
+  const { memory, fp, a, b } = await twoScreensShowingTheSamePending('U6');
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(55), contentSha256: sha('他人'), text: '他人', kind: 'uncertain' });
+  await aStartsTheReAsk(a);
+  await b.press(ACK_LABEL);
+  assert.equal(b.state().phase, 'sending');
+  assert.equal(b.state().requestId, ID(1));
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'published', providerPostId: '31337', marks: REAL });
+  await b.flush();
+  assert.equal(b.state().result.kind, 'sent');
+  assert.equal(memory.get('U1').requestId, ID(55), 'another user\'s attempt is untouched');
+});
+
+test('ACK-INFLIGHT: the stale refusal brings the screen to the attempt of ITS OWN user (any user id)', async () => {
+  const { device, memory, b } = await twoScreensShowingTheSamePending('U6');
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(55), contentSha256: sha('他人'), text: '他人', kind: 'uncertain' });
+  memory.mark('U6', { accountId: 'X_A', requestId: ID(2), contentSha256: sha('newer'), text: 'newer', kind: 'uncertain' });
+  await b.press(ACK_LABEL);
+  assert.equal(b.state().unresolved.requestId, ID(2), 'U6\'s newer attempt, not another user\'s');
+  assert.equal(b.state().result.kind, 'uncertain');
+  assert.ok(device.kv.data.has(realStore.storeKeyOf('U6')), 'nothing was cleared');
+});

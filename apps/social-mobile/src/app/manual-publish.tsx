@@ -13,7 +13,7 @@ import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-na
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
-import { attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runAcknowledge, runReadinessCheck, runSend, UNRESOLVED_REFUSAL_CODE, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
+import { acknowledgeAttempt, attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runReadinessCheck, runSend, UNRESOLVED_REFUSAL_CODE, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
 import {
   MANUAL_PUBLISH_TEXT_LIMIT,
   SEND_BLOCK_MESSAGES,
@@ -293,11 +293,20 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   const acknowledge = (then: 'unresolved_acknowledged' | 'store_unreadable_acknowledged') => {
     if (userId === null || clearingRef.current) return;
     clearingRef.current = true;
-    void runAcknowledge(deps, userId).then((cleared) => {
+    // The attempt this screen shows is named, so an old screen can never clear a newer attempt or one whose send is out.
+    const expected = then === 'unresolved_acknowledged' ? state.unresolved?.requestId ?? null : null;
+    void acknowledgeAttempt(deps, userId, expected).then((result) => {
       clearingRef.current = false;
       if (!mountedRef.current) return;
-      setClearFailed(!cleared);
-      if (cleared) dispatch({ type: then });
+      setClearFailed(result.kind === 'failed');
+      if (result.kind === 'cleared') {
+        dispatch({ type: then });
+      } else if (result.kind === 'refused') {
+        // Nothing was cleared. Show the attempt as the process knows it now (a send that is out is waited for), not an empty editor.
+        const send = inFlightSends.takeOver(userId);
+        if (send !== null) setTakenOver(send);
+        dispatch({ type: 'ack_refused', send: send === null ? null : { attempt: send.attempt, retry: send.retry }, attempt: attemptMemory.get(userId) });
+      }
     });
   };
 

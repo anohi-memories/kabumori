@@ -705,3 +705,150 @@ test('live kind: send_not_started brings a sending screen to the attempt as the 
   const done = model.manualPublishReducer(sending, { type: 'send_settled', requestId: ID(1), outcome: { kind: 'pending', targetId: ID(1), code: null } });
   assert.deepEqual(model.manualPublishReducer(done, { type: 'send_not_started', requestId: ID(1), attempt: uncertain }), done, 'already settled');
 });
+
+// ---- acknowledge: one operation per user, shared with the send ------------------------------------------------------------------------------------
+
+test('ack registry: an acknowledge and a send exclude each other; an acknowledge is no send; only its own handle releases it', async () => {
+  const reg = flow.createInFlightSends();
+  const ack = reg.beginAcknowledge('U1');
+  assert.ok(ack);
+  assert.equal(reg.begin('U1', ATT(1), false), null, 'no send under a clear that is running');
+  assert.equal(reg.beginAcknowledge('U1'), null, 'no second acknowledge');
+  assert.equal(reg.takeOver('U1'), null, 'a screen never "takes over" an acknowledge');
+  assert.equal(reg.isOut('U1', ID(1)), false);
+  assert.ok(reg.beginAcknowledge('U2'), 'another user is never blocked');
+  reg.end(ack, { kind: 'uncertain', targetId: ID(1), code: 'X' }); // end() is for sends
+  assert.equal(reg.begin('U1', ATT(1), false), null, 'still reserved: end() does not release an acknowledge');
+  reg.release({ ...ack, generation: ack.generation + 100 });
+  reg.release({ ...ack, userId: 'U3' });
+  assert.equal(reg.beginAcknowledge('U1'), null, 'a handle of another generation or user releases nothing');
+  reg.release(ack);
+  reg.release(ack); // twice: ignored
+  const send = reg.begin('U1', ATT(1), false);
+  assert.ok(send, 'free again');
+  reg.release(send); // release() is for acknowledges
+  assert.equal(reg.isOut('U1', ID(1)), true, 'release() does not end a send');
+  assert.equal(reg.beginAcknowledge('U1'), null, 'no acknowledge while a send is unfinished');
+  reg.release(ack); // the old handle can never release the newer operation
+  assert.equal(reg.isOut('U1', ID(1)), true);
+  reg.end(send, { kind: 'uncertain', targetId: ID(1), code: 'X' });
+  assert.ok(reg.beginAcknowledge('U1'));
+});
+
+const ackDeps = (h) => h.deps;
+
+test('acknowledge: a normal acknowledge clears the device record and then the memory, and frees the user', async () => {
+  const h = withRegistry(harness());
+  for (const expected of [null, ID(1)]) {
+    h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+    h.kv.data.set(storeKeyOf('U1'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), kind: 'pending', savedAt: 1 }));
+    assert.deepEqual(await flow.acknowledgeAttempt(ackDeps(h), 'U1', expected), { kind: 'cleared' }, String(expected));
+    assert.equal(h.memory.get('U1'), null);
+    assert.equal(h.kv.data.has(storeKeyOf('U1')), false);
+    const free = h.deps.inflight.beginAcknowledge('U1');
+    assert.ok(free, 'the reservation was released');
+    h.deps.inflight.release(free);
+  }
+});
+
+test('acknowledge: refused (nothing cleared) while a send of the user is unfinished -- the record and the memory of the send stay', async () => {
+  const sends = [];
+  const h = withRegistry(harness({ send: (t) => new Promise((resolve) => { sends.push({ t, resolve }); }) }));
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  const done = flow.runSend(h.deps, args({ retry: true }));
+  for (let i = 0; i < 20 && sends.length === 0; i += 1) await later();
+  const recordBefore = h.kv.data.get(storeKeyOf('U1'));
+  assert.equal(JSON.parse(recordBefore).kind, 'in_flight');
+  for (const expected of [null, ID(1), ID(2)]) {
+    assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', expected), { kind: 'refused', reason: 'in_progress' }, String(expected));
+  }
+  assert.equal(await flow.runAcknowledge(h.deps, 'U1'), false, 'the boolean wrapper does not claim a clear either');
+  assert.equal(h.kv.data.get(storeKeyOf('U1')), recordBefore, 'the record on the device is untouched');
+  assert.equal(h.memory.get('U1').kind, 'in_flight');
+  assert.equal(h.deps.inflight.isOut('U1', ID(1)), true);
+  sends[0].resolve({ targetId: ID(1), kind: 'uncertain', code: 'OFFLINE', marks: REAL });
+  assert.equal((await done).kind, 'uncertain');
+  assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'cleared' }, 'once the send ended, the acknowledge works');
+});
+
+test('acknowledge: an acknowledge that names another attempt than the process knows is refused as stale and clears nothing', async () => {
+  const h = withRegistry(harness());
+  h.memory.mark('U1', { ...ATT(2), kind: 'uncertain' });
+  h.kv.data.set(storeKeyOf('U1'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(2), contentSha256: sha('hello'), kind: 'uncertain', savedAt: 1 }));
+  assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'refused', reason: 'stale' });
+  assert.equal(h.memory.get('U1').requestId, ID(2));
+  assert.equal(JSON.parse(h.kv.data.get(storeKeyOf('U1'))).requestId, ID(2));
+  assert.ok(h.deps.inflight.beginAcknowledge('U1'), 'the reservation was released');
+});
+
+test('acknowledge: a record that cannot be removed keeps blocking (memory kept) and frees the user; a thrown clear is the same', async () => {
+  for (const mode of ['false', 'throws']) {
+    const h = withRegistry(harness());
+    h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+    h.kv.data.set(storeKeyOf('U1'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), kind: 'pending', savedAt: 1 }));
+    if (mode === 'false') h.kv.fail.drop = true; else h.deps.store = { ...h.store, clear: async () => { throw new Error('boom'); } };
+    if (mode === 'false') { const realRemove = h.kv.removeItem; h.kv.removeItem = async () => {}; h.kv.removeItem.real = realRemove; }
+    assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'failed' }, mode);
+    assert.equal(h.memory.get('U1').requestId, ID(1), `${mode}: still unresolved`);
+    assert.ok(h.deps.inflight.beginAcknowledge('U1'), `${mode}: the user is free again`);
+  }
+});
+
+test('acknowledge: while a clear is running no send can start (the reverse order), and nothing is written or sent', async () => {
+  const h = withRegistry(harness());
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  h.kv.data.set(storeKeyOf('U1'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), kind: 'pending', savedAt: 1 }));
+  const realRemove = h.kv.removeItem;
+  const held = [];
+  h.kv.removeItem = async (key) => { await new Promise((resolve) => { held.push(resolve); }); return realRemove(key); };
+  const writes = [];
+  const realSet = h.kv.setItem;
+  h.kv.setItem = async (key, value) => { writes.push(value); return realSet(key, value); };
+  const ack = flow.acknowledgeAttempt(h.deps, 'U1', ID(1));
+  for (let i = 0; i < 20 && held.length === 0; i += 1) await later();
+  assert.equal(held.length, 1, 'the clear is running');
+  const reAsk = await flow.runSend(h.deps, args({ retry: true }));
+  assert.deepEqual(reAsk, { kind: 'unavailable', targetId: ID(1), code: 'LOCAL_SEND_IN_PROGRESS' });
+  const fresh = await flow.runSend(h.deps, args({ requestId: ID(2) }));
+  assert.equal(fresh.code, 'LOCAL_SEND_IN_PROGRESS');
+  assert.equal(h.calls.send.length, 0);
+  assert.equal(writes.length, 0, 'no record was written under the clear');
+  assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'refused', reason: 'in_progress' }, 'no second acknowledge either');
+  for (const resolve of held.splice(0)) resolve();
+  assert.deepEqual(await ack, { kind: 'cleared' });
+  assert.equal(h.memory.get('U1'), null);
+  assert.equal(h.kv.data.has(storeKeyOf('U1')), false);
+});
+
+test('acknowledge: another user is not touched, and without a registry the acknowledge still works as before', async () => {
+  const h = withRegistry(harness());
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  h.memory.mark('U2', { ...ATT(2), kind: 'pending' });
+  h.kv.data.set(storeKeyOf('U1'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), kind: 'pending', savedAt: 1 }));
+  h.kv.data.set(storeKeyOf('U2'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(2), contentSha256: sha('hello'), kind: 'pending', savedAt: 1 }));
+  assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'cleared' });
+  assert.equal(h.memory.get('U2').requestId, ID(2), 'the other user\'s attempt is kept');
+  assert.ok(h.kv.data.has(storeKeyOf('U2')), 'and so is the other user\'s record');
+  const bare = harness();
+  bare.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  assert.equal(bare.deps.inflight, undefined);
+  assert.equal(await flow.runAcknowledge(bare.deps, 'U1'), true);
+  assert.equal(bare.memory.get('U1'), null);
+});
+
+test('ack_refused: brings a result screen to the attempt as the process knows it now, and does nothing in any other state', () => {
+  const pendingView = model.createInitialState({ ...ATT(1), kind: 'pending' });
+  const send = { attempt: ATT(1), retry: true };
+  const sending = model.manualPublishReducer(pendingView, { type: 'ack_refused', send, attempt: { ...ATT(1), kind: 'in_flight' } });
+  assert.equal(sending.phase, 'sending');
+  assert.equal(sending.retrying, true);
+  assert.equal(sending.requestId, ID(1));
+  const uncertain = model.manualPublishReducer(pendingView, { type: 'ack_refused', send: null, attempt: { ...ATT(2), kind: 'uncertain' } });
+  assert.equal(uncertain.phase, 'result');
+  assert.equal(uncertain.result.kind, 'uncertain');
+  assert.equal(uncertain.unresolved.requestId, ID(2));
+  assert.deepEqual(model.manualPublishReducer(pendingView, { type: 'ack_refused', send: null, attempt: null }), pendingView, 'nothing known: unchanged, never an empty editor');
+  const editing = model.createInitialState(null);
+  assert.deepEqual(model.manualPublishReducer(editing, { type: 'ack_refused', send, attempt: null }), editing, 'not a result screen');
+  assert.deepEqual(model.manualPublishReducer(sending, { type: 'ack_refused', send: null, attempt: { ...ATT(2), kind: 'uncertain' } }), sending, 'a sending screen is left alone');
+});
