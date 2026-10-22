@@ -71,6 +71,8 @@ def check_request(req, policy):
         return "invalid request validity window", None
     if req["policy_sha256"] != policy["_digest"]:
         return "policy digest mismatch", None
+    if not isinstance(req.get("issue_evidence"), dict):
+        return "request field has wrong type: issue_evidence", None  # 内容の検証は issue.check_request_evidence
 
     # 本文を自分で検証し、再ハッシュする
     result = meta.validate_task(req["prompt"], policy)
@@ -95,4 +97,8 @@ def request_matches_claim(req, claim_payload):
     """終了判定（finalize）用: 要求が、制御側の台帳に記録した CLAIM（承認済みの内容）と一致するか。"""
     keys = ("run_id", "request_id", "approval_id", "task_id", "task_sha256", "model", "model_id", "effort",
             "max_minutes", "max_budget_usd", "base_ref", "base_sha", "policy_sha256")
-    return all(req.get(k) == claim_payload.get(k) for k in keys)
+    if not all(req.get(k) == claim_payload.get(k) for k in keys):
+        return False
+    from . import issue
+    ev = req.get("issue_evidence")
+    return isinstance(ev, dict) and issue.evidence_digest(ev) == claim_payload.get("issue_evidence_sha256")

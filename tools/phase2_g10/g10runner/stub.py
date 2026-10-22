@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from . import adapter as adapter_mod, binding, ifaces, policy as policy_mod, procs, registry, signing, state, supervise
+from . import adapter as adapter_mod, binding, ifaces, issue as issue_mod, policy as policy_mod, procs, registry, signing, state, supervise
 from .agent import Agent
 from .chainlog import ChainError
 from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex
@@ -67,6 +67,9 @@ def final_check(agent, layout, req, policy):
     reason, _ = binding.check_request(req, policy)  # H3 R1: 承認済みTASK・ポリシーとの結合を再確認
     if reason:
         return reason
+    reason = issue_mod.check_request_evidence(req, agent.verifier, policy, time.time())  # H4 P1
+    if reason:
+        return "issue binding: " + reason
     try:
         st = agent.current_state(update_seen=True)
     except (ChainError, state.RewindError) as exc:
@@ -99,6 +102,8 @@ def run(root, run_id):
         agent.mark("ABORTED", req, {"reason": "request signature invalid at stub"})
         return 3
     reason, _ = binding.check_request(req, policy)
+    if not reason:
+        reason = issue_mod.check_request_evidence(req, verifier, policy, time.time())
     if reason:
         agent.mark("ABORTED", req, {"reason": "request binding invalid at stub: " + reason})
         return 3
@@ -199,9 +204,12 @@ def run(root, run_id):
     # T9: 解放後の再確認（保険）
     if supervise.hard_halt_requested(layout, agent):
         entry = registry.load(layout, run_id)
-        ident = registry.identity(entry)
-        details = procs.terminate(lambda: dict(procs.find_run_processes(ident)),
-                                  policy_mod.timing(policy, "grace_seconds"), policy_mod.timing(policy, "confirm_seconds"))
+        collect = supervise.collector(layout, entry)
+        own = os.getpid()
+        only_run = (lambda: {p: s for p, s in collect().items() if p != own})  # 自分自身（スタブ）は止めない
+        only_run.verify = collect.verify
+        details = procs.terminate(only_run, policy_mod.timing(policy, "grace_seconds"),
+                                  policy_mod.timing(policy, "confirm_seconds"))
         absent = details["absent"] and not details["unknown"]
         try:
             registry.update(layout, run_id, "interrupted" if absent else "stop_unconfirmed",

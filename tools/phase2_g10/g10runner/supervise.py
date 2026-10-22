@@ -39,19 +39,39 @@ def s2_fresh(layout, policy, now=None):
 
 
 def collector(layout, entry):
-    """停止の対象を集める関数を返す（H3 R3）: 正確な識別子に一致するランのプロセスと、
-    識別（pid・開始時刻・uid・`--run-id`・`--root`）が一致した起動スタブだけ。観測できなければ例外。"""
+    """停止の対象を集める関数を返す（H3 R3・H4 P1/P2）。
+
+    - 識別（pid・開始時刻・uid・`--run-id`・`--root`）が一致した起動スタブ（先頭: 親を先に止め、
+      子の終了を「exited」と記録させない）
+    - 登録簿の子（child_pid・child_start）を、一覧とは独立に直接確認したもの（一覧の欠落を補う）
+    - カーネルと ps の和集合のうち、正確な識別子に一致するもの
+    観測できなければ ObservationError。戻り値の関数は .verify(pid, 開始時刻) を持つ（signal 直前の再照合）。
+    """
     ident = registry.identity(entry)
+    stub_pid, stub_start = entry.get("stub_pid"), entry.get("stub_start")
+    child_pid, child_start = entry.get("child_pid"), entry.get("child_start")
+
+    def is_stub(pid, start):
+        return (pid == stub_pid and bool(stub_start) and start == stub_start
+                and procs.stub_matches(stub_pid, stub_start, entry["run_id"], entry["root"], entry["uid"]))
+
+    def verify(pid, start):
+        """送信直前の照合: uid・開始時刻・完全な argv（ランの識別子、またはスタブの識別子）。"""
+        if not start or procs.start_time(pid) != start:
+            return False
+        return is_stub(pid, start) or procs.run_process_matches(pid, ident)
 
     def collect():
         targets = {}
-        stub_pid, stub_start = entry.get("stub_pid"), entry.get("stub_start")
-        if stub_pid and stub_start and procs.stub_matches(stub_pid, stub_start, entry["run_id"],
-                                                          entry["root"], entry["uid"]):
-            targets[stub_pid] = stub_start  # 先頭: 親（スタブ）を先に止め、子の終了を「exited」と記録させない
+        if stub_pid and stub_start and is_stub(stub_pid, stub_start):
+            targets[stub_pid] = stub_start
+        if child_pid and child_start and procs.identity_ok(child_pid, child_start) \
+                and procs.run_process_matches(child_pid, ident):
+            targets.setdefault(child_pid, child_start)
         for pid, start in procs.find_run_processes(ident):
             targets.setdefault(pid, start)
         return targets
+    collect.verify = verify
     return collect
 
 

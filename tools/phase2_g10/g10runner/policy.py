@@ -26,6 +26,7 @@ DEFAULT_POLICY = {
         "halt_sync_wait": 30.0,
         "halt_escalation": 10.0,
         "minute_seconds": 60.0,
+        "issue_evidence_max_age": 120.0,  # Issue #323 の取得証拠の有効時間（H4 P1）
     },
     "rate_guard": {"window_seconds": 600, "max_starts": 10},
     "breaker_consecutive_failures": 3,

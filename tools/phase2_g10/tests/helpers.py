@@ -7,7 +7,7 @@ import tempfile
 import time
 import unittest
 
-from g10runner import norm, policy as policy_mod, procs, registry, signing, supervise
+from g10runner import issue as issue_mod, norm, policy as policy_mod, procs, registry, signing, supervise
 from g10runner.agent import Agent
 from g10runner.control import Control
 from g10runner.layout import Layout
@@ -79,6 +79,7 @@ FAST_TIMING = {
     "halt_sync_wait": 10.0,
     "halt_escalation": 10.0,
     "minute_seconds": 0.5,
+    "issue_evidence_max_age": 120.0,
 }
 TRUSTED_ISSUE = {"state": "OPEN", "number": 323, "author": "anohi-memories", "editor": None}
 
@@ -159,7 +160,11 @@ class Env:
         self.clock = now
         nowfn = (lambda: self.clock()) if callable(now) else time.time
         self.notifier = notifier or RecordingNotifier()
-        self.control = Control(self.layout, self.control_signer, self.verifier, self.policy, self.notifier, nowfn)
+        self.issue = issue_mod.MockIssueSource()  # 模擬の Issue #323（実際の GitHub には触れない）
+        self.witness_signer = signing.HmacTestSigner({"witness": keys["witness"]})
+        self.witness = issue_mod.IssueWitness(self.issue, self.witness_signer, nowfn)
+        self.control = Control(self.layout, self.control_signer, self.verifier, self.policy, self.notifier, nowfn,
+                               witness=self.witness)
         self.agent = Agent(self.layout, self.agent_signer, self.verifier, self.policy, nowfn)
 
     def s2_heartbeat(self, fresh=True):
@@ -188,6 +193,7 @@ class EnvTestCase(unittest.TestCase):
     def claim_and_run(self, scenario=None, hooks=None, body=None, wait=True, timeout=30, **body_kw):
         env = self.env
         body = body or make_body(env.policy, **body_kw)
+        env.issue.publish(body)  # 正式に発行された現役TASKとして Issue #323 に載せる
         run_id, reason = env.control.try_claim(body, TRUSTED_ISSUE, time.time())
         self.assertIsNotNone(run_id, reason)
         if hooks is not None:

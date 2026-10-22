@@ -1,15 +1,19 @@
-"""プロセスの観測・識別・停止。仕様 v5 §7、v5.3 §5。H3 レビュー R2・R3 の修正。
+"""プロセスの観測・識別・停止。仕様 v5 §7、v5.3 §5。H3 R2・R3、H4 P1（部分観測）・P2（signal直前）の修正。
 
-- R2: 観測の失敗（ps の timeout・OSError・異常終了・解析できない行・空の一覧・argv を読めない）は
-  ObservationError として伝える。「空の一覧（正常）」と「観測できない」を区別し、観測できないときに
-  「不在」と判定しない。terminate は absent／unknown を分けて返す。
-- R3: 停止対象は、session_id の部分一致ではなく、正確な argv のトークン
-  （`--session-id <uuid>` がちょうど1つ、かつ `--settings <path>` の正規化パスがランのものと一致）と、
-  期待する uid・pid・開始時刻で識別する。signal の直前に開始時刻を再照合する（pid の再利用対策）。
-  開始時刻が無い・読めないものは停止しない。
+- 観測は独立した2経路: カーネル（libproc の `proc_listallpids`・`proc_pidinfo`）と `/bin/ps`。
+  どちらかが失敗・異常（timeout・OSError・非0終了・解析できない行・自分自身を欠く一覧）なら ObservationError。
+  一覧は2経路の**和集合**を使い、片方の一覧に載っていないことを「不在」の根拠にしない（H4 P1）。
+  さらに呼び出し側（supervise.collector）が、登録簿の pid を一覧とは独立に直接確認する。
+- 生存・ゾンビ・uid・開始時刻はカーネルから読む（`os.kill(pid, 0)` と食い違えば ObservationError）。
+  開始時刻はマイクロ秒単位（`秒.マイクロ秒`）。
+- 識別は正確な argv のトークン（sysctl KERN_PROCARGS2）・uid・開始時刻（H3 R3）。
+- signal は、各 pid に送る**直前**に、uid・開始時刻・完全な argv をもう一度照合し、一致したときだけ送る（H4 P2）。
+  照合できない・一致しない（exec による argv の変化・pid の再利用・uid の変化）ものには送らない。
+  照合と送信の間のごく短い時間は、pidfd 相当の原子的な手段が macOS に無いため残る（既知の限界）。
 """
 import ctypes
 import ctypes.util
+import errno
 import os
 import signal
 import subprocess
@@ -29,6 +33,58 @@ def _ps(args):
     return out.returncode, out.stdout
 
 
+# --- カーネルからの観測（macOS: libproc） ---
+_PROC_PIDTBSDINFO, _PROC_PIDT_SHORTBSDINFO, _SZOMB = 3, 13, 5
+_libproc_handle = None
+
+
+class _ShortBsdInfo(ctypes.Structure):
+    _fields_ = [("pid", ctypes.c_uint32), ("ppid", ctypes.c_uint32), ("pgid", ctypes.c_uint32),
+                ("status", ctypes.c_uint32), ("comm", ctypes.c_char * 16), ("flags", ctypes.c_uint32),
+                ("uid", ctypes.c_uint32), ("gid", ctypes.c_uint32), ("ruid", ctypes.c_uint32),
+                ("rgid", ctypes.c_uint32), ("svuid", ctypes.c_uint32), ("svgid", ctypes.c_uint32),
+                ("rfu", ctypes.c_uint32)]
+
+
+class _BsdInfo(ctypes.Structure):
+    _fields_ = [("flags", ctypes.c_uint32), ("status", ctypes.c_uint32), ("xstatus", ctypes.c_uint32),
+                ("pid", ctypes.c_uint32), ("ppid", ctypes.c_uint32), ("uid", ctypes.c_uint32),
+                ("gid", ctypes.c_uint32), ("ruid", ctypes.c_uint32), ("rgid", ctypes.c_uint32),
+                ("svuid", ctypes.c_uint32), ("svgid", ctypes.c_uint32), ("rfu_1", ctypes.c_uint32),
+                ("comm", ctypes.c_char * 16), ("name", ctypes.c_char * 32), ("nfiles", ctypes.c_uint32),
+                ("pgid", ctypes.c_uint32), ("pjobc", ctypes.c_uint32), ("e_tdev", ctypes.c_uint32),
+                ("e_tpgid", ctypes.c_uint32), ("nice", ctypes.c_int32), ("start_tvsec", ctypes.c_uint64),
+                ("start_tvusec", ctypes.c_uint64)]
+
+
+def _libproc():
+    global _libproc_handle
+    if _libproc_handle is None:
+        if sys.platform != "darwin":
+            raise ObservationError("kernel process observation is only implemented for macOS")
+        try:
+            _libproc_handle = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        except OSError as exc:
+            raise ObservationError("libproc unavailable: %s" % exc)
+    return _libproc_handle
+
+
+def kernel_pids():
+    """カーネルの全プロセスの pid。失敗・自分自身を欠く一覧は ObservationError。"""
+    lib = _libproc()
+    n = lib.proc_listallpids(None, 0)
+    if n <= 0:
+        raise ObservationError("proc_listallpids failed")
+    buf = (ctypes.c_int * (n + 256))()
+    m = lib.proc_listallpids(buf, ctypes.sizeof(buf))
+    if m <= 0:
+        raise ObservationError("proc_listallpids failed")
+    pids = {p for p in buf[:m] if p > 0}
+    if os.getpid() not in pids:
+        raise ObservationError("partial kernel process list (own process missing)")
+    return pids
+
+
 def _exists_by_kill(pid):
     try:
         os.kill(pid, 0)
@@ -39,42 +95,82 @@ def _exists_by_kill(pid):
     return True
 
 
-def pid_status(pid):
-    """'absent'／'alive'／'zombie'。存在するのに状態を読めなければ ObservationError。"""
-    if not isinstance(pid, int) or pid <= 0:
-        return "absent"
-    if not _exists_by_kill(pid):
-        return "absent"
-    rc, text = _ps(["-o", "stat=", "-p", str(pid)])
-    if rc != 0 or not text.strip():
+def kinfo(pid):
+    """カーネルの短い情報 {pid, ppid, pgid, uid, zombie}。不在なら None。読めなければ ObservationError。
+
+    終了処理の途中（libproc は「無し」、kill(0) は「有り」、p_stat はまだゾンビでない）の一瞬は、
+    短く待って見直す。それでも食い違うなら ObservationError（不在とはみなさない）。
+    """
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return None
+    detail = None
+    for attempt in range(50):
+        info = _ShortBsdInfo()
+        r = _libproc().proc_pidinfo(pid, _PROC_PIDT_SHORTBSDINFO, 0, ctypes.byref(info), ctypes.sizeof(info))
+        if r == ctypes.sizeof(info):
+            return {"pid": int(info.pid), "ppid": int(info.ppid), "pgid": int(info.pgid), "uid": int(info.uid),
+                    "zombie": info.status == _SZOMB}
+        err = ctypes.get_errno()
         if not _exists_by_kill(pid):
-            return "absent"
-        raise ObservationError("cannot read state of pid %d" % pid)
-    return "zombie" if text.strip().startswith("Z") else "alive"
+            return None
+        # libproc は終了済み（ゾンビ）の情報を返さない。sysctl KERN_PROC_PID の p_stat で確かめる
+        stat_ = _kern_proc_stat(pid)
+        if stat_ == _SZOMB:
+            return {"pid": pid, "ppid": None, "pgid": None, "uid": None, "zombie": True}
+        if stat_ is None and not _exists_by_kill(pid):
+            return None
+        detail = "errno %d, p_stat %r" % (err, stat_)
+        time.sleep(0.01)
+    raise ObservationError("cannot read kernel info of pid %d (%s)" % (pid, detail))
+
+
+_KERN_PROC, _KERN_PROC_PID, _KINFO_PROC_SIZE, _P_STAT_OFFSET, _P_PID_OFFSET = 14, 1, 648, 36, 40
+
+
+def _kern_proc_stat(pid):
+    """sysctl KERN_PROC_PID の p_stat（不在なら None）。読めなければ ObservationError。"""
+    libc = _sysctl_libc()
+    mib = (ctypes.c_int * 4)(_CTL_KERN, _KERN_PROC, _KERN_PROC_PID, pid)
+    buf = ctypes.create_string_buffer(_KINFO_PROC_SIZE)
+    size = ctypes.c_size_t(_KINFO_PROC_SIZE)
+    if libc.sysctl(mib, 4, buf, ctypes.byref(size), None, 0) != 0:
+        raise ObservationError("sysctl KERN_PROC_PID failed for pid %d" % pid)
+    if size.value == 0:
+        return None
+    raw = buf.raw[:size.value]
+    if size.value != _KINFO_PROC_SIZE or int.from_bytes(raw[_P_PID_OFFSET:_P_PID_OFFSET + 4], "little") != pid:
+        raise ObservationError("unexpected kinfo_proc for pid %d" % pid)
+    return raw[_P_STAT_OFFSET]
+
+
+def pid_status(pid):
+    """'absent'／'alive'／'zombie'。観測できなければ ObservationError。"""
+    info = kinfo(pid)
+    if info is None:
+        return "absent"
+    return "zombie" if info["zombie"] else "alive"
 
 
 def start_time(pid):
-    """開始時刻。不在・ゾンビなら None。存在するのに読めなければ ObservationError。"""
-    if pid_status(pid) != "alive":
+    """開始時刻（`秒.マイクロ秒`、カーネル）。不在・ゾンビなら None。別uidなら 'foreign-uid'。
+    存在するのに読めなければ ObservationError。"""
+    info = kinfo(pid)
+    if info is None or info["zombie"]:
         return None
-    rc, text = _ps(["-o", "lstart=", "-p", str(pid)])
-    if rc != 0 or not text.strip():
+    if info["uid"] != os.getuid():
+        return "foreign-uid"  # 記録された開始時刻と一致することはない（別uidのプロセスは本人ではない）
+    b = _BsdInfo()
+    r = _libproc().proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(b), ctypes.sizeof(b))
+    if r != ctypes.sizeof(b):
         if pid_status(pid) != "alive":
             return None
         raise ObservationError("cannot read start time of pid %d" % pid)
-    return " ".join(text.split())
+    return "%d.%06d" % (b.start_tvsec, b.start_tvusec)
 
 
 def uid_of(pid):
-    rc, text = _ps(["-o", "uid=", "-p", str(pid)])
-    if rc != 0 or not text.strip():
-        if pid_status(pid) != "alive":
-            return None
-        raise ObservationError("cannot read uid of pid %d" % pid)
-    try:
-        return int(text.strip())
-    except ValueError:
-        raise ObservationError("unparseable uid for pid %d" % pid)
+    info = kinfo(pid)
+    return None if info is None else info["uid"]
 
 
 # --- 正確な argv（macOS: sysctl KERN_PROCARGS2） ---
@@ -104,10 +200,16 @@ def argv(pid):
     buf = ctypes.create_string_buffer(argmax.value)
     size = ctypes.c_size_t(argmax.value)
     mib3 = (ctypes.c_int * 3)(_CTL_KERN, _KERN_PROCARGS2, pid)
-    if libc.sysctl(mib3, 3, buf, ctypes.byref(size), None, 0) != 0:
+    for attempt in range(5):  # 起動・exec の途中の一瞬は読めないことがある: 短く再試行してから unknown
+        size = ctypes.c_size_t(argmax.value)
+        if libc.sysctl(mib3, 3, buf, ctypes.byref(size), None, 0) == 0:
+            break
+        err = ctypes.get_errno()
         if pid_status(pid) != "alive":
             return None
-        raise ObservationError("cannot read argv of pid %d (errno %d)" % (pid, ctypes.get_errno()))
+        time.sleep(0.02)
+    else:
+        raise ObservationError("cannot read argv of pid %d (errno %d)" % (pid, err))
     data = buf.raw[:size.value]
     if len(data) < 4:
         raise ObservationError("argv buffer too short")
@@ -183,24 +285,39 @@ def argv_matches(av, ident):
             and os.path.realpath(settings[0]) == ident.settings_path)
 
 
+def all_pids():
+    """カーネルと ps の和集合（ゾンビ・不在を除く）。どちらかの経路が観測できなければ ObservationError。"""
+    pids = kernel_pids() | {row["pid"] for row in snapshot()}
+    alive_pids = set()
+    for pid in pids:
+        if pid_status(pid) == "alive":
+            alive_pids.add(pid)
+    return alive_pids
+
+
+def run_process_matches(pid, ident):
+    """pid が識別子に正確に一致するか（uid・argv）。不在なら False。観測できなければ ObservationError。"""
+    info = kinfo(pid)
+    if info is None or info["zombie"] or info["uid"] != ident.uid:
+        return False
+    av = argv(pid)
+    return av is not None and argv_matches(av, ident)
+
+
 def find_run_processes(ident):
     """識別子に正確に一致するプロセス [(pid, 開始時刻)]。観測できなければ ObservationError。
 
-    ps の起動引数の文字列で候補を絞ってから（正確なトークンを持つなら必ず部分文字列として現れる）、
-    候補ごとに sysctl の正確な argv で照合する。
+    ps の起動引数の文字列は信用せず、和集合のすべての同uidのプロセスを sysctl の正確な argv で照合する。
     """
     me = os.getpid()
     found = []
-    for row in snapshot():
-        if row["pid"] == me or row["uid"] != ident.uid or ident.session_id not in row["command"]:
+    for pid in sorted(all_pids()):
+        if pid == me or not run_process_matches(pid, ident):
             continue
-        av = argv(row["pid"])
-        if av is None or not argv_matches(av, ident):
-            continue
-        st = start_time(row["pid"])
+        st = start_time(pid)
         if st is None:
             continue
-        found.append((row["pid"], st))
+        found.append((pid, st))
     return found
 
 
@@ -233,58 +350,67 @@ def alive(pid):
 
 
 # --- 停止 ---
-def _signal_verified(targets, sig):
-    """signal の直前に開始時刻を再照合し、一致したものだけに送る（pid の再利用対策）。
+def _signal_verified(targets, sig, verify, details):
+    """各 pid に送る直前に verify(pid, 開始時刻)（uid・開始時刻・完全な argv）で照合し、一致したときだけ送る。
 
-    全員の照合を先に済ませてから、targets の順（呼び出し側が親＝起動スタブを先頭にする）で続けて送る。
-    1件ずつ「照合→送信」にすると、照合（ps）の間に親が子の終了を先に記録してしまう。
+    targets の順（呼び出し側が親＝起動スタブを先頭にする）で、1件ずつ「照合→送信」する
+    （照合はカーネルと sysctl だけで、外部コマンドを使わないので、照合と送信の間は短い）。
+    照合できない（ObservationError）ものには送らず、unknown とする。一致しないものは skipped に記録する。
     """
-    verified = []
     for pid, st in list(targets.items()):
-        current = start_time(pid)
-        if current is None or current != st:
-            targets.pop(pid, None)  # 不在、または pid が再利用された: 送らない
+        try:
+            ok = verify(pid, st)
+        except ObservationError as exc:
+            details["unknown"] = True
+            details.setdefault("verify_errors", []).append("%d: %s" % (pid, exc))
             continue
-        verified.append(pid)
-    for pid in verified:
+        if not ok:
+            details.setdefault("skipped", []).append(pid)  # exec・pid 再利用・uid 変化の疑い: 送らない
+            continue
         try:
             os.kill(pid, sig)
         except ProcessLookupError:
-            targets.pop(pid, None)
+            pass
 
 
 def terminate(collect, grace, confirm):
     """collect() が返す {pid: 開始時刻} を、SIGTERM → 猶予 → SIGKILL → 不在確認。
 
+    collect.verify(pid, 開始時刻) が必須（signal 直前の再照合）。無ければ何も送らず unknown。
     戻り値: {"absent": bool, "unknown": bool, ...}。観測できなければ unknown=True・absent=False。
     """
     details = {"term_targets": [], "kill_targets": [], "remaining": [], "unknown": False, "absent": False}
+    verify = getattr(collect, "verify", None)
+    if verify is None:
+        details["unknown"] = True
+        details["error"] = "no signal-time verifier"
+        return details
     try:
         targets = collect()
-        details["term_targets"] = sorted(targets)
+        details["term_targets"] = list(targets)
         if not targets:
-            details["absent"] = True
+            details["absent"] = not details["unknown"]
             return details
-        _signal_verified(dict(targets), signal.SIGTERM)
+        _signal_verified(dict(targets), signal.SIGTERM, verify, details)
         deadline = time.monotonic() + grace
         while time.monotonic() < deadline:
             targets = collect()
             if not targets:
-                details["absent"] = True
+                details["absent"] = not details["unknown"]
                 return details
             time.sleep(0.05)
         targets = collect()
-        details["kill_targets"] = sorted(targets)
-        _signal_verified(dict(targets), signal.SIGKILL)
+        details["kill_targets"] = list(targets)
+        _signal_verified(dict(targets), signal.SIGKILL, verify, details)
         deadline = time.monotonic() + confirm
         while time.monotonic() < deadline:
             targets = collect()
             if not targets:
-                details["absent"] = True
+                details["absent"] = not details["unknown"]
                 return details
             time.sleep(0.05)
         details["remaining"] = sorted(collect())
-        details["absent"] = not details["remaining"]
+        details["absent"] = not details["remaining"] and not details["unknown"]
         return details
     except ObservationError as exc:
         details["unknown"] = True

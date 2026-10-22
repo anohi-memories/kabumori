@@ -2,6 +2,7 @@
 
 G10 Issue #323 の TASK `g10-phase2-runner-fake-claude-impl-20261021` の成果物。
 H3 レビュー指摘 R1（P1）・R2（P1）・R3（P2）の修正は TASK `g10-phase2-pr423-h3-c3-p1x2-p2-source-fix-20261022`（下の「H3 レビュー修正」）。
+H4 再レビュー指摘 P1×2・P2×1 の修正は TASK `g10-phase2-pr423-h4-c4-issue-binding-partial-ps-signal-20261022`（下の「H4 レビュー修正」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -31,6 +32,7 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 | `g10runner/supervise.py` | 停止（識別確認→SIGTERM→猶予→SIGKILL→不在確認）・S1・S2 | v5.1 §2、v5.2 §1-4 |
 | `g10runner/registry.py` | プロセス登録簿（不変項目のダイジェスト・状態遷移） | v5 §7-1 |
 | `g10runner/procs.py` | 観測（`ps` の失敗は `ObservationError`＝unknown）・正確な識別（sysctl の argv・settings・uid・開始時刻）・開始時刻を再照合してからの signal（ゾンビは不在とみなす） | v5.3 §5、H3 R2・R3 |
+| `g10runner/issue.py` | Issue #323 の取得証拠（取得係＝witness 鍵の署名）と、要求の本文との結合の検証 | v5 §5-4、H4 P1 |
 | `g10runner/binding.py` | 起動要求と承認済みTASK・ポリシーの結合（本文の再ハッシュ・実行項目の照合・型・形式・期限） | v5.3 §2-3、H3 R1 |
 | `g10runner/adapter.py` | **偽Claude専用**の実行アダプタ（実行ファイル固定・環境変数の許可リスト） | TASK 実行6 |
 | `g10runner/report.py`・`notify.py` | ローカルREPORT（実行事実／自己申告の分離・GitHub用の下書き）・通知（失敗時も NEEDS_ATTENTION） | v5 §10-4・§10-5 |
@@ -60,6 +62,22 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 - 試験: 修正前のコードで再現試験 9件を実行し、16件（subTest 単位）が失敗することを確認してから修正（`tests/test_review_regressions.py`）。
   単体試験 `tests/test_procs_identity.py`、変異試験に H3 用 15件を追加（合計 32件）。
 
+## H4 レビュー修正（TASK 3・2026-10-22）
+- **P1 Issue #323 との結合**: 取得係（`issue.IssueWitness`）が Issue #323 を新しく取得し、runner とは別の witness 鍵で
+  本文の SHA-256・state・作成者・編集者・更新時刻・取得時刻に署名する。制御側は CLAIM の前にこの証拠を取得して照合し
+  （取得失敗・本文不一致・CLOSED・別Issue・信頼できない作成者/編集者は起動しない）、要求に同梱する。CLAIM には証拠のダイジェストを記録。
+  実行側（agent の受理前・スタブの開始時・臨界区間の最終判定）は、証拠の署名・鮮度（`issue_evidence_max_age`、既定 120秒）と、
+  要求の prompt が証拠の本文と**完全に同じ**（生の SHA-256 と NORM-1 の両方）であることを検証する。TASK側の status: ready・slot・owner は
+  本文そのものの検証（meta）で確かめる。runner 鍵だけでは Issue に無いTASK・古い本文を受理させられない。CONFIRM・ENVELOPE の両方で必須。
+- **P1 部分観測**: プロセス一覧は、カーネル（libproc）と `/bin/ps` の**和集合**。どちらかの失敗・自分自身を欠く一覧は unknown。
+  ps の文字列は識別に使わず、同uidの全プロセスを sysctl の argv で照合する。さらに登録簿の子（pid・開始時刻）を一覧とは独立に直接確認する。
+  生存・ゾンビ・uid・開始時刻（マイクロ秒）はカーネルから読み、kill(0) と食い違う状態が続けば unknown（終了処理中の一瞬は短く待つ。
+  ゾンビは sysctl の p_stat で確認）。
+- **P2 signal 直前の再照合**: `terminate` は collector の `.verify(pid, 開始時刻)` を必須とし、各 pid に送る直前に uid・開始時刻・完全な argv
+  （ランの識別子、またはスタブの識別子）を照合して、一致したときだけ送る。照合できなければ送らず unknown、一致しなければ skipped。
+- 試験: `tests/test_review_regressions_h4.py`（H4 の反例。修正前HEAD fa1967e8 で 4件すべて失敗）、`tests/test_issue_binding.py`、
+  `tests/test_observation_h4.py`。変異試験に H4 用 15件を追加（合計 47件）。
+
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。
 - 実際の非対称署名（Ed25519／ECDSA と `openssl`）・人の鍵のパスフレーズ・鍵の保管（試験用 HMAC のみ）。
@@ -67,9 +85,11 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 - GitHub からの Issue の取得と HTTP `Date` ヘッダ（呼び出し側が本文・メタ情報・参照時刻を渡す形。Phase 1 の取得コードとは未接続）。
 - 作業フォルダの実際の `git` 取得（偽の作業フォルダのみ）。
 - `needs_input` の判定（自己申告の `pending_questions:` 行による暫定の判定）。
-- ENVELOPE モードの残余: 実行側は Issue 本文を自分で取得・検証できないため、runner の鍵を持つ者は、ENVELOPE の範囲内で**正しい形式の別のTASK本文**を作って署名できる（R1 の修正で防げるのは、承認済みTASKと要求の食い違い・範囲外への拡大まで）。CONFIRM モードは人が承認した task_sha256 に縛られる。
-- 開始時刻は `ps -o lstart`（1秒単位）。照合と signal の間のごく短い時間の pid 再利用は防げない（pidfd が無い macOS の限界）。
-- argv の取得（sysctl）は同じuidのプロセスだけで確認。別UID（専用macOSユーザー）のプロセスの argv 取得は未検証。
+- Issue の取得: 実際の GitHub からの取得（gh／API・HTTP Date・編集者の取得方法）は未実装。取得元は差し替え可能なインターフェースで、試験は模擬（MockIssueSource）。witness の鍵も試験用 HMAC。**witness 鍵を持つ者は任意の本文を「取得した」と署名できる**ため、実運用では取得係を runner と別の権限（別uid・別鍵）に置く必要がある（未実装）。
+- Issue の証拠は取得から最大 `issue_evidence_max_age` 秒有効。その間に Issue が書き換わっても、起動は止まらない（finalize の本文照合で事後に検出し HALT）。
+- 照合と signal の間のごく短い時間の pid 再利用・exec は防げない（pidfd 相当が無い macOS の限界。照合はカーネルと sysctl だけで行い、外部コマンドを挟まない）。
+- カーネル一覧と ps の**両方**が同じプロセスを欠き、かつ登録簿に無い子孫（逃げた孫など）は見つけられない（両経路の同時の偽装が必要）。
+- argv・開始時刻の取得は同じuidのプロセスだけで可能。別uidのプロセスの argv は読めない（試験で確認: 読めないものは unknown）。専用macOSユーザー（別uid）で実行する設計では、監督側の権限が別途必要（未検証）。
 - binding の model→model_id 照合は `meta.validate_task` の照合と二重（片方だけを壊す変異は検出されないため、変異試験の対象外）。
 - ログと処理済み番号を一緒に古い状態へ戻すことの検出（既知の限界。試験 `test_whole_log_and_seen_rolled_back_together_is_a_known_limit` で記録）。
 

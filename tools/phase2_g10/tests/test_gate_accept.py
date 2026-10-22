@@ -24,6 +24,7 @@ class TestClaim(unittest.TestCase):
         return make_body(self.env.policy, approval_id=approval, **kw)
 
     def claim(self, body, issue=TRUSTED_ISSUE, ref=None):
+        self.env.issue.publish(body)
         return self.c.try_claim(body, issue, time.time() if ref is None else ref)
 
     def test_requires_confirm_or_envelope(self):
@@ -82,6 +83,7 @@ class TestClaim(unittest.TestCase):
     def test_clock_rules(self):
         self.env.envelope()
         self.assertEqual(self.claim(self.body(), ref=time.time() + 400)[1], "clock_skew")
+        self.env.issue.publish(self.body())
         self.assertEqual(self.c.try_claim(self.body(), TRUSTED_ISSUE, None)[1], "reference_clock_unavailable")
 
     def test_clock_anomaly_halts(self):
@@ -99,9 +101,11 @@ class TestClaim(unittest.TestCase):
         env.envelope()
         body = make_body(env.policy)
         clock["t"] = jstclock.next_rollover(base) - 1
+        env.issue.publish(body)
         self.assertIsNotNone(env.control.try_claim(body, TRUSTED_ISSUE, clock["t"])[0])
         body2 = make_body(env.policy, approval_id="g10-p2-test-0002")
         clock["t"] = jstclock.next_rollover(base)
+        env.issue.publish(body2)
         run_id, reason = env.control.try_claim(body2, TRUSTED_ISSUE, clock["t"])
         self.assertIsNone(run_id)
         self.assertIn("envelope does not authorize", reason)
@@ -112,8 +116,9 @@ class TestClaim(unittest.TestCase):
         env.envelope()
         ok = 0
         for i in range(12):
-            run_id, reason = env.control.try_claim(make_body(env.policy, approval_id="g10-p2-rate-%04d" % i),
-                                                   TRUSTED_ISSUE, time.time())
+            body = make_body(env.policy, approval_id="g10-p2-rate-%04d" % i)
+            env.issue.publish(body)
+            run_id, reason = env.control.try_claim(body, TRUSTED_ISSUE, time.time())
             ok += run_id is not None
         self.assertEqual(ok, 10)  # 直近10分で10起動まで
         self.assertIn("rate guard", reason)
@@ -140,6 +145,7 @@ class TestClaim(unittest.TestCase):
         self.addCleanup(env.cleanup)
         env.envelope()
         body = make_body(env.policy)
+        env.issue.publish(body)
         results = []
 
         def worker():
@@ -168,6 +174,7 @@ class TestAccept(unittest.TestCase):
         self.addCleanup(self.env.cleanup)
         self.env.envelope()
         self.body = make_body(self.env.policy)
+        self.env.issue.publish(self.body)
         self.run_id, reason = self.env.control.try_claim(self.body, TRUSTED_ISSUE, time.time())
         self.assertIsNotNone(self.run_id, reason)
         self.path = self.env.layout.request_file(self.run_id)

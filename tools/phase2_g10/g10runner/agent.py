@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 
-from . import binding, jstclock, logs, policy as policy_mod, procs, registry, state
+from . import binding, issue as issue_mod, jstclock, logs, policy as policy_mod, procs, registry, state
 from .chainlog import ChainError, record_hash
 from .fsutil import atomic_write_json, canonical, read_json, touch
 
@@ -19,7 +19,7 @@ REQUIRED_REQUEST_FIELDS = ("request_id", "run_id", "approval_id", "task_id", "se
                            "prompt", "base_ref", "base_sha", "model", "model_id", "effort", "max_minutes",
                            "max_budget_usd", "policy_sha256", "authorization", "claim_seq",
                            "issued_at", "reference_time", "expires_at", "phase2_scope",
-                           "production_permission", "report_mode")
+                           "production_permission", "report_mode", "issue_evidence")
 
 
 class Agent:
@@ -82,6 +82,10 @@ class Agent:
         reason, _ = binding.check_request(req, policy_mod.load(self.layout.policy_pub))
         if reason:
             return reason
+        # H4 P1: runner の自己申告ではなく、取得係が署名した Issue #323 の本文と完全に一致すること
+        reason = issue_mod.check_request_evidence(req, self.verifier, self.policy, local_now)
+        if reason:
+            return "issue binding: " + reason
         if not (req["issued_at"] - jstclock.CLOCK_TOLERANCE_SECONDS <= local_now < req["expires_at"]):
             return "request expired or not yet valid"
         if req["policy_sha256"] != policy_mod.load(self.layout.policy_pub)["_digest"]:

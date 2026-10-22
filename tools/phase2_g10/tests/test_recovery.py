@@ -18,6 +18,7 @@ class TestCrashPoints(EnvTestCase):
 
     def test_crash_after_accepted_before_stub(self):
         body = make_body(self.env.policy)
+        self.env.issue.publish(body)
         run_id, _ = self.env.control.try_claim(body, TRUSTED_ISSUE, time.time())
         req, _ = self.env.agent.load_request(self.env.layout.request_file(run_id))
         self.assertIsNotNone(self.env.agent.accept(req)[0])
@@ -75,6 +76,7 @@ class TestReconcile(EnvTestCase):
 
     def test_consistent_logs_pass(self):
         body = make_body(self.env.policy)
+        self.env.issue.publish(body)
         run_id, _ = self.env.control.try_claim(body, TRUSTED_ISSUE, time.time())
         req, _ = self.env.agent.load_request(self.env.layout.request_file(run_id))
         self.env.agent.accept(req)

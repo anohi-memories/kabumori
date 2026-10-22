@@ -1,6 +1,7 @@
 """署名の境界。仕様 v5.3 §3・v5.4 §1。
 
-役割（role）: runner（ランナー鍵）／human（人の鍵・パスフレーズつき）／agent（実行側の鍵）。
+役割（role）: runner（ランナー鍵）／human（人の鍵・パスフレーズつき）／agent（実行側の鍵）／
+witness（Issue #323 の取得係の鍵。runner とは別。H4 P1）。
 本TASKでは、実際の非対称署名（Ed25519／ECDSA と openssl）は実装しない（NOT_VERIFIED）。
 試験用に、役割ごとに別の鍵を持つ HMAC の署名器を使い、「役割の取り違え・改ざん・欠落」を
 検出できることだけを検証する。HmacTestSigner を実運用に使ってはならない。
@@ -8,7 +9,7 @@
 import hashlib
 import hmac
 
-ROLES = ("runner", "human", "agent")
+ROLES = ("runner", "human", "agent", "witness")
 
 
 class SignatureError(ValueError):
@@ -52,7 +53,8 @@ class HmacTestVerifier:
 
 
 def test_keys():
-    return {"runner": b"test-runner-key", "human": b"test-human-key", "agent": b"test-agent-key"}
+    return {"runner": b"test-runner-key", "human": b"test-human-key", "agent": b"test-agent-key",
+            "witness": b"test-witness-key"}
 
 
 TEST_KEYS_FILE = "test_keys.json"

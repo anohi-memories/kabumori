@@ -102,11 +102,28 @@ class TestIdentity(unittest.TestCase):
             self.assertEqual(procs.argv(p.pid)[-4:], ["--session-id", SESSION, "--settings", settings])
             found = [pid for pid, _ in procs.find_run_processes(procs.RunIdentity(SESSION, settings, os.getuid()))]
             self.assertEqual(found, [p.pid])
-            self.assertEqual(procs.find_run_processes(procs.RunIdentity(SESSION, settings, os.getuid() + 1)), [])
+            # どのプロセスも持たない uid の識別子: 一致なし（自分の uid のプロセスは uid の照合で除外される）
+            self.assertEqual(procs.find_run_processes(procs.RunIdentity(SESSION, settings, 2 ** 31 - 7)), [])
+            self.assertFalse(procs.run_process_matches(p.pid, procs.RunIdentity(SESSION, settings, 2 ** 31 - 7)))
         finally:
             for q in (p, decoy):
                 q.kill()
                 q.wait()
+
+    def test_foreign_uid_argv_unreadable_is_unknown(self):
+        """別uidのプロセスの argv は読めない: 読めないものを「一致しない」とせず ObservationError（unknown）。"""
+        foreign = [pid for pid in procs.all_pids() if (procs.kinfo(pid) or {}).get("uid") not in (None, os.getuid())]
+        self.assertTrue(foreign, "no foreign-uid process to probe")
+        ident_uid = procs.kinfo(foreign[0])["uid"]
+        results = []
+        for pid in [q for q in foreign if (procs.kinfo(q) or {}).get("uid") == ident_uid][:3]:
+            if procs.kinfo(pid):
+                try:
+                    results.append(procs.run_process_matches(pid, procs.RunIdentity(SESSION, "/tmp/x", ident_uid)))
+                except procs.ObservationError:
+                    results.append("unknown")
+        self.assertIn("unknown", results)
+        self.assertNotIn(True, results)
 
     def test_missing_start_time_is_not_identity(self):
         p = _sleeper()
@@ -121,11 +138,37 @@ class TestIdentity(unittest.TestCase):
     def test_pid_reuse_start_mismatch_is_not_signalled(self):
         p = _sleeper()
         try:
-            targets = {p.pid: "Mon Jan  1 00:00:00 2001"}  # 別のプロセスの開始時刻（pid 再利用を模擬）
-            procs._signal_verified(targets, 9)
+            stale = "978307200.000000"  # 別のプロセスの開始時刻（pid 再利用を模擬）
+            details = {"unknown": False}
+            procs._signal_verified({p.pid: stale}, 9, lambda pid, st: procs.start_time(pid) == st, details)
             time.sleep(0.2)
             self.assertIsNone(p.poll(), "signal was sent to a process whose start time did not match")
-            self.assertEqual(targets, {})
+            self.assertEqual(details.get("skipped"), [p.pid])
+        finally:
+            p.kill()
+            p.wait()
+
+    def test_verify_error_is_unknown_and_not_signalled(self):
+        p = _sleeper()
+        try:
+            def broken(pid, st):
+                raise procs.ObservationError("cannot verify")
+            details = {"unknown": False}
+            procs._signal_verified({p.pid: procs.start_time(p.pid)}, 9, broken, details)
+            time.sleep(0.2)
+            self.assertIsNone(p.poll())
+            self.assertTrue(details["unknown"])
+        finally:
+            p.kill()
+            p.wait()
+
+    def test_terminate_without_verifier_sends_nothing(self):
+        p = _sleeper()
+        try:
+            details = procs.terminate(lambda: {p.pid: procs.start_time(p.pid)}, 0.2, 0.2)
+            self.assertTrue(details["unknown"])
+            self.assertFalse(details["absent"])
+            self.assertIsNone(p.poll())
         finally:
             p.kill()
             p.wait()
@@ -134,7 +177,9 @@ class TestIdentity(unittest.TestCase):
         p = _sleeper()
         try:
             st = procs.start_time(p.pid)
-            details = procs.terminate(lambda: {p.pid: st} if p.poll() is None else {}, 2.0, 2.0)
+            collect = (lambda: {p.pid: st} if p.poll() is None else {})
+            collect.verify = lambda pid, start: procs.start_time(pid) == start
+            details = procs.terminate(collect, 2.0, 2.0)
             self.assertTrue(details["absent"])
             self.assertFalse(details["unknown"])
         finally:

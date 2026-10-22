@@ -9,12 +9,12 @@ import os
 import time
 import uuid
 
-from . import binding, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state
+from . import binding, issue as issue_mod, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state
 from .chainlog import ChainError, ChainLog
 from .fsutil import FileLock, atomic_write_json, canonical, read_json, sha256_hex
 from .stub import tree_digest
 
-TRUSTED_LOGIN = "anohi-memories"
+TRUSTED_LOGIN = issue_mod.TRUSTED_LOGIN
 FAILURES = ("ended_checks_failed", "runner_error", "interrupted", "runner_crashed")
 NEUTRAL = ("ended_checks_passed", "needs_input")
 
@@ -24,8 +24,9 @@ class Hold(Exception):
 
 
 class Control:
-    def __init__(self, layout, signer, verifier, policy, notifier=None, now=time.time):
+    def __init__(self, layout, signer, verifier, policy, notifier=None, now=time.time, witness=None):
         self.layout = layout
+        self.witness = witness  # Issue #323 の取得係（H4 P1）。無ければ起動しない
         self.signer = signer
         self.verifier = verifier
         self.policy = policy
@@ -210,6 +211,17 @@ class Control:
         result = meta.validate_task(body, self.policy)
         if not result.ok:
             return None, "task invalid: " + "; ".join(result.problems)
+        # H4 P1: Issue #323 を新しく取得し、現役TASKの本文と完全に同じであることを確認する（fail-closed）
+        if self.witness is None:
+            return None, "no issue witness (cannot fetch Issue #323)"
+        try:
+            evidence = self.witness.observe()
+        except Exception as exc:  # 取得の失敗は種類を問わず起動しない
+            return None, "issue fetch failed: %s" % type(exc).__name__
+        problem = issue_mod.check_evidence(evidence, self.verifier, body, local_now,
+                                           policy_mod.timing(self.policy, "issue_evidence_max_age"))
+        if problem:
+            return None, "issue binding: " + problem
         f = result.fields
         try:
             computed = norm.compute_hash(body)
@@ -232,7 +244,7 @@ class Control:
             "model_id": f["phase2_model_id"], "effort": f["effort"], "max_minutes": f["max_minutes"],
             "max_budget_usd": f["max_budget_usd"], "policy_sha256": self.policy["_digest"],
             "phase2_scope": f["phase2_scope"], "production_permission": f["production_permission"],
-            "report_mode": f["phase2_report_mode"],
+            "report_mode": f["phase2_report_mode"], "issue_evidence": evidence,
         }
         c = st.confirms.get(f["phase2_approval_id"])
         if c and c.get("task_sha256") == computed and c.get("policy_sha256") == self.policy["_digest"]:
@@ -271,6 +283,7 @@ class Control:
         for key in ("approval_id", "task_id", "task_sha256", "model", "model_id", "effort", "max_minutes",
                     "max_budget_usd", "base_ref", "base_sha", "policy_sha256"):
             claim_payload[key] = base[key]
+        claim_payload["issue_evidence_sha256"] = issue_mod.evidence_digest(evidence)
         claim, reason = self.ledger.append_if("CLAIM", claim_payload, self.signer, "runner", local_now, gate)
         if claim is None:
             if reason and reason.startswith("rate guard"):

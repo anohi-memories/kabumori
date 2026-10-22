@@ -164,6 +164,7 @@ class TestHaltUnhalt(EnvTestCase):
         self.assertEqual(e["state"], "interrupted")
         self.assertEqual(e["stop_reason"], "emergency_stop")
         body2 = make_body(self.env.policy, approval_id="g10-p2-test-0002")
+        self.env.issue.publish(body2)
         self.assertIn("halted", self.env.control.try_claim(body2, TRUSTED_ISSUE, time.time())[1])
 
     def test_unhalt_refused_while_process_present(self):
@@ -206,6 +207,7 @@ class TestHaltUnhalt(EnvTestCase):
         self.assertFalse(state.flags_say_halt(self.env.layout))
         self.assertFalse(self.env.control.read_state().halted)
         body = make_body(self.env.policy, approval_id="g10-p2-test-0003")
+        self.env.issue.publish(body)
         self.assertIsNotNone(self.env.control.try_claim(body, TRUSTED_ISSUE, time.time())[0])
 
     def test_unhalt_blocks_stubs_while_holding_lock(self):
@@ -226,6 +228,7 @@ class TestHaltUnhalt(EnvTestCase):
         self.env.agent.halt_agent("violation")
         self.assertTrue(self.env.control.read_state().hard_halted)
         body = make_body(self.env.policy)
+        self.env.issue.publish(body)
         self.assertIn("halted", self.env.control.try_claim(body, TRUSTED_ISSUE, time.time())[1])
         self.env.control.unhalt("checked")
         self.env.agent.sync_flags()

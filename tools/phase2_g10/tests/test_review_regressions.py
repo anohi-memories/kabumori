@@ -33,6 +33,8 @@ class R1Binding(EnvTestCase):
         self.env.s2_heartbeat()
         self.body = make_body(self.env.policy)
         self.env.control.confirm("g10-p2-test-0001", norm.compute_hash(self.body))
+        if getattr(self.env, "issue", None) is not None:  # 修正前のコードには Issue の取得がない
+            self.env.issue.publish(self.body)
         self.run_id, reason = self.env.control.try_claim(self.body, TRUSTED_ISSUE, time.time())
         self.assertIsNotNone(self.run_id, reason)
         self.path = self.env.layout.request_file(self.run_id)
@@ -60,6 +62,7 @@ class R1Binding(EnvTestCase):
             ("minutes", lambda r: r.__setitem__("max_minutes", "120")),
             ("base", lambda r: r.__setitem__("base_sha", "f" * 40)),
             ("approval", lambda r: r.__setitem__("approval_id", "g10-p2-other-0009")),
+            ("task hash field", lambda r: r.__setitem__("task_sha256", "e" * 64)),
         ]
         for name, fn in cases:
             with self.subTest(case=name):
