@@ -1,0 +1,93 @@
+✖ G2-AK1 (RK3 + ack): A's NEW post is out, the stale screen B (still showing the OLD posted attempt) presses "I checked X" -- refused, the out post keeps its memory and record, and B is brought to "sending" for A's post and then shows its real answer (72.513084ms)
+✖ G2-AK2: two screens showing the same uncertain attempt press "I checked X" at the same moment -- exactly one clear; the other is refused (nothing cleared by it) and can acknowledge again afterwards; no request (26.836167ms)
+✖ G2-AK3: while an acknowledge is still clearing (removal held), another screen's same-id re-ask does not go out (that screen offers no new post while the attempt is known); after it finishes, a new post can go (23.718792ms)
+✔ G2-AK4: the removal FAILS -- nothing is cleared, the screen says so, the reservation is released (a later acknowledge works) (19.188917ms)
+✔ G2-AK5: sign-out and the same person signing in again while an acknowledge is still clearing -- the new screen shows the attempt until the clear ends; the clear of the old screen still finishes cleanly; nothing is sent (17.745709ms)
+ℹ re-created screen after the clear: {"phase":"result","kind":"uncertain","requestId":"00000000-0000-4000-8000-000000000001"}
+✖ G2-AK6: a stale "I checked X" for the OLD attempt while the process knows a NEWER unresolved one (not out) -- refused as stale, the newer one is kept and shown (20.367792ms)
+✔ KNOWN (H1 #306 POST_ACK_SAME_ID_REASK_OPEN, G1 next TASK, not a new finding): after A acknowledged, B's stale same-id re-ask still goes out -- measured (28.684ms)
+﹣ negative controls (heads with the acknowledge reservation): (1) no reservation -> AK1 clears the out post; (2) no stale check -> AK6 clears the newer attempt; (3) the screen ignores a refused acknowledge -> AK1 does not take over (0.124208ms) # no acknowledge reservation on this head
+✔ KNOWN entrance (same root as POST_ACK_SAME_ID_REASK_OPEN, not a new finding): a PENDING attempt acknowledged while the person signs out and in -- the re-created screen keeps showing it with the same-id re-ask after the clear, and that re-ask goes out (18.882291ms)
+ℹ re-created screen after the clear: {"phase":"result","kind":"pending","requestId":"00000000-0000-4000-8000-000000000001"}
+ℹ tests 9
+ℹ suites 0
+ℹ pass 4
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 447.009709
+
+✖ failing tests:
+
+test at tests/g2-pr450-ack.test.mjs:243:1
+✖ G2-AK1 (RK3 + ack): A's NEW post is out, the stale screen B (still showing the OLD posted attempt) presses "I checked X" -- refused, the out post keeps its memory and record, and B is brought to "sending" for A's post and then shows its real answer (72.513084ms)
+  AssertionError [ERR_ASSERTION]: memory of the out post kept
+  + actual - expected
+  
+  + undefined
+  - '00000000-0000-4000-8000-000000000002'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-ack435/apps/social-mobile/tests/g2-pr450-ack.test.mjs:253:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: '00000000-0000-4000-8000-000000000002',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-pr450-ack.test.mjs:262:1
+✖ G2-AK2: two screens showing the same uncertain attempt press "I checked X" at the same moment -- exactly one clear; the other is refused (nothing cleared by it) and can acknowledge again afterwards; no request (26.836167ms)
+  AssertionError [ERR_ASSERTION]: one clear
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-ack435/apps/social-mobile/tests/g2-pr450-ack.test.mjs:271:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-pr450-ack.test.mjs:280:1
+✖ G2-AK3: while an acknowledge is still clearing (removal held), another screen's same-id re-ask does not go out (that screen offers no new post while the attempt is known); after it finishes, a new post can go (23.718792ms)
+  AssertionError [ERR_ASSERTION]: the same-id re-ask did not go out
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-ack435/apps/social-mobile/tests/g2-pr450-ack.test.mjs:288:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-pr450-ack.test.mjs:332:1
+✖ G2-AK6: a stale "I checked X" for the OLD attempt while the process knows a NEWER unresolved one (not out) -- refused as stale, the newer one is kept and shown (20.367792ms)
+  AssertionError [ERR_ASSERTION]: the newer attempt is kept
+  + actual - expected
+  
+  + undefined
+  - '00000000-0000-4000-8000-000000000002'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-ack435/apps/social-mobile/tests/g2-pr450-ack.test.mjs:343:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: '00000000-0000-4000-8000-000000000002',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
