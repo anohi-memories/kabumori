@@ -1,0 +1,52 @@
+⚠ RELEASE GATE G2-SN1: a screen that loaded BEFORE the send (no stale read at all) must not send a NEW id after the send ended uncertain / pending (66.44225ms) # RELEASE GATE (H1 residual P2): red until a reviewed fix lands
+⚠ RELEASE GATE G2-SN2: the stale screen picks ANOTHER X account for its new id -- still no second request while the first attempt is unresolved (30.03375ms) # RELEASE GATE (H1 residual P2): red until a reviewed fix lands
+✔ G2-SN3: no over-block -- after the other proven ends (rejected, refused) and after the user's "I checked X", the stale screen CAN send a new id (81.629833ms)
+✔ G2-SN4: a sign-out and the same person signing in again (a new session) re-create the stale screen -- its old read lands nowhere, and the new screen shows the unresolved attempt, so no new id can go out (19.578875ms)
+﹣ OBSERVATION G2-SN5 (heads with the send-entry wall only): what a screen that loaded before the send shows when the wall refuses its new id (0.23675ms) # no send-entry wall on this head
+﹣ negative control NC1 (heads with the send-entry wall): without the wall, the gates turn red again (SN1 and SN2 each see a second request) (0.049833ms) # no send-entry wall on this head (nothing to remove)
+✔ negative control NC2: a proven end that keeps the attempt (memory.clear dropped from the proven-end branch) over-blocks on heads with the wall (SN3 turns red), and changes nothing on heads without (35.369459ms)
+✔ negative control NC3: an "uncertain" answer treated as a proven end (memory and record cleared) turns SN4 red on every head; removing the session defences one or two at a time does NOT (layered: re-created screen, cancelled read ignored, and a read applied only while loading) (125.917042ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 2
+ℹ duration_ms 575.910834
+
+✖ failing tests:
+
+test at tests/g2-stale-none-cross-order.test.mjs:186:1
+⚠ RELEASE GATE G2-SN1: a screen that loaded BEFORE the send (no stale read at all) must not send a NEW id after the send ended uncertain / pending (66.44225ms) # RELEASE GATE (H1 residual P2): red until a reviewed fix lands
+  AssertionError [ERR_ASSERTION]: uncertain: no second request (a new id 00000000-0000-4000-8000-000000000002)
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-stale/apps/social-mobile/tests/g2-stale-none-cross-order.test.mjs:191:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-stale-none-cross-order.test.mjs:196:1
+⚠ RELEASE GATE G2-SN2: the stale screen picks ANOTHER X account for its new id -- still no second request while the first attempt is unresolved (30.03375ms) # RELEASE GATE (H1 residual P2): red until a reviewed fix lands
+  AssertionError [ERR_ASSERTION]: no request to another account while the first attempt is unresolved
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-stale/apps/social-mobile/tests/g2-stale-none-cross-order.test.mjs:200:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
