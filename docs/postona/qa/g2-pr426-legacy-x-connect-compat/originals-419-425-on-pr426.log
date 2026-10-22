@@ -1,0 +1,174 @@
+✔ OBSERVATION G2-CB1 (sign-in owner to confirm; by design of PKCE links): a late return of A's sign-in flow after B signed in on the same phone still exchanges with A's stored verifier and replaces B with A, without asking (13.728166ms)
+✔ G2-CB1-S: a late return of A's sign-in flow after a sign-out is refused -- sign-out (auth-js 2.115.0 _removeSession -> removeAllPKCEVerifiers) drops every stored verifier, so nobody is signed in by it (3.518167ms)
+✔ G2-CB2: a return whose code was already used (e.g. a relaunch re-delivering the launch link in a new process) is never a success -- it is refused, with no session change (0.933458ms)
+✔ G2-CB2-E: an expired sign-in return is refused with the expiry message, nobody is signed in, and a second delivery of it stays refused (0.676417ms)
+✔ OBSERVATION G2-CB3 (sign-in owner to confirm): forgetAuthCallbackOutcomes() ("e.g. on sign-out") is called by no product code -- after a sign-out a re-delivered earlier success is answered from memory (no new exchange, no UI effect: the deep-link handler only shows failures) (1.17ms)
+✔ G2-CB4: both landing routes only go home -- they read no URL, parameter or session (a wrong or forged link cannot produce a success screen there) (0.951375ms)
+✖ FINDING G2-CB5 (P3, owner of the X connect screen / G4 server): another person signs in while A's X browser round trip is open -- the exchange still runs with A's token, and the still-mounted screen then tells B "Xアカウントを接続しました @A's handle" (33.850292ms)
+✖ OBSERVATION G2-CB6 (owner G4 server / NOT_VERIFIED): a sign-out while A's X browser round trip is open does not stop it -- the app still sends the callback exchange with A's (signed-out) token; whether the server accepts it is not verified (8.16325ms)
+✔ negative controls: a landing route that reads the link, and a callback completion that turns a refused code into a success, are each caught (19.666875ms)
+✔ G2-CC1 (source map): remembered outcomes have no time limit (only 32 entries, oldest settled dropped first) and are read by exactly two callers -- the in-app browser round trip (always with its own flow id) and the deep-link handler (shows failures only) (3.019084ms)
+✔ G2-CC2 (real SDK, differential to the stub-client flow-binding test): a stale remembered success fed into a NEW flow (old code + new flow id) is refused without touching the new flow's verifier -- the real return of the new flow still signs in its own person (13.477ms)
+✔ G2-CC3: the same person signed in again (a new session) -- re-delivering the old session's link returns the remembered success but changes nothing: no exchange, the new session stays (1.239625ms)
+✔ G2-CC4 (cache "expiry" = eviction): after 32 newer outcomes the old success is forgotten; a re-delivery then goes back to the SDK and is refused (verifier already used) -- an honest failure on the sign-in screen, never a success, current session untouched (0.945958ms)
+✔ G2-CC5: repeated sign-out / sign-in cycles (A, B, A, B) with every earlier link re-delivered after each cycle -- no re-delivery ever changes who is signed in or sends a second exchange (1.825625ms)
+✔ OBSERVATION G2-CC6 (fail-closed): a network failure during the exchange is remembered too -- the same link delivered again after the network is back returns the same failure without retrying; the SDK has already dropped that flow's verifier, so a retry could not succeed either (the person starts sign-in again) (0.675833ms)
+✔ G2-CC7 (service collision at the deep-link entry, real auth-client-flows + SDK): X connect returns (oauth-callback, with or without an injected sb_flow_id) and X-shaped auth returns (state+code, no flow id) are ignored -- nothing is exchanged and nothing is shown (34.391084ms)
+✖ G2-CX1: sign-out, then the X browser is cancelled -- no exchange is sent, nothing is connected (10.189209ms)
+✖ UNKNOWN G2-CX2 (owner G4, server side NOT_VERIFIED): sign-out and the SAME person signs in again while the X browser is open -- the exchange carries the OLD (signed-out) token; if the server refuses it the screen says "安全確認を完了できませんでした" (not connected), if it accepts the screen says connected for the same person (6.230583ms)
+✖ G2-CX3: whatever the server answers to an exchange sent after sign-out (401, 403, 400, 503, success:false, empty handle), the screen never says connected and the reload never runs (5.1825ms)
+✖ negative controls: (1) remembered outcomes shared across flows, (2) a failed exchange turned into a success, (3) the X hook ignoring a cancel -- each is caught by the matching check above (37.239083ms)
+ℹ tests 20
+ℹ suites 0
+ℹ pass 14
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 346.448875
+
+✖ failing tests:
+
+test at tests/zz-g2-419.test.mjs:187:1
+✖ FINDING G2-CB5 (P3, owner of the X connect screen / G4 server): another person signs in while A's X browser round trip is open -- the exchange still runs with A's token, and the still-mounted screen then tells B "Xアカウントを接続しました @A's handle" (33.850292ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import @/domain/recovery-binding
+      at require (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-419.test.mjs:180:93)
+      at use-x-connect.ts:43:28
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at xHook (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-419.test.mjs:180:6)
+      at async TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-419.test.mjs:188:13)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/zz-g2-419.test.mjs:205:1
+✖ OBSERVATION G2-CB6 (owner G4 server / NOT_VERIFIED): a sign-out while A's X browser round trip is open does not stop it -- the app still sends the callback exchange with A's (signed-out) token; whether the server accepts it is not verified (8.16325ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import @/domain/recovery-binding
+      at require (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-419.test.mjs:180:93)
+      at use-x-connect.ts:43:28
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at xHook (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-419.test.mjs:180:6)
+      at async TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-419.test.mjs:206:13)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/zz-g2-425.test.mjs:252:1
+✖ G2-CX1: sign-out, then the X browser is cancelled -- no exchange is sent, nothing is connected (10.189209ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import @/domain/recovery-binding
+      at require (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:165)
+      at use-x-connect.ts:43:28
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at xHook (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:6)
+      at async TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:253:13)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/zz-g2-425.test.mjs:264:1
+✖ UNKNOWN G2-CX2 (owner G4, server side NOT_VERIFIED): sign-out and the SAME person signs in again while the X browser is open -- the exchange carries the OLD (signed-out) token; if the server refuses it the screen says "安全確認を完了できませんでした" (not connected), if it accepts the screen says connected for the same person (6.230583ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import @/domain/recovery-binding
+      at require (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:165)
+      at use-x-connect.ts:43:28
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at xHook (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:6)
+      at async TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:269:15)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/zz-g2-425.test.mjs:286:1
+✖ G2-CX3: whatever the server answers to an exchange sent after sign-out (401, 403, 400, 503, success:false, empty handle), the screen never says connected and the reload never runs (5.1825ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import @/domain/recovery-binding
+      at require (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:165)
+      at use-x-connect.ts:43:28
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at xHook (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:6)
+      at async TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:288:15)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/zz-g2-425.test.mjs:319:1
+✖ negative controls: (1) remembered outcomes shared across flows, (2) a failed exchange turned into a success, (3) the X hook ignoring a cancel -- each is caught by the matching check above (37.239083ms)
+  node:internal/assert/utils:77
+      throw err;
+      ^
+  
+  AssertionError [ERR_ASSERTION]: unexpected import @/domain/recovery-binding
+      at require (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:165)
+      at use-x-connect.ts:43:28
+      at Script.runInContext (node:vm:149:12)
+      at Script.runInNewContext (node:vm:154:17)
+      at Object.runInNewContext (node:vm:310:38)
+      at xHook (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:244:6)
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/zz-g2-425.test.mjs:344:19)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

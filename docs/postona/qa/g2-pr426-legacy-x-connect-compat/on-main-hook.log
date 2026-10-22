@@ -1,0 +1,106 @@
+✖ L1 #419 CB5: safe fail-closed expectation (37.189166ms)
+✖ L2 #419 CB6: safe fail-closed expectation (7.136125ms)
+✔ L3 #425 CX1: safe fail-closed expectation (7.003709ms)
+✖ L4 #425 CX2: safe fail-closed expectation (5.075917ms)
+✖ L5 #425 CX3: safe fail-closed expectation (5.394417ms)
+✔ P1 same session: still works (4.734834ms)
+✖ P2 same session, refreshed token: still works (4.946416ms)
+✔ P3 same session, exchange fails: still works (20.363958ms)
+﹣ harness control H1: a STALE getSession mock (stuck on the start session) must not make the hook look safe -- on a head with owner checks, L1 / L2 / L4 / L5 then fail (0.258584ms) # no owner checks on this head
+﹣ harness control H2: a harness WITHOUT getSession (the #419 / #425 harness gap) blocks everything at the start -- the "opened" check and the positive controls catch it, so it can never pass as safe (0.303459ms) # no owner checks on this head
+﹣ negative controls: (1) both owner re-checks removed -> L1 / L4 fail (another signed-in person); a sign-out is then still stopped only by the null token read, so (1b) also exchanging with the screen's captured token (the old code) -> L2 / L5 fail too; (2) the #425 control: the cancel branch removed -> L3 fails (0.117ms) # no owner checks on this head
+ℹ tests 11
+ℹ suites 0
+ℹ pass 3
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 294.063417
+
+✖ failing tests:
+
+test at tests/g2-x-connect-legacy-compat.test.mjs:176:3
+✖ L1 #419 CB5: safe fail-closed expectation (37.189166ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/g2-x-connect-legacy-compat.test.mjs:176:70)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-legacy-compat.test.mjs:176:3
+✖ L2 #419 CB6: safe fail-closed expectation (7.136125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/g2-x-connect-legacy-compat.test.mjs:176:70)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-legacy-compat.test.mjs:176:3
+✖ L4 #425 CX2: safe fail-closed expectation (5.075917ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/g2-x-connect-legacy-compat.test.mjs:176:70)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-legacy-compat.test.mjs:176:3
+✖ L5 #425 CX3: safe fail-closed expectation (5.394417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/g2-x-connect-legacy-compat.test.mjs:176:70)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-x-connect-legacy-compat.test.mjs:179:3
+✖ P2 same session, refreshed token: still works (4.946416ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-compat/apps/social-mobile/tests/g2-x-connect-legacy-compat.test.mjs:179:53)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
