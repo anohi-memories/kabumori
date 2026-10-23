@@ -2822,3 +2822,149 @@ test('POST-ACK: a legitimate re-ask after a restart (text-less record, retyped t
   assert.equal(fp.calls.send.length, 1);
   assert.equal(fp.calls.send[0].targetId, ID(9), 'the SAME id as the record');
 });
+
+// ---- H1 C1 13th review, P2: a read of the device record that began BEFORE an acknowledge must not bring the attempt back after it -------------------------
+
+const DELAYED_TEXT = '確認済みになる本文';
+const RESTORED_ACK_LABEL = 'Xで確認しました（この記録を破棄）';
+const RESTORED_REASK_LABEL = '前回と同じ本文を入力して確認し直す';
+
+/**
+ * After a restart: the device holds the pending attempt R1 (hash only), the memory is empty. Screen L starts its first read and
+ * the snapshot (R1 found) is held back; screen A reads normally and shows R1 (the memory now knows it). Optionally screen B opens
+ * from the memory and holds a confirmed re-ask of R1.
+ */
+async function delayedReadBeforeAcknowledge({ withB = false, userId = 'U1' } = {}) {
+  const late = lateReadKV();
+  late.kv.data.set(realStore.storeKeyOf(userId), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha(DELAYED_TEXT) })));
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  late.holdNextReturn = true;
+  const l = await mount({ ...TWO, userId, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1', idBase: 300 });
+  assert.equal(l.state().store.kind, 'loading', 'L holds an old snapshot of R1');
+  const a = await mount({ ...TWO, userId, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  assert.equal(a.state().result.kind, 'pending');
+  assert.equal(memory.get(userId).requestId, ID(1));
+  let b = null;
+  if (withB) {
+    b = await mount({ ...TWO, userId, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1', idBase: 100 });
+    await b.press(RESTORED_REASK_LABEL);
+    await b.typeText(DELAYED_TEXT);
+    await b.tick();
+    assert.equal(b.state().phase, 'confirming', 'B holds a confirmed re-ask of R1');
+  }
+  await a.press(RESTORED_ACK_LABEL);
+  assert.equal(memory.get(userId), null, 'A acknowledged: the memory is empty');
+  assert.equal(late.kv.data.has(realStore.storeKeyOf(userId)), false, 'and the device holds nothing');
+  late.release(); // the old snapshot of L arrives only now
+  await l.flush();
+  return { late, memory, inflight, fp, l, a, b, userId };
+}
+
+test('DELAYED-READ (2 screens): an old snapshot that arrives after the acknowledge does not bring R1 back -- memory empty, device empty, nothing re-askable', async () => {
+  const { late, memory, fp, l, userId } = await delayedReadBeforeAcknowledge();
+  assert.equal(memory.get(userId), null, 'R1 is not put back into the memory');
+  assert.equal(late.kv.data.has(realStore.storeKeyOf(userId)), false);
+  // what a person on L would do if R1 were offered again
+  if (l.button(RESTORED_REASK_LABEL) !== null) {
+    await l.press(RESTORED_REASK_LABEL);
+    await l.typeText(DELAYED_TEXT);
+    await l.tick();
+    if (l.button('Xに投稿する') !== null) await l.press('Xに投稿する');
+  }
+  assert.equal(fp.calls.send.length, 0, 'the acknowledged attempt is not sent again');
+  assert.equal(late.kv.data.has(realStore.storeKeyOf(userId)), false, 'nothing written');
+  assert.equal(l.state().unresolved, null, 'L does not show the acknowledged attempt');
+  assert.equal(l.state().store.kind, 'ready');
+});
+
+test('DELAYED-READ (3 screens): B\'s confirmed re-ask of R1 sends nothing after A\'s acknowledge, even when L\'s old snapshot arrives first', async () => {
+  const { late, memory, fp, b, userId } = await delayedReadBeforeAcknowledge({ withB: true });
+  await b.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0, 'the acknowledged attempt is not sent again');
+  assert.equal(memory.get(userId), null);
+  assert.equal(late.kv.data.has(realStore.storeKeyOf(userId)), false);
+  assert.equal(b.state().unresolved, null);
+});
+
+test('DELAYED-READ: after the old snapshot was dropped, L is a normal empty editor -- a NEW attempt from it goes out with a new id', async () => {
+  const { fp, l } = await delayedReadBeforeAcknowledge();
+  assert.equal(l.state().phase, 'editing');
+  await l.typeText('確認後に書いた新しい本文');
+  await l.press('内容を確認する');
+  await l.tick();
+  await l.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 1);
+  assert.equal(fp.calls.send[0].targetId, ID(301), 'a new id, not R1');
+});
+
+test('DELAYED-READ: the snapshot arrives while the acknowledge is still clearing -- L shows R1 for now, but its re-ask after the clear sends nothing', async () => {
+  const late = lateReadKV();
+  late.kv.data.set(realStore.storeKeyOf('U1'), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha(DELAYED_TEXT) })));
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  late.holdNextReturn = true;
+  const l = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1', idBase: 300 });
+  const a = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  const realRemove = late.kv.removeItem;
+  const removals = [];
+  late.kv.removeItem = async (key) => { await new Promise((resolve) => { removals.push(resolve); }); return realRemove(key); };
+  a.button(RESTORED_ACK_LABEL).props.onPress(); // the clear starts and is held
+  await a.flush();
+  late.release(); // L's old snapshot arrives while the clear runs
+  await l.flush();
+  assert.equal(l.state().unresolved.requestId, ID(1), 'R1 is still the attempt of the process for now');
+  for (const resolve of removals.splice(0)) resolve();
+  await a.flush();
+  assert.equal(memory.get('U1'), null, 'the acknowledge finished');
+  await l.press(RESTORED_REASK_LABEL);
+  await l.typeText(DELAYED_TEXT);
+  await l.tick();
+  if (l.button('Xに投稿する') !== null) await l.press('Xに投稿する');
+  assert.equal(fp.calls.send.length, 0, 'the acknowledged attempt is not sent again');
+  assert.equal(memory.get('U1'), null);
+  assert.equal(late.kv.data.has(realStore.storeKeyOf('U1')), false);
+});
+
+test('DELAYED-READ: R1 acknowledged and a NEW attempt R2 begun before L\'s old snapshot arrives -- L shows R2, never R1', async () => {
+  const late = lateReadKV();
+  late.kv.data.set(realStore.storeKeyOf('U1'), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(1), contentSha256: sha(DELAYED_TEXT) })));
+  const memory = realFlow.createAttemptMemory();
+  const inflight = realFlow.createInFlightSends();
+  const fp = fakePort();
+  late.holdNextReturn = true;
+  const l = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1', idBase: 300 });
+  const a = await mount({ ...TWO, port: fp, memory, inflight, kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1', idBase: 500 });
+  await a.press(RESTORED_ACK_LABEL);
+  await a.typeText('次の本文');
+  await a.press('内容を確認する');
+  await a.tick();
+  await a.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(501), kind: 'pending', code: 'IN_PROGRESS', marks: REAL });
+  await a.flush();
+  assert.equal(memory.get('U1').requestId, ID(501));
+  late.release();
+  await l.flush();
+  assert.equal(l.state().unresolved.requestId, ID(501), 'the newer attempt');
+  assert.equal(memory.get('U1').requestId, ID(501), 'R1 never comes back');
+});
+
+test('DELAYED-READ: the same for any user id, and another user\'s acknowledge never drops this user\'s restored attempt', async () => {
+  const u7 = await delayedReadBeforeAcknowledge({ withB: true, userId: 'U7' });
+  await u7.b.press('Xに投稿する');
+  assert.equal(u7.fp.calls.send.length, 0);
+  assert.equal(u7.memory.get('U7'), null);
+  const late = lateReadKV();
+  late.kv.data.set(realStore.storeKeyOf('U9'), JSON.stringify(RESTORED({ kind: 'pending', requestId: ID(9), contentSha256: sha(DELAYED_TEXT) })));
+  const memory = realFlow.createAttemptMemory();
+  late.holdNextReturn = true;
+  const l9 = await mount({ ...TWO, userId: 'U9', memory, inflight: realFlow.createInFlightSends(), kv: late.kv, draftKv: fakeKV(), sessionMark: 'T1' });
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(1), contentSha256: sha('x'), text: 'x', kind: 'pending' });
+  memory.clear('U1');
+  late.release();
+  await l9.flush();
+  assert.equal(l9.state().unresolved.requestId, ID(9), 'U9\'s restored attempt is shown');
+  assert.equal(memory.get('U9').requestId, ID(9));
+});

@@ -954,3 +954,118 @@ test('post-ack: the device check reads the record of THIS user only -- another u
   assert.equal(h.memory.get('U2'), null);
   assert.equal(h.memory.get('U1'), null, 'the other user\'s record is not put into any memory');
 });
+
+// ---- a read of the device record is a snapshot: it never re-creates an attempt the memory dropped while it was being read --------------------------------
+
+test('delayed read: loadPersistedAttempt never puts back an attempt that was acknowledged while the record was being read', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), JSON.stringify({ v: 1, accountId: 'X_A', requestId: ID(1), contentSha256: sha('hello'), kind: 'pending', savedAt: 1 }));
+  const realGet = h.kv.getItem;
+  const held = [];
+  let hold = true;
+  h.kv.getItem = async (key) => { const value = await realGet(key); if (hold) { hold = false; await new Promise((resolve) => { held.push(resolve); }); } return value; };
+  const load = flow.loadPersistedAttempt(h.deps, 'U1');
+  for (let i = 0; i < 20 && held.length === 0; i += 1) await later();
+  assert.equal(held.length, 1, 'the snapshot (R1 found) is held');
+  // meanwhile another screen restores R1 and the user acknowledges it
+  h.memory.mark('U1', { ...ATT(1), text: null, kind: 'pending' });
+  assert.deepEqual(await flow.acknowledgeAttempt(h.deps, 'U1', ID(1)), { kind: 'cleared' });
+  for (const resolve of held.splice(0)) resolve();
+  await load;
+  assert.equal(h.memory.get('U1'), null, 'the acknowledged attempt is not brought back');
+  assert.equal(h.kv.data.has(storeKeyOf('U1')), false);
+});
+
+const R_REC = (id, over = {}) => JSON.stringify({ v: 1, accountId: 'X_A', requestId: id, contentSha256: sha('hello'), kind: 'pending', savedAt: 1, ...over });
+
+/** Hold the RETURN of the next read (the value is read first): a snapshot delivered late. */
+function lateRead(h) {
+  const realGet = h.kv.getItem;
+  const ctl = { held: [], holdNext: false, reads: 0 };
+  h.kv.getItem = async (key) => {
+    const value = await realGet(key);
+    ctl.reads += 1;
+    if (ctl.holdNext) { ctl.holdNext = false; await new Promise((resolve) => { ctl.held.push(resolve); }); }
+    return value;
+  };
+  ctl.release = () => { for (const resolve of ctl.held.splice(0)) resolve(); };
+  return ctl;
+}
+const heldOnce = async (ctl) => { for (let i = 0; i < 20 && ctl.held.length === 0; i += 1) await later(); assert.equal(ctl.held.length, 1, 'the snapshot is held'); };
+
+test('memory version: moves on every mark and every clear (also a clear of nothing), per user', () => {
+  const memory = flow.createAttemptMemory();
+  assert.equal(memory.version('U1'), 0);
+  memory.mark('U1', ATT(1));
+  assert.equal(memory.version('U1'), 1);
+  memory.mark('U1', ATT(1));
+  assert.equal(memory.version('U1'), 2, 'the same entry again still moves it');
+  memory.clear('U1');
+  assert.equal(memory.version('U1'), 3);
+  memory.clear('U1');
+  assert.equal(memory.version('U1'), 4, 'a clear of nothing moves it too');
+  assert.equal(memory.version('U2'), 0, 'another user is independent');
+});
+
+test('delayed read: the memory knows ANOTHER attempt now -- the old snapshot is returned but never put into the memory (old R1 / new R2)', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), R_REC(ID(1)));
+  const ctl = lateRead(h);
+  ctl.holdNext = true;
+  const load = flow.loadPersistedAttempt(h.deps, 'U1');
+  await heldOnce(ctl);
+  h.memory.mark('U1', { ...ATT(2), kind: 'pending' }); // R1 was acknowledged and a new attempt R2 began meanwhile
+  ctl.release();
+  const read = await load;
+  assert.equal(read.kind, 'found');
+  assert.equal(h.memory.get('U1').requestId, ID(2), 'the newer attempt stays');
+  assert.equal(flow.reconcileLoadedRead(h.deps, 'U1', read).kind, 'memory', 'and is what the visit shows');
+  assert.equal(ctl.reads, 1, 'no second read is needed: the memory decides');
+});
+
+test('delayed read: the memory was emptied meanwhile -- the record is read AGAIN, and what is there now decides', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), R_REC(ID(1)));
+  const ctl = lateRead(h);
+  ctl.holdNext = true;
+  const load = flow.loadPersistedAttempt(h.deps, 'U1');
+  await heldOnce(ctl);
+  h.memory.mark('U1', { ...ATT(1), text: null, kind: 'pending' });
+  h.memory.clear('U1');
+  h.kv.data.set(storeKeyOf('U1'), R_REC(ID(3))); // a record of another attempt is on the device by now
+  ctl.release();
+  const read = await load;
+  assert.equal(read.kind, 'found');
+  assert.equal(read.attempt.requestId, ID(3), 'the fresh read, not the old snapshot');
+  assert.equal(h.memory.get('U1').requestId, ID(3));
+  assert.equal(ctl.reads, 2, 'read twice');
+});
+
+test('delayed read: a memory that keeps changing under every read is treated as unreadable (fail closed), nothing is put into it', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), R_REC(ID(1)));
+  const realGet = h.kv.getItem;
+  h.kv.getItem = async (key) => { const value = await realGet(key); h.memory.clear('U1'); return value; };
+  assert.deepEqual(await flow.loadPersistedAttempt(h.deps, 'U1'), { kind: 'unreadable', reason: 'io' });
+  assert.equal(h.memory.get('U1'), null);
+});
+
+test('delayed read: an unchanged memory keeps the earlier behaviour -- a restart record is put into the memory once, another user is independent', async () => {
+  const h = withRegistry(harness());
+  h.kv.data.set(storeKeyOf('U1'), R_REC(ID(1)));
+  h.kv.data.set(storeKeyOf('U9'), R_REC(ID(9)));
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' }); // U1 has a history of its own before U9 reads
+  h.memory.clear('U1');
+  const ctl = lateRead(h);
+  ctl.holdNext = true;
+  const load = flow.loadPersistedAttempt(h.deps, 'U9');
+  await heldOnce(ctl);
+  h.memory.mark('U1', { ...ATT(1), kind: 'pending' });
+  h.memory.clear('U1'); // only U1 changes
+  ctl.release();
+  const read = await load;
+  assert.equal(read.kind, 'found');
+  assert.equal(h.memory.get('U9').requestId, ID(9), 'U9\'s record is restored');
+  assert.equal(ctl.reads, 1, 'read once');
+  assert.equal(h.memory.get('U1'), null);
+});
