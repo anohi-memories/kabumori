@@ -1,0 +1,53 @@
+✔ control G2-SR0: a refresh that keeps the mark loses nothing -- same screen, same text, same stored record (58.066666ms)
+✔ KNOWN SM3R-T + SM2, storage side: a refresh with a new mark re-creates the open screen (SCREEN LOST: the typed text is gone) and the new screen REMOVES the stored draft (STORAGE LOST); nothing old comes back (23.937291ms)
+✔ G2-SR1: the refresh arrives while the last keystroke's save is still on its way -- the draft store applies writes and removals strictly in order, so the new screen's removal waits for that save and then removes it: the old text is never re-created or shown (20.541792ms)
+ℹ after the new screen's removal: {"v":1,"accountId":"X_A","text":"最初の本文","sessionMark":"2026-10-22T08:00:00.000000Z","savedAt":1792728547490} / after the late save: null
+✔ G2-SR2: the refresh arrives while the screen's restore read is still pending -- the old screen's read is not applied to the new screen; the new screen discards the old-mark draft and removes it (16.86125ms)
+✔ G2-SR3: the refresh arrives in the confirmation step with consent ticked -- the re-created screen is an empty editor with no consent and nothing sendable (the confirmation is lost with the text) (16.657459ms)
+⚠ RELEASE GATE SM3R-T (KNOWN, P3, owner G1/G5): a refresh of the same person on THIS device does not lose the open text (14.076833ms) # KNOWN SM3R-T: red until fixed
+⚠ RELEASE GATE SM2 (KNOWN, P3, owner G5 mark / G1): a refresh caused by a sign-in elsewhere does not delete this device's stored draft (15.302625ms) # KNOWN SM2: red until fixed
+✔ negative control: keying the screen by the user only (no mark) turns the SM3R-T gate green -- but then a NEW sign-in of the same person (no sign-out in between) keeps the old session's open text (SM3 comes back). The mark itself must change meaning (per session, e.g. session_id), not be dropped (18.218667ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 2
+ℹ duration_ms 397.919041
+
+✖ failing tests:
+
+test at tests/g2-draft-sm2-sm3rt.test.mjs:336:1
+⚠ RELEASE GATE SM3R-T (KNOWN, P3, owner G1/G5): a refresh of the same person on THIS device does not lose the open text (14.076833ms) # KNOWN SM3R-T: red until fixed
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '' !== '入力中の本文'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-sm/apps/social-mobile/tests/g2-draft-sm2-sm3rt.test.mjs:339:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: '入力中の本文',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-draft-sm2-sm3rt.test.mjs:342:1
+⚠ RELEASE GATE SM2 (KNOWN, P3, owner G5 mark / G1): a refresh caused by a sign-in elsewhere does not delete this device's stored draft (15.302625ms) # KNOWN SM2: red until fixed
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  '' !== '入力中の本文'
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-sm/apps/social-mobile/tests/g2-draft-sm2-sm3rt.test.mjs:347:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '',
+    expected: '入力中の本文',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
