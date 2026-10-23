@@ -8,6 +8,7 @@ Issue の鮮度・取消の起動直前安全契約は TASK `g10-phase2-pr423-is
 H4 C4 P2（遅延する再取得の後の HALT・期限の再判定）の修正は TASK `g10-phase2-pr423-h4-c4-delayed-fetch-halt-expiry-p2-fix-20261022`（同じ節の「再取得の後の再判定」）。
 実行中の Issue の変化の検出は TASK `g10-phase2-pr423-running-issue-change-monitor-fake-20261023`（同じ節の「実行中の Issue 監督」）。
 H2 C2 P2×2（監督スレッドの異常・正常時刻）の修正は TASK `g10-phase2-pr423-h2-c2-monitor-worker-stale-heartbeat-p2-fix-20261023`（同じ節の「監督スレッドの結果と正常時刻の契約」）。
+ゲート1（実 GitHub の Issue #323 の読み取り専用取得元の候補）は TASK `g10-phase2-gate1-github-readonly-witness-candidate-20261023`（下の「ゲート1」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -37,6 +38,7 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 | `g10runner/supervise.py` | 停止（識別確認→SIGTERM→猶予→SIGKILL→不在確認）・S1・S2 | v5.1 §2、v5.2 §1-4 |
 | `g10runner/registry.py` | プロセス登録簿（不変項目のダイジェスト・状態遷移） | v5 §7-1 |
 | `g10runner/procs.py` | 観測（`ps` の失敗は `ObservationError`＝unknown）・正確な識別（sysctl の argv・settings・uid・開始時刻）・開始時刻を再照合してからの signal（ゾンビは不在とみなす） | v5.3 §5、H3 R2・R3 |
+| `g10runner/github_source.py` | ゲート1: 実 GitHub の Issue #323 の読み取り専用取得元（候補。既定は無効・起動経路に未結線） | TASK 10 |
 | `g10runner/issue.py` | Issue #323 の取得証拠（取得係＝witness 鍵の署名）と、要求の本文との結合の検証 | v5 §5-4、H4 P1 |
 | `g10runner/binding.py` | 起動要求と承認済みTASK・ポリシーの結合（本文の再ハッシュ・実行項目の照合・型・形式・期限） | v5.3 §2-3、H3 R1 |
 | `g10runner/adapter.py` | **偽Claude専用**の実行アダプタ（実行ファイル固定・環境変数の許可リスト） | TASK 実行6 |
@@ -154,6 +156,21 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 **人が止める手順**（模擬の範囲）: 特定のTASKを止める → `Control.revoke_issue(task_id, approval_id=..., reason=...)`（起動前なら起動しない、
 起動後なら S1/S2 が止める）。すべてを止める → ハードHALT（`Control.halt("hard", ...)`）。S1/S2 が両方止まっている場合は、
 手順書の最終手段（プロセスの手動停止）に従う。
+
+## ゲート1: 実 GitHub の読み取り専用取得元（TASK 10・2026-10-23。候補・未結線）
+- `g10runner/github_source.py` の `GitHubIssueSource`。`FileIssueSource` と同じ `fetch(timeout)` の契約で、`IssueWitness` の取得元になれる。
+  **既定は無効**（`enabled=False`）で、`spawn_witness`・S1/S2 の監督には**結線していない**（起動経路は従来どおり偽Claude・模擬 Issue のみ）。
+- 取得するのは `https://api.github.com/repos/anohi-memories/kabumori/issues/323` の HTTPS GET だけ。GET 以外・他ホスト・他リポジトリ・他の番号・
+  リダイレクト・別 URL からの応答は拒否。HTTP 200 以外・JSON の不正（NaN を含む）・部分応答・打ち切り・接続失敗・回数制限の残り0・
+  Date ヘッダの欠落・ローカル時刻との5分超のずれは、すべて取得失敗（例外の本文は理由に出さない）。
+- 認証: リポジトリは公開なので、既定は**認証なし**（token を一切使わない）。環境変数・gh の認証情報は読まない。token を渡す場合は、
+  classic token の `X-OAuth-Scopes` が空（公開情報の読み取りのみ）のときだけ受け付け、scope の見えない fine-grained token は拒否。
+- **最後の編集者は REST では取れない**（GraphQL の `editor`／`userContentEdits` は認証が必須）。そのため編集者は `UNKNOWN_EDITOR` とし、
+  証拠の検査（editor は None か信頼済みのみ）で**必ず拒否**される。つまり、この取得元だけでは起動できない（fail-closed）。
+  編集者を確かめるには、読み取り専用の認証で GraphQL を使う設計の追加と、その認証の決定が必要（次の判断）。
+- 回数制限: 認証なしは1時間60回。監督間隔5秒（1ランあたり毎時720回）では足りない。認証ありでも間隔の正式値は別途決める。
+- 限定ライブ取得（2026-10-23）: 認証なしの GET 2回で、本文の SHA-256・state・作成者・updated_at が gh での読み取りと一致。
+  編集者は不明となり、証拠は拒否された（想定どおり）。
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。
