@@ -65,7 +65,9 @@ async function seed(db: string) {
   const expired = await sql(db, `insert into auth.sessions (user_id, not_after) values ('${P}', now() - interval '1 minute') returning id`);
   sessions[db] = { live, expired };
 }
-const person = (db: string, extra: Record<string, unknown> = {}) => json({ sub: P, role: 'authenticated', session_id: sessions[db].live, ...extra });
+// a person proves non-anonymity with the boolean false (GoTrue's claim); `bare` is the same token without the claim (G5-25: refused)
+const person = (db: string, extra: Record<string, unknown> = {}) => json({ sub: P, role: 'authenticated', session_id: sessions[db].live, is_anonymous: false, ...extra });
+const bare = (db: string) => json({ sub: P, role: 'authenticated', session_id: sessions[db].live });
 
 test_('setup and FAIL before: the reviewed T13 (md5 of its body checked) lets an anonymous sign-in write, by either claim source', async () => {
   for (const db of [S21, REV]) {
@@ -74,6 +76,8 @@ test_('setup and FAIL before: the reviewed T13 (md5 of its body checked) lets an
   }
   assert.equal(await write(S21, person(S21, { is_anonymous: true })), 'OK', 'JSON claims');
   assert.equal(await write(S21, { style: 'legacy', sub: P, role: 'authenticated', session: sessions[S21].live, anon: 'true' }), 'OK', 'per-claim settings');
+  assert.equal(await write(S21, bare(S21)), 'OK', 'a token without the claim (H4 P2: unproven, yet allowed)');
+  assert.equal(await write(S21, { style: 'legacy', sub: P, role: 'authenticated', session: sessions[S21].live }), 'OK', 'per-claim settings without the claim');
   assert.equal(await write(S21, person(S21)), 'OK', 'a person');
 });
 
@@ -113,6 +117,21 @@ test_('refused installs leave the reviewed T13 untouched: superuser, another rol
   await unchanged();
 });
 
+// (G5-25) H4's P2 reproduced on PR #480's own candidate (1a974b8d), then rolled back with its own rollback; skipped without the pinned commit
+const testP2 = enabled && env('S21_P2_CANDIDATE') !== '' ? test : test.skip;
+testP2('P2 before (PR #480 head 1a974b8d): a missing, null or empty claim passes its T13; that is what this revision refuses', async () => {
+  let r = await run(REV, ['-f', env('S21_P2_CANDIDATE')]);
+  assert.ok(r.ok, r.error);
+  assert.equal(await write(REV, person(REV, { is_anonymous: true })), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED', 'PR #480 refuses true');
+  assert.equal(await write(REV, bare(REV)), 'OK', 'P2: a missing JSON claim passes');
+  assert.equal(await write(REV, person(REV, { is_anonymous: null })), 'OK', 'P2: a null JSON claim passes');
+  assert.equal(await write(REV, { style: 'legacy', sub: P, role: 'authenticated', session: sessions[REV].live }), 'OK', 'P2: a missing per-claim setting passes');
+  assert.equal(await write(REV, { style: 'legacy', sub: P, role: 'authenticated', session: sessions[REV].live, anon: '' }), 'OK', 'P2: an empty per-claim setting passes');
+  r = await run(REV, ['-f', env('S21_P2_ROLLBACK')]);
+  assert.ok(r.ok, r.error);
+  assert.equal(await md5(REV), MD5_REVIEWED, 'back to the reviewed T13');
+});
+
 test_('install: same OID, owner-only EXECUTE kept, the expected body; a second run refuses', async () => {
   const before = await oid(S21);
   const acl = await sql(S21, `select proacl::text from pg_proc where oid = '${T13}'::regprocedure`);
@@ -140,20 +159,23 @@ function cases(db: string): Array<[string, Claims, string | null]> {
     ['legacy is_anonymous true', L('true'), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
     ['legacy is_anonymous yes', L('yes'), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
     ['JSON is_anonymous false', person(db, { is_anonymous: false }), null],
-    ['JSON claim missing (an older token)', person(db), null],
-    ['JSON is_anonymous null', person(db, { is_anonymous: null }), null],
+    // G5-25 (H4 P2): non-anonymity must be PROVEN -- a missing, null, empty or otherwise typed claim is refused like an anonymous one
+    ['JSON claim missing', bare(db), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
+    ['JSON is_anonymous null', person(db, { is_anonymous: null }), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
+    ['JSON is_anonymous {} (an object)', person(db, { is_anonymous: {} }), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
+    ['legacy claim missing', L(), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
+    ['legacy is_anonymous empty', L(''), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED'],
     ['legacy is_anonymous false', L('false'), null],
-    ['legacy claim missing', L(), null],
-    ['another person\'s session', json({ sub: P, role: 'authenticated', session_id: '00000000-0000-4000-8000-0000000000ff' }), null],
-    ['expired session', json({ sub: P, role: 'authenticated', session_id: sessions[db].expired }), null],
-    ['role anon in the claims', json({ sub: P, role: 'anon', session_id: live }), null],
-    ['no session id', json({ sub: P, role: 'authenticated' }), null],
+    ['another person\'s session', json({ sub: P, role: 'authenticated', session_id: '00000000-0000-4000-8000-0000000000ff', is_anonymous: false }), null],
+    ['expired session', json({ sub: P, role: 'authenticated', session_id: sessions[db].expired, is_anonymous: false }), null],
+    ['role anon in the claims', json({ sub: P, role: 'anon', session_id: live, is_anonymous: false }), null],
+    ['no session id', json({ sub: P, role: 'authenticated', is_anonymous: false }), null],
     ['broken claims', { style: 'json', raw: '{not json' }, null],
-    ['a person without the service', json({ sub: Q, role: 'authenticated', session_id: live }), null],
+    ['a person without the service', json({ sub: Q, role: 'authenticated', session_id: live, is_anonymous: false }), null],
   ];
 }
 
-test_('PASS after: only the anonymous cases change (to ACCOUNT_LIFECYCLE_AUTH_REQUIRED); every other answer is identical to the reviewed T13', async () => {
+test_('PASS after: only the anonymous and the unproven cases change (to ACCOUNT_LIFECYCLE_AUTH_REQUIRED); every other answer is identical to the reviewed T13', async () => {
   const before = cases(REV);
   const after = cases(S21);
   for (let i = 0; i < before.length; i += 1) {
@@ -199,11 +221,13 @@ test_('rollback: the reviewed body byte for byte, same OID, the anonymous case p
   assert.equal(await md5(S21), MD5_REVIEWED);
   assert.equal(await oid(S21), before);
   assert.equal(await write(S21, person(S21, { is_anonymous: true })), 'OK', 'the reviewed behaviour is back');
+  assert.equal(await write(S21, bare(S21)), 'OK', 'including the missing claim');
   r = await run(S21, ['-f', env('S21_ROLLBACK')]);
   assert.ok(!r.ok && r.error.includes('T13_ANON_ROLLBACK_NOT_APPLIED'), r.error);
   r = await run(S21, ['-f', env('S21_CANDIDATE')]);
   assert.ok(r.ok, r.error);
   assert.equal(await md5(S21), MD5_S21);
   assert.equal(await write(S21, person(S21, { is_anonymous: true })), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED');
+  assert.equal(await write(S21, bare(S21)), 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED');
   assert.equal(await write(S21, person(S21)), 'OK');
 });

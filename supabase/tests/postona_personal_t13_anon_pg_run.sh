@@ -40,6 +40,13 @@ else
     || { echo "Pinned blobs differ." >&2; exit 2; }
   git -C "$repo" show "$pin:$t13_path" > "$work/t13.sql"; git -C "$repo" show "$pin:$fx_path" > "$work/fixture.sql"
 fi
+# (G5-25) PR #480's candidate at its reviewed head, to reproduce H4's P2 on it; skipped in a copy without .git (the mutation runs)
+p2=1a974b8daefc0c732c79694087740d72d97f1657; p2_c=""; p2_r=""
+if [ -z "${S21_PINNED_DIR:-}" ] && git -C "$repo" cat-file -e "$p2^{commit}" 2>/dev/null; then
+  git -C "$repo" show "$p2:supabase/candidates/postona_personal_auth/001_t13_anonymous_refusal.sql" > "$work/p2_candidate.sql"
+  git -C "$repo" show "$p2:supabase/candidates/postona_personal_auth/001_t13_anonymous_refusal_rollback.sql" > "$work/p2_rollback.sql"
+  p2_c="$work/p2_candidate.sql"; p2_r="$work/p2_rollback.sql"
+fi
 
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
@@ -68,5 +75,6 @@ for w in s21 rev; do
   "${S[@]}" -d "${prefix}_$w" -c "grant usage on schema private to $other" >/dev/null
 done
 ( cd "$repo" && CAL_E2E=1 S21_CANDIDATE="$cand/001_t13_anonymous_refusal.sql" S21_ROLLBACK="$cand/001_t13_anonymous_refusal_rollback.sql" \
+    S21_P2_CANDIDATE="$p2_c" S21_P2_ROLLBACK="$p2_r" \
     S21_OWNER="$owner" S21_OTHER="$other" S21_DB="${prefix}_s21" S21_REV="${prefix}_rev" PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_t13_anon_pg_test.ts" )

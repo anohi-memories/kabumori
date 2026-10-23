@@ -2,14 +2,17 @@
 -- supabase/migrations/. Never apply to a managed or production database without an independent focused Codex Sol (high) review of this file,
 -- the G5 担当ちゃ's acceptance and the owner's explicit production approval.
 --
+-- G5-25 REVISION (2026-10-23, Issue #320 task 25): a missing / null / empty is_anonymous claim is now REFUSED (H4 #331 comment 6366601676).
+--
 -- T13 (private.account_lifecycle_assert_active_service_write, the reviewed Phase 3b migration 20261010051938, G5 Draft chain) checks that the
 -- caller is the signed-in person with a live session, but it does not look at the JWT's `is_anonymous` claim: an anonymous sign-in (role
 -- `authenticated`!) passes it (S1-F2; G3's finding, Issue #320 comment 6355355712). R0, R1 and the session verdict already refuse it.
 --
 -- This file REPLACES ONLY THAT FUNCTION'S BODY (CREATE OR REPLACE: same OID, owner, ACL, definer, volatility, empty search_path), with the
--- reviewed body plus four lines: `is_anonymous` is read from the same claim source as `sub` (the per-claim setting of an older PostgREST,
--- else the JSON claims; a missing claim counts as not anonymous, exactly as R1 reads it) and any value other than false is refused with the
--- existing ACCOUNT_LIFECYCLE_AUTH_REQUIRED (SQLSTATE 42501), in the subject step, BEFORE any lock. Every other check, code, lock and its order
+-- reviewed body plus a few lines: `is_anonymous` is read from the same claim source as `sub` (the per-claim setting of an older PostgREST,
+-- else the JSON claims) and ONLY a proven false passes -- the JSON boolean false, or the per-claim text 'false'. A missing, null or empty claim,
+-- another JSON type (a string, a number) or any other value is refused with the existing ACCOUNT_LIFECYCLE_AUTH_REQUIRED (SQLSTATE 42501), in
+-- the subject step, BEFORE any lock (G5-25: fail closed on a missing claim, H4 P2 on PR #480). Every other check, code, lock and its order
 -- is unchanged, so every consumer (G3 / G4 writers that call T13 first) inherits the refusal without being edited.
 --
 -- It refuses unless the function is EXACTLY the reviewed T13 (md5 of its body; another body is someone else's change and is left alone),
@@ -33,7 +36,7 @@ begin
     raise exception 'T13_ANON_PRECONDITION_T13_MISSING';
   end if;
   v_md5 := (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn);
-  if v_md5 = 'cba0e35a9c7e9871f9770fcc036fcb73' then
+  if v_md5 = '1f8cd9c764c251f3232c61b7a77ff597' then
     raise exception 'T13_ANON_ALREADY_APPLIED';
   end if;
   -- only the exact reviewed body is replaced: anything else is a different function and stays untouched
@@ -87,7 +90,7 @@ begin
     v_sub := v_legacy_sub;
     v_role := nullif(current_setting('request.jwt.claim.role', true), '');
     v_session := nullif(current_setting('request.jwt.claim.session_id', true), '');
-    v_anonymous := coalesce(nullif(current_setting('request.jwt.claim.is_anonymous', true), ''), 'false');
+    v_anonymous := nullif(current_setting('request.jwt.claim.is_anonymous', true), '');
   else
     begin
       v_claims := nullif(current_setting('request.jwt.claims', true), '')::jsonb;
@@ -98,7 +101,7 @@ begin
       v_sub := v_claims ->> 'sub';
       v_role := v_claims ->> 'role';
       v_session := v_claims ->> 'session_id';
-      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'false');
+      v_anonymous := case when jsonb_typeof(v_claims -> 'is_anonymous') = 'boolean' then v_claims ->> 'is_anonymous' end;
     end if;
   end if;
   begin
@@ -107,8 +110,9 @@ begin
   exception when others then
     raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';
   end;
-  -- (S2-1, G5-24) an anonymous sign-in is not a person: refused here, before any lock, as R0 / R1 / SV refuse it. A missing claim
-  -- (an older token) counts as not anonymous, exactly as R1 reads it; any value other than false is refused.
+  -- (S2-1, G5-24 / G5-25) an anonymous sign-in is not a person: refused here, before any lock. Only a PROVEN non-anonymous caller
+  -- passes: the JSON claim must be the boolean false, the per-claim setting exactly 'false'; missing, null, empty, another type or
+  -- any other value is refused (H4 P2 on PR #480).
   if p_user_id is null or v_subject is null or v_session_id is null or v_role is distinct from 'authenticated'
      or v_anonymous is distinct from 'false'
      or v_subject <> p_user_id or (select auth.uid()) is distinct from p_user_id then
@@ -169,7 +173,7 @@ begin
   if v_fn is null or v_fn::oid::text is distinct from pg_catalog.current_setting('postona_personal_s2_1.oid', true) then
     raise exception 'T13_ANON_POSTCONDITION_OID';
   end if;
-  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from 'cba0e35a9c7e9871f9770fcc036fcb73' then
+  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from '1f8cd9c764c251f3232c61b7a77ff597' then
     raise exception 'T13_ANON_POSTCONDITION_BODY';
   end if;
   -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void,
