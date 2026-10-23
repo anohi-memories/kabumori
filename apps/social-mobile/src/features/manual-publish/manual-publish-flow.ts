@@ -21,14 +21,23 @@ export interface AttemptMemory {
   get(userId: string | null): UnresolvedAttempt | null;
   mark(userId: string, entry: UnresolvedAttempt): void;
   clear(userId: string): void;
+  /**
+   * A per-user counter that moves on EVERY mark and clear (also a clear of nothing). A reader of the device record takes it
+   * before the read and compares it after: if it moved, the memory changed while the record was being read, so the snapshot
+   * may be older than that change (e.g. an acknowledge cleared the attempt the snapshot still shows).
+   */
+  version(userId: string): number;
 }
 
 export function createAttemptMemory(): AttemptMemory {
   const entries = new Map<string, UnresolvedAttempt>();
+  const versions = new Map<string, number>();
+  const bump = (userId: string) => { versions.set(userId, (versions.get(userId) ?? 0) + 1); };
   return {
     get: (userId) => (userId === null ? null : entries.get(userId) ?? null),
-    mark: (userId, entry) => { entries.set(userId, entry); },
-    clear: (userId) => { entries.delete(userId); },
+    mark: (userId, entry) => { entries.set(userId, entry); bump(userId); },
+    clear: (userId) => { entries.delete(userId); bump(userId); },
+    version: (userId) => versions.get(userId) ?? 0,
   };
 }
 
@@ -178,19 +187,35 @@ export function restoredAttemptOf(attempt: PersistedAttempt): UnresolvedAttempt 
  * process sees it without reading again. Never throws.
  */
 export async function loadPersistedAttempt(deps: FlowDeps, userId: string): Promise<StoreRead> {
-  let read: StoreRead;
-  try {
-    read = await deps.store.read(userId);
-  } catch {
-    read = { kind: 'unreadable', reason: 'io' };
+  // A read is a snapshot of the moment it was taken. If the memory of this user changed while it was being read, the snapshot
+  // may be older than that change: when the memory knows an attempt now, that attempt wins (see reconcileLoadedRead) and the
+  // snapshot is not put into the memory; when the memory was emptied meanwhile (an acknowledge, a proven end), the snapshot
+  // may still show the attempt that was just dropped -- it is never put back: the record is read again. A memory that keeps
+  // changing under the reads is treated as an unreadable record (fail closed; the visit can read again).
+  for (let round = 0; round < LOAD_ROUNDS; round += 1) {
+    const before = deps.memory.version(userId);
+    let read: StoreRead;
+    try {
+      read = await deps.store.read(userId);
+    } catch {
+      read = { kind: 'unreadable', reason: 'io' };
+    }
+    if (deps.memory.version(userId) !== before) {
+      if (deps.memory.get(userId) !== null) return read;
+      continue;
+    }
+    // The text-less record of an earlier run never replaces what this process knows: an attempt of this process is already in
+    // the memory (with its text), and a send that is still being prepared or recorded is about to put its own entry there.
+    if (read.kind === 'found' && deps.memory.get(userId) === null && (deps.inflight?.takeOver(userId) ?? null) === null) {
+      deps.memory.mark(userId, restoredAttemptOf(read.attempt));
+    }
+    return read;
   }
-  // The text-less record of an earlier run never replaces what this process knows: an attempt of this process is already in
-  // the memory (with its text), and a send that is still being prepared or recorded is about to put its own entry there.
-  if (read.kind === 'found' && deps.memory.get(userId) === null && (deps.inflight?.takeOver(userId) ?? null) === null) {
-    deps.memory.mark(userId, restoredAttemptOf(read.attempt));
-  }
-  return read;
+  return { kind: 'unreadable', reason: 'io' };
 }
+
+/** How many times a visit reads the record again when the memory changed under the read (see loadPersistedAttempt). */
+const LOAD_ROUNDS = 3;
 
 /**
  * The code of a start that `runSend` did not make because this process already knows an unresolved attempt of the user that this
