@@ -1,0 +1,17 @@
+✔ G2-XI1 pending: A signs out, B signs in -- B sees nothing of A and can post (own new id); A's attempt stays in storage and in the process; A signing in again sees it as pending, with no consent back (71.634917ms)
+✔ G2-XI1 unconfirmed: A signs out, B signs in -- B sees nothing of A and can post (own new id); A's attempt stays in storage and in the process; A signing in again sees it as unconfirmed, with no consent back (27.760917ms)
+✔ G2-XI1 uncertain: A signs out, B signs in -- B sees nothing of A and can post (own new id); A's attempt stays in storage and in the process; A signing in again sees it as uncertain, with no consent back (25.768625ms)
+✔ G2-XI2 (still sending): A's send is out, A signs out and B signs in -- B is not shown A's "sending" and B's own post goes; A's answer lands for A only; A back sees A's real answer (22.487375ms)
+✔ G2-XI3 (acknowledged): A presses "I checked X", signs out, B, then A again -- nothing of the attempt anywhere: not on B's or A's screen, not in storage, not in the process (19.5095ms)
+✔ G2-XI4 (deletion done): A deletes the account with an uncertain attempt -- B then sees nothing of A and can post; STORAGE: A's attempt record stays on the device (known SM4-D) and A's post text stays in the app process until restart (same family, recorded) (44.360334ms)
+✔ G2-XI5 (deletion while A's send is out): the deletion completes, then A's answer lands -- B never sees it; STORAGE: the answer is still recorded for the deleted A (an uncertain record written AFTER the deletion) (37.274375ms)
+✔ G2-XI6 (deletion refused while A's send is out, e.g. PUBLISH_IN_FLIGHT): A stays signed in, A's screen keeps waiting and then shows the real answer; nothing is removed (23.844208ms)
+✔ negative controls: (1) a memory that is NOT per person makes B see A's attempt after the switch (XI1 fails); (2) a route that keeps one screen across people shows A's result to B (XI1 fails) (34.794833ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 550.498166
