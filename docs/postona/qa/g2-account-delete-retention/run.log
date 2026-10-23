@@ -1,0 +1,15 @@
+✔ G2-AD1 (KNOWN SM4-D, executed -- not a new finding): the REAL deleteAccount, answered "deleted" by the server, removes this person's onboarding record ONLY -- the manual-post draft and the unresolved-attempt record stay in device storage (62.467708ms)
+✔ G2-AD2 (KNOWN SM4, executed): the REAL signOut removes none of the three records (15.641666ms)
+✔ G2-AD3: a deletion the server refuses, a lost answer, or a confirmation of another session removes nothing and keeps the person signed in (35.107375ms)
+✔ G2-AD4: after A's deletion, B signs in and opens the manual-post screen on the same device -- A's text is NOT shown to B (hidden), yet A's 48-hour-old draft is STILL in storage (never read, so never expired) (33.034292ms)
+✔ G2-AD5: the same person signing in again on the device after sign-out (a new session) -- the old draft is removed from storage on that visit (SM4 ends only when THIS person reads again) (18.649708ms)
+✔ ACCEPTANCE (for the SM4-D fix, G1/G5): a clean-up that removes the draft at deletion must also win over a draft save still on its way -- today a save that lands after a removal re-creates the draft (shown with a clean-up that removes the draft key) (28.142917ms)
+✔ controls: (1) the provider really runs -- a provider whose clean-up line is removed keeps the onboarding record too (AD1 notices); (2) the offline harness makes no request outside the fake server (9.06675ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 419.882417
