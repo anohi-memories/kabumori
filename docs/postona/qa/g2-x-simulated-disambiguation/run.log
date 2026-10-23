@@ -1,0 +1,19 @@
+✔ G2-SIM1 (marked simulated): a screen opened LATER in the same process shows the attempt as unresolved -- no success word, no post id, no re-ask, nothing sendable (the "test result" note is not carried: conservative) (163.968542ms)
+ℹ marked simulated: later screen = {"phase":"result","result":"uncertain","unresolved":"uncertain"}
+✔ G2-SIM2 (marked simulated): a person switch after the test result -- B sees nothing of it and can post; A back sees the attempt unresolved, never as posted (39.212541ms)
+✔ G2-SIM3 (marked simulated): a screen loaded BEFORE the send cannot treat the test result as "done" -- its new send is refused by the send-entry wall (no second request) (33.151541ms)
+✔ G2-SIM1 (no marks): a screen opened LATER in the same process shows the attempt as unresolved -- no success word, no post id, no re-ask, nothing sendable (the "test result" note is not carried: conservative) (23.051167ms)
+ℹ no marks: later screen = {"phase":"result","result":"uncertain","unresolved":"uncertain"}
+✔ G2-SIM2 (no marks): a person switch after the test result -- B sees nothing of it and can post; A back sees the attempt unresolved, never as posted (19.861667ms)
+✔ G2-SIM3 (no marks): a screen loaded BEFORE the send cannot treat the test result as "done" -- its new send is refused by the send-entry wall (no second request) (24.236959ms)
+✔ G2-SIM4: the used account disappears from the list (disconnect / reload) after a test result -- the result stays a test result, no success, nothing sendable (24.866208ms)
+✔ G2-SIM5 (positive control): the same flow with REAL marks is a post -- "受け付けました" and the post id are shown (the checks above can see a success) (20.017792ms)
+✔ negative control: a model that turns a simulated answer into "sent" is caught -- the first screen then shows the post id as a success (G2-SIM1 fails) (34.010291ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 618.778542
