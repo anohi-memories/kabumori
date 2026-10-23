@@ -1,4 +1,4 @@
-"""Mutation check for the G5-24 (S2-1) T13 anonymous-refusal candidate: ONE rule of the candidate is broken in a scratch COPY (a body mutant
+"""Mutation check for the G5-24 / G5-25 (S2-1) T13 anonymous-refusal candidate: ONE rule of the candidate is broken in a scratch COPY (a body mutant
 also gets its md5 constants recomputed in the candidate and the rollback, so it fails for the rule and not for the checksum); the suite
 (postona_personal_t13_anon_pg_run.sh) must fail. A control must pass first. The copy has no .git: the two pinned files are extracted once
 with `git show` and handed over in S21_PINNED_DIR. Usage (needs the socket variables of a THROW-AWAY local cluster):
@@ -22,18 +22,21 @@ M = [
     # ---- the rule
     ('the anonymous claim is not checked', C, "\n     or v_anonymous is distinct from 'false'\n", "\n"),
     ('only the literal true is refused', C, "     or v_anonymous is distinct from 'false'\n", "     or v_anonymous = 'true'\n"),
-    ('the per-claim setting is not read', C, "    v_anonymous := coalesce(nullif(current_setting('request.jwt.claim.is_anonymous', true), ''), 'false');\n", ""),
-    ('the JSON claim is not read', C, "      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'false');\n", ""),
-    ('a missing claim counts as anonymous', C, "      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'false');\n",
-     "      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'true');\n"),
-    ('a JSON string "false" counts as false', C, "      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'false');\n",
-     "      v_anonymous := coalesce(nullif(v_claims ->> 'is_anonymous', 'null'), 'false');\n"),
+    ('the per-claim setting is not read', C, "    v_anonymous := nullif(current_setting('request.jwt.claim.is_anonymous', true), '');\n", ""),
+    # (G5-25, H4 P2) a missing / empty claim is NOT proof of non-anonymity
+    ('a missing or empty per-claim setting counts as false', C, "    v_anonymous := nullif(current_setting('request.jwt.claim.is_anonymous', true), '');\n",
+     "    v_anonymous := coalesce(nullif(current_setting('request.jwt.claim.is_anonymous', true), ''), 'false');\n"),
+    ('the JSON claim is not read', C, "      v_anonymous := case when jsonb_typeof(v_claims -> 'is_anonymous') = 'boolean' then v_claims ->> 'is_anonymous' end;\n", ""),
+    ('a missing or null JSON claim counts as false', C, "      v_anonymous := case when jsonb_typeof(v_claims -> 'is_anonymous') = 'boolean' then v_claims ->> 'is_anonymous' end;\n",
+     "      v_anonymous := coalesce(case when jsonb_typeof(v_claims -> 'is_anonymous') = 'boolean' then v_claims ->> 'is_anonymous' end, 'false');\n"),
+    ('the JSON type is not checked (a string "false" counts as false)', C, "      v_anonymous := case when jsonb_typeof(v_claims -> 'is_anonymous') = 'boolean' then v_claims ->> 'is_anonymous' end;\n",
+     "      v_anonymous := v_claims ->> 'is_anonymous';\n"),
     ('the refusal is after the locks', C, "     or v_anonymous is distinct from 'false'\n", "\n"),  # paired with the next edit, see below
     # ---- the install guards
     ('a changed body is replaced', C, "  if v_md5 is distinct from '08840016794a973225be767952265e79' then\n    raise exception 'T13_ANON_PRECONDITION_BODY_NOT_REVIEWED';",
      "  if false then\n    raise exception 'T13_ANON_PRECONDITION_BODY_NOT_REVIEWED';"),
     ('the install does not check the shape', C, "    raise exception 'T13_ANON_PRECONDITION_SHAPE';", "    null;"),
-    ('a second install is not refused', C, "  if v_md5 = 'cba0e35a9c7e9871f9770fcc036fcb73' then\n    raise exception 'T13_ANON_ALREADY_APPLIED';",
+    ('a second install is not refused', C, "  if v_md5 = '1f8cd9c764c251f3232c61b7a77ff597' then\n    raise exception 'T13_ANON_ALREADY_APPLIED';",
      "  if false then\n    raise exception 'T13_ANON_ALREADY_APPLIED';"),
     ('the rollback restores a different body', RB, "    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\n\n  -- 2. I1 lock order",
      "    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\n  -- edited\n\n  -- 2. I1 lock order"),

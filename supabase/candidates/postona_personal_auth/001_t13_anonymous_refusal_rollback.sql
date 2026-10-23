@@ -23,7 +23,7 @@ begin
     raise exception 'T13_ANON_ROLLBACK_NOT_APPLIED';
   end if;
   -- only the exact reviewed body is replaced: anything else is a different function and stays untouched
-  if v_md5 is distinct from 'cba0e35a9c7e9871f9770fcc036fcb73' then
+  if v_md5 is distinct from '1f8cd9c764c251f3232c61b7a77ff597' then
     raise exception 'T13_ANON_ROLLBACK_PRECONDITION_BODY_NOT_REVIEWED';
   end if;
   -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void,
