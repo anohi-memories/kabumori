@@ -1,0 +1,110 @@
+⚠ RELEASE GATE G2-RW1 uncertain (SM4-D acceptance, todo): after a SUCCESSFUL deletion, a late "uncertain" send answer re-creates nothing of A -- no attempt record, no text in the process memory (90.64975ms) # SM4-D acceptance: red until the clean-up and a fence for late writes exist (G1/G5)
+ℹ uncertain: {"record":true,"draft":false,"memory":true}
+⚠ RELEASE GATE G2-RW1 pending (SM4-D acceptance, todo): after a SUCCESSFUL deletion, a late "pending" send answer re-creates nothing of A -- no attempt record, no text in the process memory (34.509875ms) # SM4-D acceptance: red until the clean-up and a fence for late writes exist (G1/G5)
+ℹ pending: {"record":true,"draft":false,"memory":true}
+⚠ RELEASE GATE G2-RW1 unavailable (SM4-D acceptance, todo): after a SUCCESSFUL deletion, a late "unavailable" send answer re-creates nothing of A -- no attempt record, no text in the process memory (30.265833ms) # SM4-D acceptance: red until the clean-up and a fence for late writes exist (G1/G5)
+ℹ unavailable: {"record":true,"draft":false,"memory":true}
+⚠ RELEASE GATE G2-RW2 (SM4-D acceptance, todo): after a SUCCESSFUL deletion, A's draft is gone -- including a save that was still on its way (25.447375ms) # SM4-D acceptance: red until the clean-up removes drafts in order with pending saves (G1/G5)
+ℹ {"record":false,"draft":true,"memory":false}
+✔ G2-RW3 (control): a late answer that PROVES an end (published, rejected) after a deletion leaves nothing -- the proven end clears record and memory by itself (57.515375ms)
+✔ G2-RW4 (control): a deletion the server REFUSES (A still exists) -- the late answer is recorded for A and shown to A (that write is right, not residue) (23.409875ms)
+✔ G2-RW5 (control): a plain SIGN-OUT then B -- the late answer is recorded for A (A still exists; known SM4 is about retention, not this write) and B sees nothing (14.692125ms)
+✔ G2-RW6 (fix requirement): with a clean-up that removes A's keys, the ORDER decides -- an answer before the clean-up leaves no record, an answer after it re-creates the record; the process memory survives both (the provider cannot reach it: BLOCKED_IF a G1 flow API for the clean-up) (42.768625ms)
+✔ G2-RW7 (fix requirement): clearing through the app's own store instances is ordered for DRAFTS (the draft store queues writes and removals) but NOT for the attempt record (no queue; a later answer still writes) -- so the late send answer needs a fence, not only a clean-up (31.879667ms)
+✔ negative control: a late-answer path that does not write the record (keep() made a no-op) would turn RW1 green for the record -- so RW1 really measures that write (the memory part stays red) (25.091625ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 4
+ℹ duration_ms 622.159584
+
+✖ failing tests:
+
+test at tests/g2-delete-inflight-rewrite.test.mjs:399:3
+⚠ RELEASE GATE G2-RW1 uncertain (SM4-D acceptance, todo): after a SUCCESSFUL deletion, a late "uncertain" send answer re-creates nothing of A -- no attempt record, no text in the process memory (90.64975ms) # SM4-D acceptance: red until the clean-up and a fence for late writes exist (G1/G5)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   memory: true,
+  +   record: true
+  -   memory: false,
+  -   record: false
+    }
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-rw/apps/social-mobile/tests/g2-delete-inflight-rewrite.test.mjs:406:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { record: true, memory: true },
+    expected: { record: false, memory: false },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-delete-inflight-rewrite.test.mjs:399:3
+⚠ RELEASE GATE G2-RW1 pending (SM4-D acceptance, todo): after a SUCCESSFUL deletion, a late "pending" send answer re-creates nothing of A -- no attempt record, no text in the process memory (34.509875ms) # SM4-D acceptance: red until the clean-up and a fence for late writes exist (G1/G5)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   memory: true,
+  +   record: true
+  -   memory: false,
+  -   record: false
+    }
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-rw/apps/social-mobile/tests/g2-delete-inflight-rewrite.test.mjs:406:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { record: true, memory: true },
+    expected: { record: false, memory: false },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-delete-inflight-rewrite.test.mjs:399:3
+⚠ RELEASE GATE G2-RW1 unavailable (SM4-D acceptance, todo): after a SUCCESSFUL deletion, a late "unavailable" send answer re-creates nothing of A -- no attempt record, no text in the process memory (30.265833ms) # SM4-D acceptance: red until the clean-up and a fence for late writes exist (G1/G5)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   memory: true,
+  +   record: true
+  -   memory: false,
+  -   record: false
+    }
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-rw/apps/social-mobile/tests/g2-delete-inflight-rewrite.test.mjs:406:12)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { record: true, memory: true },
+    expected: { record: false, memory: false },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/g2-delete-inflight-rewrite.test.mjs:410:1
+⚠ RELEASE GATE G2-RW2 (SM4-D acceptance, todo): after a SUCCESSFUL deletion, A's draft is gone -- including a save that was still on its way (25.447375ms) # SM4-D acceptance: red until the clean-up removes drafts in order with pending saves (G1/G5)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  
+  true !== false
+  
+      at TestContext.<anonymous> (file://~/Developer/kabumori-g2-rw/apps/social-mobile/tests/g2-delete-inflight-rewrite.test.mjs:426:10)
+      at async Test.run (node:internal/test_runner/test:1389:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:960:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: true,
+    expected: false,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
