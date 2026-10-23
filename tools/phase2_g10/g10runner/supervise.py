@@ -1,11 +1,12 @@
 """監督機構: 停止（stop_run）・S1（ランごとの reaper）・S2（watchdog）。仕様 v5.1 §2・v5.2 §1-4・v5.4 §3。"""
 import json
 import os
+import threading
 import time
 
-from . import policy as policy_mod, procs, registry, state
+from . import issue as issue_mod, policy as policy_mod, procs, registry, state
 from .chainlog import ChainError
-from .fsutil import atomic_write_json, read_json
+from .fsutil import atomic_write_json, canonical, read_json, sha256_hex
 
 
 def supervisor_log(layout, record):
@@ -163,11 +164,88 @@ def issue_revoked(agent, entry):
         return False
 
 
+def _issue_monitor_check(layout, policy, agent, run_id):
+    try:
+        doc = read_json(os.path.join(layout.run_dir(run_id), "request.json"))
+        req = doc["request"]
+        if not agent.verifier.verify("runner", canonical(req), doc["sig"]) or req.get("run_id") != run_id:
+            return "request unverifiable", None
+    except Exception as exc:  # 要求が読めないランは、照合できないので安全側
+        return "request unreadable: %s" % type(exc).__name__, None
+    witness = issue_mod.spawn_witness(layout.root, policy)
+    if witness is None:
+        return "no issue witness (real GitHub fetch is not implemented)", None
+    nonce = issue_mod.monitor_nonce(run_id)
+    try:
+        ev = witness.observe("monitor", nonce, timeout=policy_mod.timing(policy, "issue_fetch_timeout"))
+    except Exception as exc:  # 取得の失敗・打ち切りを「変更なし」とみなさない
+        return "issue fetch failed while running: %s" % type(exc).__name__, None
+    reason = issue_mod.check_monitor(ev, req.get("issue_evidence"), agent.verifier, req.get("prompt"), time.time(),
+                                     policy_mod.timing(policy, "spawn_evidence_max_age"), nonce)
+    return reason, ev
+
+
+def issue_monitor_check(layout, policy, agent, run_id, by):
+    """実行中のランの Issue #323 を再取得し、OPEN・本文・世代が CLAIM 時と同じか照合する（TASK 7）。
+    問題があれば理由、なければ None。結果は runs/<run_id>/issue_monitor.jsonl に監査証拠として残す。"""
+    reason, ev = _issue_monitor_check(layout, policy, agent, run_id)
+    record = {"ts": time.time(), "by": by, "ok": reason is None, "reason": reason,
+              "evidence_sha256": sha256_hex(canonical(ev)) if ev else None}
+    try:
+        with open(os.path.join(layout.run_dir(run_id), "issue_monitor.jsonl"), "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        pass
+    return reason
+
+
+def stop_for_issue_change(layout, policy, agent, entry, problem, by):
+    """実行中の Issue の変化・照合不能: まず HALT（HALT_AGENT）を記録し、次にランを止める。"""
+    agent.halt_agent("issue_changed_while_running", {"run_id": entry["run_id"], "reason": problem, "by": by})
+    stop_run(layout, policy, agent, entry, "issue_changed_while_running", by)
+
+
+class IssueMonitor:
+    """S1 の実行中の Issue 監督（TASK 7）。再取得は別スレッドで行い、取得の遅れ（最大 issue_fetch_timeout 秒）で
+    S1 の HALT・取消・期限の確認を止めない。打ち切り時間を過ぎても戻らない取得は、失敗として扱う。"""
+
+    def __init__(self, layout, policy, agent, run_id):
+        self.layout, self.policy, self.agent, self.run_id = layout, policy, agent, run_id
+        self.interval = policy_mod.timing(policy, "issue_monitor_interval")
+        self.overdue = policy_mod.timing(policy, "issue_fetch_timeout") + self.interval
+        self.thread = None
+        self.result = None
+        self.started_at = None
+        self.ok_at = None
+
+    def _run(self):
+        self.result = issue_monitor_check(self.layout, self.policy, self.agent, self.run_id, "S1")
+
+    def poll(self, now):
+        """問題があれば理由を返す（None＝まだ・問題なし）。"""
+        if self.thread is not None:
+            if self.thread.is_alive():
+                if now - self.started_at > self.overdue:
+                    return "issue monitor fetch overdue"
+                return None
+            self.thread = None
+            if self.result is not None:
+                return self.result
+            self.ok_at = time.time()
+        if self.started_at is None or now - self.started_at >= self.interval:
+            self.started_at = now
+            self.result = None
+            self.thread = threading.Thread(target=self._run, daemon=True)
+            self.thread.start()
+        return None
+
+
 def reaper_loop(layout, policy, agent, run_id):
     """S1: 1つのランを期限まで監督する。実行係（スタブ）から独立したプロセスで動く。"""
     interval = policy_mod.timing(policy, "reaper_interval")
     hb_path = os.path.join(layout.run_dir(run_id), "reaper_heartbeat.json")
     started = time.time()
+    monitor = IssueMonitor(layout, policy, agent, run_id)
     while True:
         try:
             entry = registry.load(layout, run_id)
@@ -178,7 +256,7 @@ def reaper_loop(layout, policy, agent, run_id):
             return 2
         atomic_write_json(hb_path, {"pid": os.getpid(), "start": procs.start_time(os.getpid()),
                                     "ts": time.time(), "run_id": run_id,
-                                    "loaded_deadline": entry["hard_deadline"]})
+                                    "loaded_deadline": entry["hard_deadline"], "issue_ok_at": monitor.ok_at})
         st = entry["state"]
         if st in registry.TERMINAL or st in registry.UNRESOLVED:
             return 0
@@ -189,9 +267,14 @@ def reaper_loop(layout, policy, agent, run_id):
         if hard_halt_requested(layout, agent):
             stop_run(layout, policy, agent, entry, "emergency_stop", "S1")
             return 0
-        if st == "running" and issue_revoked(agent, entry):  # 起動後の取消: 止める
+        if st == "running" and issue_revoked(agent, entry):  # 起動後の取消: 止める（毎周期・Issue の再取得より優先）
             stop_run(layout, policy, agent, entry, "issue_revoked", "S1")
             return 0
+        if st == "running":  # TASK 7: 実行中の Issue の変化・照合不能を検出して止める
+            problem = monitor.poll(now)
+            if problem:
+                stop_for_issue_change(layout, policy, agent, entry, problem, "S1")
+                return 0
         try:
             stub_ok = procs.identity_ok(entry.get("stub_pid"), entry.get("stub_start"))
             child_ok = procs.identity_ok(entry.get("child_pid"), entry.get("child_start"))
@@ -257,6 +340,9 @@ def watchdog_cycle(layout, policy, agent, now=None):
         elif issue_revoked(agent, entry):
             stop_run(layout, policy, agent, entry, "issue_revoked", "S2")
             actions.append((run_id, "issue_revoked"))
+        elif _s1_issue_monitor_stale(layout, policy, entry, now) and \
+                _s2_issue_problem(layout, policy, agent, entry) is not None:
+            actions.append((run_id, "issue_changed_while_running"))
         elif now >= entry["hard_deadline"] + slack or (now >= entry["hard_deadline"] and not reaper_ok):
             stop_run(layout, policy, agent, entry, "timed_out", "S2")
             actions.append((run_id, "timed_out"))
@@ -281,6 +367,22 @@ def watchdog_cycle(layout, policy, agent, now=None):
                                                     "observation_unknown": details["unknown"]})
                 actions.append((run_id, "orphan"))
     return actions
+
+
+def _s1_issue_monitor_stale(layout, policy, entry, now):
+    """S1 の Issue 監督が途絶えているか（最後の正常な照合が古い・記録なし）。そのときだけ S2 が自分で照合する。"""
+    hb = read_json(os.path.join(layout.run_dir(entry["run_id"]), "reaper_heartbeat.json")) or {}
+    ok_at = hb.get("issue_ok_at")
+    limit = policy_mod.timing(policy, "issue_monitor_interval") * 3 + policy_mod.timing(policy, "issue_fetch_timeout")
+    base = ok_at if isinstance(ok_at, (int, float)) and not isinstance(ok_at, bool) else entry.get("spawned_at")
+    return not isinstance(base, (int, float)) or now - base > limit
+
+
+def _s2_issue_problem(layout, policy, agent, entry):
+    problem = issue_monitor_check(layout, policy, agent, entry["run_id"], "S2")
+    if problem:
+        stop_for_issue_change(layout, policy, agent, entry, problem, "S2")
+    return problem
 
 
 def watchdog_loop(layout, policy, agent, interval):

@@ -440,7 +440,10 @@ class Control:
         path = os.path.join(self.layout.reports, run_id + ".md")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
-        self.alert(status, "G10 %s" % status, "task_id: %s" % req["task_id"])
+        detail = "task_id: %s" % req["task_id"]
+        if entry and entry.get("stop_reason"):
+            detail += "（停止の理由: %s）" % entry["stop_reason"]
+        self.alert(status, "G10 %s" % status, detail)
         if violations:
             self.halt("hard", "safety violation: " + "; ".join(violations), wait_sync=0)
         elif self.consecutive_failures(self.ledger.read_all()) >= int(self.policy["breaker_consecutive_failures"]):

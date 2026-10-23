@@ -82,6 +82,7 @@ FAST_TIMING = {
     "issue_evidence_max_age": 120.0,
     "spawn_evidence_max_age": 10.0,
     "issue_fetch_timeout": 5.0,
+    "issue_monitor_interval": 0.5,
 }
 TRUSTED_ISSUE = {"state": "OPEN", "number": 323, "author": "anohi-memories", "editor": None}
 

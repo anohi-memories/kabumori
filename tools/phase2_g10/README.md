@@ -6,6 +6,7 @@ H4 再レビュー指摘 P1×2・P2×1 の修正は TASK `g10-phase2-pr423-h4-c4
 H3 第10TASK（C3）指摘 P1・P2 の修正は TASK `g10-phase2-pr423-h3-c3-identity-drift-nan-evidence-fix-20261022`（下の「H3 C3 レビュー修正」）。
 Issue の鮮度・取消の起動直前安全契約は TASK `g10-phase2-pr423-issue-freshness-revoke-fake-gate-20261022`（下の「Issue の鮮度・取消の契約」）。
 H4 C4 P2（遅延する再取得の後の HALT・期限の再判定）の修正は TASK `g10-phase2-pr423-h4-c4-delayed-fetch-halt-expiry-p2-fix-20261022`（同じ節の「再取得の後の再判定」）。
+実行中の Issue の変化の検出は TASK `g10-phase2-pr423-running-issue-change-monitor-fake-20261023`（同じ節の「実行中の Issue 監督」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -119,6 +120,20 @@ CLAIM 時の証拠（最大 `issue_evidence_max_age`＝120秒前の写し）は�
 または要求の期限が過ぎた場合は、SPAWNING・起動へ進まない（`aborted_by_halt`／`aborted_before_spawn`）。
 2回目の判定から実際の起動（Popen）までのごく短い間に立ったフラグは、起動の後に S1/S2 が止める（ハードHALT）。
 
+**実行中の Issue 監督（TASK 7）**: running 中のランについて、S1 が `issue_monitor_interval`（既定5秒。試験は0.3〜0.5秒）ごとに
+Issue #323 を再取得し（`purpose: monitor`、毎回ちがう nonce）、OPEN・本文・世代（updated_at）が CLAIM 時と同じことを照合する。
+CLOSED（本文は不変でも）・idle・review_required・本文だけの変更・世代だけの変更・取得の失敗・打ち切り・署名不正・要求が読めない、の
+いずれでも「変更なし」とはみなさず、まず HALT（HALT_AGENT `issue_changed_while_running`）を記録してからランを止める
+（`stop_reason: issue_changed_while_running`。識別の照合・drift の扱いは従来どおりで、止められなければ stop_unconfirmed）。
+照合の結果は毎回 `runs/<run_id>/issue_monitor.jsonl` に監査記録として残し、finalize の通知には停止の理由を載せる。
+- 再取得は S1 の**別スレッド**で行うので、取得の遅れ（最大 `issue_fetch_timeout`）の間も、S1 の HALT・取消（ISSUE_REVOKE は毎周期・
+  再取得より優先）・期限の確認は止まらない。打ち切り時間＋間隔を過ぎても戻らない取得は失敗として扱う。
+- S2 は、S1 の最後の正常な照合（reaper の heartbeat の `issue_ok_at`）が「間隔×3＋打ち切り時間」より古いときだけ、自分で照合する（予備）。
+- **誤停止の扱い**: 取得の一時的な失敗でも止めて HALT にする（安全側）。人が Issue と監査記録を確認し、問題が無ければ UNHALT して、
+  必要なら担当ちゃが TASK を出し直す。
+- **残るリスク**: Issue の変化から停止までは、最大で「監督の間隔＋取得時間＋停止時間（猶予20秒＋確認10秒）」かかる。
+  GitHub の変化と監督の照合は原子的ではない。実際の GitHub の API の回数制限（間隔5秒なら1ランあたり毎時720回）は未検証。
+
 **線形化点**: 起動の可否は「スタブが共有ロックを保持して行う最終判定（取消イベントの確認と起動直前の再取得）」で決まる。
 取消（排他ロック）は、それより前なら起動しない、後なら起動の確定の後になり S1/S2 が止める（どちらの順序も試験で確認）。
 
@@ -126,7 +141,7 @@ CLAIM 時の証拠（最大 `issue_evidence_max_age`＝120秒前の写し）は�
 - GitHub と OS の起動は原子的にできない。起動直前の再取得から実際の起動（数ミリ秒〜）までの間の Issue の変化は、起動前には止められない
   （その後の S1/S2 の取消確認・finalize の再照合で事後に止める・検出する）。
 - 再取得はロックの中で行うため、取得の遅れ（最大5秒）の間、HALT・取消の追記が待たされる（ハードHALT はフラグで S1/S2 がスタブも止める）。
-- 起動後の取消は、S1 の確認間隔（既定1秒）までは走り続ける。Issue 側の CLOSED・変更（取消イベントを伴わないもの）は起動後は finalize まで検出しない。
+- 起動後の取消は、S1 の確認間隔（既定1秒）までは走り続ける。Issue 側の CLOSED・変更（取消イベントを伴わないもの）は、TASK 7 から実行中の監督で検出する（間隔は上記）。
 - 取得係・witness 鍵・模擬の Issue はすべて試験用。実際の GitHub 取得・HTTP 参照時刻・編集者の判定・鍵の権限分離は未実装（次段階のゲート）。
 
 **人が止める手順**（模擬の範囲）: 特定のTASKを止める → `Control.revoke_issue(task_id, approval_id=..., reason=...)`（起動前なら起動しない、

@@ -27,7 +27,7 @@ TRUSTED_LOGIN = "anohi-memories"
 EVIDENCE_FIELDS = ("repo", "number", "state", "author", "editor", "updated_at", "fetched_at", "body_sha256",
                    "task_sha256", "purpose", "nonce")
 # 証拠の用途（TASK 5）: claim＝CLAIM 前の取得、spawn＝ACCEPTED 後・起動直前の再取得、postflight＝finalize での再取得
-PURPOSES = ("claim", "spawn", "postflight")
+PURPOSES = ("claim", "spawn", "postflight", "monitor")  # monitor＝実行中の監督の再取得（TASK 7）
 
 
 class IssueSourceError(RuntimeError):
@@ -202,6 +202,12 @@ def postflight_nonce(run_id):
     return "postflight:%s" % run_id
 
 
+def monitor_nonce(run_id):
+    """実行中の監督の再取得ごとの値（毎回ちがう。古い監督の証拠の使い回しを拒否）。"""
+    import uuid
+    return "monitor:%s:%s" % (run_id, uuid.uuid4().hex)
+
+
 def _same_generation(doc, claim_doc):
     """CLAIM 時の証拠と、世代（updated_at）・本文・state が同じか。"""
     ev, cev = doc["evidence"], (claim_doc or {}).get("evidence") or {}
@@ -226,6 +232,14 @@ def check_spawn_evidence(doc, claim_doc, verifier, prompt, now, max_age, nonce, 
 def check_postflight(doc, claim_doc, verifier, prompt, now, max_age, nonce):
     """finalize の再取得証拠: OPEN（CLOSED だけの変更も検出）・本文・世代が CLAIM 時と同じこと。"""
     reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="postflight", nonce=nonce)
+    if reason:
+        return reason
+    return _same_generation(doc, claim_doc)
+
+
+def check_monitor(doc, claim_doc, verifier, prompt, now, max_age, nonce):
+    """実行中の監督の再取得証拠（TASK 7）: OPEN・本文・世代が CLAIM 時と同じこと（finalize の再照合と同じ条件）。"""
+    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="monitor", nonce=nonce)
     if reason:
         return reason
     return _same_generation(doc, claim_doc)
