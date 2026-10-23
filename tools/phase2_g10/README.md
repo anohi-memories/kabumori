@@ -7,6 +7,7 @@ H3 第10TASK（C3）指摘 P1・P2 の修正は TASK `g10-phase2-pr423-h3-c3-ide
 Issue の鮮度・取消の起動直前安全契約は TASK `g10-phase2-pr423-issue-freshness-revoke-fake-gate-20261022`（下の「Issue の鮮度・取消の契約」）。
 H4 C4 P2（遅延する再取得の後の HALT・期限の再判定）の修正は TASK `g10-phase2-pr423-h4-c4-delayed-fetch-halt-expiry-p2-fix-20261022`（同じ節の「再取得の後の再判定」）。
 実行中の Issue の変化の検出は TASK `g10-phase2-pr423-running-issue-change-monitor-fake-20261023`（同じ節の「実行中の Issue 監督」）。
+H2 C2 P2×2（監督スレッドの異常・正常時刻）の修正は TASK `g10-phase2-pr423-h2-c2-monitor-worker-stale-heartbeat-p2-fix-20261023`（同じ節の「監督スレッドの結果と正常時刻の契約」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -129,6 +130,12 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 - 再取得は S1 の**別スレッド**で行うので、取得の遅れ（最大 `issue_fetch_timeout`）の間も、S1 の HALT・取消（ISSUE_REVOKE は毎周期・
   再取得より優先）・期限の確認は止まらない。打ち切り時間＋間隔を過ぎても戻らない取得は失敗として扱う。
 - S2 は、S1 の最後の正常な照合（reaper の heartbeat の `issue_ok_at`）が「間隔×3＋打ち切り時間」より古いときだけ、自分で照合する（予備）。
+- **監督スレッドの結果と正常時刻の契約（TASK 8）**: スレッドの結果は「未完了／成功（取得時刻）／失敗（理由）」で区別する。
+  取得係の生成（鍵が読めない等）・取得・署名照合・監査のどこで例外が起きても、例外の型名だけの決まった理由
+  （例: `issue witness unavailable: ValueError`）で**失敗**にし、例外の本文は記録しない。例外で終わった・結果を残さずに終わったスレッドも失敗。
+  失敗では `issue_ok_at` を更新しない。成功の `issue_ok_at` は**証拠の取得時刻**で、親（S1）が受け取った時刻ではない（後戻りもしない）。
+  受け取りが遅れて `spawn_evidence_max_age`（10秒）より古くなった成功は「新しい照合」として公表せず、すぐ取り直す。
+  したがって S1 が遅れ・停止しても、S2 は `issue_ok_at` の古さで気づいて自分で照合する（S2 の照合も例外を投げない）。
 - **誤停止の扱い**: 取得の一時的な失敗でも止めて HALT にする（安全側）。人が Issue と監査記録を確認し、問題が無ければ UNHALT して、
   必要なら担当ちゃが TASK を出し直す。
 - **残るリスク**: Issue の変化から停止までは、最大で「監督の間隔＋取得時間＋停止時間（猶予20秒＋確認10秒）」かかる。

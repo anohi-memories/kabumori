@@ -6,7 +6,7 @@ import time
 
 from . import issue as issue_mod, policy as policy_mod, procs, registry, state
 from .chainlog import ChainError
-from .fsutil import atomic_write_json, canonical, read_json, sha256_hex
+from .fsutil import atomic_write_json, canonical, is_finite_number, read_json, sha256_hex
 
 
 def supervisor_log(layout, record):
@@ -172,7 +172,10 @@ def _issue_monitor_check(layout, policy, agent, run_id):
             return "request unverifiable", None
     except Exception as exc:  # 要求が読めないランは、照合できないので安全側
         return "request unreadable: %s" % type(exc).__name__, None
-    witness = issue_mod.spawn_witness(layout.root, policy)
+    try:
+        witness = issue_mod.spawn_witness(layout.root, policy)
+    except Exception as exc:  # 取得係を作れない（鍵が読めない等）: 照合できないので安全側（TASK 8 R1）
+        return "issue witness unavailable: %s" % type(exc).__name__, None
     if witness is None:
         return "no issue witness (real GitHub fetch is not implemented)", None
     nonce = issue_mod.monitor_nonce(run_id)
@@ -187,16 +190,41 @@ def _issue_monitor_check(layout, policy, agent, run_id):
 
 def issue_monitor_check(layout, policy, agent, run_id, by):
     """実行中のランの Issue #323 を再取得し、OPEN・本文・世代が CLAIM 時と同じか照合する（TASK 7）。
-    問題があれば理由、なければ None。結果は runs/<run_id>/issue_monitor.jsonl に監査証拠として残す。"""
-    reason, ev = _issue_monitor_check(layout, policy, agent, run_id)
-    record = {"ts": time.time(), "by": by, "ok": reason is None, "reason": reason,
-              "evidence_sha256": sha256_hex(canonical(ev)) if ev else None}
+
+    戻り値: (理由, checked_at)。問題なしなら (None, 証拠の取得時刻)。例外は投げない（TASK 8 R1: どの段階の
+    例外も、型名だけの決まった理由で失敗にする。例外の本文は記録しない）。結果は runs/<run_id>/issue_monitor.jsonl
+    に監査証拠として残す。"""
+    try:
+        reason, ev = _issue_monitor_check(layout, policy, agent, run_id)
+    except Exception as exc:
+        reason, ev = "issue monitor error: %s" % type(exc).__name__, None
+    checked_at = None
+    if reason is None:
+        try:
+            checked_at = ev["evidence"]["fetched_at"]
+        except (TypeError, KeyError):
+            checked_at = None
+        if not is_finite_number(checked_at):
+            reason, checked_at = "issue monitor produced no usable evidence", None
+    _record_issue_monitor(layout, run_id, {"ts": time.time(), "by": by, "ok": reason is None, "reason": reason,
+                                           "checked_at": checked_at,
+                                           "evidence_sha256": _safe_digest(ev) if reason is None else None})
+    return reason, checked_at
+
+
+def _safe_digest(ev):
+    try:
+        return sha256_hex(canonical(ev))
+    except (TypeError, ValueError):
+        return None
+
+
+def _record_issue_monitor(layout, run_id, record):
     try:
         with open(os.path.join(layout.run_dir(run_id), "issue_monitor.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-    except OSError:
+    except (OSError, ValueError):
         pass
-    return reason
 
 
 def stop_for_issue_change(layout, policy, agent, entry, problem, by):
@@ -207,19 +235,31 @@ def stop_for_issue_change(layout, policy, agent, entry, problem, by):
 
 class IssueMonitor:
     """S1 の実行中の Issue 監督（TASK 7）。再取得は別スレッドで行い、取得の遅れ（最大 issue_fetch_timeout 秒）で
-    S1 の HALT・取消・期限の確認を止めない。打ち切り時間を過ぎても戻らない取得は、失敗として扱う。"""
+    S1 の HALT・取消・期限の確認を止めない。打ち切り時間を過ぎても戻らない取得は、失敗として扱う。
+
+    TASK 8: スレッドの結果は「未完了（PENDING）／成功（SUCCESS, 取得時刻）／失敗（FAILURE, 理由）」で区別する。
+    - 例外で終わった・結果を残さずに終わったスレッドは失敗（成功の None と取り違えない）。ok_at は更新しない。
+    - 成功の ok_at は、親が受け取った時刻ではなく、証拠の取得時刻（checked_at）。受け取りが遅れて
+      `spawn_evidence_max_age` より古くなった成功は「新しい照合」として公表せず（ok_at を進めない）、すぐ取り直す。
+      これにより、S1 が遅れても S2 の stale の判定（issue_ok_at が古ければ S2 が自分で照合）をすり抜けない。"""
 
     def __init__(self, layout, policy, agent, run_id):
         self.layout, self.policy, self.agent, self.run_id = layout, policy, agent, run_id
         self.interval = policy_mod.timing(policy, "issue_monitor_interval")
         self.overdue = policy_mod.timing(policy, "issue_fetch_timeout") + self.interval
+        self.max_age = policy_mod.timing(policy, "spawn_evidence_max_age")
         self.thread = None
         self.result = None
         self.started_at = None
         self.ok_at = None
+        self.stale_discarded = 0
 
     def _run(self):
-        self.result = issue_monitor_check(self.layout, self.policy, self.agent, self.run_id, "S1")
+        try:
+            reason, checked_at = issue_monitor_check(self.layout, self.policy, self.agent, self.run_id, "S1")
+            self.result = ("FAILURE", reason) if reason is not None else ("SUCCESS", checked_at)
+        except BaseException as exc:  # どの例外も、型名だけの決まった理由で失敗として親へ伝える
+            self.result = ("FAILURE", "issue monitor worker error: %s" % type(exc).__name__)
 
     def poll(self, now):
         """問題があれば理由を返す（None＝まだ・問題なし）。"""
@@ -229,9 +269,20 @@ class IssueMonitor:
                     return "issue monitor fetch overdue"
                 return None
             self.thread = None
-            if self.result is not None:
-                return self.result
-            self.ok_at = time.time()
+            result, self.result = self.result, None
+            if not (isinstance(result, tuple) and len(result) == 2 and result[0] in ("SUCCESS", "FAILURE")):
+                return "issue monitor worker ended without a result"
+            if result[0] == "FAILURE":
+                return result[1] if isinstance(result[1], str) and result[1] else "issue monitor failed"
+            checked_at = result[1]
+            current = time.time()
+            if not is_finite_number(checked_at) or checked_at > current + 1.0:
+                return "issue monitor result has an invalid time"
+            if current - checked_at > self.max_age or now - checked_at > self.max_age:
+                self.stale_discarded += 1  # 古い成功: 公表せず、すぐ取り直す（S2 は issue_ok_at の古さで気づく）
+                self.started_at = None
+            elif self.ok_at is None or checked_at > self.ok_at:
+                self.ok_at = checked_at
         if self.started_at is None or now - self.started_at >= self.interval:
             self.started_at = now
             self.result = None
@@ -379,7 +430,7 @@ def _s1_issue_monitor_stale(layout, policy, entry, now):
 
 
 def _s2_issue_problem(layout, policy, agent, entry):
-    problem = issue_monitor_check(layout, policy, agent, entry["run_id"], "S2")
+    problem, _checked_at = issue_monitor_check(layout, policy, agent, entry["run_id"], "S2")
     if problem:
         stop_for_issue_change(layout, policy, agent, entry, problem, "S2")
     return problem
