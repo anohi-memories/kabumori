@@ -4,7 +4,7 @@ import test from "node:test";
 import type { PgConnect } from "./postgres_db.ts";
 import { createSinglePostDb } from "./single_post_db.ts";
 
-const SUBJECT = { userId: "11111111-1111-4111-8111-111111111111", sessionId: "22222222-2222-4222-8222-222222222222" };
+const SUBJECT = { userId: "11111111-1111-4111-8111-111111111111", sessionId: "22222222-2222-4222-8222-222222222222", isAnonymous: false as const };
 function scripted(answer: (text: string) => unknown[][] | Error) {
   const log: { text: string; args?: unknown[] }[] = [];
   const connect: PgConnect = () => Promise.resolve({
@@ -56,6 +56,16 @@ test("refusals keep POSTONA_RESV_* codes; a lock timeout is SERVICE_BUSY; anythi
   assert.deepEqual(await createSinglePostDb(scripted(() => pgError("canceling statement due to lock timeout", "55P03")).connect).call("preflight", ["r", "l"], SUBJECT), { ok: false, code: "POSTONA_RESV_SERVICE_BUSY" });
   assert.deepEqual(await createSinglePostDb(scripted(() => pgError("relation x secret")).connect).call("readback", ["r"], SUBJECT), { ok: false, code: "DB_ERROR" });
   await assert.rejects(() => createSinglePostDb(scripted(() => new TypeError("reset")).connect).call("record", ["r", "l", "published", "1", null, "x"], SUBJECT), /SINGLE_POST_DB_OUTCOME_UNKNOWN/u);
-  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("readback", ["r"], { userId: "x", sessionId: SUBJECT.sessionId }), { ok: false, code: "DB_REQUEST_INVALID" });
-  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("readback", ["r"], { userId: SUBJECT.userId, sessionId: "" }), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("readback", ["r"], { userId: "x", sessionId: SUBJECT.sessionId, isAnonymous: false }), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await createSinglePostDb(scripted(() => [[]]).connect).call("readback", ["r"], { userId: SUBJECT.userId, sessionId: "", isAnonymous: false }), { ok: false, code: "DB_REQUEST_INVALID" });
+});
+
+test("G3-34 F1: a subject without the token's explicit non-anonymous false never reaches the database (refused before connecting)", async () => {
+  let connected = 0;
+  const db = createSinglePostDb(() => { connected += 1; return Promise.reject(new Error("x")); });
+  for (const isAnonymous of [undefined, null, "false", true]) {
+    const subject = { ...SUBJECT, isAnonymous } as unknown as typeof SUBJECT;
+    assert.deepEqual(await db.call("readback", [SUBJECT.userId], subject), { ok: false, code: "DB_REQUEST_INVALID" }, String(isAnonymous));
+  }
+  assert.equal(connected, 0);
 });

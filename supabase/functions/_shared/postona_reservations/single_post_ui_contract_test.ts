@@ -24,7 +24,7 @@ const REQ = "55555555-5555-4555-8555-555555555555";
 const GEN = "a1".repeat(32);
 const X_TOKEN = "fake-x-token-sa_x-0001";
 const b64 = (v: unknown) => btoa(JSON.stringify(v)).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
-const TOKEN = `${b64({ alg: "HS256" })}.${b64({ sub: USER, session_id: SESSION })}.sig`;
+const TOKEN = `${b64({ alg: "HS256" })}.${b64({ sub: USER, session_id: SESSION, is_anonymous: false })}.sig`;
 const auth = { verify: (t: string) => Promise.resolve(t === TOKEN ? { userId: USER } : null) };
 const sha = "b".repeat(64);
 const body = (text = "本文", id = REQ) => JSON.stringify({ socialAccountId: "sa_x", clientRequestId: id, text, consent: { confirmed: true, contentSha256: sha } });

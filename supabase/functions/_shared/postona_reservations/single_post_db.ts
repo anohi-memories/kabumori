@@ -15,7 +15,8 @@ import type { PgConnect } from "./postgres_db.ts";
 
 export type SinglePostFunction = "begin" | "preflight" | "record" | "readback";
 export type SinglePostDbResult = { ok: true; rows: Record<string, unknown>[] } | { ok: false; code: string };
-export type SinglePostSubject = { userId: string; sessionId: string };
+/** The verified caller and its token's explicit non-anonymous claim (only the literal false: anything else never reaches the database). */
+export type SinglePostSubject = { userId: string; sessionId: string; isAnonymous: false };
 export type SinglePostDb = { call(fn: SinglePostFunction, args: readonly unknown[], subject: SinglePostSubject): Promise<SinglePostDbResult> };
 
 export const SINGLE_POST_ROLE = "postona_resv_api";
@@ -40,7 +41,7 @@ export function createSinglePostDb(connect: PgConnect): SinglePostDb {
   return {
     async call(fn, args, subject) {
       const target = CALLS[fn];
-      if (!target || args.length !== target.arity || !UUID_RE.test(subject.userId) || !UUID_RE.test(subject.sessionId)) {
+      if (!target || args.length !== target.arity || !UUID_RE.test(subject.userId) || !UUID_RE.test(subject.sessionId) || subject.isAnonymous !== false) {
         return { ok: false, code: "DB_REQUEST_INVALID" };
       }
       const session = await connect();
@@ -52,8 +53,8 @@ export function createSinglePostDb(connect: PgConnect): SinglePostDb {
         await client.queryArray({ text: "SET LOCAL statement_timeout = '15s'" });
         await client.queryArray({
           text: "SELECT set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', '', true)",
-          // G3-34: Auth already refused an anonymous sign-in, so is_anonymous is the proven false G5's S2-2 requires.
-          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId, is_anonymous: false })],
+          // G3-34 F1: is_anonymous is the token's own explicit false carried in the subject (checked above), never a default.
+          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId, is_anonymous: subject.isAnonymous })],
         });
         const text = target.scalar ? `SELECT json_build_array(json_build_object('answer', ${target.sql}))::text` : `SELECT coalesce(json_agg(r), '[]'::json)::text FROM ${target.sql} r`;
         const result = await client.queryArray({ text, args: args.map((v) => (v === null || v === undefined ? null : String(v))) });

@@ -33,7 +33,7 @@ const USERS: Record<string, unknown> = {
 const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 const jwtOf = (alias: string): string => {
   const user = USERS[alias] as { id: string } | undefined;
-  return user ? `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: user.id, session_id: "00000000-0000-4000-8000-0000000000e1" }))}.sig-${alias}` : alias;
+  return user ? `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: user.id, session_id: "00000000-0000-4000-8000-0000000000e1", is_anonymous: false }))}.sig-${alias}` : alias;
 };
 const ALIAS_OF_JWT: Record<string, string> = Object.fromEntries(Object.keys(USERS).map((alias) => [jwtOf(alias), alias]));
 let authCalls = 0;

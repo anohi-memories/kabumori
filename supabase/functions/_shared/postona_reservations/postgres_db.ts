@@ -5,7 +5,7 @@
  *   BEGIN
  *   SET LOCAL ROLE postona_resv_api            -- a constant; the role is never taken from input
  *   SET LOCAL statement_timeout = '15s'
- *   set_config('request.jwt.claims', {sub, role, session_id, is_anonymous: false}, true), request.jwt.claim.sub = ''
+ *   set_config('request.jwt.claims', {sub, role, session_id, is_anonymous}, true), request.jwt.claim.sub = ''
  *                                              -- the VERIFIED subject and its session only, local to the transaction
  *                                                 (G3-34: what G5's person-session gate S2-2 reads; as single_post_db.ts)
  *   SELECT ... FROM postona_x_resv.<one fixed owner function>($1, ...)   -- every value is a bind parameter
@@ -61,7 +61,7 @@ export function createPostgresReservationDb(connect: PgConnect): ReservationDb {
   return {
     async call(fn: ReservationDbFunction, args: readonly unknown[], subject: ReservationSubject): Promise<DbResult> {
       const target = CALLS[fn];
-      if (!target || args.length !== target.arity || !UUID_RE.test(subject.userId) || !UUID_RE.test(subject.sessionId)) {
+      if (!target || args.length !== target.arity || !UUID_RE.test(subject.userId) || !UUID_RE.test(subject.sessionId) || subject.isAnonymous !== false) {
         return { ok: false, code: "DB_REQUEST_INVALID" };
       }
       const session = await connect(); // throws: unreachable, outcome unknown (nothing was sent)
@@ -73,8 +73,8 @@ export function createPostgresReservationDb(connect: PgConnect): ReservationDb {
         await client.queryArray({ text: "SET LOCAL statement_timeout = '15s'" });
         await client.queryArray({
           text: "SELECT set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', '', true)",
-          // Auth already refused an anonymous sign-in (supabase_auth.ts), so is_anonymous is the proven false S2-2 requires.
-          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId, is_anonymous: false })],
+          // G3-34 F1: is_anonymous is the token's own explicit false carried in the subject (checked above), never a default.
+          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId, is_anonymous: subject.isAnonymous })],
         });
         const result = await client.queryArray({
           text: `SELECT coalesce(json_agg(r), '[]'::json)::text FROM ${target.sql} r`,
