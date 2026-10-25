@@ -9,7 +9,7 @@ import { Link, Stack } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Dimensions, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Dimensions, Keyboard, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
@@ -90,6 +90,26 @@ const KEYBOARD_DISMISS_MODE = Platform.OS === 'ios' ? 'interactive' : 'on-drag';
 // grows up to this height and then scrolls inside itself, so the line being typed stays in the box and above the keyboard.
 const TEXT_BOX_MAX_HEIGHT = 240;
 
+// The text box being typed in must stay ABOVE the soft keyboard, its bottom edge included (G2 QA G2-A11Y-1: with the box low on
+// the screen, the keyboard covered the box itself, so the line being typed could not be read). The scroll view's keyboard insets
+// only make room; they do not move the box into view. So: when a box gets the focus, when it grows, and when the keyboard is
+// shown or changes its height, the box is measured on the screen and -- only if its bottom is under the keyboard -- the content
+// is scrolled up by exactly the hidden part (plus a small gap). Nothing is scrolled when the box is visible or has no focus.
+const KEYBOARD_GAP = 12;
+
+type MeasurableBox = { measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void } | null;
+type KeyboardWatch = { scrollY: number; keyboardTop: number | null; focused: MeasurableBox };
+
+function revealFocusedBox(watch: KeyboardWatch, scrollView: { scrollTo?: (options: { y: number; animated: boolean }) => void } | null) {
+  const box = watch.focused;
+  const keyboardTop = watch.keyboardTop;
+  if (box === null || keyboardTop === null) return;
+  box.measureInWindow?.((_x, y, _width, height) => {
+    const hidden = y + height + KEYBOARD_GAP - keyboardTop;
+    if (Number.isFinite(hidden) && hidden > 0) scrollView?.scrollTo?.({ y: watch.scrollY + hidden, animated: true });
+  });
+}
+
 /** The device text size (font scale) now; 1 where it cannot be read. */
 function currentFontScale(): number {
   const scale = Dimensions?.get?.('window')?.fontScale;
@@ -146,6 +166,34 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   // A result must open at ITS beginning -- its heading and its warning ("check X first") -- not where the confirmation was scrolled
   // to (with large text the result appeared scrolled to its end, showing only the discard button first: G2 QA G2-A11Y-2).
   const scrollRef = useRef<ScrollView>(null);
+  const bodyBoxRef = useRef<TextInput>(null);
+  const retypeBoxRef = useRef<TextInput>(null);
+  const keyboardWatch = useRef<KeyboardWatch>({ scrollY: 0, keyboardTop: null, focused: null });
+  useEffect(() => {
+    const shown = (event: { endCoordinates?: { screenY?: number } } | undefined) => {
+      const top = event?.endCoordinates?.screenY;
+      keyboardWatch.current.keyboardTop = typeof top === 'number' && Number.isFinite(top) ? top : null;
+      revealFocusedBox(keyboardWatch.current, scrollRef.current);
+    };
+    const hidden = () => { keyboardWatch.current.keyboardTop = null; };
+    const subscriptions = [
+      Keyboard?.addListener?.('keyboardDidShow', shown),
+      Keyboard?.addListener?.('keyboardDidChangeFrame', shown),
+      Keyboard?.addListener?.('keyboardDidHide', hidden),
+    ];
+    return () => { for (const subscription of subscriptions) subscription?.remove?.(); };
+  }, []);
+  // The scroll content is laid out anew (from its top) when the text size changes.
+  useEffect(() => { keyboardWatch.current.scrollY = 0; }, [fontScale]);
+  const boxFocused = (box: MeasurableBox) => {
+    keyboardWatch.current.focused = box;
+    revealFocusedBox(keyboardWatch.current, scrollRef.current);
+  };
+  const boxBlurred = (box: MeasurableBox) => {
+    if (keyboardWatch.current.focused === box) keyboardWatch.current.focused = null;
+  };
+  // A box that grows (or shrinks) may now reach under the keyboard; only the focused box is ever revealed.
+  const boxResized = () => revealFocusedBox(keyboardWatch.current, scrollRef.current);
   const resultTop = useRef<number | null>(null);
   const scrollToResult = useRef(false);
   const sendingRef = useRef(false);
@@ -375,6 +423,8 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
       <ScrollView
         key={`text-size-${fontScale}`}
         ref={scrollRef}
+        onScroll={(event) => { keyboardWatch.current.scrollY = event.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
         automaticallyAdjustKeyboardInsets
         contentContainerStyle={{ gap: 16, paddingBottom: spacing.xl }}
         keyboardDismissMode={KEYBOARD_DISMISS_MODE}
@@ -470,9 +520,13 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
             <Card>
               <SectionTitle detail="Xに公開する本文を入力します">本文</SectionTitle>
               <TextInput
+                ref={bodyBoxRef}
                 accessibilityLabel="投稿の本文"
                 editable={account !== null && state.unresolved === null}
                 multiline
+                onFocus={() => boxFocused(bodyBoxRef.current)}
+                onBlur={() => boxBlurred(bodyBoxRef.current)}
+                onContentSizeChange={boxResized}
                 onChangeText={(text) => dispatch({ type: 'draft_changed', text })}
                 placeholder={account === null ? '先に投稿先のXアカウントを選んでください' : 'いまどうしていますか？'}
                 placeholderTextColor={colors.muted}
@@ -517,8 +571,12 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
                 <SectionTitle detail={`前回の本文の照合コード ${shortHash(state.unresolved.contentSha256)}`}>前回と同じ本文を入力</SectionTitle>
                 <Text style={styles.muted}>アプリを再起動したため、前回の本文は端末に残っていません。入力した本文が前回と同じときだけ、同じ送信IDで確認し直せます。</Text>
                 <TextInput
+                  ref={retypeBoxRef}
                   accessibilityLabel="前回と同じ本文の入力"
                   multiline
+                  onFocus={() => boxFocused(retypeBoxRef.current)}
+                  onBlur={() => boxBlurred(retypeBoxRef.current)}
+                  onContentSizeChange={boxResized}
                   onChangeText={(text) => dispatch({ type: 'draft_changed', text })}
                   placeholder="前回と同じ本文を入力してください"
                   placeholderTextColor={colors.muted}
