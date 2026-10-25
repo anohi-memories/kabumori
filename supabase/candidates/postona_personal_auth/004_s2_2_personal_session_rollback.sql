@@ -2,6 +2,12 @@
 -- the installed one (body, owner, attributes, owner-only ACL; another body or shape is someone else's change and is left alone), and while the
 -- body of any other function names it (a consumer still calls it: remove the consumer first; PL/pgSQL calls are not tracked as dependencies).
 -- Nothing else is touched: SV, R0, R1, T13, W1 and the S2-3 predicate stay. It writes no row.
+--
+-- G5-38 REVISION (2026-10-26, Issue #320 task 38): the callers check compares in LOWER CASE (an unquoted name may be written in any case; the
+-- G5-34 check missed an upper-case caller), and a recorded dependency (a view, a SQL-standard BEGIN ATOMIC body ...) is refused by name with
+-- S22_ROLLBACK_PRECONDITION_DEPENDENTS before PostgreSQL's DROP ... RESTRICT would stop it -- the same fence as the S2-3 rollback (G5-37).
+-- What it CANNOT see: a name assembled at run time (dynamic SQL), a caller in another database or outside the database (Edge / app); a comment
+-- that names the gate counts as a caller (a fail-closed false positive). It is a fence for the reachable cases, not a complete call graph.
 begin;
 
 set local lock_timeout = '5s';
@@ -41,8 +47,12 @@ begin
               where not r.rolsuper and pg_catalog.has_function_privilege(r.oid, v_fn, 'EXECUTE') and not pg_catalog.pg_has_role(r.oid, v_owner, 'USAGE')) then
     raise exception 'S22_ROLLBACK_PRECONDITION_OTHER_ROLE_EXECUTES';
   end if;
-  if exists (select 1 from pg_catalog.pg_proc p where p.oid <> v_fn and pg_catalog.strpos(p.prosrc, 'postona_personal_session') > 0) then
+  if exists (select 1 from pg_catalog.pg_proc p
+              where p.oid <> v_fn and pg_catalog.strpos(pg_catalog.lower(p.prosrc), 'postona_personal_session') > 0) then
     raise exception 'S22_ROLLBACK_PRECONDITION_CALLERS';
+  end if;
+  if exists (select 1 from pg_catalog.pg_depend d where d.refclassid = 'pg_catalog.pg_proc'::pg_catalog.regclass and d.refobjid = v_fn) then
+    raise exception 'S22_ROLLBACK_PRECONDITION_DEPENDENTS';
   end if;
 end $$;
 

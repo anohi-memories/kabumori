@@ -189,6 +189,67 @@ test_('the same answer as SV for every claim set (anonymous, missing claim, role
   console.log(`S22_COMPARED ${compared + 2} answers identical to SV, 0 NULL`);
 });
 
+// ---- (G5-38) consumers of the gate and the rollback: the callers check in any letter case, recorded dependents, the limits ------------------
+const GATE = 'private.postona_personal_session()';
+const CONSUMERS: Array<[string, string, string, string]> = [
+  ['a PL/pgSQL function', `create function public.g538_plpgsql() returns text language plpgsql as $c$ begin return ${GATE}; end $c$`, 'drop function public.g538_plpgsql()',
+    'S22_ROLLBACK_PRECONDITION_CALLERS'],
+  ['the name in upper case', `create function public.g538_upper() returns text language plpgsql as $c$ begin return ${GATE.toUpperCase()}; end $c$`,
+    'drop function public.g538_upper()', 'S22_ROLLBACK_PRECONDITION_CALLERS'],
+  ['the name in mixed case', `create function public.g538_mixed() returns text language plpgsql as $c$ begin return Private.Postona_Personal_Session(); end $c$`,
+    'drop function public.g538_mixed()', 'S22_ROLLBACK_PRECONDITION_CALLERS'],
+  ['a plain SQL function', `create function public.g538_sql() returns text language sql as $c$ select ${GATE} $c$`, 'drop function public.g538_sql()',
+    'S22_ROLLBACK_PRECONDITION_CALLERS'],
+  ['a SQL-standard (BEGIN ATOMIC) body', `create function public.g538_atomic() returns text language sql begin atomic select ${GATE}; end`, 'drop function public.g538_atomic()',
+    'S22_ROLLBACK_PRECONDITION_DEPENDENTS'],
+  ['a view', `create view public.g538_view as select ${GATE} as answer`, 'drop view public.g538_view', 'S22_ROLLBACK_PRECONDITION_DEPENDENTS'],
+  // a FALSE POSITIVE, recorded: a comment naming the gate counts as a caller (it refuses; it never lets a real caller through)
+  ['only a comment naming it (false positive)', `create function public.g538_comment() returns text language plpgsql as $c$ begin
+    -- formerly called Private.Postona_Personal_Session()
+    return 'x'; end $c$`, 'drop function public.g538_comment()', 'S22_ROLLBACK_PRECONDITION_CALLERS'],
+];
+const DYNAMIC = `create function public.g538_dynamic() returns text language plpgsql as $c$ declare r text; begin
+  execute 'select private.postona_' || 'personal_session()' into r; return r; end $c$`;
+
+const testOld = enabled && env('S34_OLD_ROLLBACK') !== '' ? test : test.skip;
+testOld('FAIL before (PR #510 rollback, 6d59f3b6): an upper-case caller is not seen -- the gate is dropped under it and it breaks; a view stops only at DROP RESTRICT', async () => {
+  await sql(FULL, CONSUMERS[1][1]);
+  let r = await run(FULL, ['-f', env('S34_OLD_ROLLBACK')]);
+  assert.ok(r.ok, `the old rollback runs under an upper-case caller\n${r.error}`);
+  const broken = await run(FULL, ['-c', 'select public.g538_upper()']);
+  assert.ok(!broken.ok && /does not exist/u.test(broken.error), `the caller is broken\n${broken.error}`);
+  await sql(FULL, CONSUMERS[1][2]);
+  r = await run(FULL, ['-f', env('S34_CANDIDATE')]);
+  assert.ok(r.ok, `re-install\n${r.error}`);
+  await sql(FULL, CONSUMERS[5][1]);
+  r = await run(FULL, ['-f', env('S34_OLD_ROLLBACK')]);
+  assert.ok(!r.ok && /other objects depend on it/u.test(r.error), r.error);
+  assert.equal(await exists(FULL, S22), 'true', 'the gate kept');
+  await sql(FULL, CONSUMERS[5][2]);
+});
+
+test_('(G5-38) the rollback refuses while anything still uses the gate -- the gate stays exactly; a dynamic-SQL caller is NOT seen (recorded limit)', async () => {
+  const keep = `${await md5(FULL, S22)}|${await shape(FULL, S22)}`;
+  const sv = `${await md5(FULL, SV)}|${await shape(FULL, SV)}`;
+  for (const [label, create, drop, code] of CONSUMERS) {
+    await sql(FULL, create);
+    const r = await run(FULL, ['-f', env('S34_ROLLBACK')]);
+    assert.ok(!r.ok && r.error.includes(code), `${label}\n${r.error}`);
+    assert.equal(`${await md5(FULL, S22)}|${await shape(FULL, S22)}`, keep, `${label}: the gate exactly as it was (same OID, ACL, attributes)`);
+    assert.equal(`${await md5(FULL, SV)}|${await shape(FULL, SV)}`, sv, `${label}: SV untouched`);
+    await sql(FULL, drop);
+  }
+  await sql(FULL, DYNAMIC);
+  let r = await run(FULL, ['-f', env('S34_ROLLBACK')]);
+  assert.ok(r.ok, `the fence does not see dynamic SQL (recorded)\n${r.error}`);
+  const broken = await run(FULL, ['-c', 'select public.g538_dynamic()']);
+  assert.ok(!broken.ok && /does not exist/u.test(broken.error), broken.error);
+  await sql(FULL, 'drop function public.g538_dynamic()');
+  r = await run(FULL, ['-f', env('S34_CANDIDATE')]);
+  assert.ok(r.ok, `re-install\n${r.error}`);
+  assert.equal(await ask(FULL, S22, person()), 'active');
+});
+
 test_('the rollback refuses a drifted gate or a caller, then drops only S2-2; a second rollback refuses; the candidate re-installs', async () => {
   const rb = env('S34_ROLLBACK');
   const svBefore = `${await md5(FULL, SV)}|${await shape(FULL, SV)}`;
