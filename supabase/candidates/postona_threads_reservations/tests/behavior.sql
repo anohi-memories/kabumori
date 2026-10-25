@@ -203,6 +203,15 @@ select pg_temp.expect(pg_temp.wk(format('select postona_threads_resv.release_uns
 select pg_temp.expect(pg_temp.api(format('select postona_threads_resv.cancel_reservation(%L)', :'r7'), pg_temp.p(72), pg_temp.sess(72)) = 'ERR:POSTONA_THREADS_RESV_NOT_FOUND', 'L7 other person cannot cancel');
 select pg_temp.expect(pg_temp.api(format('select postona_threads_resv.cancel_reservation(%L)', :'r7'), pg_temp.p(71), pg_temp.sess(71)) = 'cancelled', 'L7 cancelled');
 select pg_temp.expect(pg_temp.api(format('select postona_threads_resv.cancel_reservation(%L)', :'r4'), pg_temp.p(65), pg_temp.sess(65)) = 'ERR:POSTONA_THREADS_RESV_NOT_CANCELLABLE', 'L7 published not cancellable');
+-- G3-33 T5: exactly one audit row for the cancel (codes only), none for the refused attempts; no role reaches the audit table.
+select pg_temp.expect((select count(*) from postona_threads_resv.audit where reservation_id = :'r7') = 1
+  and (select bool_and(action = 'cancel' and user_id = pg_temp.p(71) and detail = '{"from_status": "planned"}'::jsonb)
+       from postona_threads_resv.audit where reservation_id = :'r7'), 'T5 one cancel audit row, codes only');
+select pg_temp.expect(not exists (select 1 from postona_threads_resv.audit where reservation_id = :'r4'), 'T5 a refused cancel writes no audit row');
+select pg_temp.expect(not exists (select 1 from postona_threads_resv.audit a, postona_threads_resv.reservations r
+  where r.id = a.reservation_id and (a.detail::text like '%' || r.body || '%' or a.detail::text like '%' || r.content_sha256 || '%')), 'T5 no text or hash in the audit');
+select pg_temp.expect(not exists (select 1 from unnest(array['anon', 'authenticated', 'service_role', 'postona_resv_api', 'postona_resv_worker']) r(role)
+  where pg_catalog.has_table_privilege(r.role, 'postona_threads_resv.audit', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')), 'T5 audit table unreachable');
 select pg_temp.expect(pg_temp.api(format('select state from postona_threads_resv.receipt(%L, %L)', pg_temp.th(71), (select client_request_id from postona_threads_resv.reservations where id = :'r7')),
   pg_temp.p(72), pg_temp.sess(72)) = 'ERR:POSTONA_THREADS_RESV_NOT_FOUND', 'L7 other person receipt');
 select pg_temp.expect(pg_temp.api(format('select state from postona_threads_resv.receipt(%L, %L)', pg_temp.th(71), gen_random_uuid()), pg_temp.p(71), pg_temp.sess(71))

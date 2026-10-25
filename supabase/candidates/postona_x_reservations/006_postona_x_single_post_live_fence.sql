@@ -294,8 +294,12 @@ begin
   end if;
   select b.* into v_bind from postona_x_resv.single_post_bindings b where b.reservation_id = p_reservation_id;
   reservation_id := v_row.id;
+  -- G3-33 X5: a claimed row whose lease ran out may have reached X: 'uncertain' until a sweep / reconciliation says more
+  -- (the same answer as Threads' receipt, 007). Read only: the row is not changed here.
   state := case v_row.status when 'published' then 'sent' when 'uncertain' then 'uncertain'
-                             when 'failed' then 'failed' when 'cancelled' then 'failed' else 'pending' end;
+                             when 'failed' then 'failed' when 'cancelled' then 'failed'
+                             when 'claimed' then case when v_row.lease_expires_at > pg_catalog.clock_timestamp() then 'pending' else 'uncertain' end
+                             else 'pending' end;
   provider_post_id := v_row.provider_post_id; outcome_code := v_row.outcome_code;
   after_freeze := coalesce(v_bind.after_freeze, false);
   simulated := v_bind.transport is distinct from 'x';  -- unknown transport is never reported as a real post
