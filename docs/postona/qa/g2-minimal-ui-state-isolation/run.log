@@ -1,0 +1,28 @@
+✔ G2-MU1a: A's stored draft -- after sign-out and B's sign-in, NO frame of B's screen (also while B's own restore read is pending) shows A's draft (59.4895ms)
+✔ G2-MU1b: A's restore read is still pending when B signs in -- when it answers, no frame of B shows A's draft (24.80525ms)
+✔ G2-MU1c: a SIMULATED result of A on screen, then B signs in -- no frame of B shows A's text, the test-result words, the post id or A's "I checked X" (21.049833ms)
+✔ G2-MU1d: the session ends without a sign-out step (e.g. a failed refresh) while A is in the confirmation with consent -- no signed-out frame shows A's text; A signing in again (new session) gets neither the text nor the consent back (18.52675ms)
+✔ G2-MU2: after an app restart A's unresolved attempt is hash-only and the screen is its result -- no editor, no "下書きを消す", no draft written; "I checked X" leaves an EMPTY editor and nothing stored; only new typing writes a draft (30.711083ms)
+✔ G2-MU3: a still-valid draft AND an unresolved record of A on the device at restart -- the record wins: the draft is not shown and is removed, the record is kept and blocks; after "I checked X" the removed draft does NOT come back (34.625167ms)
+✔ G2-MU3 positive control: the same seeded draft WITHOUT a record is restored (so MU3 removes it because of the record, not because the seed is unreadable) (12.925583ms)
+✔ G2-MU4: at restart the record read is SLOW and a valid draft is on the device -- while the record has not answered, no frame shows the draft or an editor/send; when it answers, the result shows and the draft is removed (26.413167ms)
+✔ G2-MU5 (design vs implementation, source): the G1 design's personal-workspace resolution (0 / several candidates fail closed) and Threads in the manual-post screen are NOT_IMPLEMENTED on #468 -- the screen takes accounts from the active-account provider and offers X only (0.3005ms)
+✔ negative control: a route that keeps ONE screen across people lets A's draft appear in a frame of B (MU1a fails) (16.319ms)
+✔ G2-MU3 measured (two layers): removing ONLY the screen's "nothing to restore beside an unresolved attempt" check is not enough to leak -- the model also refuses to put a draft beside an unresolved attempt, and the draft is still removed (25.5585ms)
+✔ negative control: a screen that does not remove the stored draft while an attempt is unresolved leaves A's draft on the device beside the record (MU3 fails) (27.673625ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 530.967625
+ℹ full suite (node --test tests/*.test.mjs, #468 + this file):
+ℹ tests 624
+ℹ suites 0
+ℹ pass 623
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
