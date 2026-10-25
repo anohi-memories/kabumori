@@ -47,6 +47,39 @@ export function rpcRefusalStatus(code: string, httpStatus: number): number {
   return 400;
 }
 
+// G4-43 (carried over from G4-05's PR #353): only the fixed codes the RPCs raise reach the app. Any other message -- the
+// database's own text for a constraint, a permission or a lock -- becomes the generic code, so nothing internal is echoed.
+export const X_CONNECT_RPC_ERROR_CODES: ReadonlySet<string> = new Set([
+  // main: 20260919120000, 20260922003101, and the account-deletion guard (20260928160000)
+  "OAUTH_STATE_INPUT_INVALID",
+  "OAUTH_STATE_NOT_CONSUMABLE",
+  "OAUTH_TOKEN_OR_IDENTITY_INVALID",
+  "SOCIAL_MOBILE_ACCOUNT_NOT_OWNED",
+  "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED",
+  "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED",
+  "X_ACCOUNT_ALREADY_CONNECTED",
+  "X_IDENTITY_ACCOUNT_MISMATCH",
+  "SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS",
+  // supabase/candidates/postona_g4_x_oauth_personal_epoch 001-004 (G4-39..43)
+  "SOCIAL_MOBILE_OAUTH_SESSION_NOT_ACTIVE",
+  "OWN_WORKSPACE_CONFLICT",
+  "WORKSPACE_OWNER_UNKNOWN",
+  "WORKSPACE_VERDICT_UNKNOWN",
+  "OWNER_EPOCH_UNAVAILABLE",
+  "OWNER_EPOCH_CHANGED",
+  "OAUTH_STATE_SUPERSEDED",
+  "OAUTH_STATE_NOT_BOUND",
+  "X_CONNECTION_CHANGED",
+]);
+
+export function rpcRefusalCode(message: unknown): string {
+  return typeof message === "string" && X_CONNECT_RPC_ERROR_CODES.has(message) ? message : "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED";
+}
+
+// G4-43 (carried over from PR #353): the redirect URI is the one registered for this app in the X developer portal and fixed
+// in the app (use-x-connect.ts), exactly; begin stores it with the state and the callback must present the same value.
+export const X_CONNECT_REGISTERED_REDIRECT_URIS: ReadonlySet<string> = new Set(["kabumori-social://oauth-callback"]);
+
 export async function hashState(state: string): Promise<string> {
   const bytes = new TextEncoder().encode(state);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -120,7 +153,7 @@ export async function rpcAsUser({
     let code = "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED";
     try {
       const errorBody = await response.json() as { message?: unknown };
-      if (typeof errorBody.message === "string" && errorBody.message.length > 0) code = errorBody.message;
+      code = rpcRefusalCode(errorBody.message);
     } catch {
       // keep the generic code
     }
@@ -164,6 +197,7 @@ export async function startConnection({
   // as a sanity floor without hardcoding the client's exact encoding.
   if (!request.rawState || request.rawState.length < 16) fail("OAUTH_STATE_INPUT_INVALID", 400);
   if (!request.codeChallenge || !request.redirectUri) fail("OAUTH_STATE_INPUT_INVALID", 400);
+  if (!X_CONNECT_REGISTERED_REDIRECT_URIS.has(request.redirectUri)) fail("OAUTH_STATE_INPUT_INVALID", 400);
 
   const stateHash = await hashState(request.rawState);
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
