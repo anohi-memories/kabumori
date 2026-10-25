@@ -13,7 +13,8 @@ alter default privileges grant all on sequences to anon, authenticated, service_
 create schema auth;
 create table auth.users (id uuid primary key);
 create function auth.uid() returns uuid language sql stable
-as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+as $$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''),
+                      (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid $$;  -- both claim sources (as Supabase's auth.uid(); G3-34)
 grant usage on schema auth to anon, authenticated, service_role;
 
 create table public.brands (
@@ -64,3 +65,10 @@ insert into public.social_accounts (id, brand_id, platform, handle) values
 create schema t;
 create function t.as_user(p uuid) returns void language plpgsql as $$
 begin perform set_config('request.jwt.claim.sub', coalesce(p::text, ''), false); end $$;
+
+-- TEST DOUBLE (G3-34) for G5's person-session gate S2-2 (private.postona_personal_session(), PR #510), which caller() asks first:
+-- 'active' exactly when a subject is set. NOT G5's implementation and no evidence about sessions: this minimal world has no
+-- auth.sessions. The G5-based runners install the REAL S2-2 (g5_s2_2_pinned.sh).
+create schema if not exists private;
+create function private.postona_personal_session() returns text language sql stable
+as $$ select case when auth.uid() is null then 'AUTH_REQUIRED' else 'active' end $$;

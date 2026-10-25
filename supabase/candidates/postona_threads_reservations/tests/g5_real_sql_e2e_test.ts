@@ -51,7 +51,7 @@ const people = new Map((await owner<[number, string, string, string]>("select n,
 const P = (n: number) => people.get(n)!;
 const session = async (n: number, notAfter: string | null = null) =>
   String((await owner<[string]>("insert into auth.sessions (user_id, not_after) values ($1::uuid, $2::timestamptz) returning id::text", [P(n).user, notAfter]))[0][0]);
-const claims = (n: number, sessionId: string, extra: Record<string, unknown> = {}) => JSON.stringify({ sub: P(n).user, role: "authenticated", session_id: sessionId, ...extra });
+const claims = (n: number, sessionId: string, extra: Record<string, unknown> = {}) => JSON.stringify({ sub: P(n).user, role: "authenticated", session_id: sessionId, is_anonymous: false, ...extra });
 /** G5's REAL R1, asked as the person (authenticated, the person's JWT claims). */
 async function r1(n: number, sessionId: string): Promise<Record<string, unknown>> {
   const [[v]] = await sql<[Record<string, unknown>]>(OWNER_URL, "select public.common_account_authorization_verdict('postona', 'threads_publish', $1)", [P(n).brand],

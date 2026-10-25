@@ -78,6 +78,11 @@ own "$db" -f "$m/20261012130000_common_account_core_service_fence.sql" >/dev/nul
 own "$db" -f "$here/001_postona_x_reservations.sql" >/dev/null
 own "$db" -f "$here/002_postona_x_resv_api_role.sql" >/dev/null
 echo "BASELINE_G5_RESERVATIONS_001_002_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$here/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own "$db" -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # D0: 004 needs 003 (the real G5 binding); a failed apply leaves nothing; a re-apply is refused.
 own "$plain" -f "$here/test_fixture.sql" >/dev/null
@@ -122,9 +127,10 @@ uid() { printf '00000000-0000-4000-8000-%012d' "$1"; }
 rid() { val -c "select id from t_ids.ids where name = 'r$1'"; }
 due() { own "$db" -c "update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute', expires_at = now() + interval '6 hours' where id = '$1'" >/dev/null; }
 as_worker() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$wlogin" -d "$db" -c "begin isolation level read committed" -c "set local role postona_resv_worker" -c "$1" -c "commit"; }
-as_api() { # $1 user, $2 SQL
+as_api() { # $1 user, $2 SQL; G3-34: a live session of the user and a proven non-anonymous sign-in (what G5's S2-2 reads)
+  local s; s="$(own "$db" -A -t -c "insert into auth.sessions (user_id) values ('$1') returning id")"
   psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$apilogin" -d "$db" -c "begin isolation level read committed" -c "set local role postona_resv_api" \
-    -c "select set_config('request.jwt.claim.sub', '$1', true), set_config('request.jwt.claims', '{\"sub\":\"$1\",\"role\":\"authenticated\"}', true)" -c "$2" -c "commit"
+    -c "select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '{\"sub\":\"$1\",\"role\":\"authenticated\",\"session_id\":\"$s\",\"is_anonymous\":false}', true)" -c "$2" -c "commit"
 }
 holder() { # $1 user, $2 reservation (or '' for none), $3 seconds; G5 lifecycle lock, wait, then the row
   local row="select 1"; [[ -n "$2" ]] && row="select 1 from postona_x_resv.reservations where id = '$2' for update"

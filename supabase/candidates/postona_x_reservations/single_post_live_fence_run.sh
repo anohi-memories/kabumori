@@ -95,6 +95,11 @@ fp() { val -c "select md5(string_agg(p.oid::regprocedure::text || ':' || p.prosr
   from pg_proc p where p.pronamespace = 'postona_x_resv'::regnamespace"; }
 FP005="$(fp)"
 echo "BASELINE_005_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$here/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own "$db" -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 own "$db" -f "$lf/people.sql" >"$tmp/people" 2>&1 || { cat "$tmp/people"; fail "people"; }
 grep -q LIVE_FENCE_PEOPLE_READY "$tmp/people" || { cat "$tmp/people"; fail "people not ready"; }
@@ -158,7 +163,7 @@ race() {
   S="$(val -c "insert into auth.sessions (user_id) values ('$P') returning id")"
   own "$db" -c "update public.social_accounts set publish_enabled = true where id = '$A'" >/dev/null
   as_api() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$apilogin" -d "$db" -c "begin isolation level read committed" -c "set local role postona_resv_api" \
-    -c "do \$\$ begin perform set_config('request.jwt.claims', '{\"sub\":\"$P\",\"role\":\"authenticated\",\"session_id\":\"$S\"}', true); end \$\$" -c "$1" -c "commit"; }
+    -c "do \$\$ begin perform set_config('request.jwt.claims', '{\"sub\":\"$P\",\"role\":\"authenticated\",\"session_id\":\"$S\",\"is_anonymous\":false}', true); end \$\$" -c "$1" -c "commit"; }
   B="$(as_api "select reservation_id || ' ' || lease_token from postona_x_resv.post_now_begin('$A', gen_random_uuid(), 'race $n', encode(sha256(convert_to('race $n', 'UTF8')), 'hex'))")"
   read -r R L <<<"$B"
   [[ "$R" =~ ^[0-9a-f-]{36}$ ]] || fail "R begin $n: $B"

@@ -8,11 +8,16 @@ import {
   POSTONA_RESERVATION_API_ENABLED,
   type ReservationDb,
   type ReservationRow,
+  type ReservationSubject,
 } from "./api.ts";
 
 const USER = "00000000-0000-4000-8000-00000000000a";
 const OTHER = "00000000-0000-4000-8000-00000000000b";
-const TOKEN = "token-of-user-a-0123456789";
+const SESSION = "00000000-0000-4000-8000-0000000000c1";
+const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+/** A token shaped like Auth's (header.payload.signature); the payload's session_id is read only after the verifier accepted it. */
+const tokenFor = (claims: Record<string, unknown>) => `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify(claims))}.signature-0123456789`;
+const TOKEN = tokenFor({ sub: USER, session_id: SESSION });
 const BATCH = "0f9d2a52-8c1b-4b6a-9d55-1a2b3c4d5e6f";
 const RID = "11111111-2222-4333-8444-555555555555";
 const SHA = "a".repeat(64);
@@ -26,7 +31,7 @@ const row = (over: Partial<ReservationRow> = {}): ReservationRow => ({
 const verifier: AuthVerifier = { verify: (token) => Promise.resolve(token === TOKEN ? { userId: USER } : null) };
 const allow: PermissionSources = { xAutopostAllowed: () => Promise.resolve(true), xAccountVerified: () => Promise.resolve(true) };
 function recordingDb(answer: Awaited<ReturnType<ReservationDb["call"]>> | (() => never) = { ok: true, rows: [row()] }) {
-  const calls: { fn: string; args: readonly unknown[]; subject: string }[] = [];
+  const calls: { fn: string; args: readonly unknown[]; subject: ReservationSubject }[] = [];
   const db: ReservationDb = {
     call(fn, args, subject) {
       calls.push({ fn, args, subject });
@@ -154,7 +159,7 @@ test("each action calls exactly one owner function as the VERIFIED subject with 
     const last = calls[calls.length - 1];
     assert.equal(last.fn, fn);
     assert.deepEqual(last.args, args);
-    assert.equal(last.subject, USER);
+    assert.deepEqual(last.subject, { userId: USER, sessionId: SESSION });
   }
   const ok = await api(req({ action: "get", payload: { reservationId: RID } }));
   assert.deepEqual(ok.body, {
@@ -192,4 +197,20 @@ test("source: the API module has no imports, no Deno.env, no service-role key, n
   assert.doesNotMatch(code, /^import /mu);
   assert.doesNotMatch(code, /Deno\.env|SERVICE_ROLE|service_role|fetch\(|api\.x\.com|twitter|openai|\.from\(|claim_due|finish\(/iu);
   assert.match(code, /export const POSTONA_RESERVATION_API_ENABLED = false as const;/u);
+});
+
+test("G3-34: a verified token without a session id of the same subject is refused (401) before any permission or database call", async () => {
+  const { db, calls } = recordingDb();
+  let asked = 0;
+  for (const token of [tokenFor({ sub: USER }), tokenFor({ sub: OTHER, session_id: SESSION }), tokenFor({ sub: USER, session_id: "not-a-uuid" }), "no-payload-0123456789"]) {
+    const api = createReservationApi({
+      enabled: true,
+      auth: { verify: () => Promise.resolve({ userId: USER }) },
+      permissions: { xAutopostAllowed: () => { asked += 1; return Promise.resolve(true); }, xAccountVerified: () => Promise.resolve(true) },
+      db,
+    });
+    assert.deepEqual(await api(req(createPayload(), { authorization: `Bearer ${token}` })), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, token);
+  }
+  assert.equal(asked, 0);
+  assert.equal(calls.length, 0);
 });

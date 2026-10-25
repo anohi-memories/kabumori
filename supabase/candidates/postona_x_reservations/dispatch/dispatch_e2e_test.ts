@@ -22,11 +22,35 @@ const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0"
 const accountOf = (user: string) => `x${user.replaceAll("-", "")}`;
 const A = uid(61), B = uid(62), C = uid(63);
 const TOKENS: Record<string, string> = { "token-a-0123456789abcdef": A, "token-b-0123456789abcdef": B, "token-c-0123456789abcdef": C };
+// G3-34: Auth-shaped tokens carrying a live session of each person -- the Edge reads session_id only after Auth accepted the
+// token, and G5's person-session gate S2-2 (asked first by caller()) checks that session row. The aliases above stay the names.
+const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+async function sessionOf(user: string): Promise<string> {
+  const c = new Client(OWNER_URL);
+  await c.connect();
+  try {
+    return (await c.queryArray<[string]>("insert into auth.sessions (user_id) values ($1::uuid) returning id::text", [user])).rows[0][0];
+  } finally {
+    await c.end();
+  }
+}
+// Made on first use (the people are created by the tests); an unknown alias stays an unknown (401) token.
+const JWT: Record<string, Promise<string>> = {};
+const USER_OF_JWT: Record<string, string> = {};
+const jwtOf = (alias: string): Promise<string> => {
+  const user = TOKENS[alias];
+  if (!user) return Promise.resolve(alias);
+  return JWT[alias] ??= sessionOf(user).then((session) => {
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: user, session_id: session }))}.signature-0123456789`;
+    USER_OF_JWT[jwt] = user;
+    return jwt;
+  });
+};
 
 // MOCK_ONLY Auth (fake GoTrue): unknown or expired tokens are 401.
 const fakeAuth = (_url: string, init?: RequestInit) => {
   const token = String(new Headers(init?.headers).get("Authorization")).replace(/^Bearer /u, "");
-  const id = TOKENS[token];
+  const id = USER_OF_JWT[token];
   return Promise.resolve(id ? Response.json({ id, aud: "authenticated", role: "authenticated" }) : new Response(JSON.stringify({ msg: "invalid JWT" }), { status: 401 }));
 };
 const apiConnect = createDriverConnect({ databaseUrl: API_URL, allowInsecureLoopback: true });
@@ -43,7 +67,7 @@ const store = (token: string, handler = apiHandler()) => createRemoteReservation
     }));
     return { status: response.status, body: await response.json().catch(() => null) };
   },
-  getAccessToken: () => Promise.resolve(token),
+  getAccessToken: () => jwtOf(token),
 });
 
 // MOCK_ONLY X + credential source: every create is recorded; the answer is scripted per call.

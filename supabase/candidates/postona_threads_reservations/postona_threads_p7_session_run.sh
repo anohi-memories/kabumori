@@ -2,8 +2,8 @@
 # G3 TASK 14/50 proof (disposable LOCAL PostgreSQL only): P7 -- 007's cancel_reservation / receipt identify the person by auth.uid()
 # only and do not check that the session is still live. Same U8 world as postona_threads_http_contract_run.sh (REAL 2a-2 CHECK in
 # force, G5 #371 real, G4 #124 / custody / #367 / #377 real, people 'sa_<24 hex>'); 007 unchanged. Two runs of one test file:
-#   P7_MODE=current  what 007 does today (must PASS: the weakness is recorded, not hidden)
-#   P7_MODE=desired  what a fixed 007 must do (must FAIL on exactly the P7 cases listed below: EXPECTED FAILURES, not a pass)
+#   P7_MODE=current  what 007 did before G3-34 (the weakness, recorded): it must now FAIL on exactly C1-C5 -- the weakness is gone
+#   P7_MODE=desired  what a fixed 007 must do: with G3-34 (caller() asks G5's S2-2 first) it must PASS in full
 # G4 / G5 / #370 files are read-only copies. Roles are cluster-wide: run alone. Environment: as postona_threads_g4_credential_run.sh.
 set -euo pipefail
 
@@ -117,6 +117,11 @@ xfp() { val -c "select md5(coalesce(string_agg(p.oid::regprocedure::text || ':' 
   from pg_proc p where p.pronamespace = 'postona_x_resv'::regnamespace"; }
 FPX="$(xfp)"
 echo "BASELINE_001_006_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$resv/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # 3. The owners' candidates, in their dependency order (every refusal before its prerequisite is checked)
 refuse "$oe" OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS "S0 #303 before #370"
@@ -152,15 +157,18 @@ p7() { local mode="$1"; P7_MODE="$mode" THREADS_XO_API_URL="postgres://$apilogin
   deno test --no-config --no-lock --allow-net=127.0.0.1:"$port" --allow-read --allow-env=P7_MODE,THREADS_XO_API_URL,THREADS_XO_WORKER_URL,THREADS_XO_OWNER_URL,THREADS_G4_SOCIAL_DIR \
   "$t/p7_session_revocation_pg_test.ts"; }
 strip() { sed $'s/\x1b\\[[0-9;]*m//g'; }
-if ! p7 current >"$tmp/current" 2>&1; then cat "$tmp/current"; fail "P7 current-behaviour suite"; fi
+# G3-34: caller() now asks G5's S2-2 first, so the "today" cases C1-C5 (receipt / cancel answering a dead session) are GONE: the
+# current-behaviour suite must fail on exactly C1-C5, nothing else; the desired suite must pass in full.
+if p7 current >"$tmp/current" 2>&1; then cat "$tmp/current"; fail "P7 current suite PASSED: the old weakness is back"; fi
+gotc="$(strip <"$tmp/current" | grep -E '^P7 C[1-5] .* \.\.\. FAILED' | awk '{print $2}' | sort -u | tr '\n' ',')"
+gota="$(strip <"$tmp/current" | grep -c -E ' \.\.\. FAILED' || true)"
+[[ "$gotc" == "C1,C2,C3,C4,C5," && "$gota" == 5 ]] || { strip <"$tmp/current" | tail -40; fail "P7 current suite: expected failures [C1..C5] only, got [$gotc] ($gota failures)"; }
+echo "P7_OLD_WEAKNESS_GONE $gotc"
 strip <"$tmp/current" | grep -E "^P7 I4 R1|^P7 Q1:|^(ok|FAILED) \| " | tail -4
-# The desired suite uses its own people (no row of the current suite); it must fail on exactly the P7 cases D1-D5, nothing else.
-if p7 desired >"$tmp/desired" 2>&1; then cat "$tmp/desired"; fail "P7 desired suite PASSED: 007 now checks the session -- update this gate"; fi
-got="$(strip <"$tmp/desired" | grep -E '^[A-Z][A-Z0-9]* .* \.\.\. FAILED' | sed 's/ .*//' | sort -u | tr '\n' ',')"
-want="D1,D2,D3,D4,D5,"
-[[ "$got" == "$want" ]] || { strip <"$tmp/desired" | tail -40; fail "P7 desired suite: expected failures [$want], got [$got]"; }
+# The desired suite uses its own people (no row of the current suite): with G3-34 it must PASS in full (D1-D5 refused, I1-I5 hold).
+if ! p7 desired >"$tmp/desired" 2>&1; then strip <"$tmp/desired" | tail -40; fail "P7 desired suite failed"; fi
 strip <"$tmp/desired" | grep -E "^(ok|FAILED) \| " | tail -1
-echo "P7_DESIRED_EXPECTED_FAILURES $got"
+echo "P7_DESIRED_ALL_PASS"
 [[ "$(xfp)" == "$FPX" ]] || fail "the run changed postona_x_resv"
 [[ "$(val -c "select (select count(*) from pg_constraint where conrelid = 'public.social_accounts'::regclass and conname = 'social_accounts_meta_publish_disabled')::text
   || '/' || (select count(*) from public.social_accounts where platform = 'threads' and publish_enabled)::text")" == "1/0" ]] || fail "U8: the CHECK must still be in force after the run"

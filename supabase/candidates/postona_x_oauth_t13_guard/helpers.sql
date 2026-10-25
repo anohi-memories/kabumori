@@ -12,7 +12,8 @@ create function pg_temp.claims(p_sub uuid, p_session uuid) returns void language
 begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', case when p_sub is null then '' else
-    jsonb_strip_nulls(jsonb_build_object('sub', p_sub, 'role', 'authenticated', 'session_id', p_session))::text end, true);
+    -- is_anonymous false: Auth refused anonymous sign-ins before the Edge sets the claims (G3-34: G5's S2-2 requires the proven false)
+    jsonb_strip_nulls(jsonb_build_object('sub', p_sub, 'role', 'authenticated', 'session_id', p_session, 'is_anonymous', false))::text end, true);
 end $$;
 -- One statement as `p_role` (default authenticated) for a person and session; returns its text or 'ERR:' || message.
 create function pg_temp.as_person(p_sql text, p_sub uuid, p_session uuid, p_role text default 'authenticated') returns text language plpgsql as $$

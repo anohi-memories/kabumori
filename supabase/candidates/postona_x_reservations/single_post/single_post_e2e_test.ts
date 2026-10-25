@@ -209,11 +209,14 @@ Deno.test("the service ends between begin and the X call: failed (not sent); the
   assert.equal(ended.result.kind, "failed", JSON.stringify(ended.body));
   assert.equal((ended.body as { code: string }).code, "NOT_PUBLISHABLE_AT_SEND");
   assert.equal(xCalls.length, before);
-  // ... and the person signs out between begin and the X call: refused at the check (T13 re-checks the session), not sent.
+  // ... and the person signs out between begin and the X call: refused at the check, not sent. G3-34: the person-session gate
+  // (S2-2, asked first by caller()) now refuses the check AND the read-back of a dead session before any row is read, so the
+  // dead session is told nothing ('uncertain' / READBACK_UNAVAILABLE) and the row stays claimed until its lease is fenced -- never sent.
   const s = await signIn(75);
   const signedOut = await post(s.token, P(75).account, "直前にサインアウト", undefined, handler({ connect: afterCommit(1, () =>
     owner("delete from auth.sessions where id = $1::uuid", [s.session])) }));
-  assert.equal(signedOut.result.kind, "failed", JSON.stringify(signedOut.body));
+  assert.deepEqual([signedOut.result.kind, (signedOut.body as { code?: string }).code], ["uncertain", "READBACK_UNAVAILABLE"], JSON.stringify(signedOut.body));
+  assert.deepEqual((await owner<[string]>("select status from postona_x_resv.reservations where user_id = $1::uuid order by created_at desc limit 1", [P(75).user]))[0], ["claimed"]);
   assert.equal(xCalls.length, before);
   const b = await signIn(71);
   let rid = "";

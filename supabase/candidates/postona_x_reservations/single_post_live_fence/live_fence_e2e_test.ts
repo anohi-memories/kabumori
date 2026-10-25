@@ -156,8 +156,15 @@ Deno.test("E3 a change after begin, before the X call: failed (never sent, X 0) 
     const s = await signIn(n);
     const before = xCalls.length;
     const answer = await post(s.token, P(n).account, `直前の変更 ${label}`, undefined, handler({ connect: afterCommit(1, () => change(n, s.session)) }));
-    assert.deepEqual([answer.result.kind, codeOf(answer.body)], ["failed", "NOT_PUBLISHABLE_AT_SEND"], `${label}: ${JSON.stringify(answer.body)}`);
     assert.equal(xCalls.length, before, `${label}: X never called`);
+    if (label === "signed out") {
+      // G3-34: the person-session gate (S2-2, asked first by caller()) refuses the dead session's check AND read-back before any
+      // row is read: the dead session is told nothing, and the row stays claimed until its lease is fenced -- never sent.
+      assert.deepEqual([answer.result.kind, codeOf(answer.body)], ["uncertain", "READBACK_UNAVAILABLE"], `${label}: ${JSON.stringify(answer.body)}`);
+      assert.deepEqual((await stored(ridOf(answer.body))).slice(0, 3), ["claimed", null, null], label);
+      continue;
+    }
+    assert.deepEqual([answer.result.kind, codeOf(answer.body)], ["failed", "NOT_PUBLISHABLE_AT_SEND"], `${label}: ${JSON.stringify(answer.body)}`);
     assert.deepEqual((await stored(ridOf(answer.body))).slice(0, 3), ["failed", null, "NOT_PUBLISHABLE_AT_SEND"], label);
   }
 });

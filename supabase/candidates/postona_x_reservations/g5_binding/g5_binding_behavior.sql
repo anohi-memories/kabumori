@@ -12,10 +12,21 @@ begin if not coalesce(p_ok, false) then raise exception 'FAIL %', p_label; end i
 create function pg_temp.uid(p_n integer) returns uuid language sql immutable as $$
   select ('00000000-0000-4000-8000-' || lpad(p_n::text, 12, '0'))::uuid $$;
 create function pg_temp.set_claims(p_sub uuid) returns void language plpgsql as $$
+declare v_session uuid;
 begin
+  -- G3-34: a live session of this person (made once) and a proven non-anonymous sign-in, as G5's person-session gate S2-2 reads them
+  if p_sub is not null and exists (select 1 from auth.users u where u.id = p_sub) then
+    select s.id into v_session from auth.sessions s where s.user_id = p_sub and (s.not_after is null or s.not_after > clock_timestamp()) order by s.id limit 1;
+    if v_session is null then
+      insert into auth.sessions (user_id) values (p_sub) returning id into v_session;
+    end if;
+  end if;
   perform set_config('request.jwt.claim.sub', coalesce(p_sub::text, ''), true);
   perform set_config('request.jwt.claim.role', case when p_sub is null then '' else 'authenticated' end, true);
-  perform set_config('request.jwt.claims', case when p_sub is null then '' else json_build_object('sub', p_sub, 'role', 'authenticated')::text end, true);
+  perform set_config('request.jwt.claim.session_id', coalesce(v_session::text, ''), true);
+  perform set_config('request.jwt.claim.is_anonymous', case when p_sub is null then '' else 'false' end, true);
+  perform set_config('request.jwt.claims', case when p_sub is null then '' else json_build_object('sub', p_sub, 'role', 'authenticated',
+    'session_id', v_session, 'is_anonymous', false)::text end, true);
 end $$;
 -- One statement as a role with a subject; returns its text or 'ERR:' || message.
 create function pg_temp.as_role(p_sql text, p_role text, p_sub uuid default null) returns text language plpgsql as $$

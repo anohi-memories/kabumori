@@ -86,6 +86,11 @@ own "$db" -f "$here/004_postona_x_resv_dispatch.sql" >/dev/null
 "${S[@]}" -d postgres -c "create role $apilogin login noinherit" -c "grant postona_resv_api to $apilogin" \
   -c "grant postona_resv_api to $owner with inherit false, set true" -c "grant postona_resv_worker to $owner with inherit false, set true" >/dev/null
 echo "BASELINE_G5_STAGE3B_ONBOARDING_GUARD_RESERVATIONS_001_004_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$here/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own "$db" -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # S0: 005 needs 001-004 and T13; a failed apply leaves nothing; a re-apply is refused.
 own "$plain" -f "$here/test_fixture.sql" >/dev/null
@@ -114,7 +119,7 @@ done
 P76="$(val -c "select user_id from t_ids.people where n = 76")"; A76="$(val -c "select account from t_ids.people where n = 76")"
 S76="$(val -c "insert into auth.sessions (user_id) values ('$P76') returning id")"
 as_api() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$apilogin" -d "$db" -c "begin isolation level read committed" -c "set local role postona_resv_api" \
-  -c "do \$\$ begin perform set_config('request.jwt.claims', '{\"sub\":\"$P76\",\"role\":\"authenticated\",\"session_id\":\"$S76\"}', true); end \$\$" -c "$1" -c "commit"; }
+  -c "do \$\$ begin perform set_config('request.jwt.claims', '{\"sub\":\"$P76\",\"role\":\"authenticated\",\"session_id\":\"$S76\",\"is_anonymous\":false}', true); end \$\$" -c "$1" -c "commit"; }
 SHA76="$(val -c "select encode(sha256(convert_to('busy', 'UTF8')), 'hex')")"
 REQ76="$(val -c "select gen_random_uuid()")"
 B76="$(as_api "select reservation_id || ' ' || lease_token from postona_x_resv.post_now_begin('$A76', '$REQ76', 'busy', '$SHA76')")"

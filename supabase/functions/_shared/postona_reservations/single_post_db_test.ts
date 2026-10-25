@@ -27,7 +27,7 @@ test("one read-committed transaction as postona_resv_api with the verified subje
   const result = await createSinglePostDb(s.connect).call("begin", ["sa_x", SUBJECT.userId, "t", "a".repeat(64)], SUBJECT);
   assert.deepEqual(result, { ok: true, rows: [{ reservation_id: "r", state: "claimed" }] });
   assert.deepEqual(s.log.slice(0, 3).map((q) => q.text), ["BEGIN ISOLATION LEVEL READ COMMITTED", "SET LOCAL ROLE postona_resv_api", "SET LOCAL statement_timeout = '15s'"]);
-  assert.deepEqual(JSON.parse(String(s.log[3].args?.[0])), { sub: SUBJECT.userId, role: "authenticated", session_id: SUBJECT.sessionId });
+  assert.deepEqual(JSON.parse(String(s.log[3].args?.[0])), { sub: SUBJECT.userId, role: "authenticated", session_id: SUBJECT.sessionId, is_anonymous: false });
   assert.ok(s.log[4].text.includes("postona_x_resv.post_now_begin($1::text, $2::uuid, $3::text, $4::text)"));
   assert.equal(s.log.at(-1)?.text, "COMMIT");
 });

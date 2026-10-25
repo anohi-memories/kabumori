@@ -5,6 +5,7 @@ import { createDriverConnect } from "./postgres_driver.ts";
 import { createSupabaseAuthVerifier } from "./supabase_auth.ts";
 
 const USER = "00000000-0000-4000-8000-00000000000a";
+const SUBJECT = { userId: USER, sessionId: "00000000-0000-4000-8000-0000000000c1" };
 const NOW = Date.parse("2026-10-13T00:00:00Z");
 
 // ---------------------------------------------------------------------------------------------------
@@ -81,16 +82,16 @@ test("db: one transaction -- constant role, local claims of the verified subject
   const s = scriptedSession((step) => (step.text.startsWith("SELECT coalesce") ? { rows: [[ROWS]] } : { rows: [] }));
   const db = createPostgresReservationDb(s.connect);
   const items = [{ draft_id: "d", scheduled_at: "2026-10-20T00:30:00Z", body: "x'); drop table x; --", consent: { confirmed: true, content_sha256: "a".repeat(64) } }];
-  const result = await db.call("create_batch", ["x_a", "0f9d2a52-8c1b-4b6a-9d55-1a2b3c4d5e6f", 1, "manual_exact", null, items], USER);
+  const result = await db.call("create_batch", ["x_a", "0f9d2a52-8c1b-4b6a-9d55-1a2b3c4d5e6f", 1, "manual_exact", null, items], SUBJECT);
   assert.equal(result.ok, true);
   const order = ["BEGIN ISOLATION LEVEL READ COMMITTED", "SET LOCAL ROLE ", "SET LOCAL statement_timeout", "SELECT set_config('request.jwt.claims'", "SELECT coalesce(json_agg(r)", "COMMIT"];
   assert.equal(s.steps.length, order.length);
   order.forEach((prefix, i) => assert.ok(s.steps[i].text.startsWith(prefix), `${i}: ${s.steps[i].text}`));
   assert.equal(s.steps[1].text, "SET LOCAL ROLE postona_resv_api");
-  assert.deepEqual(s.steps[3].args, [JSON.stringify({ sub: USER, role: "authenticated" }), USER]);
+  assert.deepEqual(s.steps[3].args, [JSON.stringify({ sub: USER, role: "authenticated", session_id: SUBJECT.sessionId, is_anonymous: false })]);
   // Every claim is transaction-local (is_local = true): a reused connection never carries a subject over.
   assert.equal((s.steps[3].text.match(/set_config\('[a-z_.]+', [^)]+\)/gu) ?? []).filter((call) => !call.endsWith(", true)")).length, 0);
-  assert.equal((s.steps[3].text.match(/set_config\(/gu) ?? []).length, 3);
+  assert.equal((s.steps[3].text.match(/set_config\(/gu) ?? []).length, 2); // the JSON claims + an empty per-claim sub (G3-34)
   assert.match(s.steps[4].text, /postona_x_resv\.create_batch\(\$1::text, \$2::uuid, \$3::integer, \$4::text, \$5::jsonb, \$6::jsonb\)/u);
   assert.deepEqual(s.steps[4].args, ["x_a", "0f9d2a52-8c1b-4b6a-9d55-1a2b3c4d5e6f", "1", "manual_exact", null, JSON.stringify(items)]);
   assert.ok(!s.steps.some((step) => step.text.includes("drop table")), "values never reach the SQL text");
@@ -100,9 +101,9 @@ test("db: one transaction -- constant role, local claims of the verified subject
 test("db: refuses an unknown function, a wrong arity or a non-UUID subject before connecting", async () => {
   let connected = 0;
   const db = createPostgresReservationDb(() => { connected += 1; return Promise.reject(new Error("x")); });
-  assert.deepEqual(await db.call("claim_due" as never, [], USER), { ok: false, code: "DB_REQUEST_INVALID" });
-  assert.deepEqual(await db.call("cancel", ["r"], USER), { ok: false, code: "DB_REQUEST_INVALID" });
-  assert.deepEqual(await db.call("list_reservations", ["x_a"], "00000000-0000-4000-8000-00000000000a' or '1'='1"), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await db.call("claim_due" as never, [], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await db.call("cancel", ["r"], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await db.call("list_reservations", ["x_a"], { userId: "00000000-0000-4000-8000-00000000000a' or '1'='1", sessionId: SUBJECT.sessionId }), { ok: false, code: "DB_REQUEST_INVALID" });
   assert.equal(connected, 0);
 });
 
@@ -113,7 +114,7 @@ test("db: a POSTONA_RESV refusal rolls back and returns its code; a lock timeout
     [pgError("42501", "permission denied for function claim_due"), "DB_ERROR"],
   ] as const) {
     const s = scriptedSession((step) => (step.text.startsWith("SELECT coalesce") ? error : { rows: [] }));
-    assert.deepEqual(await createPostgresReservationDb(s.connect).call("list_reservations", ["x_a"], USER), { ok: false, code });
+    assert.deepEqual(await createPostgresReservationDb(s.connect).call("list_reservations", ["x_a"], SUBJECT), { ok: false, code });
     assert.equal(s.steps[s.steps.length - 1].text, "ROLLBACK");
     assert.ok(!s.steps.some((step) => step.text === "COMMIT"));
     assert.equal(s.released(), 1);
@@ -122,11 +123,11 @@ test("db: a POSTONA_RESV refusal rolls back and returns its code; a lock timeout
 
 test("db: a broken connection or a failed COMMIT is an UNKNOWN outcome (throws), never a definite answer", async () => {
   const broken = scriptedSession((step) => (step.text.startsWith("SELECT coalesce") ? new Error("connection reset") : { rows: [] }));
-  await assert.rejects(createPostgresReservationDb(broken.connect).call("list_reservations", ["x_a"], USER), /OUTCOME_UNKNOWN/u);
+  await assert.rejects(createPostgresReservationDb(broken.connect).call("list_reservations", ["x_a"], SUBJECT), /OUTCOME_UNKNOWN/u);
   const commit = scriptedSession((step) => (step.text === "COMMIT" ? pgError("08006", "connection failure") : step.text.startsWith("SELECT coalesce") ? { rows: [[ROWS]] } : { rows: [] }));
-  await assert.rejects(createPostgresReservationDb(commit.connect).call("list_reservations", ["x_a"], USER), /OUTCOME_UNKNOWN/u);
+  await assert.rejects(createPostgresReservationDb(commit.connect).call("list_reservations", ["x_a"], SUBJECT), /OUTCOME_UNKNOWN/u);
   assert.equal(commit.released(), 1);
-  await assert.rejects(createPostgresReservationDb(() => Promise.reject(new Error("refused"))).call("list_reservations", ["x_a"], USER));
+  await assert.rejects(createPostgresReservationDb(() => Promise.reject(new Error("refused"))).call("list_reservations", ["x_a"], SUBJECT));
 });
 
 test("driver config: TLS is enforced for any non-loopback host; plain TCP only on loopback with the explicit test flag", () => {

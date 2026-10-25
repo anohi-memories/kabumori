@@ -1,8 +1,8 @@
 // G3 TASK 14/50: P7 -- 007's cancel_reservation / receipt identify the person by postona_x_resv.caller() = auth.uid() only; they do
 // not check that the session in the request is still live, belongs to that person, or is not anonymous. create does (G5's R1).
 // Run by postona_threads_p7_session_run.sh only, twice:
-//   P7_MODE=current  "P7 Cn" record what 007 does TODAY (they pass: the weakness is written down, not hidden)
-//   P7_MODE=desired  "Dn"    what a fixed 007 must do (they FAIL today: EXPECTED FAILURES checked by the runner)
+//   P7_MODE=current  "P7 Cn" record what 007 did before G3-34 (since caller() asks G5's S2-2 first they FAIL: the runner checks C1-C5)
+//   P7_MODE=desired  "Dn"    what a fixed 007 must do (they PASS with G3-34; the runner checks the whole suite passes)
 //   "P7 In" / "In"           invariants that must hold in both modes (privilege boundary, no existence leak, U8, R1 evidence)
 // The calls are made exactly as the reservation Edge would make them: the API login, SET ROLE postona_resv_api, the request's JWT claims
 // as settings (MOCK claims, as a verifier that checked only the signature and expiry would pass them). No JWT is forged or verified.
@@ -52,7 +52,7 @@ async function plant(n: number, text: string): Promise<{ id: string; clientId: s
 }
 const status = async (id: string) => (await owner<[string]>("select status from postona_threads_resv.reservations where id = $1::uuid", [id]))[0][0];
 type Claims = Record<string, unknown>;
-const claimsOf = (user: string, session: string, extra: Claims = {}) => JSON.stringify({ sub: user, role: "authenticated", session_id: session, ...extra });
+const claimsOf = (user: string, session: string, extra: Claims = {}) => JSON.stringify({ sub: user, role: "authenticated", session_id: session, is_anonymous: false, ...extra });
 /** As the reservation Edge would call 007: API login, SET ROLE postona_resv_api, the request's claims. Commits like the person store. */
 async function asEdge(claims: string | null, text: string, args: unknown[]): Promise<{ ok: true; rows: unknown[][] } | { ok: false; code: string }> {
   const setup = ["set local role postona_resv_api"];
