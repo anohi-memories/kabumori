@@ -8,6 +8,9 @@ Status: **isolated source candidate + local PG17 proof.**
 - **G5-28 revision** (task `common-account-g5-pr486-strict-shape-guard-p2-source-fix-20261025`, Issue #320 task 28): the P2 of H4's review of
   PR #486 (Issue #331 comment 6378096499, CHANGES_REQUIRED at `24e6be5c`) is fixed. The shape guards now pin every attribute CREATE OR REPLACE
   would reset (section 7). PR #486 stays as the review evidence; the fix is a separate Draft PR on top of it.
+- **G5-29 revision** (task `common-account-g5-pr487-transform-protrftypes-shape-guard-p2-source-fix-20261025`, Issue #320 task 29): the P2 of
+  H4's review of PR #487 (Issue #331 comment 6393211366, CHANGES_REQUIRED at `e282c563`) is fixed. The attribute baseline also pins
+  `protrftypes IS NULL` (no TRANSFORM) (section 8). PR #487 stays as the review evidence.
 
 - TASK `common-account-g5-personal-r0-r1-sv-anonymous-claim-d1-source-candidate-20261024` (Issue #320, G5-01 generation, task 27, completion K5).
 - Design: D1 of `docs/common-account/g5-26-personal-claim-workspace-if-contract.md` (PR #485).
@@ -112,3 +115,15 @@ Body mutants get their checksums recomputed, so each fails for the rule.
 | Tests [D] | 7 tests ×3. New in G5-28: **P2 before** (PR #486's own candidate `24e6be5c`, read with `git show`): a STRICT R1 is accepted by its install and reset; a STRICT SV is accepted by its rollback. **Drift refused**: STRICT on R1 / R0 / SV, PARALLEL SAFE on R0, COST 50 on SV and LEAKPROOF on R1 each refuse the install with that function's SHAPE code. Every body and attribute is left as it was (the drift stays visible). A STRICT SV after the install refuses the rollback the same way. The earlier 5 tests (60 answers: 12 change, 48 byte-identical) still pass; the shape comparison now includes every attribute. |
 | Mutations | 23 / 23: the 16 of G5-27, plus 7 for the attribute baseline (STRICT on each function before the install, PARALLEL, COST, LEAKPROOF, STRICT before the rollback) |
 | Not verified | managed (attributes as deployed), real consumers, production |
+
+## 8. G5-29: no TRANSFORM (`protrftypes`), H4 P2 on PR #487
+
+| Item | Detail |
+| --- | --- |
+| The finding | The G5-28 baseline did not include `pg_proc.protrftypes`, the attribute a `TRANSFORM FOR TYPE …` clause sets. CREATE OR REPLACE (the declaration has no TRANSFORM) would erase a non-NULL value without noticing. H4 found it statically. |
+| The fix | Every pre- and post-condition shape check of the candidate and the rollback (12 places) also requires `p.protrftypes is null`, the reviewed value (measured: NULL for R1 / R0 / SV). An empty array `{}` is not NULL and is refused too. The bodies, checksums and declarations are unchanged. |
+| Can a real TRANSFORM be put on these functions? [D] | **No, not in this PG17 world**, so the real path is **NOT_VERIFIED**: `TRANSFORM FOR TYPE int` on a plpgsql function fails with "transform for type integer language plpgsql does not exist"; `pg_transform` is empty; the transforms PostgreSQL ships (`hstore_plperl`, `jsonb_plperl`, `bool_plperl`) are for plperl, not plpgsql; and SQL cannot create the `internal`-typed support functions a transform needs. A plpgsql transform would need a C extension. |
+| How it is tested instead [D] | A superuser's **direct catalog edit** (`update pg_catalog.pg_proc set protrftypes = …`) is the stand-in for the attribute, labelled as such in the suite. **P2 before:** on PR #487's own candidate (`e282c563`, `git show`), the edit on R1 is accepted by its install and erased; on SV it is accepted by its rollback and erased. **After:** `{jsonb}` on R1, `{}` on R0 and `{text}` on SV each refuse the install with that function's SHAPE code, and every body and attribute stays as it was; `{jsonb}` on R0 after the install refuses the rollback. |
+| Tests | 8 tests ×3 (the G5-28 seven plus the PR #487 reproduction; the shape comparison now includes `protrftypes`; the 60-answer comparison still 12 / 48) |
+| Mutations | 27 / 27: G5-28's 23, plus `protrftypes is null` removed before the install (R1, R0, SV) and before the rollback (R0) |
+| Not verified | a real TRANSFORM on a plpgsql function (not constructible here); managed attributes; real consumers; production |
