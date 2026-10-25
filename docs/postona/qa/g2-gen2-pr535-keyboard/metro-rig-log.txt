@@ -1,0 +1,4 @@
+# Metro rig log ([G2E2E] fake-session switches, [F2QA] scripted send port). No secrets.
+iOS Bundled 7786ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1399 modules)
+ LOG  [F2QA] readiness account=account-x-main
+ LOG  [F2QA] send call#1 targetId=c8a06b6a-ab38-4d78-a5cb-98dc1c52ac7d account=account-x-main scenario=#net consentSha=8e1f00da90bb chars=53
