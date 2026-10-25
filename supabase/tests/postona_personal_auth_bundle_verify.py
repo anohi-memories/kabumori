@@ -1,6 +1,7 @@
 """G5-40: static check of supabase/candidates/postona_personal_auth_bundle/ against its MANIFEST.tsv (no database, no network).
   * every listed file exists and its blob is the manifest's; every copied file is BYTE-IDENTICAL to its source at the stated commit (git objects);
-  * the directory holds nothing unlisted; each install step 10..70 has exactly one rollback; the one NEW file is the guard.
+  * the directory holds nothing unlisted; each install step 10..70 has exactly one rollback; the one NEW part is the guard;
+  * (G5-41) the two entrypoints INSTALL_ALL.sql / ROLLBACK_ALL.sql re-derive byte for byte from the parts (postona_personal_auth_bundle_build.py --check).
 Usage: python3 supabase/tests/postona_personal_auth_bundle_verify.py <repository root with the source commits fetched>"""
 import os
 import subprocess
@@ -27,7 +28,9 @@ for step, kind, name, commit, path, pr, blob in rows:
     listed.add(name)
     file = os.path.join(BUNDLE, name)
     check(os.path.isfile(file) and hash_object(file) == blob, f'{name}: present, blob {blob[:8]}')
-    if commit != 'NEW':
+    if commit == 'GENERATED':
+        check(kind == 'entrypoint', f'{name}: a generated file is an entrypoint')
+    elif commit != 'NEW':
         src = subprocess.run(['git', '-C', repo, 'rev-parse', f'{commit}:{path}'], capture_output=True, text=True)
         check(src.returncode == 0 and src.stdout.strip() == blob, f'{name}: byte-identical to {path} @ {commit[:8]} ({pr})')
     else:
@@ -36,5 +39,7 @@ check(set(os.listdir(BUNDLE)) - {'MANIFEST.tsv', 'README.md'} == listed, 'nothin
 installs = sorted(r[0] for r in rows if r[1] == 'install')
 rollbacks = sorted(r[0] for r in rows if r[1] == 'rollback')
 check(installs == rollbacks == ['10', '20', '30', '40', '50', '60', '70'], 'each install step 10..70 has exactly one rollback')
+built = subprocess.run([sys.executable, os.path.join(repo, 'supabase/tests/postona_personal_auth_bundle_build.py'), repo, '--check'], capture_output=True, text=True)
+check(built.returncode == 0, 'the entrypoints re-derive from the parts: ' + ' / '.join(built.stdout.split('\n')[:2]))
 print(f'BUNDLE    {"PASS" if fail == 0 else "FAIL"} ({fail} failure(s))', flush=True)
 sys.exit(1 if fail else 0)

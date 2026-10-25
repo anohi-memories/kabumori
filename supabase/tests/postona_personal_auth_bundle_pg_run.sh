@@ -5,7 +5,8 @@
 # among them), the owner-epoch candidate of PR #457 (unreviewed, H3 stopped) and the test-world auth.uid() -- WITHOUT R1 / R0 / SV:
 #   bundle  the bundle suite installs steps 10..70 itself, in order and out of order, rolls back in reverse (with the guard), reinstalls;
 #   int     steps 10..30 from the bundle, then PR #518's integration suite (fdc281fe, git show, blobs checked) on the bundle's 40..70 files;
-#   src     the same, then PR #528's consumer-source suite (5b74d977) with G3 / G4 / G6 code cut from their PR heads (as its own runner does).
+#   src     the same, then PR #528's consumer-source suite (5b74d977) with G3 / G4 / G6 code cut from their PR heads (as its own runner does);
+#   entry / stage  (G5-41) the entrypoints suite: INSTALL_ALL / ROLLBACK_ALL, and the per-file reproductions of H2's F1 / F2 on PR #531.
 # No network, no credential, no managed project; nothing of G3 / G4 / G6 is changed. Usage:
 #   CAL_PGHOST=/private/tmp/<socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/postona_personal_auth_bundle_pg_run.sh
 set -euo pipefail
@@ -67,7 +68,7 @@ end \$\$;
 create role $owner login nosuperuser nocreatedb createrole;
 grant anon, authenticated, service_role to $owner;
 SQL
-for w in bundle probe int src; do
+for w in bundle probe int src entry stage; do
   "${S[@]}" -d postgres -c "create database ${prefix}_$w owner $owner" >/dev/null
   own() { psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "${prefix}_$w" "$@"; }
   own -f "$t/social_mobile_account_deletion_fixture.sql" >/dev/null
@@ -99,6 +100,10 @@ c=(PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner")
 echo "== bundle suite"
 ( cd "$repo" && env CAL_E2E=1 S40_BUNDLE="$bundle" S40_OWNER="$owner" S40_DB="${prefix}_bundle" S40_PROBE="${prefix}_probe" "${c[@]}" \
     "${d[@]}" "$here/postona_personal_auth_bundle_pg_test.ts" ) || rc=1
+echo "== the entrypoints suite (G5-41: INSTALL_ALL / ROLLBACK_ALL)"
+mkdir -p "$work/tmp"
+( cd "$repo" && env CAL_E2E=1 S40_BUNDLE="$bundle" S40_OWNER="$owner" S40_ENTRY="${prefix}_entry" S40_STAGE="${prefix}_stage" S40_TMP="$work/tmp" "${c[@]}" \
+    "${d[@]}" --allow-write="$work/tmp" "$here/postona_personal_auth_bundle_entrypoints_pg_test.ts" ) || rc=1
 echo "== PR #518 integration suite on the bundle's files"
 ( cd "$repo" && env CAL_E2E=1 S36_C="$work/c" S36_FAKES="$work/s/fakes.sql" S36_OWNER="$owner" S36_DB="${prefix}_int" "${c[@]}" \
     "${d[@]}" "$work/s/int_test.ts" ) || rc=1
