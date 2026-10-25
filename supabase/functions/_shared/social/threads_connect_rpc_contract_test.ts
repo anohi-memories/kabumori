@@ -9,7 +9,9 @@ import {
   T13_REFUSAL_CODES,
   THREADS_CONNECT_ATTESTATION_VAULT_NAME,
   THREADS_CONNECT_RPC,
+  THREADS_CONNECT_ENTRY_REFUSAL_CODES,
   THREADS_CONNECT_RPC_REFUSAL_CODES,
+  threadsConnectRefusalKind,
   THREADS_OAUTH_STATE_MAX_TTL_MS,
   THREADS_REMOTE_REVOKE_AVAILABLE,
   threadsConnectAttestation,
@@ -175,4 +177,33 @@ test("isolation: the module imports nothing and nothing imports it", async () =>
   };
   await walk(new URL("functions/", supabaseDir));
   assert.deepEqual(importers, []);
+});
+
+// G4-43: the Threads callback entry's refusal codes and the classifier the transport / Edge can use.
+test("entry refusal codes are exactly what the candidate entry raises (+ G5's S2-3 answers it passes through)", async () => {
+  const sql = await Deno.readTextFile(new URL(
+    "candidates/postona_g4_threads_personal_auth/002_threads_entry_person_session.sql", supabaseDir));
+  const start = sql.indexOf("create or replace function postona_threads_binding.complete_and_attest_binding(");
+  const body = sql.slice(start, sql.indexOf("end $$;", start));
+  const raised = new Set([...body.matchAll(/raise exception '([A-Z0-9_]+)'/g)].map((m) => m[1]));
+  for (const passed of ["OWN_WORKSPACE_CONFLICT", "WORKSPACE_OWNER_UNKNOWN", "WORKSPACE_VERDICT_UNKNOWN"]) {
+    assert.ok(body.includes(`'${passed}'`), passed);
+    raised.add(passed);
+  }
+  assert.deepEqual([...raised].sort(), [...THREADS_CONNECT_ENTRY_REFUSAL_CODES].sort());
+  const all = [...T13_REFUSAL_CODES, ...THREADS_CONNECT_RPC_REFUSAL_CODES, ...THREADS_CONNECT_ENTRY_REFUSAL_CODES];
+  assert.equal(new Set(all).size, all.length, "no code is listed twice");
+});
+
+test("threadsConnectRefusalKind: sign in again / workspace blocked / start over", () => {
+  assert.equal(threadsConnectRefusalKind("THREADS_SESSION_NOT_ACTIVE"), "session_required");
+  assert.equal(threadsConnectRefusalKind("ACCOUNT_LIFECYCLE_AUTH_REQUIRED"), "session_required");
+  for (const code of ["OWN_WORKSPACE_CONFLICT", "WORKSPACE_OWNER_UNKNOWN", "WORKSPACE_VERDICT_UNKNOWN",
+    "SOCIAL_MOBILE_WORKSPACE_CONFLICT", "SOCIAL_MOBILE_WORKSPACE_SHARED"]) {
+    assert.equal(threadsConnectRefusalKind(code), "workspace_blocked", code);
+  }
+  for (const code of ["THREADS_BINDING_OWNER_EPOCH_CHANGED", "THREADS_BINDING_ALREADY_ATTESTED", "THREADS_OAUTH_STATE_NOT_CONSUMABLE",
+    "ACCOUNT_LOCKED", "anything else", ""]) {
+    assert.equal(threadsConnectRefusalKind(code), "restart", code);
+  }
 });
