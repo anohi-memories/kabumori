@@ -9,6 +9,7 @@ H4 C4 P2（遅延する再取得の後の HALT・期限の再判定）の修正�
 実行中の Issue の変化の検出は TASK `g10-phase2-pr423-running-issue-change-monitor-fake-20261023`（同じ節の「実行中の Issue 監督」）。
 H2 C2 P2×2（監督スレッドの異常・正常時刻）の修正は TASK `g10-phase2-pr423-h2-c2-monitor-worker-stale-heartbeat-p2-fix-20261023`（同じ節の「監督スレッドの結果と正常時刻の契約」）。
 ゲート1（実 GitHub の Issue #323 の読み取り専用取得元の候補）は TASK `g10-phase2-gate1-github-readonly-witness-candidate-20261023`（下の「ゲート1」）。
+ゲート1追加（編集者の根拠・認証・回数の予算）は TASK `g10-phase2-gate1-editor-provenance-rate-budget-20261025`（下の「ゲート1追加」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -39,6 +40,7 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 | `g10runner/registry.py` | プロセス登録簿（不変項目のダイジェスト・状態遷移） | v5 §7-1 |
 | `g10runner/procs.py` | 観測（`ps` の失敗は `ObservationError`＝unknown）・正確な識別（sysctl の argv・settings・uid・開始時刻）・開始時刻を再照合してからの signal（ゾンビは不在とみなす） | v5.3 §5、H3 R2・R3 |
 | `g10runner/github_source.py` | ゲート1: 実 GitHub の Issue #323 の読み取り専用取得元（候補。既定は無効・起動経路に未結線） | TASK 10 |
+| `g10runner/github_graphql.py`・`rate_budget.py` | ゲート1追加: 編集者の根拠（GraphQL・要認証）、回数の予算（見積もりと実行時の歯止め） | TASK 11 |
 | `g10runner/issue.py` | Issue #323 の取得証拠（取得係＝witness 鍵の署名）と、要求の本文との結合の検証 | v5 §5-4、H4 P1 |
 | `g10runner/binding.py` | 起動要求と承認済みTASK・ポリシーの結合（本文の再ハッシュ・実行項目の照合・型・形式・期限） | v5.3 §2-3、H3 R1 |
 | `g10runner/adapter.py` | **偽Claude専用**の実行アダプタ（実行ファイル固定・環境変数の許可リスト） | TASK 実行6 |
@@ -171,6 +173,27 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 - 回数制限: 認証なしは1時間60回。監督間隔5秒（1ランあたり毎時720回）では足りない。認証ありでも間隔の正式値は別途決める。
 - 限定ライブ取得（2026-10-23）: 認証なしの GET 2回で、本文の SHA-256・state・作成者・updated_at が gh での読み取りと一致。
   編集者は不明となり、証拠は拒否された（想定どおり）。
+
+## ゲート1追加: 編集者の根拠・認証・回数の予算（TASK 11・2026-10-25。候補・未結線）
+- **編集者の根拠**（`github_graphql.py`）: REST に編集者は無いので、GraphQL の `editor`・`lastEditedAt`・`userContentEdits` を使う。
+  送るのは変数の無い固定の読み取り問い合わせ1つ（`FIXED_QUERY`。mutation なし）だけ。`determine_editor` は、
+  未編集（履歴0件・lastEditedAt と editor が null）なら None、編集ありなら「履歴が欠けていない（100件以内で件数一致）・
+  すべての編集が信頼済み・削除された版が無い・Issue の editor が信頼済み・lastEditedAt が履歴の最新と一致」のときだけ
+  信頼済みのアカウント。それ以外は `UNKNOWN_EDITOR` で、証拠は必ず拒否される。編集履歴の完全性は GitHub の仕様に依存（NOT_VERIFIED）。
+- **認証の最小権限と事前確認**: 認証なし（既定）以外は、classic の個人用 token（`ghp_`＋36文字）で scope が空のものだけ。
+  1. 送信の前に形を判定（gh CLI の OAuth token `gho_`・fine-grained `github_pat_`・App の token などは、1回も送らずに拒否）
+  2. `verify_token` で、データを返さない `GET /rate_limit` に1回だけ送り、`X-OAuth-Scopes` が空であることを確認（確認前は取得しない）
+  3. 取得のたびに応答の scope を再確認
+  scope を「送る前に」証明する方法は GitHub に無いため、確認の送信は副作用の無い GET の1回だけに限る。
+  運用の設計案（未実施）: token は scope なし・有効期限つき（例: 30〜90日）で作り、Keychain など主ユーザー以外が読めない所に置き、
+  期限の前に作り直す（ローテーション）。作成・保管・ローテーションの実施は、ユーザーの承認と別TASKが必要。
+- **回数の予算**（`rate_budget.py`）: 1時間あたりの最悪の消費＝同時実行数×（S1 3600/監督間隔＋S2 3600/S2の周期）
+  ＋1ランごとの固定3回（CLAIM・起動直前・finalize）×1時間の最大起動数。上限×0.5 を超える設定は不可（`check`）。
+  既定の設定（10分に10回まで起動＝固定だけで毎時180回）では、**認証なし（毎時60回）はどの間隔でも不可**。
+  認証あり（毎時5000回／5000点）なら、監督間隔30秒・S2 30秒で REST 420回／GraphQL 840点（推奨の候補）。
+  実行時の `RateBudget` は、直近1時間の送信数・サーバの残り回数（Reset まで）・Retry-After を見て、超えそうなら送らない
+  （`RateLimited`。自動の再試行はしない）。REST は ETag の条件付き取得に対応（304 なら前回の内容を使う。
+  **認証なしの 304 も回数に数えられることを実測**）。スケジューラ（S1/S2・起動）には結線していない。
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。

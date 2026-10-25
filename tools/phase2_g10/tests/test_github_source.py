@@ -161,11 +161,17 @@ class TransportFailures(unittest.TestCase):
         return str(cm.exception)
 
     def test_http_errors(self):
-        for code in (403, 404, 429, 500, 502, 503):
+        for code in (403, 404, 500, 502, 503):
             with self.subTest(code=code):
                 def opener(req, timeout, c=code):
                     raise urllib.error.HTTPError(gh.ISSUE_URL, c, "err", {}, None)
                 self.assert_fails(opener, "github http error %d" % code)
+
+        def limited(req, timeout):
+            raise urllib.error.HTTPError(gh.ISSUE_URL, 429, "err", {"Retry-After": "42"}, None)
+        with self.assertRaises(gh.RateLimited) as cm:
+            source(limited).fetch(timeout=5)
+        self.assertEqual(cm.exception.retry_after, 42.0)
 
     def test_non_200_status(self):
         for status in (201, 204, 304):
@@ -223,12 +229,18 @@ class RequestBoundaries(unittest.TestCase):
         self.assertEqual((req.get_method(), req.host, req.type), ("GET", "api.github.com", "https"))
 
     def test_token_scope_rules(self):
-        op = respond(headers={"X-OAuth-Scopes": "repo, workflow"})
+        """取得のたびに応答の scope を再確認する（送信前の形の判定・事前確認は test_github_auth_budget）。"""
+        tok = "ghp_" + "A" * 36
+
+        def verified(op):
+            s = source(op, token=tok)
+            s._token_verified = True  # 事前確認を済ませた状態（確認そのものは別の試験）
+            return s
         with self.assertRaisesRegex(issue_mod.IssueSourceError, "only a no-scope"):
-            source(op, token="t0ken").fetch(timeout=5)
+            verified(respond(headers={"X-OAuth-Scopes": "repo, workflow"})).fetch(timeout=5)
         with self.assertRaisesRegex(issue_mod.IssueSourceError, "fine-grained"):
-            source(respond(), token="t0ken").fetch(timeout=5)
+            verified(respond()).fetch(timeout=5)
         op = respond(headers={"X-OAuth-Scopes": ""})
-        source(op, token="t0ken").fetch(timeout=5)
-        self.assertEqual(op.calls[0].get_header("Authorization"), "Bearer t0ken")
-        self.assertNotIn("t0ken", repr(source(op, token="t0ken")))
+        verified(op).fetch(timeout=5)
+        self.assertEqual(op.calls[0].get_header("Authorization"), "Bearer " + tok)
+        self.assertNotIn(tok, repr(source(op, token=tok)))
