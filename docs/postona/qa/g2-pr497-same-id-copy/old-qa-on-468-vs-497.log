@@ -1,0 +1,26 @@
+Old G2 QA files (each taken from its own PR HEAD) run on G1 #468 45ee9ac3 and on G1 #497 446a9c39, throwaway worktree, 2 runs (identical).
+== PR 394 HEAD 7384aa5abb29496c01d63c2d0add2cce5dcddc2b tests/g2-x-manual-result-gate.test.mjs
+  on #468: tests 6 / pass 1 / fail 5
+  on #497: tests 6 / pass 1 / fail 5
+  run 2 identical: True
+== PR 403 HEAD ffed4d8735c5b270c87679f259cdc3aa30007f2c tests/g2-pr398-regression.test.mjs
+  on #468: tests 6 / pass 2 / fail 4
+  on #497: tests 6 / pass 3 / fail 3
+  changed: PASS -> FAIL: G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+  changed: FAIL -> PASS: FINDING G2-SM3R (P3, owner G1 / G5; MOCK of G2-SM2): a refresh whose user carries a NEW last_sign_in_at re-creates the open screen -- the typed text is gone at once and its record is discarded on the next look
+  changed: FAIL -> PASS: G2-SM3R-C: the same change while confirming drops the confirmation and the consent (nothing can be sent with them)
+  run 2 identical: True
+== PR 411 HEAD 38501193d7baf921f673e5e169e69752f34eae3e tests/g2-postfix-baseline.test.mjs
+  on #468: tests 14 / pass 13 / fail 1
+  on #497: tests 14 / pass 12 / fail 2
+  changed: PASS -> FAIL: NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+  run 2 identical: True
+== PR 414 HEAD 7b150a89d52bae0692487654fa4c1ae7db398112 tests/g2-pr410-transitions.test.mjs
+  on #468: tests 6 / pass 4 / fail 2
+  on #497: tests 6 / pass 4 / fail 2
+  run 2 identical: True
+== PR 448 HEAD d44713bc84407847aee66a131c3c67adad6fc320 tests/g2-pr435-retry-kind.test.mjs
+  on #468: tests 8 / pass 5 / fail 3
+  on #497: tests 8 / pass 4 / fail 4
+  changed: PASS -> FAIL: OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted
+  run 2 identical: True
