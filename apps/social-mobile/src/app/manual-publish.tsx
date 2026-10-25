@@ -9,7 +9,7 @@ import { Link, Stack } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Dimensions, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
@@ -86,6 +86,16 @@ const HEADER_OPTIONS = {
 // content scrolls it and a downward drag over the keyboard still closes it. Android has no such mode: `on-drag`.
 const KEYBOARD_DISMISS_MODE = Platform.OS === 'ios' ? 'interactive' : 'on-drag';
 
+// A multi-line text box that grows without a limit pushes the line being typed under the soft keyboard (G2 QA G2-A11Y-1). The box
+// grows up to this height and then scrolls inside itself, so the line being typed stays in the box and above the keyboard.
+const TEXT_BOX_MAX_HEIGHT = 240;
+
+/** The device text size (font scale) now; 1 where it cannot be read. */
+function currentFontScale(): number {
+  const scale = Dimensions?.get?.('window')?.fontScale;
+  return typeof scale === 'number' && scale > 0 ? scale : 1;
+}
+
 /** One attempt id per attempt: a lowercase UUID, which is what the F3 server accepts as `clientRequestId`. */
 function defaultRequestId() {
   return Crypto.randomUUID();
@@ -124,6 +134,20 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   const [clearFailed, setClearFailed] = useState(false);
   // A re-ask on this screen was not made because the attempt had been acknowledged or ended on another screen.
   const [clearedElsewhere, setClearedElsewhere] = useState(false);
+  // When the device text size changes while the screen is open, text that was already laid out is cut (G2 QA G2-A11Y-3; opening
+  // the screen again shows it right). The scroll content is laid out anew (keyed by the text size) -- no size limit is imposed.
+  const [fontScale, setFontScale] = useState(currentFontScale);
+  useEffect(() => {
+    const subscription = Dimensions?.addEventListener?.('change', ({ window }) => {
+      if (typeof window?.fontScale === 'number' && window.fontScale > 0) setFontScale(window.fontScale);
+    });
+    return () => subscription?.remove?.();
+  }, []);
+  // A result must open at ITS beginning -- its heading and its warning ("check X first") -- not where the confirmation was scrolled
+  // to (with large text the result appeared scrolled to its end, showing only the discard button first: G2 QA G2-A11Y-2).
+  const scrollRef = useRef<ScrollView>(null);
+  const resultTop = useRef<number | null>(null);
+  const scrollToResult = useRef(false);
   const sendingRef = useRef(false);
   const clearingRef = useRef(false);
   const mountedRef = useRef(true);
@@ -326,6 +350,17 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
   };
 
   const result = state.phase === 'result' ? state.result : null;
+  // Each newly shown result is scrolled to its beginning, once its position is known (see the result's onLayout below).
+  const resultShown = result === null ? null : `${state.requestId ?? ''}:${result.kind}`;
+  useEffect(() => {
+    if (resultShown === null) {
+      resultTop.current = null;
+      scrollToResult.current = false;
+      return;
+    }
+    if (resultTop.current !== null) scrollRef.current?.scrollTo({ y: resultTop.current, animated: false });
+    else scrollToResult.current = true;
+  }, [resultShown]);
   const restored = state.unresolved !== null && state.unresolved.text === null;
   const retryLabel = restored ? '前回と同じ本文を入力して確認し直す' : '同じ内容・同じ送信IDで確認し直す';
   const discardLabel = restored ? 'Xで確認しました（この記録を破棄）' : 'Xで確認しました（この下書きを破棄）';
@@ -338,6 +373,8 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
           room for it (iOS), keeps taps working while it is up, keeps it up while the content is scrolled and lets a
           downward drag over the keyboard dismiss it. */}
       <ScrollView
+        key={`text-size-${fontScale}`}
+        ref={scrollRef}
         automaticallyAdjustKeyboardInsets
         contentContainerStyle={{ gap: 16, paddingBottom: spacing.xl }}
         keyboardDismissMode={KEYBOARD_DISMISS_MODE}
@@ -439,7 +476,8 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
                 onChangeText={(text) => dispatch({ type: 'draft_changed', text })}
                 placeholder={account === null ? '先に投稿先のXアカウントを選んでください' : 'いまどうしていますか？'}
                 placeholderTextColor={colors.muted}
-                style={{ minHeight: 140, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: spacing.sm, color: colors.ink, fontSize: 15, textAlignVertical: 'top' }}
+                scrollEnabled
+                style={{ minHeight: 140, maxHeight: TEXT_BOX_MAX_HEIGHT, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: spacing.sm, color: colors.ink, fontSize: 15, textAlignVertical: 'top' }}
                 value={state.draft}
               />
               <Text style={draft.kind === 'too_long' || draft.kind === 'invalid_characters' ? { color: colors.danger, fontWeight: '700' } : styles.muted}>
@@ -484,7 +522,8 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
                   onChangeText={(text) => dispatch({ type: 'draft_changed', text })}
                   placeholder="前回と同じ本文を入力してください"
                   placeholderTextColor={colors.muted}
-                  style={{ minHeight: 100, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: spacing.sm, color: colors.ink, fontSize: 15, textAlignVertical: 'top' }}
+                  scrollEnabled
+                  style={{ minHeight: 100, maxHeight: TEXT_BOX_MAX_HEIGHT, borderColor: colors.border, borderWidth: 1, borderRadius: 12, padding: spacing.sm, color: colors.ink, fontSize: 15, textAlignVertical: 'top' }}
                   value={state.draft}
                 />
               </Card>
@@ -519,6 +558,15 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
         ) : null}
 
         {result ? (
+          <View
+            onLayout={(event) => {
+              resultTop.current = event.nativeEvent.layout.y;
+              if (scrollToResult.current) {
+                scrollToResult.current = false;
+                scrollRef.current?.scrollTo({ y: resultTop.current, animated: false });
+              }
+            }}
+          >
           <Card>
             {result.kind === 'sent' ? (
               <>
@@ -587,6 +635,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
               </>
             ) : null}
           </Card>
+          </View>
         ) : null}
       </ScrollView>
     </Screen>

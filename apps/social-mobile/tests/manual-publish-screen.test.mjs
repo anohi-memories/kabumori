@@ -94,7 +94,7 @@ async function loadRoute(world) {
   const stubs = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
-    'react-native': { Platform: { OS: world.os ?? 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
+    'react-native': { Platform: { OS: world.os ?? 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View', ...(world.dimensions ? { Dimensions: world.dimensions } : {}) },
     'expo-router': { Link: 'Link', Stack: { Screen: 'StackScreen' } },
     'expo-crypto': { randomUUID: () => '00000000-0000-4000-8000-000000000000' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
@@ -117,10 +117,10 @@ async function loadRoute(world) {
   return { mod, slots, getCursor: () => cursor, setCursor: (v) => { cursor = v; }, pendingEffects };
 }
 
-async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', inflight = realFlow.createInFlightSends(), clock = { t: 100_000 }, os = 'ios', idBase = 0 } = {}) {
+async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', inflight = realFlow.createInFlightSends(), clock = { t: 100_000 }, os = 'ios', idBase = 0, dimensions = undefined } = {}) {
   const store = realStore.createAttemptStore(kv);
   const draftStore = realDraft.createDraftStore(draftKv);
-  const world = { status, userId, accounts, active, port: port.port, memory, store, draftStore, inflight, os };
+  const world = { status, userId, accounts, active, port: port.port, memory, store, draftStore, inflight, os, dimensions };
   const rt = await loadRoute(world);
   let ids = idBase;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
@@ -2981,4 +2981,136 @@ test('DELAYED-READ: the same for any user id, and another user\'s acknowledge ne
   await l9.flush();
   assert.equal(l9.state().unresolved.requestId, ID(9), 'U9\'s restored attempt is shown');
   assert.equal(memory.get('U9').requestId, ID(9));
+});
+
+// ---- G2 QA (dark mode / accessibility, iOS 27 Simulator): G2-A11Y-1 / -2 / -3 ------------------------------------------------------------
+
+/** A device text size that the test can change while the screen is open, like the iOS text size setting. */
+function fakeDimensions(fontScale = 1) {
+  const listeners = new Set();
+  const dims = {
+    removed: 0,
+    window: { width: 390, height: 844, scale: 3, fontScale },
+    get: () => dims.window,
+    addEventListener: (type, listener) => {
+      assert.equal(type, 'change');
+      listeners.add(listener);
+      return { remove: () => { dims.removed += 1; listeners.delete(listener); } };
+    },
+    setFontScale: (scale) => { dims.window = { ...dims.window, fontScale: scale }; for (const listener of listeners) listener({ window: dims.window, screen: dims.window }); },
+    listenerCount: () => listeners.size,
+  };
+  return dims;
+}
+
+/** Put a recording scroll view behind the screen's scroll view ref. */
+function recordScrolls(ui) {
+  const calls = [];
+  const ref = ui.all('ScrollView')[0].props.ref;
+  assert.ok(ref && 'current' in ref, 'the scroll view has a ref');
+  ref.current = { scrollTo: (options) => { calls.push({ ...options }); } }; // (copied out of the vm realm of the screen)
+  return calls;
+}
+const resultBox = (ui) => ui.all('View').find((node) => typeof node.props.onLayout === 'function') ?? null;
+
+test('G2-A11Y-2: a result opens at ITS beginning -- the screen scrolls to the result (heading and the "check X" warning), not where the confirmation was', async () => {
+  const fp = fakePort();
+  const ui = await mount({ port: fp });
+  const scrolls = recordScrolls(ui);
+  await ui.typeText('大きな文字で送る本文');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(resultBox(ui), null, 'no result yet');
+  assert.deepEqual(scrolls, [], 'nothing is scrolled while editing, confirming or sending');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'unavailable', code: 'TRANSPORT_FAILED' });
+  await ui.flush();
+  assert.equal(ui.state().result.kind, 'unconfirmed');
+  assert.deepEqual(scrolls, [], 'the position of the result is not known before its layout');
+  resultBox(ui).props.onLayout({ nativeEvent: { layout: { x: 0, y: 912, width: 390, height: 600 } } });
+  assert.deepEqual(scrolls, [{ y: 912, animated: false }], 'scrolled to the top of the result');
+  const texts = ui.text();
+  assert.ok(texts.indexOf('結果を確認できません') < texts.indexOf('Xで投稿済みでないことを確認してください'), 'the heading comes first, then the warning');
+  resultBox(ui).props.onLayout({ nativeEvent: { layout: { x: 0, y: 900, width: 390, height: 610 } } });
+  assert.equal(scrolls.length, 1, 'a later layout of the same result does not scroll again (the person may be reading further down)');
+});
+
+test('G2-A11Y-2: every NEW result is scrolled to again (the re-ask answer), the same result is not', async () => {
+  const fp = fakePort();
+  const ui = await mount({ port: fp });
+  const scrolls = recordScrolls(ui);
+  await ui.typeText('二度目の結果');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  fp.pending[0].resolve({ targetId: ID(1), kind: 'pending', code: 'IN_PROGRESS', marks: REAL });
+  await ui.flush();
+  resultBox(ui).props.onLayout({ nativeEvent: { layout: { x: 0, y: 700, width: 390, height: 500 } } });
+  assert.deepEqual(scrolls, [{ y: 700, animated: false }]);
+  await ui.press('同じ内容・同じ送信IDで確認し直す');
+  await ui.tick();
+  await ui.press('Xに投稿する');
+  assert.equal(resultBox(ui), null, 'the re-ask is out: no result shown');
+  fp.pending[1].resolve({ targetId: ID(1), kind: 'published', providerPostId: '424242', marks: REAL });
+  await ui.flush();
+  resultBox(ui).props.onLayout({ nativeEvent: { layout: { x: 0, y: 650, width: 390, height: 400 } } });
+  assert.deepEqual(scrolls, [{ y: 700, animated: false }, { y: 650, animated: false }], 'the new result is scrolled to');
+});
+
+test('G2-A11Y-2: a screen that opens on an unresolved attempt also starts at the result', async () => {
+  const memory = realFlow.createAttemptMemory();
+  memory.mark('U1', { accountId: 'X_A', requestId: ID(3), contentSha256: sha('前の試行'), text: '前の試行', kind: 'uncertain' });
+  const ui = await mount({ memory });
+  const scrolls = recordScrolls(ui);
+  resultBox(ui).props.onLayout({ nativeEvent: { layout: { x: 0, y: 420, width: 390, height: 500 } } });
+  assert.deepEqual(scrolls, [{ y: 420, animated: false }]);
+});
+
+test('G2-A11Y-1: the text boxes grow only up to a height and then scroll inside, so the line being typed stays above the keyboard', async () => {
+  const ui = await mount();
+  const editor = ui.all('TextInput').find((node) => node.props.accessibilityLabel === '投稿の本文');
+  assert.ok(editor);
+  assert.equal(editor.props.multiline, true);
+  assert.equal(editor.props.scrollEnabled, true, 'it scrolls inside itself');
+  assert.equal(editor.props.style.maxHeight, 240, 'it stops growing');
+  assert.ok(editor.props.style.minHeight < editor.props.style.maxHeight);
+  const restored = await mount({ kv: deviceWith(RESTORED({ kind: 'pending' })) });
+  await restored.press('前回と同じ本文を入力して確認し直す');
+  const retype = restored.all('TextInput').find((node) => node.props.accessibilityLabel === '前回と同じ本文の入力');
+  assert.ok(retype, 'the box to type the earlier text again');
+  assert.equal(retype.props.scrollEnabled, true);
+  assert.equal(retype.props.style.maxHeight, 240);
+});
+
+test('G2-A11Y-3: a text size change while the screen is open lays the content out anew -- nothing typed or chosen is lost, and no size limit is set', async () => {
+  const dims = fakeDimensions(1);
+  const ui = await mount({ dimensions: dims });
+  assert.equal(ui.all('ScrollView')[0].key, 'text-size-1');
+  assert.equal(dims.listenerCount(), 1, 'the screen listens to text size changes');
+  await ui.typeText('文字の大きさを変える前の本文');
+  await ui.press('内容を確認する');
+  await ui.tick();
+  dims.setFontScale(3.1);
+  await ui.flush();
+  assert.equal(ui.all('ScrollView')[0].key, 'text-size-3.1', 'a new key: the content is laid out again, as if the screen were opened again');
+  assert.equal(ui.state().phase, 'confirming', 'the confirmation is still open');
+  assert.equal(ui.state().draft, '文字の大きさを変える前の本文', 'the text is kept');
+  assert.ok(ui.state().consent !== null, 'the consent of THIS text is kept (it is the same screen, not a restore)');
+  const limits = [];
+  walk(ui.tree(), (node) => {
+    if (node.props?.maxFontSizeMultiplier !== undefined || node.props?.allowFontScaling === false) limits.push(node.type);
+  });
+  assert.deepEqual(limits, [], 'no text size limit anywhere on the screen');
+  dims.setFontScale(Number.NaN);
+  await ui.flush();
+  assert.equal(ui.all('ScrollView')[0].key, 'text-size-3.1', 'a nonsense value is ignored');
+  ui.unmount();
+  assert.equal(dims.removed, 1, 'the listener is removed when the screen goes away');
+});
+
+test('G2-A11Y-3: a starting text size is used from the first frame; without a readable size the screen works as before', async () => {
+  const large = await mount({ dimensions: fakeDimensions(2.35) });
+  assert.equal(large.all('ScrollView')[0].key, 'text-size-2.35');
+  const none = await mount();
+  assert.equal(none.all('ScrollView')[0].key, 'text-size-1', 'no Dimensions (as in other harnesses): the default size, no crash');
 });
