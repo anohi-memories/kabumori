@@ -251,3 +251,23 @@ test("source: no Vault, no service-role key, no console, no token or text in any
   const answer = await run({ db: happyDb().db, x: fakeX(published()) });
   assert.ok(!JSON.stringify(answer).includes(TOKEN) && !JSON.stringify(answer).includes(X_TOKEN) && !JSON.stringify(answer).includes("本文"));
 });
+
+test("G3-36: the session ends between begin and the check (the gate refuses the check) -> 401 AUTH_REQUIRED, no X call, no record, no read-back", async () => {
+  const x = fakeX(published("1"));
+  const f = fakeDb({
+    begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }),
+    preflight: () => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_AUTH_REQUIRED" }),
+  });
+  assert.deepEqual(await run({ db: f.db, x }), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } });
+  assert.deepEqual(f.calls.map((c) => c.fn), ["begin", "preflight"]);
+  assert.equal(x.sent.length, 0, "nothing was sent");
+  // any other refusal of the check keeps the stored answer (read-back), as before
+  const g = fakeDb({
+    begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }),
+    preflight: () => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_SERVICE_BUSY" }),
+    readback: rows({ reservation_id: RID, state: "pending", after_freeze: false, simulated: false }),
+  });
+  assert.equal((await run({ db: g.db, x })).status, 200);
+  assert.deepEqual(g.calls.map((c) => c.fn), ["begin", "preflight", "readback"]);
+  assert.equal(x.sent.length, 0);
+});
