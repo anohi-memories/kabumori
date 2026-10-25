@@ -68,9 +68,13 @@ function markNotes(marks: ResultMarks | null): string[] {
 // The status bar is set ONLY by the `<StatusBar>` below. The screen option `statusBarStyle` is deliberately NOT used:
 // react-native-screens then insists on the view-controller-based status bar key of Info.plist being YES, which this
 // app sets to NO, and raises the development red box (G2 QA S1). Any `statusBar*` option has the same effect.
+// The back button (iOS) would otherwise show the title of the previous entry of the root stack, which is the internal route
+// group name "(tabs)" (G2 Simulator QA G2-E2E-1). The screen is opened from the home tab only, so the back button says where it
+// goes: "ホーム". Set on THIS screen's options -- the root layout and the other screens' back buttons are not touched.
 const HEADER_OPTIONS = {
   headerShown: true,
   title: '手入力でXに投稿',
+  headerBackTitle: 'ホーム',
   headerStyle: { backgroundColor: colors.background },
   headerTintColor: colors.ink,
   headerTitleStyle: { color: colors.ink },

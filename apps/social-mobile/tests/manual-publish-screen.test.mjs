@@ -584,10 +584,21 @@ test('the header is set by the route itself (the root layout is not touched)', a
   assert.deepEqual(JSON.parse(JSON.stringify(header.props.options)), {
     headerShown: true,
     title: '手入力でXに投稿',
+    headerBackTitle: 'ホーム',
     headerStyle: { backgroundColor: 'background' },
     headerTintColor: 'ink',
     headerTitleStyle: { color: 'ink' },
   });
+});
+
+test('G2-E2E-1: the back button says where it goes ("ホーム"), never an internal route name like "(tabs)"', async () => {
+  const ui = await mount();
+  const options = ui.all('StackScreen')[0].props.options;
+  assert.equal(options.headerBackTitle, 'ホーム', 'the screen is opened from the home tab');
+  const shown = [options.title, options.headerBackTitle].join(' ');
+  assert.ok(!/[()]|tabs|manual-publish|index/u.test(shown), `no route name in what the header shows: ${shown}`);
+  assert.equal(options.headerBackVisible, undefined, 'the back button itself is left as it is (not hidden)');
+  assert.equal(options.headerBackButtonDisplayMode, undefined, 'and its display mode is the platform default');
 });
 
 // ---- the handler is its own last line of defence --------------------------------------------------------------------------
