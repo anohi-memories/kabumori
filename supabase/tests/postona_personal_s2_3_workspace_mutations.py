@@ -7,6 +7,7 @@ COPY (a body mutant also gets its md5 constants recomputed in both files, so it 
 import hashlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -47,9 +48,12 @@ M = [
      "revoke all on function private.postona_personal_workspace_eligibility(uuid) from public, anon, authenticated, service_role;\n"
      "grant execute on function private.postona_personal_workspace_eligibility(uuid) to authenticated;", 0, 1),
     ('the install does not check the superuser', C, "    raise exception 'S23_PRECONDITION_OWNER_IS_SUPERUSER';", "    null;", 0, 1),
-    ('a second install is not refused', C, "    raise exception 'S23_ALREADY_APPLIED';", "    null;", 0, 1),
+    # (G5-35) the suite reads its checksums from this very line, so the condition is kept as a comment: the mutant must fail a SUITE test, not
+    # the suite's own parse of the candidate
+    ('a second install is not refused', C, "  if v_md5 = '3e89fcff1a3232ef794cdf0483a75130' then\n    raise exception 'S23_ALREADY_APPLIED';",
+     "  if false then -- was: if v_md5 = '3e89fcff1a3232ef794cdf0483a75130' then\n    raise exception 'S23_ALREADY_APPLIED';", 0, 1),
     ('the install does not check the R0 body', C, f"  if v_md5 is distinct from '{D1_R0}' then\n    raise exception 'S23_PRECONDITION_R0_BODY_NOT_REVIEWED';",
-     "  if false then\n    raise exception 'S23_PRECONDITION_R0_BODY_NOT_REVIEWED';", 0, 1),
+     f"  if false then -- was: if v_md5 is distinct from '{D1_R0}' then\n    raise exception 'S23_PRECONDITION_R0_BODY_NOT_REVIEWED';", 0, 1),
     ('the install does not check the R0 shape', C, "    raise exception 'S23_PRECONDITION_R0_SHAPE';", "    null;", 0, 1),
     ('the install R0 shape check lets a NULL pass', C, SHAPE_TAIL, SHAPE_TAIL.replace('is not true', 'is false'), 0, 3),
     ('the install does not refuse an existing predicate', C, "    raise exception 'S23_PRECONDITION_PREDICATE_EXISTS';", "    null;", 0, 1),
@@ -83,9 +87,33 @@ def replace_nth(text, old, new, n):
 def run(root, pinned):
     env = dict(os.environ, S33_REPO_ROOT=root, S33_PINNED_TREE=pinned)
     try:
-        return subprocess.run(['bash', os.path.join(root, RUNNER)], cwd=root, capture_output=True, text=True, timeout=900, env=env).returncode
+        r = subprocess.run(['bash', os.path.join(root, RUNNER)], cwd=root, capture_output=True, text=True, timeout=900, env=env)
+        return r.returncode, r.stdout + r.stderr
     except subprocess.TimeoutExpired:
-        return 124
+        return 124, ''
+
+
+ANSI = re.compile(r'\x1b\[[0-9;]*m')
+
+
+def classify(code, output, body_mutant):
+    """(G5-35) Why the suite failed, so that only a failed SUITE ASSERTION counts as a detection: SURVIVED (it passed); TIMEOUT; SETUP (no test
+    reported a failure: the world, the runner or a pinned file broke); CHECKSUM (a body mutant failed on a body-checksum guard, i.e. the md5
+    rewrite did not hold); STATIC (the test module's checks on the candidate's TEXT failed before any test ran); ASSERTION (a suite test failed on its assertions). The second value names the first failed test, for the record."""
+    if code == 0:
+        return 'SURVIVED', ''
+    if code == 124:
+        return 'TIMEOUT', ''
+    text = ANSI.sub('', output)
+    if '(uncaught error)' in text:  # the test module's own static checks on the candidate text failed before any test ran
+        return 'STATIC', next((l for l in text.splitlines() if 'Error' in l), '')[:140]
+    failed = re.findall(r'^(.+?) \.\.\. FAILED', text, re.M)
+    if not failed or not re.search(r'FAILED \| \d+ passed \| [1-9]\d* failed', text):
+        return 'SETUP', ((text.strip().splitlines() or [''])[-1])[:140]
+    errors = text[text.index(' ERRORS '):] if ' ERRORS ' in text else text
+    if body_mutant and re.search(r'[A-Z0-9]_BODY\b|checksum', errors):
+        return 'CHECKSUM', failed[0][:140]
+    return 'ASSERTION', failed[0][:140]
 
 
 def fresh_copy():
@@ -103,15 +131,17 @@ archive = subprocess.run(['git', '-C', src_root, 'archive', PIN, 'supabase/migra
                           'supabase/candidates/common_account_authorization_verdict'], capture_output=True, check=True).stdout
 tarfile.open(fileobj=io.BytesIO(archive)).extractall(pinned)
 root = fresh_copy()
-control = run(root, pinned)
+control, _ = run(root, pinned)
 shutil.rmtree(root, ignore_errors=True)
 print(f'CONTROL   {"PASS" if control == 0 else "FAIL"}', flush=True)
 if control != 0:
     sys.exit(1)
 detected = 0
 invalid = 0
+kinds = {}
 for label, target, old, new, nth, count in M:
     root = fresh_copy()
+    body_mutant = False
     try:
         path = os.path.join(root, target)
         text = open(path, encoding='utf-8').read()
@@ -128,12 +158,20 @@ for label, target, old, new, nth, count in M:
                 if after[k] != before[k]:
                     for f in (C, RB):
                         p = os.path.join(root, f)
-                        open(p, 'w', encoding='utf-8').write(open(p, encoding='utf-8').read().replace(before[k], after[k]))
-        code = run(root, pinned)
-        print(f'{"DETECTED " if code != 0 else "SURVIVED "} {label}', flush=True)
-        detected += 1 if code != 0 else 0
+                        # (G5-35) read BEFORE opening for write: `open(p, 'w').write(open(p).read() ...)` truncated the file first and wrote it back EMPTY,
+                        # so every body mutant ran against an empty candidate / rollback and was 'detected' whatever the suite checked
+                        content = open(p, encoding='utf-8').read().replace(before[k], after[k])
+                        if not content.strip():
+                            sys.exit(f'{f} would be written empty')
+                        open(p, 'w', encoding='utf-8').write(content)
+                        body_mutant = True
+        code, output = run(root, pinned)
+        kind, where = classify(code, output, body_mutant)
+        print(f'{kind:<10} {"body " if body_mutant else "guard"} {label}{"  :: " + where if where else ""}', flush=True)
+        kinds[kind] = kinds.get(kind, 0) + 1
+        detected += 1 if kind == 'ASSERTION' else 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
 shutil.rmtree(pinned, ignore_errors=True)
-print(f'MUTANTS   {detected}/{len(M)} detected, {invalid} invalid', flush=True)
+print(f'MUTANTS   {detected}/{len(M)} detected by a suite assertion, {invalid} invalid; by kind: {kinds}', flush=True)
 sys.exit(0 if detected == len(M) and invalid == 0 else 1)
