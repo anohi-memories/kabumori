@@ -269,7 +269,13 @@ select pg_temp.check(postona_x_resv.finish((select reservation_id from w1 where 
 update postona_x_resv.reservations set lease_expires_at = now() - interval '1 second' where draft_id = 'm1_2';
 select pg_temp.check((select count(*) from postona_x_resv.claim_due('worker-3', 120, 50)) = 0, 'expired lease is not re-claimed');
 select pg_temp.check((select status = 'uncertain' and outcome_code = 'LEASE_EXPIRED' from postona_x_resv.reservations where draft_id = 'm1_2'), 'swept to uncertain');
-select pg_temp.expect_error(format($q$select postona_x_resv.finish(%L, %L, 'published', '42', null)$q$, (select reservation_id from w1 where body = '本文2'), (select lease_token from w1 where body = '本文2')), 'POSTONA_RESV_LEASE_LOST');
+-- G3-32 C1: the late finish after the sweep is not raised any more: it answers lease_lost, the row stays uncertain/LEASE_EXPIRED,
+-- and the reported provider id is kept in the audit trail only (for a reviewed reconciliation).
+select pg_temp.check(postona_x_resv.finish((select reservation_id from w1 where body = '本文2'), (select lease_token from w1 where body = '本文2'), 'published', '42', null) = 'lease_lost', 'late finish after the sweep: lease_lost');
+select pg_temp.check((select status = 'uncertain' and outcome_code = 'LEASE_EXPIRED' and provider_post_id is null from postona_x_resv.reservations where draft_id = 'm1_2'), 'swept row unchanged by the late report');
+select pg_temp.check((select count(*) = 1 and bool_and(detail ->> 'reported_outcome' = 'published' and detail ->> 'reported_provider_post_id' = '42' and detail ->> 'row_outcome_code' = 'LEASE_EXPIRED')
+  from postona_x_resv.audit where reservation_id = (select reservation_id from w1 where body = '本文2') and action = 'finish_after_fence'), 'late report after the sweep kept in the audit only');
+select pg_temp.expect_error(format($q$select postona_x_resv.finish(%L, gen_random_uuid(), 'published', '42', null)$q$, (select reservation_id from w1 where body = '本文2')), 'POSTONA_RESV_LEASE_LOST');
 select pg_temp.check((select status from postona_x_resv.reservations where origin = 'ai_generated') = 'planned', 'AI never claimed in V1');
 select 'W1_CLAIM_LEASE_FINISH_PASS' as result;
 
@@ -316,7 +322,10 @@ select pg_temp.check((select status = 'uncertain' and outcome_code = 'LEASE_EXPI
   'fenced to uncertain, no provider id recorded as success');
 select pg_temp.check((select count(*) = 1 and bool_and(detail ->> 'reported_outcome' = 'published' and detail ->> 'reported_provider_post_id' = '777000111')
   from postona_x_resv.audit where reservation_id = pg_temp.w3_id('m1_5') and action = 'finish_after_lease'), 'late report kept for reconciliation only');
-select pg_temp.expect_error(format($q$select postona_x_resv.finish(%L, %L, 'published', '777000111', null)$q$, pg_temp.w3_id('m1_5'), pg_temp.w3_tok('m1_5')), 'POSTONA_RESV_LEASE_LOST');
+-- G3-32 C1: a repeat after the fence answers lease_lost (no error), changes nothing, and is kept in the audit only.
+select pg_temp.check(postona_x_resv.finish(pg_temp.w3_id('m1_5'), pg_temp.w3_tok('m1_5'), 'published', '777000111', null) = 'lease_lost', 'repeat after the fence: lease_lost');
+select pg_temp.check((select status = 'uncertain' and outcome_code = 'LEASE_EXPIRED_AT_FINISH' and provider_post_id is null from pg_temp.w3_row('m1_5')), 'repeat changes nothing');
+select pg_temp.check((select count(*) from postona_x_resv.audit where reservation_id = pg_temp.w3_id('m1_5') and action = 'finish_after_fence') = 1, 'repeat kept in the audit only');
 -- Expired, unswept: a late 'failed_before_send' is NOT accepted either (cannot be proven once the lease is gone).
 update postona_x_resv.reservations set lease_expires_at = clock_timestamp() - interval '1 second' where id = pg_temp.w3_id('m1_6');
 select pg_temp.check(postona_x_resv.finish(pg_temp.w3_id('m1_6'), pg_temp.w3_tok('m1_6'), 'failed_before_send', null, 'RATE_LIMITED') = 'lease_lost', 'late failed refused');

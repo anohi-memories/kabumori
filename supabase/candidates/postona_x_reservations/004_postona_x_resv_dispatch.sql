@@ -118,6 +118,11 @@ begin
     -- Still ours, and this check runs before any send: hand it back instead of letting it age into 'uncertain'.
     return case when postona_x_resv.release_claim(p_reservation_id, p_lease_token, 'LEASE_EXPIRED_BEFORE_SEND') then 'RELEASED' else 'LEASE_LOST' end;
   end if;
+  -- G3-32 C2: too little lease left for one provider call (X timeout 20 s, x_publisher.ts) plus the finish: a send now could
+  -- succeed after the deadline and be fenced to 'uncertain'. Nothing has been sent yet: hand it back.
+  if v_row.lease_expires_at - pg_catalog.clock_timestamp() < interval '25 seconds' then
+    return case when postona_x_resv.release_claim(p_reservation_id, p_lease_token, 'LEASE_TOO_SHORT_BEFORE_SEND') then 'RELEASED' else 'LEASE_LOST' end;
+  end if;
   if not postona_x_resv.row_publishable(v_row) then
     update postona_x_resv.reservations r set status = 'failed', outcome_code = 'NOT_PUBLISHABLE_AT_SEND', updated_at = pg_catalog.now()
     where r.id = v_row.id;

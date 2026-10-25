@@ -142,6 +142,29 @@ test("if the outcome cannot be recorded, the run reports uncertain and does not 
   assert.deepEqual(pub.sent, ["a"]);
 });
 
+test("a finish whose answer was lost is read once more with the same arguments; the provider is never called again (G3-32)", async () => {
+  const { store, state, calls } = fakeStore([{ id: "a", body: "a" }, { id: "b", body: "b" }]);
+  const record = store.finish;
+  let lost = 0;
+  // Model of the SQL finish: the first call commits but its answer is lost; a repeat of the same success is idempotent,
+  // and any repeat on an uncertain row answers lease_lost (G3-32 C1).
+  store.finish = async (id, lease, outcome, postId, code) => {
+    const row = state.get(id)!;
+    if (row.status === "published" && outcome === "published") return "published";
+    if (row.status === "uncertain") return "lease_lost";
+    const answer = await record(id, lease, outcome, postId, code);
+    lost += 1;
+    throw new Error(`answer lost after ${answer}`);
+  };
+  const pub = publisher([{ kind: "published", providerPostId: "11" }, { kind: "unknown", code: "X_TIMEOUT" }]);
+  const report = await runReservationDelivery({ store, publisher: pub, worker: "w" });
+  assert.equal(lost, 2);
+  assert.equal(report.published, 1);
+  assert.equal(report.uncertain, 1);
+  assert.deepEqual(pub.sent, ["a", "b"], "one provider call each");
+  assert.ok(!calls.some((call) => call.startsWith("release:")), "a row that may have been sent is never handed back");
+});
+
 test("a finish after the lease deadline ('lease_lost') is counted uncertain, never published or failed, and not re-sent", async () => {
   const { store, state } = fakeStore([{ id: "a", body: "a" }, { id: "b", body: "b" }]);
   // Model of the SQL fence: the lease ran out before finish, so the store records uncertain and answers lease_lost.
