@@ -1,0 +1,22 @@
+G2 #526 gates (75a2bb4d, unchanged) run read-only on G1 #527 9738f88e:
+⚠ GATE G2-A11Y-2 (P2 candidate): with any text size, the result screen after a send starts at its top (heading + "check X" warning first, not the discard button) (71.24325ms) # G1 FIX PENDING (G1 #316 21st TASK): red until a reviewed G1 fix lands; then re-run the Simulator check
+ℹ A11Y-2 on this head: {"remounted":false,"scrolled":false,"calls":[]}
+✔ GATE G2-A11Y-1 (P3): while several lines are typed, the line being typed stays visible above the keyboard (26.875334ms) # G1 FIX PENDING (G1 #316 21st TASK): red until a reviewed G1 fix lands; then re-run the Simulator check
+ℹ A11Y-1 on this head: {"ok":true,"bounded":true,"follows":false,"maxHeight":240}
+⚠ GATE G2-A11Y-3 (P3): a text-size change while the screen is open re-lays the screen out (no clipped labels) (18.345708ms) # G1 FIX PENDING (G1 #316 21st TASK): red until a reviewed G1 fix lands; then re-run the Simulator check
+ℹ A11Y-3 on this head: {"ok":false,"relaid":false,"capped":false,"uncapped":12}
+﹣ sketch A11Y-2 (a) scroll to the top when the phase changes -> the gate turns green (0.162541ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-2 (b) re-create the ScrollView per phase group -> the gate turns green (0.041958ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-2 negative: a scroll that does not go to the top keeps the gate red (0.034542ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-1 (a) a bounded body input that scrolls inside -> the gate turns green (0.035ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-1 (b) the input growth scrolls the page -> the gate turns green (0.0285ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-1 negative: a maximum height with scrolling turned off keeps the gate red (0.040958ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-3 (a) re-create the ScrollView when the text size changes -> the gate turns green (0.071708ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+﹣ sketch A11Y-3 negative: reading the text size without using it keeps the gate red (0.039458ms) # the screen changed (a G1 fix?): sketches are for the pre-fix head only
+ℹ tests 11
+ℹ pass 0
+ℹ fail 0
+ℹ skipped 8
+ℹ todo 3
+⚠ GATE G2-A11Y-2 (P2 candidate): with any text size, the result screen after a send starts at its top (heading + "check X" warning first, not the discard button) (71.24325ms) # G1 FIX PENDING (G1 #316 21st TASK): red until a reviewed G1 fix lands; then re-run the Simulator check
+⚠ GATE G2-A11Y-3 (P3): a text-size change while the screen is open re-lays the screen out (no clipped labels) (18.345708ms) # G1 FIX PENDING (G1 #316 21st TASK): red until a reviewed G1 fix lands; then re-run the Simulator check
