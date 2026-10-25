@@ -66,7 +66,13 @@ M = [
     ('the rollback does not check the predicate shape', RB, "    raise exception 'S23_ROLLBACK_PRECONDITION_PREDICATE_SHAPE';", "    null;", 0, 1),
     ('the rollback predicate shape check lets a NULL pass', RB, SHAPE_TAIL, SHAPE_TAIL.replace('is not true', 'is false'), 1, 3),
     ('the rollback leaves the predicate', RB, "drop function private.postona_personal_workspace_eligibility(uuid);\n", "", 0, 1),
+    # ---- (G5-37) the callers / dependents fence of the rollback
+    ('the rollback ignores a caller that names the predicate', RB, "    raise exception 'S23_ROLLBACK_PRECONDITION_CALLERS';", "    null;", 0, 1),
+    ('the rollback compares callers case-sensitively', RB, "pg_catalog.strpos(pg_catalog.lower(p.prosrc), 'postona_personal_workspace_eligibility')",
+     "pg_catalog.strpos(p.prosrc, 'postona_personal_workspace_eligibility')", 0, 1),
+    ('the rollback ignores recorded dependents (left to DROP RESTRICT)', RB, "    raise exception 'S23_ROLLBACK_PRECONDITION_DEPENDENTS';", "    null;", 0, 1),
 ]
+# (G5-37) not mutated: dropping `p.oid <> v_fn` from the callers check is equivalent (the predicate's body never names itself).
 # The postcondition shape checks of R0 (install and rollback) are not mutated: the CREATE OR REPLACE just before them resets every attribute to
 # the declared value, so removing a clause there cannot change an outcome (equivalent mutants, as in G5-28 / G5-30 / G5-31).
 

@@ -254,6 +254,66 @@ test_('owner change on the own workspace (A -> B -> A): the predicate follows th
   assert.deepEqual([back.decision, back.owner_epoch], ['allow', null], 'an R0 allow carries no epoch: the exchange and posts stay behind R1 + W1');
 });
 
+// ---- (G5-37, F-2 of G5-36) consumers of the predicate and the rollback ------------------------------------------------------------------
+const ASK = `private.postona_personal_workspace_eligibility('${uid(3302)}'::uuid)`;
+const CONSUMERS: Array<[string, string, string, string]> = [
+  ['a PL/pgSQL function', `create function public.g537_plpgsql() returns text language plpgsql as $c$ begin return ${ASK}; end $c$`, 'drop function public.g537_plpgsql()',
+    'S23_ROLLBACK_PRECONDITION_CALLERS'],
+  ['the name written in upper case', `create function public.g537_upper() returns text language plpgsql as $c$ begin return ${ASK.toUpperCase().replace(`'${uid(3302).toUpperCase()}'::UUID`, `'${uid(3302)}'::uuid`)}; end $c$`,
+    'drop function public.g537_upper()', 'S23_ROLLBACK_PRECONDITION_CALLERS'],
+  ['a plain SQL function', `create function public.g537_sql() returns text language sql as $c$ select ${ASK} $c$`, 'drop function public.g537_sql()',
+    'S23_ROLLBACK_PRECONDITION_CALLERS'],
+  ['a SQL-standard (BEGIN ATOMIC) body', `create function public.g537_atomic() returns text language sql begin atomic select ${ASK}; end`, 'drop function public.g537_atomic()',
+    'S23_ROLLBACK_PRECONDITION_DEPENDENTS'],
+  ['a view', `create view public.g537_view as select ${ASK} as answer`, 'drop view public.g537_view', 'S23_ROLLBACK_PRECONDITION_DEPENDENTS'],
+];
+const DYNAMIC = `create function public.g537_dynamic() returns text language plpgsql as $c$ declare r text; begin
+  execute 'select private.postona_personal_' || 'workspace_eligibility($1)' into r using '${uid(3302)}'::uuid; return r; end $c$`;
+
+const testOld = enabled && env('S33_OLD_ROLLBACK') !== '' ? test : test.skip;
+testOld('FAIL before (PR #506 rollback, bbc52a6b): it drops the predicate under a PL/pgSQL consumer, which then breaks; recorded dependencies stop at DROP RESTRICT', async () => {
+  await sql(S23, CONSUMERS[0][1]);
+  assert.equal(await sql(S23, 'select public.g537_plpgsql()'), 'own');
+  let r = await run(S23, ['-f', env('S33_OLD_ROLLBACK')]);
+  assert.ok(r.ok, `F-2: the old rollback runs under a consumer\n${r.error}`);
+  const broken = await run(S23, ['-c', 'select public.g537_plpgsql()']);
+  assert.ok(!broken.ok && /does not exist/u.test(broken.error), `F-2: the consumer is broken\n${broken.error}`);
+  await sql(S23, CONSUMERS[0][2]);
+  r = await run(S23, ['-f', env('S33_CANDIDATE')]);
+  assert.ok(r.ok, `re-install\n${r.error}`);
+  // a recorded dependency (a view) is already stopped by PostgreSQL's own DROP ... RESTRICT, and the whole rollback (R0 included) is undone
+  await sql(S23, CONSUMERS[4][1]);
+  r = await run(S23, ['-f', env('S33_OLD_ROLLBACK')]);
+  assert.ok(!r.ok && /other objects depend on it/u.test(r.error), r.error);
+  assert.equal(await md5(S23, R0), MD5_S23, 'R0 kept');
+  assert.equal(await md5(S23, PRED), MD5_PRED, 'the predicate kept');
+  await sql(S23, CONSUMERS[4][2]);
+});
+
+test_('(G5-37) the rollback refuses while anything still uses the predicate -- R0 and the predicate stay exactly; a dynamic-SQL caller is NOT seen (recorded limit)', async () => {
+  const r0 = `${await md5(S23, R0)}|${await shape(S23, R0)}`;
+  const pred = `${await md5(S23, PRED)}|${await shape(S23, PRED)}`;
+  for (const [label, create, drop, code] of CONSUMERS) {
+    await sql(S23, create);
+    const r = await run(S23, ['-f', env('S33_ROLLBACK')]);
+    assert.ok(!r.ok && r.error.includes(code), `${label}\n${r.error}`);
+    assert.equal(`${await md5(S23, R0)}|${await shape(S23, R0)}`, r0, `${label}: R0 exactly as it was (the restore is undone with the transaction)`);
+    assert.equal(`${await md5(S23, PRED)}|${await shape(S23, PRED)}`, pred, `${label}: the predicate exactly as it was (same OID, ACL, attributes)`);
+    await sql(S23, drop);
+  }
+  // the limit: a name assembled at run time is invisible to the fence -- the rollback runs and that consumer breaks (it fails closed: it raises)
+  await sql(S23, DYNAMIC);
+  assert.equal(await sql(S23, 'select public.g537_dynamic()'), 'own');
+  let r = await run(S23, ['-f', env('S33_ROLLBACK')]);
+  assert.ok(r.ok, `the fence does not see dynamic SQL (recorded)\n${r.error}`);
+  const broken = await run(S23, ['-c', 'select public.g537_dynamic()']);
+  assert.ok(!broken.ok && /does not exist/u.test(broken.error), broken.error);
+  await sql(S23, 'drop function public.g537_dynamic()');
+  r = await run(S23, ['-f', env('S33_CANDIDATE')]);
+  assert.ok(r.ok, `re-install\n${r.error}`);
+  assert.equal(await md5(S23, R0), MD5_S23);
+});
+
 test_('the rollback refuses a drift of R0 or of the predicate, and then puts back D1 byte for byte; a second rollback refuses; the candidate re-installs', async () => {
   const rb = env('S33_ROLLBACK');
   const drifts: Array<[string, string, string, string, string]> = [

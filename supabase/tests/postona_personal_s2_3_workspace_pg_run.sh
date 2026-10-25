@@ -44,6 +44,12 @@ for pair in "001_authorization_verdict.sql 6e4ebfc4eb19807b8b0a493c8169313d66c9a
 done
 m="$tree/supabase/migrations"; t="$tree/supabase/tests"
 # D1 (PR #494 head c9f726e9) is the base R0 of S2-3: exactly that blob
+# (G5-37) PR #506's own rollback (bbc52a6b), to reproduce F-2 of G5-36 on it; skipped in a copy without .git (the mutation runs)
+old_rb=""
+if [ -z "${S33_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "bbc52a6b78efd9eb4b174f7fbb6835162a631659^{commit}" 2>/dev/null; then
+  git -C "$repo" show "bbc52a6b78efd9eb4b174f7fbb6835162a631659:supabase/candidates/postona_personal_auth/003_s2_3_workspace_eligibility_rollback.sql" > "$work/old_rb.sql"
+  old_rb="$work/old_rb.sql"
+fi
 d1="$cand/002_verdicts_anonymous_strict.sql"
 [ "$(git hash-object "$d1")" = "4f58351e98f039c0d71b103be5152854fe4f7a90" ] || { echo "D1 candidate differs from PR #494's blob." >&2; exit 2; }
 
@@ -83,6 +89,6 @@ for w in s23 rev; do
   own -f "$v/003_session_verdict.sql" >/dev/null
   own -f "$d1" >/dev/null
 done
-( cd "$repo" && CAL_E2E=1 S33_CANDIDATE="$cand/003_s2_3_workspace_eligibility.sql" S33_ROLLBACK="$cand/003_s2_3_workspace_eligibility_rollback.sql" \
+( cd "$repo" && CAL_E2E=1 S33_CANDIDATE="$cand/003_s2_3_workspace_eligibility.sql" S33_ROLLBACK="$cand/003_s2_3_workspace_eligibility_rollback.sql" S33_OLD_ROLLBACK="$old_rb" \
     S33_OWNER="$owner" S33_DB="${prefix}_s23" S33_REV="${prefix}_rev" PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_s2_3_workspace_pg_test.ts" )
