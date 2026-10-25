@@ -3,6 +3,9 @@
 -- the G5 担当ちゃ's acceptance and the owner's explicit production approval.
 --
 -- G5-25 REVISION (2026-10-23, Issue #320 task 25): a missing / null / empty is_anonymous claim is now REFUSED (H4 #331 comment 6366601676).
+-- G5-30 REVISION (2026-10-25, Issue #320 task 30): the shape checks also pin every attribute a CREATE OR REPLACE resets without an error
+-- (STRICT, LEAKPROOF, PARALLEL, COST, SUPPORT, TRANSFORM, ROWS, argument modes) to the value measured on the reviewed T13, and a NULL in the
+-- check (a RESET ALL leaves proconfig NULL) now refuses. Before, PR #483 installed over such a drift and erased it. The body is unchanged.
 --
 -- T13 (private.account_lifecycle_assert_active_service_write, the reviewed Phase 3b migration 20261010051938, G5 Draft chain) checks that the
 -- caller is the signed-in person with a live session, but it does not look at the JWT's `is_anonymous` claim: an anonymous sign-in (role
@@ -16,8 +19,9 @@
 -- is unchanged, so every consumer (G3 / G4 writers that call T13 first) inherits the refusal without being edited.
 --
 -- It refuses unless the function is EXACTLY the reviewed T13 (md5 of its body; another body is someone else's change and is left alone),
--- owned by the running role (not a superuser), definer, volatile, plpgsql, returning void, with an empty search_path, EXECUTE for its owner
--- alone and no API role reaching it through any membership. The postconditions check the same OID, the expected new body and the same shape.
+-- owned by the running role (not a superuser), definer, volatile, plpgsql, returning void, with an empty search_path, the reviewed attributes
+-- (G5-30), EXECUTE for its owner alone and no API role reaching it through any membership. The postconditions check the same OID, the
+-- expected new body and the same shape.
 -- It writes no row, creates no object, grants nothing. Rollback: 001_t13_anonymous_refusal_rollback.sql (the reviewed body, byte for byte).
 begin;
 
@@ -43,13 +47,18 @@ begin
   if v_md5 is distinct from '08840016794a973225be767952265e79' then
     raise exception 'T13_ANON_PRECONDITION_BODY_NOT_REVIEWED';
   end if;
-  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void,
-  -- EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not)
+  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void, the
+  -- attributes below, EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not).
+  -- (G5-30) `is not true`: a NULL (a RESET ALL leaves proconfig NULL) refuses, it no longer slips through `not (...)`
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
-                    and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
-                    and p.proconfig = array['search_path=""']
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+     or (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
+                and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                and p.proconfig = array['search_path=""']
+                -- (G5-30) every attribute a CREATE OR REPLACE resets without an error, at the value measured on the reviewed T13: not STRICT,
+                -- not LEAKPROOF, PARALLEL UNSAFE, COST 100, no support function, no TRANSFORM, ROWS 0, no argument modes
+                and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.procost = 100
+                and p.prosupport::oid = 0 and p.protrftypes is null and p.prorows = 0 and p.proargmodes is null
+           from pg_catalog.pg_proc p where p.oid = v_fn) is not true
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn)
           is distinct from pg_catalog.format('%s=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r
@@ -176,13 +185,18 @@ begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from '1f8cd9c764c251f3232c61b7a77ff597' then
     raise exception 'T13_ANON_POSTCONDITION_BODY';
   end if;
-  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void,
-  -- EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not)
+  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void, the
+  -- attributes below, EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not).
+  -- (G5-30) `is not true`: a NULL (a RESET ALL leaves proconfig NULL) refuses, it no longer slips through `not (...)`
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
-                    and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
-                    and p.proconfig = array['search_path=""']
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+     or (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
+                and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                and p.proconfig = array['search_path=""']
+                -- (G5-30) every attribute a CREATE OR REPLACE resets without an error, at the value measured on the reviewed T13: not STRICT,
+                -- not LEAKPROOF, PARALLEL UNSAFE, COST 100, no support function, no TRANSFORM, ROWS 0, no argument modes
+                and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.procost = 100
+                and p.prosupport::oid = 0 and p.protrftypes is null and p.prorows = 0 and p.proargmodes is null
+           from pg_catalog.pg_proc p where p.oid = v_fn) is not true
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn)
           is distinct from pg_catalog.format('%s=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r

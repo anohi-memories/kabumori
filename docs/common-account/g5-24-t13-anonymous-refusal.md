@@ -9,6 +9,10 @@ Status: **isolated source candidate + local PG17 proof.**
   the P2 of H4's independent review (Issue #331 comment 6366601676, Codex Sol (high), CHANGES_REQUIRED on PR #480 `1a974b8d`) is fixed.
   A **missing, null or empty** `is_anonymous` claim is now refused: only a proven false passes. PR #480 stays as the review evidence; the
   fix is a separate Draft PR on top of it. Section 8 holds the details.
+- **G5-30 revision** (task `common-account-g5-t13-pr483-function-attribute-shape-guard-source-candidate-20261025`, Issue #320 task 30):
+  the shape checks of the install and the rollback now also pin the function attributes that a CREATE OR REPLACE resets without an error,
+  and a NULL in the check refuses. Before, PR #483 installed (and rolled back) over such a drift and erased it. The bodies are unchanged.
+  PR #483 stays as the review evidence. Section 9 holds the details.
 
 - TASK `common-account-g5-postona-personal-s2-1-anonymous-session-guard-source-candidate-20261023` (Issue #320, G5-01 generation, task 24,
   completion K5).
@@ -144,7 +148,7 @@ A body mutant has its checksums recomputed, so it fails for the rule and not for
 | G3 (#318) | "When S2-1 is applied after its review, every X / Threads writer that calls T13 first refuses an anonymous sign-in with `ACCOUNT_LIFECYCLE_AUTH_REQUIRED` before any lock; map it to 401. User RPCs that do NOT call T13 (P7 receipt / cancel, the 43 X entry points of PR #466) still need the session gate (S2-2) — this candidate does not cover them." |
 | G4 (#319) | "The Threads OAuth begin / consume / complete and the claim candidate call T13 first, so they inherit the refusal; add an anonymous case to your T13 tests when you next touch them. No change to OAuth state, custody or lease is implied." |
 
-## 7. Remaining (see also section 8)
+## 7. Remaining (see also sections 8 and 9)
 
 1. Independent Codex Sol (high) review of the two SQL files and the suite.
 2. S2-2 (a session gate without the owner-epoch coupling) for the writers that do not call T13; S2-3 / S1-F1 (one personal-workspace rule) —
@@ -164,3 +168,19 @@ A body mutant has its checksums recomputed, so it fails for the rule and not for
 | R0 / R1 / SV | still treat a missing / null claim as false. **Not changed here** (each is its own reviewed candidate). Proposal for the 担当ちゃ: align them in one later G5 TASK with their own suites and a Sol review, or record that the difference is accepted. Until then, T13 is the stricter gate. |
 | Tests | 7 tests ×3 (test 7 reproduces the P2 on PR #480's head; test 4 compares 19 cases); 12 / 12 mutants |
 | Not verified | the managed GoTrue / PostgREST claim set; real G3 / G4 writers; production |
+
+## 9. G5-30: the function attributes in the shape checks
+
+| Item | Detail |
+| --- | --- |
+| Why | A CREATE OR REPLACE sets every attribute it does not name back to the default. PR #483's shape checks look at the owner, definer, volatility, return type, language, `search_path`, ACL and API-role reach only. So a drifted T13 was accepted and silently "repaired" by the install, and the same by the rollback (D1 got this guard in G5-28 / G5-29; T13 had not). |
+| Measured baseline [D] | The reviewed T13 (76b50e1e) in PG17.11: not STRICT, not LEAKPROOF, PARALLEL UNSAFE (`u`), COST 100, no support function, `protrftypes` NULL, ROWS 0, `proargmodes` NULL, a plain function (`f`) returning one `void`, plpgsql, arguments `{p_user_id,p_service_key}` without defaults, definer, VOLATILE, `proconfig` `{search_path=""}`, EXECUTE for the owner only. Measured, not copied from D1. |
+| Drift probe on PR #483 (`9d739904`) [D] | **Erased silently** by its install and its rollback: STRICT, PARALLEL SAFE / RESTRICTED, COST 50, LEAKPROOF, SUPPORT `textlike_support`, `RESET ALL` (proconfig NULL), and the catalog stand-ins TRANSFORM `{int4}` / `{}`, ROWS 10, argument modes `{i,i}`. **Already refused** by its shape check: an extra setting, STABLE, SECURITY INVOKER. **Refused by PostgreSQL itself** (the replace errors, so the transaction rolls back): an argument default, other argument names, a set-returning flag, another routine kind. `ALTER FUNCTION ... ROWS` is impossible on a function returning void. |
+| The NULL hole | `RESET ALL` leaves `proconfig` NULL. `p.proconfig = array[...]` is then NULL, `not (NULL)` is NULL, and a plpgsql `IF` treats NULL as false: the check passed. The check is now `(...) is not true`, so a NULL refuses. |
+| The fix | In all four shape checks (install pre / post, rollback pre / post): `and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.procost = 100 and p.prosupport::oid = 0 and p.protrftypes is null and p.prorows = 0 and p.proargmodes is null`, and `is not true` in place of `not (...)`. Only the attributes the probe showed to be erased are added; those PostgreSQL already refuses are not. |
+| Unchanged | both function bodies and their md5 (`08840016…` reviewed, `1f8cd9c7…` S2-1), the anonymous-claim rule, every denial code and the lock order, OID, owner, ACL, definer, `search_path`. T13 reads no owner epoch; the session and entitlement answers are in the 19-case comparison. |
+| Stand-ins | TRANSFORM, ROWS and argument modes can only drift here by a superuser's direct `update pg_catalog.pg_proc` (labelled CATALOG STAND-INS in the suite). A real plpgsql TRANSFORM needs a C extension that this PG17 does not have: the **real TRANSFORM path is NOT_VERIFIED**. STRICT, PARALLEL, COST, RESET ALL (owner) and LEAKPROOF, SUPPORT (superuser) use the real DDL. |
+| Post-checks | The postcondition copies cannot see a drift: the CREATE OR REPLACE just before them resets these attributes. They stay as defence in depth. Their mutants are equivalent and are not counted. |
+| Tests [D] | 10 tests ×3: G5-25's 7, plus (a) every drift reproduced on PR #483's own candidate and rollback (read with `git show`), (b) every drift refuses the install with `T13_ANON_PRECONDITION_SHAPE`, leaving the body and the drift, (c) every drift refuses the rollback with `T13_ANON_ROLLBACK_PRECONDITION_SHAPE`. The install and rollback tests compare the whole attribute row with the measured baseline. Mutants: 12 + 18 (9 removals from the install precondition, 9 from the rollback precondition). |
+| Not verified | the managed project's real T13 attributes, owner and ACL; the managed GoTrue / PostgREST claims; real G3 / G4 writers; production. |
+| Same pattern elsewhere (not changed here) | The D1 candidate (PR #488) uses the same `not (...)` form with `proconfig`. By reading it, a `RESET ALL` on R0 / R1 / SV would slip through it the same way. Not run on the D1 world and not changed (D1 is outside this TASK). Proposal: a separate small G5 TASK. |

@@ -35,6 +35,32 @@ const uid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0'
 const lit = (v: string) => `'${v.replaceAll("'", "''")}'`;
 const md5 = (db: string) => sql(db, `select md5(prosrc) from pg_proc where oid = '${T13}'::regprocedure`);
 const oid = (db: string) => sql(db, `select '${T13}'::regprocedure::oid`);
+// (G5-30) every attribute of T13 but its body; REVIEWED_SHAPE is the value measured on the reviewed T13 (76b50e1e) in this PG17
+const shape = (db: string) => sql(db, `select format('strict=%s leakproof=%s parallel=%s cost=%s support=%s trf=%s rows=%s argmodes=%s kind=%s '
+  || 'retset=%s ret=%s lang=%s argnames=%s nargdefaults=%s secdef=%s volatile=%s config=%s owner=%s acl=%s', p.proisstrict, p.proleakproof,
+  p.proparallel, p.procost, p.prosupport::oid, coalesce(p.protrftypes::text, 'NULL'), p.prorows, coalesce(p.proargmodes::text, 'NULL'), p.prokind,
+  p.proretset, p.prorettype::regtype, l.lanname, p.proargnames, p.pronargdefaults, p.prosecdef, p.provolatile, coalesce(p.proconfig::text, 'NULL'),
+  p.proowner::regrole, p.proacl) from pg_proc p join pg_language l on l.oid = p.prolang where p.oid = '${T13}'::regprocedure`, superUser);
+const REVIEWED_SHAPE = () => 'strict=f leakproof=f parallel=u cost=100 support=0 trf=NULL rows=0 argmodes=NULL kind=f retset=f ret=void lang=plpgsql '
+  + `argnames={p_user_id,p_service_key} nargdefaults=0 secdef=t volatile=v config={"search_path=\\"\\""} owner=${owner} acl={${owner}=X/${owner}}`;
+// (G5-30) the attribute drifts a CREATE OR REPLACE erases without an error (measured): [label, who can make it, the drift, its undo]. The
+// superuser's direct pg_proc updates are CATALOG STAND-INS, not the DDL path: no plpgsql TRANSFORM exists in this PG17 (the real TRANSFORM
+// path is NOT_VERIFIED), and no DDL sets ROWS or argument modes on a function returning void.
+const cat = (set: string) => `update pg_catalog.pg_proc set ${set} where oid = '${T13}'::regprocedure`;
+const DRIFTS: Array<[string, 'owner' | 'super', string, string]> = [
+  ['STRICT', 'owner', `alter function ${T13} strict`, `alter function ${T13} called on null input`],
+  ['PARALLEL SAFE', 'owner', `alter function ${T13} parallel safe`, `alter function ${T13} parallel unsafe`],
+  ['PARALLEL RESTRICTED', 'owner', `alter function ${T13} parallel restricted`, `alter function ${T13} parallel unsafe`],
+  ['COST 50', 'owner', `alter function ${T13} cost 50`, `alter function ${T13} cost 100`],
+  ['LEAKPROOF', 'super', `alter function ${T13} leakproof`, `alter function ${T13} not leakproof`],
+  ['SUPPORT textlike_support', 'super', `alter function ${T13} support textlike_support`, cat('prosupport = 0::oid::regproc')],
+  ['RESET ALL (proconfig NULL)', 'owner', `alter function ${T13} reset all`, `alter function ${T13} set search_path = ''`],
+  ['TRANSFORM stand-in {int4}', 'super', cat(`protrftypes = array['int4'::regtype::oid]::oid[]`), cat('protrftypes = null')],
+  ['TRANSFORM stand-in {}', 'super', cat(`protrftypes = '{}'::oid[]`), cat('protrftypes = null')],
+  ['ROWS stand-in 10', 'super', cat('prorows = 10'), cat('prorows = 0')],
+  ['argument modes stand-in {i,i}', 'super', cat(`proargmodes = array['i', 'i']::"char"[]`), cat('proargmodes = null')],
+];
+const as = (db: string, who: 'owner' | 'super', statement: string) => sql(db, statement, who === 'super' ? superUser : owner);
 
 // claims: 'json' -> request.jwt.claims (an object, given as raw JSON text); 'legacy' -> the per-claim settings of an older PostgREST
 type Claims = { style: 'json'; raw: string } | { style: 'legacy'; sub: string; role: string; session: string; anon?: string };
@@ -132,14 +158,48 @@ testP2('P2 before (PR #480 head 1a974b8d): a missing, null or empty claim passes
   assert.equal(await md5(REV), MD5_REVIEWED, 'back to the reviewed T13');
 });
 
+// (G5-30) the drifts reproduced on PR #483's own candidate (9d739904) and its rollback; skipped without the pinned commit
+const testP3 = enabled && env('S21_P3_CANDIDATE') !== '' ? test : test.skip;
+testP3('drift before (PR #483 head 9d739904): its install and its rollback pass over every attribute drift and erase it', async () => {
+  assert.equal(await shape(REV), REVIEWED_SHAPE(), 'the measured baseline');
+  for (const [label, who, drift] of DRIFTS) {
+    await as(REV, who, drift);
+    let r = await run(REV, ['-f', env('S21_P3_CANDIDATE')]);
+    assert.ok(r.ok, `${label}: PR #483 installs over it\n${r.error}`);
+    assert.equal(await shape(REV), REVIEWED_SHAPE(), `${label}: erased by the install`);
+    await as(REV, who, drift);
+    r = await run(REV, ['-f', env('S21_P3_ROLLBACK')]);
+    assert.ok(r.ok, `${label}: PR #483's rollback runs over it\n${r.error}`);
+    assert.equal(await shape(REV), REVIEWED_SHAPE(), `${label}: erased by the rollback`);
+    assert.equal(await md5(REV), MD5_REVIEWED);
+  }
+});
+
+test_('(G5-30) each attribute drift refuses the install with T13_ANON_PRECONDITION_SHAPE; the reviewed body and the drift are left as they were', async () => {
+  assert.equal(await shape(REV), REVIEWED_SHAPE(), 'the measured baseline');
+  for (const [label, who, drift, undo] of DRIFTS) {
+    await as(REV, who, drift);
+    const drifted = await shape(REV);
+    assert.notEqual(drifted, REVIEWED_SHAPE(), `${label}: the drift is real`);
+    const r = await run(REV, ['-f', env('S21_CANDIDATE')]);
+    assert.ok(!r.ok && r.error.includes('T13_ANON_PRECONDITION_SHAPE'), `${label}\n${r.error}`);
+    assert.equal(await shape(REV), drifted, `${label}: kept, not erased`);
+    assert.equal(await md5(REV), MD5_REVIEWED, `${label}: body unchanged`);
+    await as(REV, who, undo);
+    assert.equal(await shape(REV), REVIEWED_SHAPE(), `${label}: undone`);
+  }
+});
+
 test_('install: same OID, owner-only EXECUTE kept, the expected body; a second run refuses', async () => {
   const before = await oid(S21);
+  assert.equal(await shape(S21), REVIEWED_SHAPE(), 'the measured baseline');
   const acl = await sql(S21, `select proacl::text from pg_proc where oid = '${T13}'::regprocedure`);
   const r = await run(S21, ['-f', env('S21_CANDIDATE')]);
   assert.ok(r.ok, r.error);
   assert.equal(await oid(S21), before, 'same OID: every consumer reference stays');
   assert.equal(await md5(S21), MD5_S21);
   assert.equal(await sql(S21, `select proacl::text from pg_proc where oid = '${T13}'::regprocedure`), acl);
+  assert.equal(await shape(S21), REVIEWED_SHAPE(), 'every attribute, the owner and the ACL kept');
   for (const role of ['anon', 'authenticated', 'service_role', 'authenticator']) {
     assert.equal(await sql(S21, `select has_function_privilege('${role}', '${T13}', 'EXECUTE')`), 'f', `${role}: no EXECUTE (no Data API path)`);
   }
@@ -214,11 +274,25 @@ test_('before any lock: with the account row held by another session, an anonymo
   assert.ok((await holder.output()).success);
 });
 
+test_('(G5-30) each attribute drift refuses the rollback with T13_ANON_ROLLBACK_PRECONDITION_SHAPE; the S2-1 body and the drift stay', async () => {
+  for (const [label, who, drift, undo] of DRIFTS) {
+    await as(S21, who, drift);
+    const drifted = await shape(S21);
+    const r = await run(S21, ['-f', env('S21_ROLLBACK')]);
+    assert.ok(!r.ok && r.error.includes('T13_ANON_ROLLBACK_PRECONDITION_SHAPE'), `${label}\n${r.error}`);
+    assert.equal(await shape(S21), drifted, `${label}: kept, not erased`);
+    assert.equal(await md5(S21), MD5_S21, `${label}: the S2-1 body stays`);
+    await as(S21, who, undo);
+    assert.equal(await shape(S21), REVIEWED_SHAPE(), `${label}: undone`);
+  }
+});
+
 test_('rollback: the reviewed body byte for byte, same OID, the anonymous case passes again; a second rollback refuses; the candidate re-installs', async () => {
   const before = await oid(S21);
   let r = await run(S21, ['-f', env('S21_ROLLBACK')]);
   assert.ok(r.ok, r.error);
   assert.equal(await md5(S21), MD5_REVIEWED);
+  assert.equal(await shape(S21), REVIEWED_SHAPE(), 'every attribute kept');
   assert.equal(await oid(S21), before);
   assert.equal(await write(S21, person(S21, { is_anonymous: true })), 'OK', 'the reviewed behaviour is back');
   assert.equal(await write(S21, bare(S21)), 'OK', 'including the missing claim');
