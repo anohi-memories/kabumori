@@ -69,12 +69,26 @@ class TestAdapterFixed(unittest.TestCase):
                     self.assertIsNone(re.search(pattern, text))
 
     def test_subprocess_use_is_limited(self):
-        """subprocess を使うのは、ps（観測）・スタブ／S1の起動・偽Claudeの起動だけ。"""
-        allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py"}
+        """subprocess を使うのは、ps（観測）・スタブ／S1の起動・偽Claudeの起動、および固定のシステムの道具
+        （/usr/bin/openssl による署名・/usr/bin/plutil -lint による plist の検査。TASK 13）だけ。"""
+        allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py", "ecdsa_signing.py", "launchd_plan.py"}
         for path, text in sources():
             if re.search(r"\bsubprocess\.(run|Popen|call|check_output)\b", text):
                 with self.subTest(path=os.path.basename(path)):
                     self.assertIn(os.path.basename(path), allowed)
+
+    def test_system_tool_subprocess_targets_are_fixed(self):
+        """TASK 13 の2つのファイルが起動するのは、固定の絶対パスのシステムの道具だけ（Claude・launchctl は起動しない）。"""
+        texts = {os.path.basename(p): t for p, t in sources()}
+        ecdsa = texts["ecdsa_signing.py"]
+        self.assertIn('OPENSSL = "/usr/bin/openssl"', ecdsa)
+        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", ecdsa), ["[OPENSSL] + args"])
+        launchd = texts["launchd_plan.py"]
+        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", launchd),
+                         ['["/usr/bin/plutil"'])
+        for line in launchd.splitlines():
+            if "launchctl" in line and not line.strip().startswith(("#", "-", '"', "return", "#", "*")):
+                self.assertRegex(line, r'^\s*("|return \[")', line)  # 停止手順の文字列だけ
 
 
 if __name__ == "__main__":

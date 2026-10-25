@@ -67,6 +67,32 @@ def min_monitor_interval(policy, mode, watchdog_interval, api="rest", safety=DEF
     return concurrent * 3600.0 / room
 
 
+PHASE1_WATCH_INTERVAL = 120.0  # Phase 1 の監視（gh の GraphQL）: 2分ごと
+
+
+def principal_check(consumers, mode, api="graphql", safety=DEFAULT_SAFETY):
+    """同じ認証の主体（GitHub の主な回数制限はユーザーごと）を使う利用者の合計で、予算を確かめる（TASK 13）。
+
+    consumers: [(名前, 1時間あたりの消費)]。Phase 1 の監視（同じユーザーの gh）と G10 の取得係が同じユーザーなら、
+    両方を入れる。合計が上限×safety を超えるなら理由（文字列）、収まるなら None。"""
+    if mode not in LIMITS:
+        raise ValueError("unknown auth mode")
+    total = 0.0
+    for name, per_hour in consumers:
+        if not (isinstance(per_hour, (int, float)) and not isinstance(per_hour, bool) and per_hour >= 0):
+            raise ValueError("consumer usage must be a non-negative number: %s" % name)
+        total += per_hour
+    allowed = LIMITS[mode] * safety
+    if total > allowed:
+        names = ", ".join("%s %.0f" % (n, u) for n, u in consumers)
+        return "shared principal budget exceeded: %.0f/h > %.0f/h (%s)" % (total, allowed, names)
+    return None
+
+
+def phase1_watch_per_hour(interval=PHASE1_WATCH_INTERVAL, points_per_query=1):
+    return 3600.0 / interval * points_per_query
+
+
 class RateBudget:
     """実行時の歯止め: 直近1時間の送信数・サーバの残り回数・Retry-After を見て、超えそうなら送らない（RateLimited）。
 

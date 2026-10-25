@@ -11,6 +11,7 @@ H2 C2 P2×2（監督スレッドの異常・正常時刻）の修正は TASK `g1
 ゲート1（実 GitHub の Issue #323 の読み取り専用取得元の候補）は TASK `g10-phase2-gate1-github-readonly-witness-candidate-20261023`（下の「ゲート1」）。
 ゲート1追加（編集者の根拠・認証・回数の予算）は TASK `g10-phase2-gate1-editor-provenance-rate-budget-20261025`（下の「ゲート1追加」）。
 H2 第9TASK の P2×2（provenance の項目の欠落・予算の同時の呼び出し）の修正は TASK `g10-phase2-gate1-editor-rate-p2-fix-20261025`（同じ節の末尾）。
+監督付き初回自動起動の準備（G10 一枠）は TASK `g10-phase2-supervised-autostart-integration-prep-20261025`（下の「監督付き自動起動の準備」）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -42,6 +43,7 @@ python3 tools/phase2_g10/run_tests.py -v test_race_halt
 | `g10runner/procs.py` | 観測（`ps` の失敗は `ObservationError`＝unknown）・正確な識別（sysctl の argv・settings・uid・開始時刻）・開始時刻を再照合してからの signal（ゾンビは不在とみなす） | v5.3 §5、H3 R2・R3 |
 | `g10runner/github_source.py` | ゲート1: 実 GitHub の Issue #323 の読み取り専用取得元（候補。既定は無効・起動経路に未結線） | TASK 10 |
 | `g10runner/github_graphql.py`・`rate_budget.py` | ゲート1追加: 編集者の根拠（GraphQL・要認証）、回数の予算（見積もりと実行時の歯止め） | TASK 11 |
+| `g10runner/shared_ledger.py`・`ecdsa_signing.py`・`launchd_plan.py`・`claude_cli_plan.py` | 監督付き自動起動の準備: 別プロセスの共有台帳、非対称署名（ECDSA P-256）、launchd の計画（dry-run）、実 Claude CLI の起動計画（dry-run・実行しない） | TASK 13 |
 | `g10runner/issue.py` | Issue #323 の取得証拠（取得係＝witness 鍵の署名）と、要求の本文との結合の検証 | v5 §5-4、H4 P1 |
 | `g10runner/binding.py` | 起動要求と承認済みTASK・ポリシーの結合（本文の再ハッシュ・実行項目の照合・型・形式・期限） | v5.3 §2-3、H3 R1 |
 | `g10runner/adapter.py` | **偽Claude専用**の実行アダプタ（実行ファイル固定・環境変数の許可リスト） | TASK 実行6 |
@@ -201,6 +203,61 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
     includesCreatedEdit が true なのに履歴が0件・1件の矛盾は不明にする（true なら作成時の版＋編集で2件以上のはず）。
   - 予算: `RateBudget` の古い記録の切り捨て・判定・枠の予約と、observe／block を1つのロックの下で一体に行う
     （同じ予算を共有するスレッドが、残り1枠を同時に取らない）。別プロセスでの共有（共有の台帳）は対象外で、結線のときの別設計。
+
+## 監督付き自動起動の準備（TASK 13・2026-10-25。G10 一枠。すべて未結線・dry-run）
+### 1. 編集者の証拠・本文の一致・実際の回数の検証計画（token が安全に提供されたときに実施。今回は未実施）
+1. token の条件: classic の個人用 token、scope なし（公開情報の読み取りのみ）、有効期限つき（30〜90日）。作成・保管（主ユーザー以外が
+   読めない所）・ローテーションはユーザーの操作。既存の広い権限の token（gh の `gho_` 等）は使わない。fine-grained は scope を確かめられないので不可。
+2. 事前確認: `verify_token`（`GET /rate_limit` 1回）で `X-OAuth-Scopes` が空であることを確認してから先へ進む。
+3. GraphQL の実機確認: 固定の問い合わせで、未編集・編集ありそれぞれの Issue について `determine_editor` の判定が期待どおりか、
+   編集履歴の件数と lastEditedAt が一致するかを確認する。
+4. 本文の一致: 同じ時刻の REST の本文と GraphQL の本文の SHA-256 が一致することを確認する（改行の扱いを含む）。
+5. 実際の点数: 応答の `X-RateLimit-Remaining`（resource: graphql）の減り方から、1回あたりの点数を実測する（見込み1点、見積もりは2点）。
+6. 二次制限: 短時間の連続取得はしない（監督間隔の候補30秒）。429・403 は RateLimited で、自動の再試行なし。
+### 2. 監督間隔と、主体ごとの共有の予算
+- GitHub の主な回数制限は**ユーザーごと**。同じユーザーの Phase 1 の監視（gh の GraphQL、2分ごと＝毎時30回）と G10 の取得係は
+  同じ枠を分け合う前提で数える（`rate_budget.principal_check`）。
+- 単一プロセスの監督間隔の候補は30秒（認証あり・GraphQL で毎時840点＋Phase 1 の30＝870、上限5000×0.5 の内側）。正式な値は別判断。
+- 別プロセス（制御側・S1・S2）で同じ主体の使用量を共有する台帳 `shared_ledger.SharedRateLedger` を用意した（ファイル＋排他の flock。
+  読み・判定・予約・書き込みを一体に行う。壊れた台帳・ロックを取れないときは送らない）。結線は実通信の安全ゲートの後の別TASK。
+### 3. 信頼の境界と非対称署名
+- 監督する側（制御側＝runner 鍵・取得係＝witness 鍵・人＝human 鍵）と、実行する側（専用ユーザーのスタブ・S1・S2＝agent 鍵、
+  Claude CLI は鍵を持たない）を分ける。各秘密鍵はその役割のプロセスだけが持ち、検証する側は公開鍵だけを持つ。
+- この Mac の openssl（LibreSSL 3.3.6）は **Ed25519 に未対応**（確認済み）なので、ECDSA P-256・SHA-256（`ecdsa_signing.py`）を使う。
+  秘密鍵は 0600・所有者のみ、検証器は公開鍵だけを受け付ける。現在の起動は試験用 HMAC のまま（未結線）。
+  人の鍵のパスフレーズ・鍵の保管（Keychain 等）・ローテーションは未実装。
+### 4. 専用 macOS ユーザー・ACL・launchd・停止の方法（設計と dry-run のみ。実際の変更は禁止）
+- 専用ユーザー（名前は `_g10` で始まる）で、S2 の見張り役を LaunchDaemon（KeepAlive・RunAtLoad・Umask 077・環境変数は PATH と LANG のみ）
+  として動かす。`launchd_plan.watchdog_daemon_plan`／`validate_plan` が規則を確かめ、`plutil -lint` で形式を検査する（インストールはしない）。
+- 主ユーザーのホームへの拒否 ACL、専用ユーザーの作成、Claude CLI の配置は F0 手順書（phase2-spec/PHASE2_F0_PROCEDURE_DRAFT.md）のとおり。
+- 停止の方法（人が実行）: `sudo launchctl bootout system/com.kabumori.g10.phase2.watchdog` → `launchctl print` で見つからないことを確認。
+  監督が止まっている場合は、ハードHALT のうえ手順書の最終手段（プロセスの手動停止）。
+- 別uid のプロセスの argv は同じuid でないと読めない（unknown として安全側）。監督をどの uid で動かすかは F0 で決める。
+### 5. Claude CLI（読み取りだけの調査。CLI は一度も実行していない）
+- 場所: `~/.local/bin/claude` → 実体 `~/.local/share/claude/versions/2.1.305`（版はパスからの推定。未実行のため未確認）。
+- `claude_cli_plan.build_plan` は、起動するなら使う argv（`-p --output-format json --model --session-id --settings --max-turns`）・
+  環境変数（PATH・LANG・HOME のみ。`ANTHROPIC_API_KEY` 等は渡さない＝Max の範囲）・標準入力（TASK 本文。argv に入れない）を返すだけで、
+  実行しない。フラグの受け付け・modelUsage の形・予算の上限の効き方・Max の利用条件は**実機で未検証**。
+- 実行部分（`adapter.get_adapter`）は、引き続き偽Claude 以外を拒否する。
+### 6. G10 一枠のオフライン E2E（`tests/test_g10_offline_e2e.py`）
+承認済み TASK の受付 → 取得係の証拠 → CLAIM → 受理 → 起動直前の再取得 → 偽Claude の起動 → 実行中の監督 → 終了判定 → REPORT の下書き、
+および「起動直前に TASK が古くなった」「実行中の取消」「二重起動・再送」「時間切れ」「自己申告の秘密情報の伏せ字」を、模擬 Issue と偽Claude で確認。
+### 7. 実 Claude の初回起動の前提（すべて未了）と、人が確認する GO チェックリスト
+前提（各項目に独立レビューの PASS とユーザーの承認が必要）:
+1. 読み取り専用 token の用意と、上の検証計画 1〜6 の実施（編集者の根拠・本文の一致・点数）
+2. 取得元（GraphQL）と共有台帳を、起動直前・実行中の監督・finalize に結線する別TASK
+3. 非対称署名への切り替えと鍵の配置（runner・witness・human・agent を分離）
+4. F0（専用ユーザー・ACL・Claude CLI の配置・専用ユーザーでのログイン・F0a／F0b の極小の実行）
+5. 実 Claude のアダプタ（明示の設定でのみ有効）と、modelUsage・予算・停止の実機確認
+GO チェックリスト（初回の監督付き起動の直前に、人が1つずつ確認する）:
+- [ ] PR の HEAD・main・Issue #323 の TASK（ready・readonly_trial・task_id・承認ID）を読み返した
+- [ ] ENVELOPE または CONFIRM が今日の分として有効（04:00 JST の失効前）
+- [ ] HALT・STOP が解除されていて、Phase 1 の監視が正常
+- [ ] S2 の見張り役が動いている（ハートビートが新しい）。止め方（bootout とハードHALT）を手元に用意した
+- [ ] 取得係の token は scope なしで確認済み（verify_token）。主体の予算に余裕がある
+- [ ] 実行する TASK は readonly_trial・同時1・短い上限時間・小さな予算
+- [ ] 実行中は人が見ていて、異常があればすぐハードHALT・ISSUE_REVOKE できる
+- [ ] 終了後、ローカルの REPORT の下書き・作業フォルダに変更が無いこと・実使用モデルを確認してから、担当ちゃに渡す
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。
