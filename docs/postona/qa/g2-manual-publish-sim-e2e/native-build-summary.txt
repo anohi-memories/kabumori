@@ -1,0 +1,5 @@
+› Build Succeeded
+› 0 error(s), and 0 warning(s)
+› Installing on G2-E2E-20261025
+› Opening on G2-E2E-20261025 (com.anonymous.kabumori-social-mobile)
+exit=0

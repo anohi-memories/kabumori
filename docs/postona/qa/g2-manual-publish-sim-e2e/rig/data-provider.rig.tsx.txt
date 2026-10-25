@@ -1,0 +1,29 @@
+// G2 QA RIG ONLY (2026-10-25, gen47 Simulator E2E; untracked, never committed). Used only with G2_READY=1: the data
+// status is "ready" with a snapshot built from the LOCAL mock repository (no Supabase, no network), so the manual-publish
+// screen's send path (behind the demo-data gate) can reach the rig's scripted send port. Everything else is unchanged.
+import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import { mockRepository } from './mock-repository.rig'; // the rig's mock list (+2 X accounts)
+import type { SocialDataSnapshot } from '@/data/supabase-repository';
+import { useAuth } from './auth-provider.rig'; // the rig's fake session (a rig importer is not swapped)
+
+type DataStatus = 'mock_preview' | 'loading' | 'ready' | 'blocked' | 'unavailable';
+type DataContextValue = { status: DataStatus; reason: string | null; snapshot: SocialDataSnapshot | null; reload: () => void };
+const DataContext = createContext<DataContextValue | null>(null);
+
+export function DataProvider({ children }: PropsWithChildren) {
+  const { session } = useAuth() as { session: unknown };
+  const [generation, setGeneration] = useState(0);
+  const reload = useCallback(() => setGeneration((value) => value + 1), []);
+  const value = useMemo<DataContextValue>(() => {
+    if (!session) return { status: 'blocked', reason: 'ログイン後に運用データを読み込みます。', snapshot: null, reload };
+    const snapshot: SocialDataSnapshot = {
+      workspace: mockRepository.getWorkspace() as SocialDataSnapshot['workspace'],
+      accounts: mockRepository.getAccounts(),
+      plannedPosts: mockRepository.getPlannedPosts(),
+      history: mockRepository.getHistory(),
+    };
+    return { status: 'ready', reason: null, snapshot, reload };
+  }, [session, reload, generation]);
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+}
+export function useDataStatus() { const value = useContext(DataContext); if (!value) throw new Error('useDataStatus must be used inside DataProvider'); return value; }
