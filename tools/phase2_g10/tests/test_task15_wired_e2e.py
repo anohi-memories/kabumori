@@ -50,7 +50,7 @@ class WiredEnv(Env):
                 "ledger": {"path": self.ledger_path, "limit_per_hour": self.ledger_limit, "reserve_fraction": 0.0,
                            "watchdog_interval": 30.0}}
 
-    def apply_mode(self, mode):
+    def apply_mode(self, mode, approve=True):
         self.mode = mode
         wiring.write(self.tmp, self.wiring_doc(mode))
         keys_file = os.path.join(self.tmp, signing.TEST_KEYS_FILE)
@@ -69,6 +69,8 @@ class WiredEnv(Env):
         self.control = Control(self.layout, self.control_signer, self.verifier, self.policy, self.notifier,
                                time.time, witness=self.witness)
         self.agent = Agent(self.layout, self.agent_signer, agent_verifier, self.policy)
+        if approve:
+            self.control.approve_wiring()  # TASK 16: 人の署名で今の設定を承認（世代を1つ進める）
 
     def ledger_sent(self):
         doc = read_json(self.ledger_path) or {"sent": []}
@@ -308,7 +310,7 @@ class SignatureMigration(WiredBase):
         for log in logs:
             new = self.sigs(log)[len(old[log]):]
             self.assertTrue(new and all(s.startswith(ec.PREFIX) for s in new), log)
-        self.env.apply_mode("ecdsa")  # HMAC の記録が残る記録簿は検証できない: 実行側は止まる（記録簿を新しくする）
+        self.env.apply_mode("ecdsa", approve=False)  # HMAC の記録が残る記録簿は検証できない: 止まる（記録簿を新しくする）
         with self.assertRaises(ChainError):
             self.env.agent.current_state()
         with self.assertRaises(ChainError):
@@ -316,7 +318,7 @@ class SignatureMigration(WiredBase):
 
     def test_ecdsa_refuses_a_leftover_hmac_key_file(self):
         self.env.apply_mode("dual")
-        self.env.apply_mode("ecdsa")
+        self.env.apply_mode("ecdsa", approve=False)
         signing.write_test_keys(self.env.tmp)
         with self.assertRaises(wiring.WiringError):
             wiring.agent_side(self.env.tmp)

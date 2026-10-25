@@ -15,6 +15,7 @@
 - 既定ではどこにも結線していない（現在の起動は試験用 HMAC のまま）。人の鍵のパスフレーズ・鍵の保管場所（Keychain 等）・
   ローテーションは未実装（NOT_VERIFIED）。鍵の生成（generate_keypair）は試験・dry-run 用で、実運用の鍵の作成は別承認。
 """
+import hashlib
 import os
 import re
 import stat
@@ -87,6 +88,27 @@ def _check_public_key(path):
         data = f.read()
     if not data.startswith(b"-----BEGIN PUBLIC KEY-----") or b"PRIVATE" in data:
         raise ValueError("the verifier accepts public keys only")
+
+
+def public_key_fingerprint(path):
+    """公開鍵ファイルの正規化した指紋（DER の SHA-256）。PEM の書き方やパスが違っても、同じ鍵なら同じ値（TASK 16 R3）。"""
+    _check_public_key(path)
+    r = _run(["ec", "-pubin", "-in", path, "-outform", "DER"])
+    if r.returncode != 0 or not r.stdout:
+        raise ValueError("public key cannot be parsed")
+    return hashlib.sha256(r.stdout).hexdigest()
+
+
+def private_key_public_fingerprint(path):
+    """秘密鍵から導いた公開鍵の指紋（鍵の規則を記述子で確かめ、その記述子を openssl に渡す）。"""
+    fd, _ = _open_private_key(path)
+    try:
+        r = _run(["ec", "-in", "/dev/fd/%d" % fd, "-pubout", "-outform", "DER"], pass_fds=(fd,))
+    finally:
+        os.close(fd)
+    if r.returncode != 0 or not r.stdout:
+        raise ValueError("private key cannot be parsed")
+    return hashlib.sha256(r.stdout).hexdigest()
 
 
 class EcdsaSigner:

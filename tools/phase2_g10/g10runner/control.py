@@ -9,7 +9,7 @@ import os
 import time
 import uuid
 
-from . import binding, issue as issue_mod, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state
+from . import binding, issue as issue_mod, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state, wiring
 from .chainlog import ChainError, ChainLog
 from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
 from .stub import tree_digest
@@ -63,6 +63,22 @@ class Control:
         payload["approved_at"] = approved_at
         payload["expires_at"] = jstclock.next_rollover(approved_at)
         return self.append_control("ENVELOPE_APPROVE", payload, "human")
+
+    def approve_wiring(self):
+        """今の wiring.json を、人の署名の WIRING_APPROVE として承認する（TASK 16 R2）。世代は1つずつ増え、
+        署名方式は同じか1段先だけ（state.derive も同じ規則で検査し、違反の承認は以後ずっと無効にする）。"""
+        current = wiring.binding(self.layout.root)
+        if current is None:
+            raise wiring.WiringError("no wiring config to approve")
+        st = self.read_state()
+        if st.wiring_problem:
+            raise wiring.WiringError("wiring approvals invalid: " + st.wiring_problem)
+        prev = st.wiring
+        if prev and not wiring.mode_transition_allowed(prev["mode"], current["mode"]):
+            raise wiring.WiringError("signature mode change %s -> %s is not allowed" % (prev["mode"], current["mode"]))
+        payload = {"mode": current["mode"], "wiring_sha256": current["sha256"],
+                   "generation": prev["generation"] + 1 if prev else 1}
+        return self.append_control("WIRING_APPROVE", payload, "human")
 
     def revoke_envelope(self, envelope_id, role="runner"):
         return self.append_control("ENVELOPE_REVOKE", {"envelope_id": envelope_id}, role)
@@ -255,6 +271,10 @@ class Control:
         if state.issue_revoked(st, {"task_id": f["task_id"], "approval_id": f["phase2_approval_id"],
                                     "task_sha256": computed}):
             return None, "issue revoked"
+        # TASK 16 R2: 承認済みの設定（wiring）のハッシュと世代を要求に結び付ける（従来の経路では両方 None）
+        wreason, wiring_sha, wiring_gen = wiring.claim_binding(self.layout.root, st)
+        if wreason:
+            return None, "wiring: " + wreason
         base = {
             "approval_id": f["phase2_approval_id"], "task_id": f["task_id"], "task_sha256": computed,
             "prompt": body, "base_ref": f["base_ref"], "base_sha": f["base_sha"], "model": f["model"],
@@ -262,6 +282,7 @@ class Control:
             "max_budget_usd": f["max_budget_usd"], "policy_sha256": self.policy["_digest"],
             "phase2_scope": f["phase2_scope"], "production_permission": f["production_permission"],
             "report_mode": f["phase2_report_mode"], "issue_evidence": evidence,
+            "wiring_sha256": wiring_sha, "wiring_generation": wiring_gen,
         }
         c = st.confirms.get(f["phase2_approval_id"])
         if c and c.get("task_sha256") == computed and c.get("policy_sha256") == self.policy["_digest"]:
@@ -298,7 +319,7 @@ class Control:
         claim_payload = {"run_id": run_id, "request_id": request_id, "authorization": base["authorization"],
                          "envelope_id": base.get("envelope_id")}
         for key in ("approval_id", "task_id", "task_sha256", "model", "model_id", "effort", "max_minutes",
-                    "max_budget_usd", "base_ref", "base_sha", "policy_sha256"):
+                    "max_budget_usd", "base_ref", "base_sha", "policy_sha256", "wiring_sha256", "wiring_generation"):
             claim_payload[key] = base[key]
         claim_payload["issue_evidence_sha256"] = issue_mod.evidence_digest(evidence)
         claim, reason = self.ledger.append_if("CLAIM", claim_payload, self.signer, "runner", local_now, gate)
@@ -397,6 +418,13 @@ class Control:
         checks["policy_unchanged"] = pol["_digest"] == req["policy_sha256"]
         if not checks["policy_unchanged"]:
             violations.append("policy changed during run (observed)")
+        try:  # TASK 16 R2: 設定（wiring）の消失・無承認の変更・新しい承認への乗り換えを成功にしない
+            wiring_reason = wiring.check_run(self.layout.root, self.read_state(), req)
+        except Exception as exc:
+            wiring_reason = "wiring check failed: %s" % type(exc).__name__
+        checks["wiring_unchanged"] = wiring_reason is None
+        if wiring_reason:
+            violations.append("wiring changed or unverifiable at finalize: " + wiring_reason)
         try:
             self.ledger.read_all()
             checks["ledger_valid"] = True

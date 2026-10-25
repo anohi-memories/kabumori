@@ -8,7 +8,7 @@ import time
 import unittest
 from unittest import mock
 
-from g10runner import procs, registry, signing, supervise
+from g10runner import procs, registry, signing, state, supervise
 from g10runner.layout import Layout
 from helpers import EnvTestCase, FAST_TIMING, make_body, test_policy
 
@@ -137,6 +137,7 @@ class CheckNeverRaises(unittest.TestCase):
     def test_witness_factory_exception_is_a_failure(self):
         agent = mock.Mock()
         agent.verifier.verify.return_value = True
+        agent.current_state.return_value = state.ControlState()  # TASK 16: 設定の照合（従来の経路）を通って取得係へ進む
         req = {"run_id": RUN_ID}
         json.dump({"request": req, "sig": "x"}, open(os.path.join(self.layout.run_dir(RUN_ID), "request.json"), "w"))
         with mock.patch.object(supervise.issue_mod, "spawn_witness", side_effect=ValueError("bad hex")):

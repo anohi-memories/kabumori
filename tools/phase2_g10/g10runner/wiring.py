@@ -19,6 +19,19 @@
 3. 共有の回数台帳（SharedRateLedger）: 取得の前に予約する。上限は、同じ認証の主体の予算（Phase 1 の監視を含む）
    から計算した許容量（ledger_allowance）以下でなければ組み立てを拒否する。予約できなければ取得しない。
 
+TASK 16（H2 の P2×3 の修正）:
+- R1: 「wiring.json が無い」（_MISSING）と「あるが中身が null 等」を区別する。読めた中身は null を含め必ず規則で検査する。
+- R2: 設定は、人の署名の WIRING_APPROVE（制御ログ・世代・mode・設定のハッシュ）で承認されたものだけを使う。
+  承認の列は state.derive が検査し、段飛ばし・後退・世代の飛びがあれば以後ずっと無効（wiring_problem）。
+  CLAIM は承認済みの設定のハッシュと世代を要求に入れ（runner の署名）、起動直前（スタブの判定の前後）・実行中の監督・
+  finalize で、今の設定・最新の承認・要求の三つが一致しなければ起動しない／止める／成功にしない（check_run）。
+  設定のハッシュは、設定の中身と各役割の公開鍵の正規化した指紋をまとめたもの（鍵ファイルの中身の差し替えも検出）。
+  承認待ちの実行中のランは、新しい承認（正規の1段の移行を含む）にも乗り換えない（新しいランだけが新しい設定を使う）。
+  write も、今の設定から1段を超える変更・後退を保存しない（便宜の歯止め。権威は制御ログの承認の列）。
+- R3: 4役割の公開鍵は、正規化した指紋がすべて異なること（同じパス・別のパスの同じ鍵を拒否）。agent・witness の秘密鍵から
+  導いた公開鍵が、その役割の公開鍵と一致すること。
+- ecdsa への移行で記録簿を新しくすると、承認の列も新しく始まる（その時点の後退の検出は、記録簿を作り直す人の手順に依る）。
+
 実 GitHub への接続・実鍵の設置・専用ユーザー・launchd は、ここでは扱わない（別承認）。
 """
 import email.utils
@@ -32,29 +45,24 @@ import urllib.error
 
 from . import ecdsa_signing as ec, github_graphql as gq, github_source as gh, issue as issue_mod
 from . import policy as policy_mod, rate_budget as rb, signing
-from .fsutil import atomic_write_json, loads_strict, read_json
+from .fsutil import atomic_write_json, canonical, loads_strict, read_json, sha256_hex
 from .shared_ledger import SharedRateLedger
 
 WIRING_FILE = "wiring.json"
 VERSION = "wiring-v1"
-SIG_MODES = ("hmac", "dual", "ecdsa")
+SIG_MODES = signing.SIG_MODES
+mode_transition_allowed = signing.mode_transition_allowed
 EXECUTION_SIDE_PRIVATE_ROLES = ("agent", "witness")
 SOURCE_KINDS = ("file", "graphql_fixture")
 FIXTURE_TOKEN = "ghp_" + "0" * 36  # fixture 専用の形だけの値（実在しない。FixtureOpener の外へは出ない）
 MAX_WIRING_BYTES = 65536
 _TOP_KEYS = {"version", "mode", "public_keys", "private_keys", "issue_source", "ledger"}
 _LEDGER_KEYS = {"path", "limit_per_hour", "reserve_fraction", "watchdog_interval"}
+_MISSING = object()  # wiring.json が本当に無い（R1: JSON の null と区別する）
 
 
 class WiringError(ValueError):
     pass
-
-
-def mode_transition_allowed(old, new):
-    """署名方式の切替は、同じか、1段先（hmac→dual→ecdsa）だけ。飛ばす・戻すは不可（戻すのは人の別判断）。"""
-    if old not in SIG_MODES or new not in SIG_MODES:
-        return False
-    return SIG_MODES.index(new) - SIG_MODES.index(old) in (0, 1)
 
 
 class MigratingVerifier:
@@ -97,7 +105,7 @@ def _read_owned_json(path):
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     except FileNotFoundError:
-        return None
+        return _MISSING
     except OSError:
         raise WiringError("wiring file cannot be opened without following symlinks")
     try:
@@ -164,14 +172,75 @@ def validate(doc):
 
 
 def load(root):
-    """wiring.json を読む。無ければ None（従来の経路）。あって規則に合わなければ WiringError。"""
+    """wiring.json を読む。本当に無ければ None（従来の経路）。あれば中身が null でも必ず検査し、違反は WiringError。"""
     doc = _read_owned_json(os.path.join(root, WIRING_FILE))
-    return None if doc is None else validate(doc)
+    return None if doc is _MISSING else validate(doc)
+
+
+def key_fingerprints(cfg):
+    """R3: 役割ごとの公開鍵の正規化した指紋。役割の間で同じ鍵・秘密鍵と公開鍵の不一致は WiringError。"""
+    if cfg["mode"] == "hmac":
+        return {}
+    try:
+        fps = {role: ec.public_key_fingerprint(path) for role, path in sorted(cfg["public_keys"].items())}
+    except (OSError, ValueError) as exc:
+        raise WiringError("public key cannot be read: %s" % exc)
+    if len(set(fps.values())) != len(fps):
+        raise WiringError("the same public key is assigned to more than one role")
+    for role, path in sorted(cfg["private_keys"].items()):
+        try:
+            derived = ec.private_key_public_fingerprint(path)
+        except (OSError, ValueError) as exc:
+            raise WiringError("%s private key cannot be read: %s" % (role, exc))
+        if derived != fps[role]:
+            raise WiringError("the %s private key does not match the %s public key" % (role, role))
+    return fps
+
+
+def binding(root):
+    """今の設定の識別（R2）。無ければ None。あれば {"mode", "sha256"}（設定の中身＋公開鍵の指紋のハッシュ）。"""
+    cfg = load(root)
+    if cfg is None:
+        return None
+    fps = key_fingerprints(cfg)
+    return {"mode": cfg["mode"], "sha256": sha256_hex(canonical({"wiring": cfg, "public_key_sha256": fps}))}
+
+
+def claim_binding(root, st):
+    """CLAIM で要求に入れる (理由, 設定のハッシュ, 世代)。今の設定が最新の承認と一致しなければ理由（起動しない）。"""
+    if st.wiring_problem:
+        return "wiring approvals invalid: " + st.wiring_problem, None, None
+    try:
+        current = binding(root)
+    except (WiringError, ValueError) as exc:
+        return "wiring invalid: %s" % exc, None, None
+    approved = st.wiring
+    if current is None and approved is None:
+        return None, None, None  # 従来の経路（設定も承認も無い）
+    if current is None:
+        return "approved wiring config is missing", None, None
+    if approved is None or approved["wiring_sha256"] != current["sha256"] or approved["mode"] != current["mode"]:
+        return "wiring config is not the approved one", None, None
+    return None, current["sha256"], approved["generation"]
+
+
+def check_run(root, st, req):
+    """起動直前・監督・finalize の照合（R2）: 今の設定・最新の承認・要求（CLAIM 時）が一致すること。理由か None。"""
+    reason, sha, gen = claim_binding(root, st)
+    if reason:
+        return reason
+    if req.get("wiring_sha256") != sha or req.get("wiring_generation") != gen:
+        return "wiring config or approval changed since CLAIM"
+    return None
 
 
 def write(root, doc):
-    """試験・dry-run 用: 規則を確かめてから 0600 で書く。"""
+    """試験・dry-run 用: 規則・鍵（R3）を確かめ、今の設定から1段を超える変更・後退でなければ 0600 で書く。"""
     validate(doc)
+    key_fingerprints(doc)
+    existing = load(root)
+    if existing is not None and not mode_transition_allowed(existing["mode"], doc["mode"]):
+        raise WiringError("signature mode change %s -> %s is not allowed" % (existing["mode"], doc["mode"]))
     path = os.path.join(root, WIRING_FILE)
     atomic_write_json(path, doc)
     os.chmod(path, 0o600)
@@ -188,6 +257,7 @@ def _hmac_keys(root, cfg):
 
 
 def verifier(root, cfg):
+    key_fingerprints(cfg)  # R3: 役割の間の同じ鍵・秘密鍵との不一致を、組み立ての前に拒否
     keys = _hmac_keys(root, cfg)
     hmac_v = signing.HmacTestVerifier(keys) if keys is not None else None
     ecdsa_v = ec.EcdsaVerifier(cfg["public_keys"]) if cfg["mode"] != "hmac" else None
@@ -356,6 +426,7 @@ def issue_source(root, cfg, policy):
 
 
 def witness(root, cfg, policy, now=time.time):
+    key_fingerprints(cfg)  # R3
     return issue_mod.IssueWitness(issue_source(root, cfg, policy), signer(root, cfg, "witness"), now)
 
 

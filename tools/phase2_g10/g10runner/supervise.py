@@ -4,7 +4,7 @@ import os
 import threading
 import time
 
-from . import issue as issue_mod, policy as policy_mod, procs, registry, state
+from . import issue as issue_mod, policy as policy_mod, procs, registry, state, wiring
 from .chainlog import ChainError
 from .fsutil import atomic_write_json, canonical, is_finite_number, read_json, sha256_hex
 
@@ -172,6 +172,12 @@ def _issue_monitor_check(layout, policy, agent, run_id):
             return "request unverifiable", None
     except Exception as exc:  # 要求が読めないランは、照合できないので安全側
         return "request unreadable: %s" % type(exc).__name__, None
+    try:  # TASK 16 R2: 実行中に設定が消えた・無承認で変わった・承認が変わったら、照合できないので止める
+        wreason = wiring.check_run(layout.root, agent.current_state(update_seen=False), req)
+    except Exception as exc:
+        wreason = "wiring check failed: %s" % type(exc).__name__
+    if wreason:
+        return "wiring: " + wreason, None
     try:
         witness = issue_mod.spawn_witness(layout.root, policy)
     except Exception as exc:  # 取得係を作れない（鍵が読めない等）: 照合できないので安全側（TASK 8 R1）

@@ -12,6 +12,7 @@ CONTROL_TYPES = {
     "CONFIRM": "human",
     "UNHALT": "human",
     "STOP_OFF": "human",
+    "WIRING_APPROVE": "human",  # 結線の設定（wiring.json）の承認（TASK 16 R2）。世代・mode・設定のハッシュ
 }
 STOP_DIRECTION = {"HALT", "STOP", "ENVELOPE_REVOKE", "ENVELOPE_SUPERSEDE", "ISSUE_REVOKE"}
 

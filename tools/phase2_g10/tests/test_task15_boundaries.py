@@ -71,9 +71,9 @@ class VerifyOnlyBoundary(Keys):
 
     def test_a_private_key_offered_as_a_public_key_is_refused(self):
         pub = dict(self.pub, runner=self.priv["runner"])
-        wiring.write(self.tmp, self.doc(public_keys=pub))
-        with self.assertRaises(ValueError):
-            wiring.agent_side(self.tmp)
+        with self.assertRaises(ValueError):  # TASK 16: 保存の時点で鍵を検査して拒否する
+            wiring.write(self.tmp, self.doc(public_keys=pub))
+        self.assertIsNone(wiring.load(self.tmp))
 
     def test_invalid_wiring_documents(self):
         cases = {"extra key": self.doc(extra=1), "version": self.doc(version="wiring-v0"),

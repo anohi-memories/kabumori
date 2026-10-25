@@ -10,6 +10,15 @@ import hashlib
 import hmac
 
 ROLES = ("runner", "human", "agent", "witness")
+# 署名方式の段階（TASK 15・16）。hmac → dual → ecdsa の順に1段ずつだけ進める
+SIG_MODES = ("hmac", "dual", "ecdsa")
+
+
+def mode_transition_allowed(old, new):
+    """署名方式の切替は、同じか、1段先（hmac→dual→ecdsa）だけ。飛ばす・戻すは不可（戻すのは人が記録簿ごと作り直す）。"""
+    if old not in SIG_MODES or new not in SIG_MODES:
+        return False
+    return SIG_MODES.index(new) - SIG_MODES.index(old) in (0, 1)
 
 
 class SignatureError(ValueError):

@@ -5,7 +5,9 @@
 """
 import os
 
-from . import jstclock
+import re
+
+from . import jstclock, signing
 from .chainlog import record_hash
 from .fsutil import atomic_write_json, read_json
 
@@ -24,6 +26,8 @@ class ControlState:
         self.issue_revokes = []  # ISSUE_REVOKE の payload（取り消しは解除しない。UNHALT でも消えない）
         self.problems = []
         self.head = (0, None)
+        self.wiring = None          # 最新の有効な WIRING_APPROVE（TASK 16 R2）。無ければ従来の経路だけ
+        self.wiring_problem = None  # 不正な承認（段飛ばし・後退・形の違反）。一度立てば以後の承認では消えない
 
     @property
     def halted(self):
@@ -84,10 +88,36 @@ def derive(control_events, agent_events):
             st.confirms[p.get("approval_id")] = p
         elif t == "ISSUE_REVOKE":
             st.issue_revokes.append(p)
+        elif t == "WIRING_APPROVE":
+            reason = wiring_step_problem(st.wiring, p, rec.get("role"))
+            if reason or st.wiring_problem:
+                st.wiring_problem = st.wiring_problem or reason
+            else:
+                st.wiring = dict(p, event_id=eid)
     st.agent_halts = {aid: v for aid, v in agent_halt_by_id.items() if aid not in covered_agent}
     if control_events:
         st.head = (control_events[-1]["seq"], record_hash(control_events[-1]))
     return st
+
+
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+
+
+def wiring_step_problem(prev, payload, role):
+    """設定承認（TASK 16 R2）の1件の検査。人の署名・決まった形・世代が1つずつ増える・署名方式は同じか1段先だけ。"""
+    if role != "human":
+        return "wiring approval must be signed by the human role"
+    if not isinstance(payload, dict) or set(payload) != {"mode", "wiring_sha256", "generation"}:
+        return "wiring approval malformed"
+    gen = payload["generation"]
+    if payload["mode"] not in signing.SIG_MODES or not isinstance(payload["wiring_sha256"], str) \
+            or not _SHA256.fullmatch(payload["wiring_sha256"]) or not isinstance(gen, int) or isinstance(gen, bool):
+        return "wiring approval malformed"
+    if gen != (prev["generation"] + 1 if prev else 1):
+        return "wiring approval generation is not the next one"
+    if prev and not signing.mode_transition_allowed(prev["mode"], payload["mode"]):
+        return "wiring approval skips or reverses a signature-mode step (%s -> %s)" % (prev["mode"], payload["mode"])
+    return None
 
 
 def issue_revoked(st, item):

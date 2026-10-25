@@ -81,6 +81,12 @@ def _local_gate(agent, layout, req):
         return "not authorized at final check"
     if state.issue_revoked(st, req):
         return "issue revoked"
+    try:  # TASK 16 R2: 今の設定・最新の承認・CLAIM 時の要求が一致すること（消失・差し替え・承認の乗り換えは起動しない）
+        reason = wiring.check_run(layout.root, st, req)
+    except Exception as exc:
+        reason = "wiring check failed: %s" % type(exc).__name__
+    if reason:
+        return "wiring: " + reason
     if agent.used_state(req["run_id"]) != ["ACCEPTED"]:
         return "used_requests state is not ACCEPTED-only"
     return None
