@@ -1,3 +1,5 @@
+-- G5-31 REVISION (2026-10-25, Issue #320 task 31): every shape check is `(...) is not true` instead of `not (...)`: a RESET ALL leaves proconfig
+-- NULL, which made the check NULL and a plpgsql IF treats NULL as false, so the drift slipped through and was erased (found by G5-30 on T13).
 -- G5-29 REVISION (2026-10-25, Issue #320 task 29): the attribute baseline also pins protrftypes IS NULL (no TRANSFORM) -- H4 P2 on PR #487
 -- (Issue #331 comment 6393211366).
 -- G5-28 REVISION (2026-10-25, Issue #320 task 28): the shape checks now also pin every attribute CREATE OR REPLACE would reset (STRICT,
@@ -46,14 +48,14 @@ begin
   end if;
   -- owner, definer, STABLE, the reviewed settings (empty search_path, row_security off), the reviewed ACL, no API role reaching the owner
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off']
+     or (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off']
                     -- (G5-28, H4 P2 on PR #486) every attribute CREATE OR REPLACE would reset, at the reviewed value: never STRICT, not LEAKPROOF,
                     -- PARALLEL UNSAFE, a plain function returning one jsonb, COST 100, ROWS 0, no support function, plpgsql, the reviewed arguments, no TRANSFORM (protrftypes NULL, G5-29)
                     and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.prokind = 'f' and not p.proretset
                     and p.procost = 100 and p.prorows = 0 and p.prosupport::oid = 0 and p.prorettype = 'jsonb'::pg_catalog.regtype
                     and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
                     and p.pronargdefaults = 0 and p.proargmodes is null and p.protrftypes is null and p.proargnames is not distinct from array['p_app', 'p_feature', 'p_brand_id']::text[]
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+               from pg_catalog.pg_proc p where p.oid = v_fn) is not true  -- (G5-31) a NULL (RESET ALL: proconfig NULL) refuses
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from pg_catalog.format('%s=X/%s,authenticated=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r
                  where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator') and pg_catalog.pg_has_role(r.oid, v_owner, 'MEMBER')) then
@@ -73,14 +75,14 @@ begin
   end if;
   -- owner, definer, STABLE, the reviewed settings (empty search_path, row_security off), the reviewed ACL, no API role reaching the owner
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off']
+     or (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off']
                     -- (G5-28, H4 P2 on PR #486) every attribute CREATE OR REPLACE would reset, at the reviewed value: never STRICT, not LEAKPROOF,
                     -- PARALLEL UNSAFE, a plain function returning one jsonb, COST 100, ROWS 0, no support function, plpgsql, the reviewed arguments, no TRANSFORM (protrftypes NULL, G5-29)
                     and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.prokind = 'f' and not p.proretset
                     and p.procost = 100 and p.prorows = 0 and p.prosupport::oid = 0 and p.prorettype = 'jsonb'::pg_catalog.regtype
                     and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
                     and p.pronargdefaults = 0 and p.proargmodes is null and p.protrftypes is null and p.proargnames is not distinct from array['p_app', 'p_feature']::text[]
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+               from pg_catalog.pg_proc p where p.oid = v_fn) is not true  -- (G5-31) a NULL (RESET ALL: proconfig NULL) refuses
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from pg_catalog.format('%s=X/%s,authenticated=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r
                  where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator') and pg_catalog.pg_has_role(r.oid, v_owner, 'MEMBER')) then
@@ -100,14 +102,14 @@ begin
   end if;
   -- owner, definer, STABLE, the reviewed settings (empty search_path, row_security off), the reviewed ACL, no API role reaching the owner
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off']
+     or (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off']
                     -- (G5-28, H4 P2 on PR #486) every attribute CREATE OR REPLACE would reset, at the reviewed value: never STRICT, not LEAKPROOF,
                     -- PARALLEL UNSAFE, a plain function returning one text, COST 100, ROWS 0, no support function, plpgsql, the reviewed arguments, no TRANSFORM (protrftypes NULL, G5-29)
                     and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.prokind = 'f' and not p.proretset
                     and p.procost = 100 and p.prorows = 0 and p.prosupport::oid = 0 and p.prorettype = 'text'::pg_catalog.regtype
                     and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
                     and p.pronargdefaults = 0 and p.proargmodes is null and p.protrftypes is null and p.proargnames is not distinct from null::text[]
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+               from pg_catalog.pg_proc p where p.oid = v_fn) is not true  -- (G5-31) a NULL (RESET ALL: proconfig NULL) refuses
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from pg_catalog.format('%s=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r
                  where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator') and pg_catalog.pg_has_role(r.oid, v_owner, 'MEMBER')) then
@@ -488,7 +490,7 @@ begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from '7e84d9a2ecc53923d0c7846a4514dfdd' then
     raise exception 'D1_POSTCONDITION_R1_BODY';
   end if;
-  if not (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off'] and p.proowner = v_owner
+  if (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off'] and p.proowner = v_owner
             -- (G5-28, H4 P2 on PR #486) every attribute CREATE OR REPLACE would reset, at the reviewed value: never STRICT, not LEAKPROOF,
             -- PARALLEL UNSAFE, a plain function returning one jsonb, COST 100, ROWS 0, no support function, plpgsql, the reviewed arguments, no TRANSFORM (protrftypes NULL, G5-29)
             and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.prokind = 'f' and not p.proretset
@@ -496,7 +498,7 @@ begin
             and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
             and p.pronargdefaults = 0 and p.proargmodes is null and p.protrftypes is null and p.proargnames is not distinct from array['p_app', 'p_feature', 'p_brand_id']::text[]
             and pg_catalog.array_to_string(p.proacl::text[], ',') = pg_catalog.current_setting('postona_personal_d1.acl_r1', true)
-            from pg_catalog.pg_proc p where p.oid = v_fn) then
+            from pg_catalog.pg_proc p where p.oid = v_fn) is not true then  -- (G5-31) a NULL refuses
     raise exception 'D1_POSTCONDITION_R1_SHAPE';
   end if;
   v_fn := pg_catalog.to_regprocedure('public.common_account_bootstrap_verdict(text,text)');
@@ -506,7 +508,7 @@ begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from 'f3fb1fb4102b0cbf969145045e079318' then
     raise exception 'D1_POSTCONDITION_R0_BODY';
   end if;
-  if not (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off'] and p.proowner = v_owner
+  if (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off'] and p.proowner = v_owner
             -- (G5-28, H4 P2 on PR #486) every attribute CREATE OR REPLACE would reset, at the reviewed value: never STRICT, not LEAKPROOF,
             -- PARALLEL UNSAFE, a plain function returning one jsonb, COST 100, ROWS 0, no support function, plpgsql, the reviewed arguments, no TRANSFORM (protrftypes NULL, G5-29)
             and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.prokind = 'f' and not p.proretset
@@ -514,7 +516,7 @@ begin
             and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
             and p.pronargdefaults = 0 and p.proargmodes is null and p.protrftypes is null and p.proargnames is not distinct from array['p_app', 'p_feature']::text[]
             and pg_catalog.array_to_string(p.proacl::text[], ',') = pg_catalog.current_setting('postona_personal_d1.acl_r0', true)
-            from pg_catalog.pg_proc p where p.oid = v_fn) then
+            from pg_catalog.pg_proc p where p.oid = v_fn) is not true then  -- (G5-31) a NULL refuses
     raise exception 'D1_POSTCONDITION_R0_SHAPE';
   end if;
   v_fn := pg_catalog.to_regprocedure('private.account_lifecycle_session_verdict()');
@@ -524,7 +526,7 @@ begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from 'a5d4d71c532847a8573e86a4bd0c791d' then
     raise exception 'D1_POSTCONDITION_SV_BODY';
   end if;
-  if not (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off'] and p.proowner = v_owner
+  if (select p.prosecdef and p.provolatile = 's' and p.proconfig = array['search_path=""', 'row_security=off'] and p.proowner = v_owner
             -- (G5-28, H4 P2 on PR #486) every attribute CREATE OR REPLACE would reset, at the reviewed value: never STRICT, not LEAKPROOF,
             -- PARALLEL UNSAFE, a plain function returning one text, COST 100, ROWS 0, no support function, plpgsql, the reviewed arguments, no TRANSFORM (protrftypes NULL, G5-29)
             and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.prokind = 'f' and not p.proretset
@@ -532,7 +534,7 @@ begin
             and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
             and p.pronargdefaults = 0 and p.proargmodes is null and p.protrftypes is null and p.proargnames is not distinct from null::text[]
             and pg_catalog.array_to_string(p.proacl::text[], ',') = pg_catalog.current_setting('postona_personal_d1.acl_sv', true)
-            from pg_catalog.pg_proc p where p.oid = v_fn) then
+            from pg_catalog.pg_proc p where p.oid = v_fn) is not true then  -- (G5-31) a NULL refuses
     raise exception 'D1_POSTCONDITION_SV_SHAPE';
   end if;
 end $$;

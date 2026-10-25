@@ -58,6 +58,13 @@ if [ -z "${S27_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "$p3^{commit}" 2>
   git -C "$repo" show "$p3:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict_rollback.sql" > "$work/p3_rollback.sql"
   p3_c="$work/p3_candidate.sql"; p3_r="$work/p3_rollback.sql"
 fi
+# (G5-31) PR #488's candidate at its head, to reproduce a RESET ALL (proconfig NULL) slipping through its `not (...)` shape checks
+p4=ad83ffd81b985c2d660868ee76224c560ff82d3e; p4_c=""; p4_r=""
+if [ -z "${S27_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "$p4^{commit}" 2>/dev/null; then
+  git -C "$repo" show "$p4:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict.sql" > "$work/p4_candidate.sql"
+  git -C "$repo" show "$p4:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict_rollback.sql" > "$work/p4_rollback.sql"
+  p4_c="$work/p4_candidate.sql"; p4_r="$work/p4_rollback.sql"
+fi
 
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
@@ -105,5 +112,6 @@ fi
 ( cd "$repo" && CAL_E2E=1 S27_CANDIDATE="$cand/002_verdicts_anonymous_strict.sql" S27_ROLLBACK="$cand/002_verdicts_anonymous_strict_rollback.sql" \
     S27_P2_CANDIDATE="$p2_c" S27_P2_ROLLBACK="$p2_r" \
     S27_P3_CANDIDATE="$p3_c" S27_P3_ROLLBACK="$p3_r" \
+    S27_P4_CANDIDATE="$p4_c" S27_P4_ROLLBACK="$p4_r" \
     S27_OWNER="$owner" S27_DB="${prefix}_d1" S27_REV="${prefix}_rev" PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_d1_verdicts_pg_test.ts" )
