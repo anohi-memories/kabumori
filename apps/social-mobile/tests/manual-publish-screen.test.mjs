@@ -94,7 +94,7 @@ async function loadRoute(world) {
   const stubs = {
     react,
     'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
-    'react-native': { Platform: { OS: world.os ?? 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View', ...(world.dimensions ? { Dimensions: world.dimensions } : {}) },
+    'react-native': { Platform: { OS: world.os ?? 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View', ...(world.dimensions ? { Dimensions: world.dimensions } : {}), ...(world.keyboard ? { Keyboard: world.keyboard } : {}) },
     'expo-router': { Link: 'Link', Stack: { Screen: 'StackScreen' } },
     'expo-crypto': { randomUUID: () => '00000000-0000-4000-8000-000000000000' },
     'expo-status-bar': { StatusBar: 'StatusBar' },
@@ -117,10 +117,10 @@ async function loadRoute(world) {
   return { mod, slots, getCursor: () => cursor, setCursor: (v) => { cursor = v; }, pendingEffects };
 }
 
-async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', inflight = realFlow.createInFlightSends(), clock = { t: 100_000 }, os = 'ios', idBase = 0, dimensions = undefined } = {}) {
+async function mount({ status = 'ready', userId = 'U1', accounts = [account('X_A')], active = 'X_A', port = fakePort(), memory = realFlow.createAttemptMemory(), kv = fakeKV(), draftKv = fakeKV(), sessionMark = 'S1', inflight = realFlow.createInFlightSends(), clock = { t: 100_000 }, os = 'ios', idBase = 0, dimensions = undefined, keyboard = undefined } = {}) {
   const store = realStore.createAttemptStore(kv);
   const draftStore = realDraft.createDraftStore(draftKv);
-  const world = { status, userId, accounts, active, port: port.port, memory, store, draftStore, inflight, os, dimensions };
+  const world = { status, userId, accounts, active, port: port.port, memory, store, draftStore, inflight, os, dimensions, keyboard };
   const rt = await loadRoute(world);
   let ids = idBase;
   // Stable function identities, like the real defaults (Date.now / a module function): unstable ones would re-run the effects.
@@ -3113,4 +3113,157 @@ test('G2-A11Y-3: a starting text size is used from the first frame; without a re
   assert.equal(large.all('ScrollView')[0].key, 'text-size-2.35');
   const none = await mount();
   assert.equal(none.all('ScrollView')[0].key, 'text-size-1', 'no Dimensions (as in other harnesses): the default size, no crash');
+});
+
+// ---- G2-A11Y-1 (on the iOS 27 Simulator the text box itself stayed under the keyboard): keep the box being typed in above it ---------------
+
+/** A soft keyboard the test can show, move and hide (the "Did" events of React Native's Keyboard). */
+function fakeKeyboard() {
+  const listeners = new Map();
+  const kb = {
+    removed: 0,
+    addListener: (type, listener) => {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(listener);
+      return { remove: () => { kb.removed += 1; listeners.get(type).delete(listener); } };
+    },
+    emit: (type, event) => { for (const listener of listeners.get(type) ?? []) listener(event); },
+    show: (screenY) => kb.emit('keyboardDidShow', { endCoordinates: { screenY, height: 844 - screenY } }),
+    move: (screenY) => kb.emit('keyboardDidChangeFrame', { endCoordinates: { screenY, height: 844 - screenY } }),
+    hide: () => kb.emit('keyboardDidHide', { endCoordinates: { screenY: 844, height: 0 } }),
+    count: () => [...listeners.values()].reduce((n, set) => n + set.size, 0),
+  };
+  return kb;
+}
+
+/**
+ * A screen with a scroll view and a text box that behave like the native ones for the measurement: the box sits at a fixed place
+ * in the content; its place on the screen is that minus how far the content is scrolled (header height included).
+ */
+function keyboardRig(ui, { label = '投稿の本文', boxTop = 660, boxHeight = 140, headerHeight = 100 } = {}) {
+  const rig = { scrolls: [], offset: 0, boxHeight };
+  const scrollView = () => ui.all('ScrollView')[0];
+  scrollView().props.ref.current = {
+    scrollTo: (options) => {
+      rig.scrolls.push({ ...options });
+      rig.offset = options.y;
+      scrollView().props.onScroll({ nativeEvent: { contentOffset: { x: 0, y: options.y } } });
+    },
+  };
+  const box = () => ui.all('TextInput').find((node) => node.props.accessibilityLabel === label);
+  box().props.ref.current = { measureInWindow: (callback) => callback(16, headerHeight + boxTop - rig.offset, 358, rig.boxHeight) };
+  rig.box = box;
+  rig.bottomOnScreen = () => headerHeight + boxTop - rig.offset + rig.boxHeight;
+  return rig;
+}
+
+test('G2-A11Y-1: the focused text box is scrolled up so that its bottom edge is above the keyboard -- by exactly the hidden part', async () => {
+  const kb = fakeKeyboard();
+  const ui = await mount({ keyboard: kb });
+  const rig = keyboardRig(ui);
+  rig.box().props.onFocus();
+  assert.deepEqual(rig.scrolls, [], 'nothing moves before a keyboard is shown');
+  kb.show(500); // the keyboard covers the screen from y = 500 down
+  assert.equal(rig.scrolls.length, 1);
+  assert.equal(rig.scrolls[0].animated, true);
+  assert.equal(rig.bottomOnScreen(), 500 - 12, 'the bottom of the box now sits just above the keyboard (12 pt gap)');
+  kb.show(500);
+  assert.equal(rig.scrolls.length, 1, 'already visible: no further scroll');
+});
+
+test('G2-A11Y-1: typing more lines (the box grows) keeps it above the keyboard; growth inside its maximum height does not scroll again', async () => {
+  const kb = fakeKeyboard();
+  const ui = await mount({ keyboard: kb });
+  const rig = keyboardRig(ui, { boxTop: 200 });
+  rig.box().props.onFocus();
+  kb.show(500);
+  assert.deepEqual(rig.scrolls, [], 'the box is visible: nothing moves');
+  for (const height of [180, 220, 240]) { // the fifth line and later: the box grows up to its maximum height
+    rig.boxHeight = height;
+    await ui.typeText('一行目\n二行目\n三行目\n四行目\n五行目');
+    rig.box().props.onContentSizeChange({ nativeEvent: { contentSize: { width: 358, height } } });
+    assert.ok(rig.bottomOnScreen() <= 500 - 12, `height ${height}: the box stays above the keyboard`);
+  }
+  const scrollsAtMax = rig.scrolls.length;
+  assert.ok(scrollsAtMax >= 1, 'the growth was followed');
+  rig.box().props.onContentSizeChange({ nativeEvent: { contentSize: { width: 358, height: 600 } } }); // more text scrolls INSIDE the box (its frame stays 240)
+  assert.equal(rig.scrolls.length, scrollsAtMax, 'no scroll for text that scrolls inside the box');
+  assert.equal(ui.state().draft, '一行目\n二行目\n三行目\n四行目\n五行目', 'what was typed is kept');
+});
+
+test('G2-A11Y-1: a keyboard that changes its height (e.g. the Japanese candidate bar) is followed; a hidden keyboard and a box without focus move nothing', async () => {
+  const kb = fakeKeyboard();
+  const ui = await mount({ keyboard: kb });
+  const rig = keyboardRig(ui, { boxTop: 300 });
+  rig.box().props.onFocus();
+  kb.show(560);
+  assert.deepEqual(rig.scrolls, []);
+  kb.move(450); // the keyboard got taller
+  assert.equal(rig.scrolls.length, 1);
+  assert.equal(rig.bottomOnScreen(), 450 - 12);
+  rig.box().props.onBlur();
+  kb.move(300);
+  assert.equal(rig.scrolls.length, 1, 'no focus: nothing moves');
+  kb.hide();
+  rig.box().props.onFocus();
+  rig.boxHeight = 240;
+  rig.box().props.onContentSizeChange({ nativeEvent: { contentSize: { width: 358, height: 240 } } });
+  assert.equal(rig.scrolls.length, 1, 'no keyboard: nothing moves');
+});
+
+test('G2-A11Y-1: the box to re-type the earlier text (after a restart) is kept above the keyboard too', async () => {
+  const kb = fakeKeyboard();
+  const ui = await mount({ keyboard: kb, kv: deviceWith(RESTORED({ kind: 'pending' })) });
+  await ui.press('前回と同じ本文を入力して確認し直す');
+  const rig = keyboardRig(ui, { label: '前回と同じ本文の入力', boxTop: 720, boxHeight: 100 });
+  rig.box().props.onFocus();
+  kb.show(480);
+  assert.equal(rig.scrolls.length, 1);
+  assert.equal(rig.bottomOnScreen(), 480 - 12);
+  rig.boxHeight = 200; // more lines typed again
+  rig.box().props.onContentSizeChange({ nativeEvent: { contentSize: { width: 358, height: 200 } } });
+  assert.equal(rig.scrolls.length, 2, 'its growth is followed too');
+  assert.equal(rig.bottomOnScreen(), 480 - 12);
+});
+
+test('G2-A11Y-1: the keyboard listeners are removed with the screen; without a Keyboard module the screen works as before', async () => {
+  const kb = fakeKeyboard();
+  const ui = await mount({ keyboard: kb });
+  assert.equal(kb.count(), 3, 'shown, height changed, hidden');
+  ui.unmount();
+  assert.equal(kb.removed, 3);
+  assert.equal(kb.count(), 0);
+  const plain = await mount();
+  const box = plain.all('TextInput').find((node) => node.props.accessibilityLabel === '投稿の本文');
+  box.props.onFocus();
+  box.props.onContentSizeChange({ nativeEvent: { contentSize: { width: 358, height: 240 } } });
+  box.props.onBlur();
+  assert.equal(plain.state().phase, 'editing', 'no crash without a keyboard module or native refs');
+});
+
+test('G2-A11Y-1: after a text size change (the content is laid out again from its top) the next reveal starts from the new top', async () => {
+  const kb = fakeKeyboard();
+  const dims = fakeDimensions(1);
+  const ui = await mount({ keyboard: kb, dimensions: dims });
+  const rig = keyboardRig(ui);
+  rig.box().props.onFocus();
+  kb.show(500);
+  const first = rig.scrolls[0].y;
+  dims.setFontScale(2);
+  await ui.flush();
+  const again = keyboardRig(ui); // a new scroll view (new key): it starts at its top
+  again.box().props.onFocus();
+  kb.show(500);
+  assert.equal(again.scrolls[0].y, first, 'the same scroll target from the top, not added to the old offset');
+});
+
+test('G2-A11Y-1: a box that gets the focus while the keyboard is ALREADY up (moving from one box to another) is revealed at once', async () => {
+  const kb = fakeKeyboard();
+  const ui = await mount({ keyboard: kb });
+  const rig = keyboardRig(ui);
+  kb.show(500);
+  assert.deepEqual(rig.scrolls, [], 'a keyboard alone moves nothing');
+  rig.box().props.onFocus();
+  assert.equal(rig.scrolls.length, 1, 'the focus reveals the box');
+  assert.equal(rig.bottomOnScreen(), 500 - 12);
 });
