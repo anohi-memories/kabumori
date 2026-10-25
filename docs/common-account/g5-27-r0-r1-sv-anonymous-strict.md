@@ -5,6 +5,9 @@ Status: **isolated source candidate + local PG17 proof.**
 - Nothing applied anywhere; no managed or production connection (not even read-only).
 - It needs an independent Codex Sol (high) review before it counts. Production **NO_GO**.
 - It does not make PR #457 (independent review open) reviewed or passed.
+- **G5-28 revision** (task `common-account-g5-pr486-strict-shape-guard-p2-source-fix-20261025`, Issue #320 task 28): the P2 of H4's review of
+  PR #486 (Issue #331 comment 6378096499, CHANGES_REQUIRED at `24e6be5c`) is fixed. The shape guards now pin every attribute CREATE OR REPLACE
+  would reset (section 7). PR #486 stays as the review evidence; the fix is a separate Draft PR on top of it.
 
 - TASK `common-account-g5-personal-r0-r1-sv-anonymous-claim-d1-source-candidate-20261024` (Issue #320, G5-01 generation, task 27, completion K5).
 - Design: D1 of `docs/common-account/g5-26-personal-claim-workspace-if-contract.md` (PR #485).
@@ -98,3 +101,14 @@ Body mutants get their checksums recomputed, so each fails for the rule.
   - receipt / cancel after a stop;
   - old shared workspaces;
   - local / global sign-out.
+
+## 7. G5-28: the attribute baseline (H4 P2 on PR #486)
+
+| Item | Detail |
+| --- | --- |
+| The finding | The shape guards checked body, owner, definer, STABLE, settings and ACL, but **not** `proisstrict`. A function made STRICT before the install (or the rollback) was accepted, and CREATE OR REPLACE reset it to non-STRICT. That silently changed the NULL-argument behaviour: SQL NULL under STRICT became `FEATURE_NOT_ENABLED`. |
+| The fix | Every pre- and post-condition shape check of the candidate and the rollback now also requires the reviewed value of every attribute CREATE OR REPLACE would reset. The reviewed values were measured on the pinned world: not STRICT, not LEAKPROOF, PARALLEL UNSAFE (`u`), a plain function (`f`), not set-returning, COST 100, ROWS 0, no support function, the reviewed return type (R1 / R0 `jsonb`, SV `text`), language plpgsql, no argument defaults or modes, the reviewed argument names. The function bodies, their checksums and the declarations are unchanged. |
+| Why the post-checks stay | A post-condition cannot see a drift, because CREATE OR REPLACE has just reset the attributes. It stays as defence in depth. Its mutants are equivalent and are named in the mutation script, not counted. |
+| Tests [D] | 7 tests ×3. New in G5-28: **P2 before** (PR #486's own candidate `24e6be5c`, read with `git show`): a STRICT R1 is accepted by its install and reset; a STRICT SV is accepted by its rollback. **Drift refused**: STRICT on R1 / R0 / SV, PARALLEL SAFE on R0, COST 50 on SV and LEAKPROOF on R1 each refuse the install with that function's SHAPE code. Every body and attribute is left as it was (the drift stays visible). A STRICT SV after the install refuses the rollback the same way. The earlier 5 tests (60 answers: 12 change, 48 byte-identical) still pass; the shape comparison now includes every attribute. |
+| Mutations | 23 / 23: the 16 of G5-27, plus 7 for the attribute baseline (STRICT on each function before the install, PARALLEL, COST, LEAKPROOF, STRICT before the rollback) |
+| Not verified | managed (attributes as deployed), real consumers, production |

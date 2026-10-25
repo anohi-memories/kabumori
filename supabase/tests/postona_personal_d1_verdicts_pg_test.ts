@@ -40,7 +40,12 @@ async function sql(db: string, statement: string, user = owner): Promise<string>
 }
 const lit = (v: string) => `'${v.replaceAll("'", "''")}'`;
 const md5 = (db: string, fn: string) => sql(db, `select md5(prosrc) from pg_proc where oid = '${fn}'::regprocedure`);
-const shape = (db: string, fn: string) => sql(db, `select oid || '|' || proconfig::text || '|' || array_to_string(proacl::text[], ',') || '|' || provolatile::text || prosecdef::text from pg_proc where oid = '${fn}'::regprocedure`);
+// (G5-28) the shape includes every attribute CREATE OR REPLACE would reset (H4 P2 on PR #486)
+const shape = (db: string, fn: string) => sql(db, `select oid || '|' || proconfig::text || '|' || array_to_string(proacl::text[], ',') || '|' || provolatile::text || prosecdef::text
+  || '|' || proisstrict::text || proleakproof::text || proparallel::text || prokind::text || proretset::text || procost::text || prorows::text || prosupport::text
+  || prorettype::regtype::text || prolang::regproc::text || pronargdefaults::text || coalesce(proargnames::text, '-') from pg_proc where oid = '${fn}'::regprocedure`);
+const strictness = (db: string) => sql(db, `select string_agg(proisstrict::text || proparallel::text || procost::text || proleakproof::text, ',' order by oid::regprocedure::text) from pg_proc
+  where oid in ('${R1}'::regprocedure, '${R0}'::regprocedure, '${SV}'::regprocedure)`);
 
 type Claims = { style: 'json'; raw: string } | { style: 'legacy'; sub: string; role: string; session: string; anon?: string };
 function claimSql(c: Claims): string {
@@ -120,6 +125,40 @@ test_('refused installs leave the reviewed verdicts untouched: superuser, an API
   r = await run(REV, ['-f', env('S27_ROLLBACK')]);
   assert.ok(!r.ok && r.error.includes('D1_ROLLBACK_NOT_APPLIED'), r.error);
   await check('rollback where never applied');
+});
+
+// (G5-28) H4's P2 on PR #486's own candidate (24e6be5c): an attribute drift (here STRICT on R1) was accepted and silently reset
+const testP2 = enabled && env('S27_P2_CANDIDATE') !== '' ? test : test.skip;
+testP2('P2 before (PR #486 head 24e6be5c): a STRICT R1 is accepted by its install and reset to non-STRICT; a STRICT SV is accepted by its rollback', async () => {
+  await sql(REV, `alter function ${R1} strict`);
+  let r = await run(REV, ['-f', env('S27_P2_CANDIDATE')]);
+  assert.ok(r.ok, `P2: the install accepts the drift\n${r.error}`);
+  assert.equal(await sql(REV, `select proisstrict from pg_proc where oid = '${R1}'::regprocedure`), 'f', 'P2: the drift was silently reset');
+  await sql(REV, `alter function ${SV} strict`);
+  r = await run(REV, ['-f', env('S27_P2_ROLLBACK')]);
+  assert.ok(r.ok, `P2: the rollback accepts the drift\n${r.error}`);
+  assert.equal(await sql(REV, `select proisstrict from pg_proc where oid = '${SV}'::regprocedure`), 'f', 'P2: reset again');
+  for (const [k, fn] of Object.entries(FNS)) assert.equal(await md5(REV, fn), MD5[k as 'R1'][0], `${k}: back to the reviewed body`);
+});
+
+test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF) refuses the install and the rollback, and nothing changes -- body or attribute', async () => {
+  const drifts: Array<[string, string, string, string, string]> = [
+    ['R1 STRICT', `alter function ${R1} strict`, `alter function ${R1} called on null input`, 'D1_PRECONDITION_R1_SHAPE', owner],
+    ['R0 STRICT', `alter function ${R0} strict`, `alter function ${R0} called on null input`, 'D1_PRECONDITION_R0_SHAPE', owner],
+    ['SV STRICT', `alter function ${SV} strict`, `alter function ${SV} called on null input`, 'D1_PRECONDITION_SV_SHAPE', owner],
+    ['R0 PARALLEL SAFE', `alter function ${R0} parallel safe`, `alter function ${R0} parallel unsafe`, 'D1_PRECONDITION_R0_SHAPE', owner],
+    ['SV COST 50', `alter function ${SV} cost 50`, `alter function ${SV} cost 100`, 'D1_PRECONDITION_SV_SHAPE', owner],
+    ['R1 LEAKPROOF', `alter function ${R1} leakproof`, `alter function ${R1} not leakproof`, 'D1_PRECONDITION_R1_SHAPE', superUser],
+  ];
+  for (const [label, drift, undo, code, as] of drifts) {
+    await sql(REV, drift, as);
+    const shapes = Object.fromEntries(await Promise.all(Object.entries(FNS).map(async ([k, fn]) => [k, `${await md5(REV, fn)}|${await shape(REV, fn)}`])));
+    const r = await run(REV, ['-f', env('S27_CANDIDATE')]);
+    assert.ok(!r.ok && r.error.includes(code), `${label}\n${r.error}`);
+    for (const [k, fn] of Object.entries(FNS)) assert.equal(`${await md5(REV, fn)}|${await shape(REV, fn)}`, shapes[k], `${label}: ${k} untouched (the drift stays visible)`);
+    await sql(REV, undo, as);
+  }
+  assert.equal(await strictness(REV), 'falseu100false,falseu100false,falseu100false', 'every drift undone (booleans cast to text)');
 });
 
 test_('install: same OIDs, settings and ACLs, the expected bodies; no other G5 function changed; a second run refuses', async () => {
@@ -210,7 +249,14 @@ test_('PASS after: only the unproven claims change, to the existing AUTH_REQUIRE
 
 test_('rollback: the reviewed bodies byte for byte, same OIDs and ACLs; the missing claim is accepted again; a second rollback refuses; re-install works', async () => {
   const shapes = Object.fromEntries(await Promise.all(Object.entries(FNS).map(async ([k, fn]) => [k, await shape(D1, fn)])));
+  // (G5-28) a STRICT drift after the install refuses the rollback and changes nothing
+  await sql(D1, `alter function ${SV} strict`);
+  const sv = `${await md5(D1, SV)}|${await shape(D1, SV)}`;
   let r = await run(D1, ['-f', env('S27_ROLLBACK')]);
+  assert.ok(!r.ok && r.error.includes('D1_ROLLBACK_PRECONDITION_SV_SHAPE'), r.error);
+  assert.equal(`${await md5(D1, SV)}|${await shape(D1, SV)}`, sv, 'the D1 body and the drift both stay');
+  await sql(D1, `alter function ${SV} called on null input`);
+  r = await run(D1, ['-f', env('S27_ROLLBACK')]);
   assert.ok(r.ok, r.error);
   for (const [k, fn] of Object.entries(FNS)) {
     assert.equal(await md5(D1, fn), MD5[k as 'R1'][0], `${k}: the reviewed body`);

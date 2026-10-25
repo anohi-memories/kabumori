@@ -24,25 +24,34 @@ SIGS = {'R1': 'create or replace function public.common_account_authorization_ve
 LEG = "    v_anonymous := nullif(pg_catalog.current_setting('request.jwt.claim.is_anonymous', true), '');\n"
 JS = "      v_anonymous := case when pg_catalog.jsonb_typeof(v_claims -> 'is_anonymous') = 'boolean' then v_claims ->> 'is_anonymous' end;\n"
 
-# (label, file, old, new, occurrence index or None for "exactly once")
+# (label, file, old, new, occurrence index or None for "exactly once", how often the site occurs)
 M = []
 for i, k in enumerate(ORDER):
     M += [
         (f'{k}: a missing or empty per-claim setting counts as false', C, LEG,
-         "    v_anonymous := coalesce(nullif(pg_catalog.current_setting('request.jwt.claim.is_anonymous', true), ''), 'false');\n", i),
+         "    v_anonymous := coalesce(nullif(pg_catalog.current_setting('request.jwt.claim.is_anonymous', true), ''), 'false');\n", i, 3),
         (f'{k}: a missing or null JSON claim counts as false', C, JS,
-         "      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'false');\n", i),
-        (f'{k}: the JSON type is not checked', C, JS, "      v_anonymous := v_claims ->> 'is_anonymous';\n", i),
+         "      v_anonymous := coalesce(nullif((v_claims -> 'is_anonymous')::text, 'null'), 'false');\n", i, 3),
+        (f'{k}: the JSON type is not checked', C, JS, "      v_anonymous := v_claims ->> 'is_anonymous';\n", i, 3),
     ]
 M += [
-    ('the R0 body is not checked before the install', C, "    raise exception 'D1_PRECONDITION_R0_BODY_NOT_REVIEWED';", "    null;", None),
-    ('the R0 shape is not checked', C, "    raise exception 'D1_PRECONDITION_R0_SHAPE';", "    null;", None),
-    ('the SV shape is not checked', C, "    raise exception 'D1_PRECONDITION_SV_SHAPE';", "    null;", None),
-    ('the R1 shape is not checked', C, "    raise exception 'D1_PRECONDITION_R1_SHAPE';", "    null;", None),
-    ('a second install is not refused (R1)', C, "    raise exception 'D1_ALREADY_APPLIED';", "    null;", 0),
-    ('the superuser check is gone', C, "    raise exception 'D1_PRECONDITION_OWNER_IS_SUPERUSER';", "    null;", None),
+    ('the R0 body is not checked before the install', C, "    raise exception 'D1_PRECONDITION_R0_BODY_NOT_REVIEWED';", "    null;", None, 1),
+    ('the R0 shape is not checked', C, "    raise exception 'D1_PRECONDITION_R0_SHAPE';", "    null;", None, 1),
+    ('the SV shape is not checked', C, "    raise exception 'D1_PRECONDITION_SV_SHAPE';", "    null;", None, 1),
+    ('the R1 shape is not checked', C, "    raise exception 'D1_PRECONDITION_R1_SHAPE';", "    null;", None, 1),
+    ('a second install is not refused (R1)', C, "    raise exception 'D1_ALREADY_APPLIED';", "    null;", 0, 3),
+    ('the superuser check is gone', C, "    raise exception 'D1_PRECONDITION_OWNER_IS_SUPERUSER';", "    null;", None, 1),
     ('the rollback restores a different SV body', RB, "  return case f_session_state when 'active' then 'active'",
-     "  -- edited\n  return case f_session_state when 'active' then 'active'", None),
+     "  -- edited\n  return case f_session_state when 'active' then 'active'", None, 1),
+    # ---- (G5-28, H4 P2 on PR #486) the attribute baseline before the install / the rollback (pre blocks are occurrences 0..2: R1, R0, SV; the
+    # post blocks 3..5 cannot see a drift -- CREATE OR REPLACE has just reset every attribute -- so mutating them is equivalent and left out)
+    ('R1: a STRICT drift is accepted by the install', C, 'and not p.proisstrict and not p.proleakproof', 'and not p.proleakproof', 0, 6),
+    ('R0: a STRICT drift is accepted by the install', C, 'and not p.proisstrict and not p.proleakproof', 'and not p.proleakproof', 1, 6),
+    ('SV: a STRICT drift is accepted by the install', C, 'and not p.proisstrict and not p.proleakproof', 'and not p.proleakproof', 2, 6),
+    ('R0: a PARALLEL drift is accepted by the install', C, "p.proparallel = 'u'", 'true', 1, 6),
+    ('SV: a COST drift is accepted by the install', C, 'p.procost = 100', 'true', 2, 6),
+    ('R1: a LEAKPROOF drift is accepted by the install', C, 'and not p.proleakproof and', 'and', 0, 6),
+    ('SV: a STRICT drift is accepted by the rollback', RB, 'and not p.proisstrict and not p.proleakproof', 'and not p.proleakproof', 2, 6),
 ]
 
 
@@ -92,13 +101,13 @@ if control != 0:
     sys.exit(1)
 detected = 0
 invalid = 0
-for label, target, old, new, nth in M:
+for label, target, old, new, nth, expected in M:
     root = fresh_copy()
     try:
         path = os.path.join(root, target)
         text = open(path, encoding='utf-8').read()
         count = text.count(old)
-        if (nth is None and count != 1) or (nth is not None and count != 3):
+        if count != expected:
             print(f'INVALID   {label}: the site occurs {count} times', flush=True)
             invalid += 1
             continue

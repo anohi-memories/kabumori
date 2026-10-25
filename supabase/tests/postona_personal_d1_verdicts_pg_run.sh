@@ -44,6 +44,13 @@ for pair in "001_authorization_verdict.sql 6e4ebfc4eb19807b8b0a493c8169313d66c9a
   [ "$(git hash-object "$v/$1")" = "$2" ] || { echo "Pinned blob differs: $1" >&2; exit 2; }
 done
 m="$tree/supabase/migrations"; t="$tree/supabase/tests"
+# (G5-28) PR #486's own candidate at its reviewed head, to reproduce H4's P2 (attribute drift accepted); skipped without .git (mutation runs)
+p2=24e6be5c6616564955d5f55b9ca7096bc7ab6b0d; p2_c=""; p2_r=""
+if [ -z "${S27_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "$p2^{commit}" 2>/dev/null; then
+  git -C "$repo" show "$p2:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict.sql" > "$work/p2_candidate.sql"
+  git -C "$repo" show "$p2:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict_rollback.sql" > "$work/p2_rollback.sql"
+  p2_c="$work/p2_candidate.sql"; p2_r="$work/p2_rollback.sql"
+fi
 
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
@@ -81,11 +88,14 @@ for w in d1 rev; do
   own -f "$v/003_session_verdict.sql" >/dev/null
 done
 if [ -n "${S27_BUILD_ONLY:-}" ]; then
-  psql -X -q -A -t -h "$host" -p "$port" -U "$owner" -d "${prefix}_rev" -c "select p.oid::regprocedure, p.proconfig, md5(p.prosrc), array_to_string(p.proacl::text[], ',') from pg_proc p
+  psql -X -q -A -t -h "$host" -p "$port" -U "$owner" -d "${prefix}_rev" -c "select p.oid::regprocedure, p.proconfig, md5(p.prosrc), array_to_string(p.proacl::text[], ','),
+    p.proisstrict, p.proleakproof, p.proparallel, p.prokind, p.proretset, p.procost, p.prorows, p.prosupport, p.prorettype::regtype, l.lanname, p.provolatile, p.prosecdef,
+    p.proargnames, p.proargmodes, p.pronargdefaults from pg_proc p join pg_language l on l.oid = p.prolang
     where p.oid in ('public.common_account_authorization_verdict(text,text,text)'::regprocedure, 'public.common_account_bootstrap_verdict(text,text)'::regprocedure,
                     'private.account_lifecycle_session_verdict()'::regprocedure)"
   exit 0
 fi
 ( cd "$repo" && CAL_E2E=1 S27_CANDIDATE="$cand/002_verdicts_anonymous_strict.sql" S27_ROLLBACK="$cand/002_verdicts_anonymous_strict_rollback.sql" \
+    S27_P2_CANDIDATE="$p2_c" S27_P2_ROLLBACK="$p2_r" \
     S27_OWNER="$owner" S27_DB="${prefix}_d1" S27_REV="${prefix}_rev" PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_d1_verdicts_pg_test.ts" )
