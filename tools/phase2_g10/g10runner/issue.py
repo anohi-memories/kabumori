@@ -251,12 +251,8 @@ def mock_issue_path(root):
 
 
 def spawn_witness(root, policy):
-    """実行側（スタブ）が起動直前に使う取得係。偽Claudeのアダプタのときだけ、試験用の模擬（ファイル）と
-    試験用の witness 鍵で作る。実際の GitHub からの取得は未実装（None＝起動しない）。"""
-    if policy.get("adapter") != "fake":
-        return None
-    from . import signing
-    keys = signing.load_test_keys(root)
-    if "witness" not in keys:
-        return None
-    return IssueWitness(FileIssueSource(mock_issue_path(root)), signing.HmacTestSigner({"witness": keys["witness"]}))
+    """実行側（スタブ）が起動直前に使う取得係。偽Claudeのアダプタのときだけ作る（それ以外は None＝起動しない）。
+    TASK 15: 組み立ては wiring.spawn_witness（wiring.json が無ければ従来どおり、試験用の模擬（ファイル）と
+    試験用の witness 鍵）。実際の GitHub からの取得は未実装。"""
+    from . import wiring
+    return wiring.spawn_witness(root, policy)

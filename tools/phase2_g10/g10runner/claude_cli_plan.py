@@ -8,6 +8,14 @@
 - プロンプト（TASK 本文）は argv に入れず、標準入力から渡す（ps で他のユーザーから見えないように）。
 - フラグ名（-p・--output-format・--model・--session-id・--settings・--max-turns 等）は公開の資料に基づく想定で、
   この版（2.1.305 とみられる）での実際の受け付け・modelUsage の形・予算の上限の効き方は実機で未検証（NOT_VERIFIED）。
+- TASK 15（何も実行しない）:
+  - consistent_with_fake(): 実 CLI の計画と偽Claude のコマンドが、同じ要求の値（model・session・settings・出力形式・
+    プロンプトの出どころ）を使うことを確かめる。偽Claude で試した経路と、実 CLI の計画がずれないようにする。
+  - describe(): 記録・REPORT 用の表示。HOME を <HOME> に伏せ、token に見える値があれば表示を作らない（ValueError）。
+  - prelaunch_check(): 起動するなら直前に行う再検証。起動待ちがちょうど1件（ACCEPTED→SPAWNING。二重起動の防止）・
+    CLI の実体と版が固定したものと同じ・計画が承認済みの要求から作り直したものと完全に同じ・環境変数が許可リストだけ。
+    確認と実行の間に CLI がすり替わる可能性（実行は記述子経由にする等）・実 CLI の停止（子プロセス・シグナル）・
+    timeout の効き方は未検証（NOT_VERIFIED）。偽Claude の停止・timeout・HALT はスタブと S1/S2 が試験済み。
 """
 import os
 import re
@@ -16,6 +24,8 @@ import shutil
 ENV_ALLOWLIST = ("PATH", "LANG", "HOME")
 FORBIDDEN_ENV = re.compile(r"ANTHROPIC|CLAUDE_CODE_USE_|AWS_|GOOGLE_|VERTEX|TOKEN|SECRET|PASSWORD|API_KEY", re.I)
 VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
+SECRET_LIKE = re.compile(r"(ghp_|gho_|ghs_|ghu_|github_pat_|sk-ant-)[A-Za-z0-9_-]{8,}")
+SHARED_OPTIONS = ("--model", "--session-id", "--settings", "--output-format")
 
 
 def probe(path_env=None):
@@ -54,3 +64,67 @@ def check_env(env):
     if extra or bad:
         raise ValueError("environment not allowed: %s" % sorted(extra | set(bad)))
     return True
+
+
+def _option(argv, name):
+    """name がちょうど1回あり、値が続くならその値。そうでなければ None。"""
+    if argv.count(name) != 1:
+        return None
+    i = argv.index(name)
+    return argv[i + 1] if i + 1 < len(argv) else None
+
+
+def consistent_with_fake(plan, fake_argv):
+    """実 CLI の計画と偽Claude のコマンドの違いの一覧（空＝一致）。"""
+    problems = []
+    for name in SHARED_OPTIONS:
+        a, b = _option(plan["argv"], name), _option(fake_argv, name)
+        if a is None or b is None:
+            problems.append("%s must appear exactly once in both" % name)
+        elif a != b:
+            problems.append("%s differs" % name)
+    if "--prompt-file" in plan["argv"]:
+        problems.append("the real CLI plan must read the prompt from stdin, not argv")
+    if _option(fake_argv, "--prompt-file") != plan.get("stdin_path"):
+        problems.append("prompt source differs")
+    return problems
+
+
+def describe(plan):
+    """記録・REPORT 用の表示（伏せ字）。token に見える値があれば ValueError（表示を作らない）。"""
+    home = plan["env"].get("HOME")
+
+    def red(value):
+        if SECRET_LIKE.search(value):
+            raise ValueError("plan contains a secret-like value")
+        return value.replace(home, "<HOME>") if home else value
+    return {"argv": [red(a) for a in plan["argv"]], "env": {k: red(v) for k, v in sorted(plan["env"].items())},
+            "stdin_path": red(plan["stdin_path"]), "dry_run": True}
+
+
+def prelaunch_check(plan, request, prompt_path, settings_path, home, pinned, used_states, probe_fn=probe,
+                    max_turns=30):
+    """起動するなら直前に行う再検証（実行しない）。問題があれば理由（文字列）、なければ None。
+
+    pinned: {"realpath": CLI の実体の絶対パス, "version": 版}（人が確認して固定したもの）。
+    used_states: このランの used_requests の状態の列（ちょうど ACCEPTED→SPAWNING のときだけ起動してよい）。
+    max_turns: 承認済みの上限（計画に書かれた値は信用しない）。"""
+    if used_states != ["ACCEPTED", "SPAWNING"]:
+        return "not exactly one pending launch (at-most-once)"
+    found = probe_fn()
+    if not found.get("found") or not found.get("executable"):
+        return "claude CLI not found or not executable"
+    if found.get("realpath") != pinned.get("realpath") or found.get("version_from_path") != pinned.get("version"):
+        return "claude CLI changed since it was pinned"
+    try:  # 固定した CLI の実体と承認済みの値（計画の中の値ではない）から作り直し、計画と完全に同じであること
+        fresh = build_plan(pinned["realpath"], request, prompt_path, settings_path, home, max_turns)
+    except ValueError as exc:
+        return "plan cannot be rebuilt from the approved request: %s" % exc
+    if fresh != plan:
+        return "plan differs from the approved request"
+    try:
+        check_env(plan["env"])
+        describe(plan)
+    except ValueError as exc:
+        return str(exc)
+    return None

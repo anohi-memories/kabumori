@@ -10,7 +10,6 @@ S1 の確認間隔を長くし、スタブの最終判定だけで起動が止�
 """
 import json
 import os
-import threading
 import time
 
 from g10runner import registry
@@ -68,26 +67,23 @@ class HaltDuringFetch(DelayedFetchBase):
     def test_hard_halt_during_delayed_fetch(self):
         run_id, stub = self.start()
         time.sleep(self.fetch_delay - 0.8)  # 再取得の終わり近くで HALT（フラグが先に立つ）
-        t = threading.Thread(target=lambda: self.env.control.halt("hard", "during fetch", wait_sync=0.5))
-        t.start()
+        t = self.start_control_thread(lambda: self.env.control.halt("hard", "during fetch", wait_sync=0.5))
         self.assert_not_spawned(run_id, stub, "halted")
-        t.join(timeout=30)
+        self.join_control_thread(t)
 
     def test_soft_halt_during_delayed_fetch(self):
         run_id, stub = self.start()
         time.sleep(self.fetch_delay - 0.8)
-        t = threading.Thread(target=lambda: self.env.control.halt("soft", "during fetch", wait_sync=0))
-        t.start()
+        t = self.start_control_thread(lambda: self.env.control.halt("soft", "during fetch", wait_sync=0))
         self.assert_not_spawned(run_id, stub, "halted")
-        t.join(timeout=30)
+        self.join_control_thread(t)
 
     def test_stop_during_delayed_fetch(self):
         run_id, stub = self.start()
         time.sleep(self.fetch_delay - 0.8)
-        t = threading.Thread(target=self.env.control.stop_on)
-        t.start()
+        t = self.start_control_thread(self.env.control.stop_on)
         self.assert_not_spawned(run_id, stub, "stopped")
-        t.join(timeout=30)
+        self.join_control_thread(t)
 
 
 class ExpiryDuringFetch(DelayedFetchBase):
@@ -118,10 +114,9 @@ class StoppedThenRecovery(DelayedFetchBase):
     def test_no_spawn_after_recovery_or_second_stub(self):
         run_id, stub = self.start()
         time.sleep(self.fetch_delay - 0.8)
-        t = threading.Thread(target=lambda: self.env.control.halt("soft", "during fetch", wait_sync=0))
-        t.start()
+        t = self.start_control_thread(lambda: self.env.control.halt("soft", "during fetch", wait_sync=0))
         self.assert_not_spawned(run_id, stub, "halted")
-        t.join(timeout=30)
+        self.join_control_thread(t)
         self.assertEqual(self.env.agent.recover(), [])  # ABORTED 済み: 復旧で何もしない（再実行しない）
         stub2 = self.env.agent.spawn_stub(run_id)  # 二度目のスタブ起動
         self.assertEqual(stub2.wait(timeout=30), 3)

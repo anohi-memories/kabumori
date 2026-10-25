@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import policy as policy_mod, signing, supervise  # noqa: E402
+from g10runner import policy as policy_mod, supervise, wiring  # noqa: E402
 from g10runner.agent import Agent  # noqa: E402
 from g10runner.layout import Layout  # noqa: E402
 
@@ -19,7 +19,7 @@ def main():
     a = p.parse_args()
     layout = Layout(a.root)
     policy = policy_mod.load(layout.policy_pub)
-    signer, verifier = signing.agent_side(a.root)
+    signer, verifier = wiring.agent_side(a.root)
     agent = Agent(layout, signer, verifier, policy)
     if a.once:
         supervise.write_s2_heartbeat(layout)

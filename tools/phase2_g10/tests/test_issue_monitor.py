@@ -1,7 +1,6 @@
 """TASK 7 の個別試験: 実行中の Issue 監督（S1 の別スレッド・S2 の予備）、取消・HALT の優先、監査記録、誤停止しないこと。"""
 import json
 import os
-import threading
 import time
 import unittest
 from unittest import mock
@@ -126,7 +125,7 @@ class Priority(Base):
     def test_hard_halt_is_not_delayed_by_a_slow_monitor_fetch(self):
         run_id, body = self.slow_monitor()
         t0 = time.time()
-        threading.Thread(target=lambda: self.env.control.halt("hard", "x", wait_sync=0)).start()
+        self.start_control_thread(lambda: self.env.control.halt("hard", "x", wait_sync=0))
         e = self.wait_state(run_id, timeout=5)
         self.assertEqual(e["stop_reason"], "emergency_stop")
         self.assertLess(time.time() - t0, 1.2, "hard HALT waited for the slow Issue fetch")

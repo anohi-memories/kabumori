@@ -228,8 +228,8 @@ class Control:
         # H4 P1: Issue #323 を新しく取得し、現役TASKの本文と完全に同じであることを確認する（fail-closed）
         if self.witness is None:
             return None, "no issue witness (cannot fetch Issue #323)"
-        try:
-            evidence = self.witness.observe()
+        try:  # TASK 15: 打ち切り時間を渡す（実際の取得元は打ち切り時間の無い取得を拒否する。結線 E2E で発見）
+            evidence = self.witness.observe(timeout=policy_mod.timing(self.policy, "issue_fetch_timeout"))
         except Exception as exc:  # 取得の失敗は種類を問わず起動しない
             return None, "issue fetch failed: %s" % type(exc).__name__
         problem = issue_mod.check_evidence(evidence, self.verifier, body, local_now,

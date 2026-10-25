@@ -254,11 +254,49 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
   その記述子を /dev/fd 経由で openssl に渡す（確認と使用の間にすり替わらない）。シンボリックリンク・別の鍵への置き換え・権限の緩みは拒否。
 - 同じユーザーの権限を持つ者がフォルダの中を書き換えることは防げない（信頼の範囲。専用ユーザーの分離は F0）。
 
+### 9. TASK 15（監督付き自動起動のオフライン結線。`g10runner/wiring.py`）
+- ルートに `wiring.json`（自分の所有・他人が書けない通常ファイル・厳密なキー）があるときだけ結線する。無ければ従来どおり（動作は不変）。
+  偽Claude 以外のアダプタでは取得係を作らない。スタブ・S1・S2 の入口は `wiring.agent_side`／`issue.spawn_witness`（→ `wiring.spawn_witness`）を通る。
+- 結線した経路（`tests/test_task15_wired_e2e.py` で1つの fixture で通しを確認）: GraphQL の取得元（`FixtureOpener`＝ネットワークに触れない・
+  形だけの `FIXTURE_TOKEN` 以外は拒否）→ 編集者／本文の証拠（witness の ECDSA 署名）→ 共有台帳の予約 → CLAIM → 受理 → 起動直前の再取得
+  （別プロセスのスタブ）→ 署名の検証 → 偽Claude → S1 の監督（別プロセス・同じ台帳）→ finalize → REPORT の候補。
+  取得元の失敗・本文の変更・回数不足（台帳・サーバの 429）・作成者／編集者／Issue 番号／リポジトリの差し替え・CLOSED・再送・二重起動・
+  漏れた HMAC 鍵で署名した要求・取消・実行中の本文変更・実行中の回数不足は、すべて起動しない／止める。
+- 署名の段階的切替: `hmac → dual → ecdsa` を1段ずつ（`mode_transition_allowed`）。dual は ECDSA で署名し両方を検証、ecdsa は HMAC を
+  受け付けず、HMAC の鍵ファイルが残っていればどの組み立ても拒否する。HMAC の記録が残る記録簿は ecdsa では検証に失敗して止まる
+  （ecdsa へ進む前に記録簿を新しくする）。実行側が持てるのは agent の秘密鍵と4役割の公開鍵だけ（runner・human の秘密鍵は設定不可）。
+  証拠の目的・nonce・有効時間・使い回しの拒否は ECDSA でも同じに効く（`tests/test_task15_boundaries.py`）。
+- 台帳の上限: `ledger_allowance` が、Phase 1 の監視（120秒ごと＝30点/時）と G10 の最悪の見積もりの合計を主体の予算（5000点×0.5）で確かめ、
+  G10 の台帳に許す回数（(2500−30)÷2＝1235回/時）を超える設定を拒否する。監督の間隔 0.5 秒の方針は組み立て自体を拒否する（5秒は可）。
+- Claude CLI の計画（実行しない）: `consistent_with_fake`（偽Claude と同じ model・session・settings・出力形式・プロンプトの出どころ）、
+  `describe`（HOME の伏せ字・token に見える値の拒否）、`prelaunch_check`（起動待ちがちょうど1件・CLI の実体と版が固定値どおり・
+  承認済みの値から作り直した計画と完全一致・環境変数の許可リスト）。
+- 結線 E2E で見つけて直した欠陥: CLAIM 時の取得に打ち切り時間を渡していなかった（実際の取得元では CLAIM が必ず失敗、打ち切りの無い
+  取得元なら止まらない）。`Control.try_claim` が `issue_fetch_timeout` を渡すようにした。
+- 試験の後片付け: 遅延 HALT などの制御スレッドは `EnvTestCase.start_control_thread` で始め、一時フォルダの削除より前に終了を待つ。
+  終わらなければ失敗にして一時フォルダを残す（消すと同じパスに作り直されるため）。スレッド内の例外も失敗にする。
+- 未結線・未検証のまま: 実 GitHub への接続（認証つき GET／GraphQL は禁止のため fixture のみ）、別ユーザーの取得係（今は偽Claude の試験で
+  実行側の中に作る）、別 UID 間での台帳の共有（今の台帳は「自分の所有のフォルダ」が条件で、別ユーザーとは共有できない。実運用では
+  取得をすべて取得係のプロセスに集め、台帳はそこだけが持つ設計が必要）、実鍵の生成・配置、実 CLI の実行（記述子経由の実行・子プロセスの停止）。
+
+### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
+1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
+   `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。
+2. 取得係の分離: 取得係を別プロセス・別ユーザーにし、CLAIM・起動直前・監督・finalize の取得をそこへ集める（台帳も取得係だけが持つ）。
+3. 鍵: 役割ごとの ECDSA 鍵を各ユーザーで生成（runner・human は制御側、agent は実行側、witness は取得係）→ 公開鍵を配る →
+   `hmac → dual` → 記録簿を新しくして `ecdsa` → `test_keys.json` を消す。
+4. OS の役割: 専用 macOS ユーザー・フォルダの所有と ACL → S2 の launchd（`render_validated` の plist を人が `launchctl bootstrap`）→
+   停止手順（bootout・ハードHALT）を実際に確認。
+5. Claude CLI: 専用ユーザー用に CLI を配置し版を固定 → そのユーザーで Max にログイン → F0a／F0b の極小の実行 → 実アダプタ
+   （明示の設定でのみ有効・`prelaunch_check` を起動直前に必ず通す・記述子経由の実行）と、modelUsage・予算・停止の実機確認。
+6. 下の GO チェックリストを人が1つずつ確認し、監督付きで1回だけ起動する。
+
 ### 7. 実 Claude の初回起動の前提（すべて未了）と、人が確認する GO チェックリスト
 前提（各項目に独立レビューの PASS とユーザーの承認が必要）:
 1. 読み取り専用 token の用意と、上の検証計画 1〜6 の実施（編集者の根拠・本文の一致・点数）
-2. 取得元（GraphQL）と共有台帳を、起動直前・実行中の監督・finalize に結線する別TASK
-3. 非対称署名への切り替えと鍵の配置（runner・witness・human・agent を分離）
+2. 取得元（GraphQL）と共有台帳を、起動直前・実行中の監督・finalize に結線する別TASK（TASK 15 でオフライン・fixture の結線は済み。
+   実接続・別ユーザーの取得係は未了）
+3. 非対称署名への切り替えと鍵の配置（runner・witness・human・agent を分離）（TASK 15 で切替の仕組みはオフラインで確認済み。実鍵は未了）
 4. F0（専用ユーザー・ACL・Claude CLI の配置・専用ユーザーでのログイン・F0a／F0b の極小の実行）
 5. 実 Claude のアダプタ（明示の設定でのみ有効）と、modelUsage・予算・停止の実機確認
 GO チェックリスト（初回の監督付き起動の直前に、人が1つずつ確認する）:
@@ -273,7 +311,7 @@ GO チェックリスト（初回の監督付き起動の直前に、人が1つ�
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。
-- 実際の非対称署名（Ed25519／ECDSA と `openssl`）・人の鍵のパスフレーズ・鍵の保管（試験用 HMAC のみ）。
+- 実際の非対称署名の実運用（ECDSA は TASK 15 で wiring.json によりオフラインで結線できるが、既定は試験用 HMAC）・人の鍵のパスフレーズ・鍵の保管。
 - 専用macOSユーザー・ACL・Seatbelt・launchd（KeepAlive）・別UID間の `flock`・別UIDのプロセスの `ps` 列挙・F0。
 - GitHub からの Issue の取得と HTTP `Date` ヘッダ（呼び出し側が本文・メタ情報・参照時刻を渡す形。Phase 1 の取得コードとは未接続）。
 - 作業フォルダの実際の `git` 取得（偽の作業フォルダのみ）。

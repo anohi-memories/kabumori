@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from . import adapter as adapter_mod, binding, ifaces, issue as issue_mod, policy as policy_mod, procs, registry, signing, state, supervise
+from . import adapter as adapter_mod, binding, ifaces, issue as issue_mod, policy as policy_mod, procs, registry, state, supervise, wiring
 from .agent import Agent
 from .chainlog import ChainError
 from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
@@ -102,7 +102,10 @@ def final_check(agent, layout, req, policy):
         return "used_requests state is not ACCEPTED-only"
     # TASK 5: ACCEPTED 後・起動直前に Issue #323 を再取得し、CLAIM 時から state・本文・世代が変わっていないこと。
     # CLAIM 時の（最大120秒前の）証拠は、起動時の最新性の証明として扱わない。取得の失敗・遅れも起動しない。
-    witness = issue_mod.spawn_witness(layout.root, policy)
+    try:
+        witness = issue_mod.spawn_witness(layout.root, policy)
+    except Exception as exc:  # TASK 15: 取得係を組み立てられない（設定・鍵・台帳の不備）なら起動しない
+        return "issue witness unavailable at spawn: %s" % type(exc).__name__
     if witness is None:
         return "no spawn-time issue witness (real GitHub fetch is not implemented)"
     nonce = issue_mod.spawn_nonce(req, accepted[0]["event_id"])
@@ -128,7 +131,7 @@ def final_check(agent, layout, req, policy):
 def run(root, run_id):
     layout = Layout(root)
     policy = policy_mod.load(layout.policy_pub)
-    signer, verifier = signing.agent_side(root)
+    signer, verifier = wiring.agent_side(root)
     agent = Agent(layout, signer, verifier, policy)
     run_dir = layout.run_dir(run_id)
     hooks = _hooks(run_dir, policy)

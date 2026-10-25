@@ -4,6 +4,7 @@ import os
 import shutil
 import stat
 import tempfile
+import threading
 import time
 import unittest
 
@@ -188,18 +189,51 @@ class Env:
         params.update(overrides)
         return self.control.approve_envelope(params)
 
+    keep_tmp = None  # 止まらない制御スレッドが残ったときの理由（一時フォルダを消さずに残す）
+
     def cleanup(self):
         kill_leftovers(self.layout)
+        if self.keep_tmp:
+            # TASK 15: まだ動いているスレッドがあるのに消すと、そのスレッドが同じパスに中途半端なフォルダを作り直す。
+            # 消さずに残し、試験の失敗として見えるようにする（停止不能を隠さない）。
+            return
         make_writable(self.tmp)
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 
 class EnvTestCase(unittest.TestCase):
     policy_overrides = {}
+    control_thread_join_timeout = 30.0
 
     def setUp(self):
         self.env = Env(policy=test_policy(**self.policy_overrides))
         self.addCleanup(self.env.cleanup)
+
+    # --- 制御側（HALT・STOP など）を別スレッドで動かす試験の後片付け（TASK 15） ---
+    def start_control_thread(self, target):
+        """target を別スレッドで始める。終了待ちを後片付けに登録する（後に登録したものから先に動くので、
+        一時フォルダの削除（env.cleanup）より前に、必ずスレッドの終了を待つ）。スレッド内の例外も失敗にする。"""
+        errors = []
+
+        def run():
+            try:
+                target()
+            except BaseException as exc:  # 試験の失敗として後で再送出する
+                errors.append(exc)
+        t = threading.Thread(target=run, name="g10-control-thread", daemon=True)
+        t.errors = errors
+        t.start()
+        self.addCleanup(self.join_control_thread, t)
+        return t
+
+    def join_control_thread(self, t, timeout=None):
+        """スレッドの終了を待つ（何度呼んでもよい）。終わらなければ一時フォルダを残して失敗にする。"""
+        t.join(self.control_thread_join_timeout if timeout is None else timeout)
+        if t.is_alive():
+            self.env.keep_tmp = "control thread still running"
+            raise AssertionError("a control thread did not finish; temp dir kept at %s" % self.env.tmp)
+        if t.errors:
+            raise t.errors[0]
 
     def claim_and_run(self, scenario=None, hooks=None, body=None, wait=True, timeout=30, **body_kw):
         env = self.env
