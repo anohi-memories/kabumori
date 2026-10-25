@@ -191,12 +191,18 @@ export function useXConnect(onConnected?: () => void) {
 
   // The caller's own X connection only (the RPC derives everything from the forwarded JWT; no ids are sent).
   // Server side it stays refused (X_DISCONNECT_NOT_ENABLED -> terminal_error) until the operator opens its gate.
+  // As connect (G4-18): a screen left over from another person disconnects nothing.
   const disconnect = useCallback(async () => {
     if (inFlight.current) return;
     inFlight.current = true;
     setState('disconnecting');
     try {
       if (!supabase || !session?.access_token) throw new Error('AUTH_SESSION_UNAVAILABLE');
+      const current = await currentSession();
+      if (!current || current.user.id !== session.user.id) {
+        setState('session_changed');
+        return;
+      }
       const { error, status } = await supabase.rpc('disconnect_social_mobile_x_connection');
       if (error) {
         setState(FAILURE_STATE[classifyXDisconnectFailure(error.message, status)]);
