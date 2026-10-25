@@ -1,7 +1,7 @@
 /**
  * TEST FIXTURE -- PostgreSQL ports over candidate 007 for the disposable-PG17 runs only (G3 Issue #318 TASK 3/50).
  * Imported by no product code. One call = one connection = one READ COMMITTED transaction:
- *   person  (postona_resv_api):    request.jwt.claims = { sub, role: authenticated, session_id } of the MOCK verdict
+ *   person  (postona_resv_api):    request.jwt.claims = { sub, role: authenticated, session_id, is_anonymous: false } of the MOCK verdict
  *   worker  (postona_resv_worker): the four dispatcher functions
  * A refusal raised by 007 (POSTONA_*) is answered { ok: false, code }; anything after the call (a lost COMMIT) THROWS so
  * the caller treats the outcome as unknown. `hooks` let a test lose the answer before or after the COMMIT on purpose.
@@ -31,7 +31,7 @@ export function createPgPersonStore(url: string, hooks: { beforeCommit?: () => P
       try {
         await c.queryArray("BEGIN ISOLATION LEVEL READ COMMITTED");
         await c.queryArray("SET LOCAL ROLE postona_resv_api");
-        await c.queryArray({ text: "SELECT set_config('request.jwt.claims', $1, true)", args: [JSON.stringify({ sub: caller.userId, role: "authenticated", session_id: caller.sessionId })] });
+        await c.queryArray({ text: "SELECT set_config('request.jwt.claims', $1, true)", args: [JSON.stringify({ sub: caller.userId, role: "authenticated", session_id: caller.sessionId, is_anonymous: false })] });
         const result = await c.queryObject<Record<string, unknown>>({ text: PERSON_SQL[fn], args: args.map((v) => (v === null || v === undefined ? null : String(v))) });
         phase = "after";
         if (hooks.beforeCommit) await hooks.beforeCommit();

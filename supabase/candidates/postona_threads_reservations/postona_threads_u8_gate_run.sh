@@ -117,6 +117,11 @@ xfp() { val -c "select md5(coalesce(string_agg(p.oid::regprocedure::text || ':' 
   from pg_proc p where p.pronamespace = 'postona_x_resv'::regnamespace"; }
 FPX="$(xfp)"
 echo "BASELINE_001_006_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$resv/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # 3. The owners' candidates, in their dependency order (every refusal before its prerequisite is checked)
 refuse "$oe" OWNER_EPOCH_PRECONDITION_API_ROLE_CAN_CREATE_MEMBERSHIP_TRIGGERS "S0 #303 before #370"

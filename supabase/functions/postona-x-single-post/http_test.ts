@@ -25,7 +25,7 @@ test("behind the gate: configuration required; oversized bodies refused; no G4 s
   assert.equal(big.status, 413);
   const body = JSON.stringify({ socialAccountId: "sa_x", clientRequestId: "55555555-5555-4555-8555-555555555555", text: "t", consent: { confirmed: true, contentSha256: "a".repeat(64) } });
   const b64 = (v: unknown) => btoa(JSON.stringify(v)).replace(/=+$/u, "");
-  const tokenWithSession = `${b64({ alg: "HS256" })}.${b64({ sub: "11111111-1111-4111-8111-111111111111", session_id: "22222222-2222-4222-8222-222222222222" })}.sig`;
+  const tokenWithSession = `${b64({ alg: "HS256" })}.${b64({ sub: "11111111-1111-4111-8111-111111111111", session_id: "22222222-2222-4222-8222-222222222222", is_anonymous: false })}.sig`;
   const response = await createSinglePostHttpHandler(env(FULL), {
     enabled: true, connect: db.connect, auth: { verify: () => Promise.resolve({ userId: "11111111-1111-4111-8111-111111111111" }) },
   })(new Request("https://fn.example/x", { method: "POST", headers: { authorization: `Bearer ${tokenWithSession}` }, body }));

@@ -153,10 +153,24 @@ $$;
 -- ---------------------------------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------------------------------
+/**
+ * The person behind a person-facing call (every X and Threads reservation entry identifies the caller here, before any row is
+ * read). G3-34: G5's person-session gate S2-2 (private.postona_personal_session(), PR #510) is asked FIRST: only exactly
+ * 'active' (a signed-in, non-anonymous person whose session row is live, sub = auth.uid()) proceeds; any other answer, a NULL or
+ * a missing gate refuses with AUTH_REQUIRED -- so another person's row and an unknown id keep answering alike. Fail-closed until
+ * S2-2 is installed by the same owner.
+ */
 create function postona_x_resv.caller() returns uuid
 language plpgsql stable security definer set search_path = '' as $$
-declare v uuid := auth.uid();
+declare v uuid;
 begin
+  if to_regprocedure('private.postona_personal_session()') is null then
+    raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = 'P0001';
+  end if;
+  if private.postona_personal_session() is distinct from 'active' then
+    raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = 'P0001';
+  end if;
+  v := auth.uid();
   if v is null then raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = 'P0001'; end if;
   return v;
 end $$;
