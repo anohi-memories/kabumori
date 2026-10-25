@@ -11,6 +11,9 @@ Status: **isolated source candidate + local PG17 proof.**
 - **G5-29 revision** (task `common-account-g5-pr487-transform-protrftypes-shape-guard-p2-source-fix-20261025`, Issue #320 task 29): the P2 of
   H4's review of PR #487 (Issue #331 comment 6393211366, CHANGES_REQUIRED at `e282c563`) is fixed. The attribute baseline also pins
   `protrftypes IS NULL` (no TRANSFORM) (section 8). PR #487 stays as the review evidence.
+- **G5-31 revision** (task `common-account-g5-d1-pr488-proconfig-null-reset-all-shape-guard-source-fix-20261025`, Issue #320 task 31): the
+  nullable `not (...)` shape checks are fixed. G5-30 found the problem in T13, and H4 task 11 reported it for D1. It was reproduced on PR #488
+  first: a `RESET ALL` slipped through and was erased. Every check is now `(...) is not true` (section 9). PR #488 stays as the evidence.
 
 - TASK `common-account-g5-personal-r0-r1-sv-anonymous-claim-d1-source-candidate-20261024` (Issue #320, G5-01 generation, task 27, completion K5).
 - Design: D1 of `docs/common-account/g5-26-personal-claim-workspace-if-contract.md` (PR #485).
@@ -127,3 +130,17 @@ Body mutants get their checksums recomputed, so each fails for the rule.
 | Tests | 8 tests ×3 (the G5-28 seven plus the PR #487 reproduction; the shape comparison now includes `protrftypes`; the 60-answer comparison still 12 / 48) |
 | Mutations | 27 / 27: G5-28's 23, plus `protrftypes is null` removed before the install (R1, R0, SV) and before the rollback (R0) |
 | Not verified | a real TRANSFORM on a plpgsql function (not constructible here); managed attributes; real consumers; production |
+
+## 9. G5-31: a NULL shape check (`RESET ALL`) refuses
+
+| Item | Detail |
+| --- | --- |
+| The finding | `ALTER FUNCTION … RESET ALL` (the owner's real DDL) leaves `proconfig` NULL. In PR #488, `p.proconfig = array['search_path=""', 'row_security=off']` is then NULL, so the whole `and` chain is NULL. `not (NULL)` is NULL, and a plpgsql `IF` treats NULL as false: the drift passed the check. The CREATE OR REPLACE then put the settings back, so the drift was erased. G5-30 found this in T13 (PR #489); H4 task 11 reported it for D1. |
+| Reproduced first [D] | On PR #488's own candidate and rollback (`ad83ffd8`, read with `git show`), a `RESET ALL` on R1, R0 or SV each time: the install **passes and erases it**, and the rollback **passes and erases it**. The new drift tests run on that head first: **6 passed, 3 failed** (the RESET ALL cases are not refused). |
+| The fix | All 12 shape checks (pre / post of the install and the rollback, R1 / R0 / SV) are `(...) is not true` instead of `not (...)`. A NULL now refuses. Nothing else changes in the checks: no attribute is added or removed. The other conditions of these blocks use `is distinct from` or `exists`, which never yield NULL. |
+| Unchanged | the bodies and their md5, the anonymous-claim rule, v1 wire, `g5oe`, entitlements, OID, owner, ACL, definer, `search_path`, `row_security`, STABLE, the G5-28 / G5-29 attribute baseline |
+| After [D] | A `RESET ALL` on R1, R0 or SV refuses the install with that function's `D1_PRECONDITION_*_SHAPE`. After the install, it refuses the rollback with `D1_ROLLBACK_PRECONDITION_*_SHAPE`. The body and the NULL settings stay, and the undo returns the reviewed shape. The drift loop now also checks that each undo restores every function's body and shape. |
+| Post-checks | The replace has just set `proconfig`, so a post check cannot meet a NULL setting. `is not true` there is defence in depth, and its mutants are equivalent (not counted). |
+| Tests | 9 tests ×3 (G5-29's 8 plus the PR #488 reproduction); the 60-answer comparison is still 12 / 48 |
+| Mutations | 33 / 33 (control PASS): G5-29's 27, plus `is not true` turned back into `is false` (the PR #488 NULL logic) before the install and before the rollback, for R1, R0 and SV |
+| Not verified | a real TRANSFORM (not constructible here); managed attributes and claims; real consumers; production |

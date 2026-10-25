@@ -160,7 +160,30 @@ testP3('P2 before (PR #487 head e282c563): a protrftypes drift (catalog stand-in
   for (const [k, fn] of Object.entries(FNS)) assert.equal(await md5(REV, fn), MD5[k as 'R1'][0], `${k}: back to the reviewed body`);
 });
 
-test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF, protrftypes stand-in) refuses the install and the rollback, and nothing changes -- body or attribute', async () => {
+// (G5-31) a RESET ALL leaves proconfig NULL: `p.proconfig = array[...]` is then NULL, `not (NULL)` is NULL, and a plpgsql IF treats NULL as false.
+// The reviewed settings are put back with one ALTER (the order of proconfig is the reviewed one; the shape comparison checks it).
+const resetAll = (fn: string) => `alter function ${fn} reset all`;
+const settingsBack = (fn: string) => `alter function ${fn} set search_path = '' set row_security = off`;
+const config = (db: string, fn: string) => sql(db, `select coalesce(proconfig::text, 'NULL') from pg_proc where oid = '${fn}'::regprocedure`);
+const REVIEWED_CONFIG = '{"search_path=\\"\\"",row_security=off}';
+const testP4 = enabled && env('S27_P4_CANDIDATE') !== '' ? test : test.skip;
+testP4('P2 before (PR #488 head ad83ffd8): a RESET ALL on R1, R0 or SV is accepted by its install and its rollback and the NULL settings are erased', async () => {
+  for (const [k, fn] of Object.entries(FNS)) {
+    await sql(REV, resetAll(fn));
+    assert.equal(await config(REV, fn), 'NULL', `${k}: the drift is real`);
+    let r = await run(REV, ['-f', env('S27_P4_CANDIDATE')]);
+    assert.ok(r.ok, `${k}: P2, the install accepts it\n${r.error}`);
+    assert.equal(await config(REV, fn), REVIEWED_CONFIG, `${k}: P2, erased by the install`);
+    await sql(REV, resetAll(fn));
+    r = await run(REV, ['-f', env('S27_P4_ROLLBACK')]);
+    assert.ok(r.ok, `${k}: P2, the rollback accepts it\n${r.error}`);
+    assert.equal(await config(REV, fn), REVIEWED_CONFIG, `${k}: P2, erased by the rollback`);
+    for (const [j, f] of Object.entries(FNS)) assert.equal(await md5(REV, f), MD5[j as 'R1'][0], `${j}: back to the reviewed body`);
+  }
+});
+
+test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF, protrftypes stand-in, RESET ALL) refuses the install and the rollback, and nothing changes -- body or attribute', async () => {
+  const baseline = Object.fromEntries(await Promise.all(Object.entries(FNS).map(async ([k, fn]) => [k, `${await md5(REV, fn)}|${await shape(REV, fn)}`])));
   const drifts: Array<[string, string, string, string, string]> = [
     ['R1 STRICT', `alter function ${R1} strict`, `alter function ${R1} called on null input`, 'D1_PRECONDITION_R1_SHAPE', owner],
     ['R0 STRICT', `alter function ${R0} strict`, `alter function ${R0} called on null input`, 'D1_PRECONDITION_R0_SHAPE', owner],
@@ -172,6 +195,10 @@ test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF, protrftypes stand-in)
     ['R1 protrftypes {jsonb} (stand-in)', standIn(R1, "array['jsonb'::regtype::oid]::oid[]"), standIn(R1, 'null'), 'D1_PRECONDITION_R1_SHAPE', superUser],
     ['R0 protrftypes {} (stand-in)', standIn(R0, "'{}'::oid[]"), standIn(R0, 'null'), 'D1_PRECONDITION_R0_SHAPE', superUser],
     ['SV protrftypes {text} (stand-in)', standIn(SV, "array['text'::regtype::oid]::oid[]"), standIn(SV, 'null'), 'D1_PRECONDITION_SV_SHAPE', superUser],
+    // (G5-31) RESET ALL: proconfig NULL, the real DDL of the owner
+    ['R1 RESET ALL', resetAll(R1), settingsBack(R1), 'D1_PRECONDITION_R1_SHAPE', owner],
+    ['R0 RESET ALL', resetAll(R0), settingsBack(R0), 'D1_PRECONDITION_R0_SHAPE', owner],
+    ['SV RESET ALL', resetAll(SV), settingsBack(SV), 'D1_PRECONDITION_SV_SHAPE', owner],
   ];
   for (const [label, drift, undo, code, as] of drifts) {
     await sql(REV, drift, as);
@@ -180,6 +207,7 @@ test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF, protrftypes stand-in)
     assert.ok(!r.ok && r.error.includes(code), `${label}\n${r.error}`);
     for (const [k, fn] of Object.entries(FNS)) assert.equal(`${await md5(REV, fn)}|${await shape(REV, fn)}`, shapes[k], `${label}: ${k} untouched (the drift stays visible)`);
     await sql(REV, undo, as);
+    for (const [k, fn] of Object.entries(FNS)) assert.equal(`${await md5(REV, fn)}|${await shape(REV, fn)}`, baseline[k], `${label}: ${k} undone to the reviewed shape`);
   }
   assert.equal(await strictness(REV), 'falseu100false,falseu100false,falseu100false', 'every drift undone (booleans cast to text)');
   for (const fn of [R1, R0, SV]) assert.equal(await trf(REV, fn), 'null', `${fn}: no TRANSFORM left`);
@@ -287,6 +315,16 @@ test_('rollback: the reviewed bodies byte for byte, same OIDs and ACLs; the miss
   assert.ok(!r.ok && r.error.includes('D1_ROLLBACK_PRECONDITION_R0_SHAPE'), r.error);
   assert.equal(`${await md5(D1, R0)}|${await shape(D1, R0)}`, r0, 'the D1 body and the drift both stay');
   await sql(D1, standIn(R0, 'null'), superUser);
+  // (G5-31) a RESET ALL (proconfig NULL) on any of the three after the install refuses the rollback; the D1 body and the NULL settings stay
+  for (const [k, fn] of Object.entries(FNS)) {
+    await sql(D1, resetAll(fn));
+    const drifted = `${await md5(D1, fn)}|${await shape(D1, fn)}|${await config(D1, fn)}`;
+    r = await run(D1, ['-f', env('S27_ROLLBACK')]);
+    assert.ok(!r.ok && r.error.includes(`D1_ROLLBACK_PRECONDITION_${k}_SHAPE`), `${k}\n${r.error}`);
+    assert.equal(`${await md5(D1, fn)}|${await shape(D1, fn)}|${await config(D1, fn)}`, drifted, `${k}: the D1 body and the drift both stay`);
+    await sql(D1, settingsBack(fn));
+    assert.equal(await shape(D1, fn), shapes[k], `${k}: undone`);
+  }
   r = await run(D1, ['-f', env('S27_ROLLBACK')]);
   assert.ok(r.ok, r.error);
   for (const [k, fn] of Object.entries(FNS)) {

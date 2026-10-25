@@ -1,4 +1,4 @@
-"""Mutation check for the G5-27 (D1) candidate: ONE rule is broken in a scratch COPY -- in one function at a time (the reading lines are the same
+"""Mutation check for the G5-27 / G5-28 / G5-29 / G5-31 (D1) candidate: ONE rule is broken in a scratch COPY -- in one function at a time (the reading lines are the same
 text in R1, R0 and SV, in that order, so a mutant names its occurrence) -- and the suite (postona_personal_d1_verdicts_pg_run.sh) must fail. A body
 mutant gets that function's D1 checksum recomputed in the candidate and the rollback, so it fails for the rule, not for the checksum. A control
 must pass first. The copy has no .git: the pinned tree is extracted once with `git archive` and handed over in S27_PINNED_TREE. Usage (needs the
@@ -58,6 +58,12 @@ M += [
     ('SV: a protrftypes drift is accepted by the install', C, 'and p.protrftypes is null', '', 2, 6),
     ('R0: a protrftypes drift is accepted by the rollback', RB, 'and p.protrftypes is null', '', 1, 6),
 ]
+# ---- (G5-31) `(...) is not true` back to the PR #488 NULL logic (`is false`, i.e. `not (...)`): a RESET ALL (proconfig NULL) slips through. The
+# pre blocks of the install and of the rollback, R1 / R0 / SV (occurrences 0..2); the post blocks are equivalent (the replace just set proconfig).
+PRE_NULL = ' is not true  -- (G5-31) a NULL (RESET ALL: proconfig NULL) refuses'
+for where, target in (('install', C), ('rollback', RB)):
+    for i, k in enumerate(ORDER):
+        M.append((f'{k}: a NULL shape check (RESET ALL) passes the {where}', target, PRE_NULL, ' is false', i, 3))
 
 
 def bodies(text):
