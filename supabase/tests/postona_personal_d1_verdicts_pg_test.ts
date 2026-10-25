@@ -43,7 +43,8 @@ const md5 = (db: string, fn: string) => sql(db, `select md5(prosrc) from pg_proc
 // (G5-28) the shape includes every attribute CREATE OR REPLACE would reset (H4 P2 on PR #486)
 const shape = (db: string, fn: string) => sql(db, `select oid || '|' || proconfig::text || '|' || array_to_string(proacl::text[], ',') || '|' || provolatile::text || prosecdef::text
   || '|' || proisstrict::text || proleakproof::text || proparallel::text || prokind::text || proretset::text || procost::text || prorows::text || prosupport::text
-  || prorettype::regtype::text || prolang::regproc::text || pronargdefaults::text || coalesce(proargnames::text, '-') from pg_proc where oid = '${fn}'::regprocedure`);
+  || prorettype::regtype::text || prolang::regproc::text || pronargdefaults::text || coalesce(proargnames::text, '-') || '|' || coalesce(protrftypes::text, 'no-transform')
+  from pg_proc where oid = '${fn}'::regprocedure`);
 const strictness = (db: string) => sql(db, `select string_agg(proisstrict::text || proparallel::text || procost::text || proleakproof::text, ',' order by oid::regprocedure::text) from pg_proc
   where oid in ('${R1}'::regprocedure, '${R0}'::regprocedure, '${SV}'::regprocedure)`);
 
@@ -141,7 +142,25 @@ testP2('P2 before (PR #486 head 24e6be5c): a STRICT R1 is accepted by its instal
   for (const [k, fn] of Object.entries(FNS)) assert.equal(await md5(REV, fn), MD5[k as 'R1'][0], `${k}: back to the reviewed body`);
 });
 
-test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF) refuses the install and the rollback, and nothing changes -- body or attribute', async () => {
+// (G5-29) H4's P2 on PR #487 (e282c563): protrftypes (the TRANSFORM attribute) is not in its baseline. A real TRANSFORM cannot be put on a plpgsql
+// function here (no transform exists for plpgsql; SQL cannot create the internal-typed support functions), so the drift is a superuser's direct
+// catalog edit -- a STAND-IN for the attribute, labelled as such; a real TRANSFORM path stays NOT_VERIFIED.
+const standIn = (fn: string, value: string) => `update pg_catalog.pg_proc set protrftypes = ${value} where oid = '${fn}'::regprocedure`;
+const trf = (db: string, fn: string) => sql(db, `select coalesce(protrftypes::text, 'null') from pg_proc where oid = '${fn}'::regprocedure`);
+const testP3 = enabled && env('S27_P3_CANDIDATE') !== '' ? test : test.skip;
+testP3('P2 before (PR #487 head e282c563): a protrftypes drift (catalog stand-in) is accepted by its install and its rollback and erased', async () => {
+  await sql(REV, standIn(R1, "array['jsonb'::regtype::oid]::oid[]"), superUser);
+  let r = await run(REV, ['-f', env('S27_P3_CANDIDATE')]);
+  assert.ok(r.ok, `P2: the install accepts it\n${r.error}`);
+  assert.equal(await trf(REV, R1), 'null', 'P2: erased by CREATE OR REPLACE');
+  await sql(REV, standIn(SV, "array['text'::regtype::oid]::oid[]"), superUser);
+  r = await run(REV, ['-f', env('S27_P3_ROLLBACK')]);
+  assert.ok(r.ok, `P2: the rollback accepts it\n${r.error}`);
+  assert.equal(await trf(REV, SV), 'null', 'P2: erased again');
+  for (const [k, fn] of Object.entries(FNS)) assert.equal(await md5(REV, fn), MD5[k as 'R1'][0], `${k}: back to the reviewed body`);
+});
+
+test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF, protrftypes stand-in) refuses the install and the rollback, and nothing changes -- body or attribute', async () => {
   const drifts: Array<[string, string, string, string, string]> = [
     ['R1 STRICT', `alter function ${R1} strict`, `alter function ${R1} called on null input`, 'D1_PRECONDITION_R1_SHAPE', owner],
     ['R0 STRICT', `alter function ${R0} strict`, `alter function ${R0} called on null input`, 'D1_PRECONDITION_R0_SHAPE', owner],
@@ -149,6 +168,10 @@ test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF) refuses the install a
     ['R0 PARALLEL SAFE', `alter function ${R0} parallel safe`, `alter function ${R0} parallel unsafe`, 'D1_PRECONDITION_R0_SHAPE', owner],
     ['SV COST 50', `alter function ${SV} cost 50`, `alter function ${SV} cost 100`, 'D1_PRECONDITION_SV_SHAPE', owner],
     ['R1 LEAKPROOF', `alter function ${R1} leakproof`, `alter function ${R1} not leakproof`, 'D1_PRECONDITION_R1_SHAPE', superUser],
+    // (G5-29) protrftypes, by the catalog stand-in (see above); the empty array is not the reviewed NULL either
+    ['R1 protrftypes {jsonb} (stand-in)', standIn(R1, "array['jsonb'::regtype::oid]::oid[]"), standIn(R1, 'null'), 'D1_PRECONDITION_R1_SHAPE', superUser],
+    ['R0 protrftypes {} (stand-in)', standIn(R0, "'{}'::oid[]"), standIn(R0, 'null'), 'D1_PRECONDITION_R0_SHAPE', superUser],
+    ['SV protrftypes {text} (stand-in)', standIn(SV, "array['text'::regtype::oid]::oid[]"), standIn(SV, 'null'), 'D1_PRECONDITION_SV_SHAPE', superUser],
   ];
   for (const [label, drift, undo, code, as] of drifts) {
     await sql(REV, drift, as);
@@ -159,6 +182,7 @@ test_('attribute drift (STRICT, PARALLEL, COST, LEAKPROOF) refuses the install a
     await sql(REV, undo, as);
   }
   assert.equal(await strictness(REV), 'falseu100false,falseu100false,falseu100false', 'every drift undone (booleans cast to text)');
+  for (const fn of [R1, R0, SV]) assert.equal(await trf(REV, fn), 'null', `${fn}: no TRANSFORM left`);
 });
 
 test_('install: same OIDs, settings and ACLs, the expected bodies; no other G5 function changed; a second run refuses', async () => {
@@ -256,6 +280,13 @@ test_('rollback: the reviewed bodies byte for byte, same OIDs and ACLs; the miss
   assert.ok(!r.ok && r.error.includes('D1_ROLLBACK_PRECONDITION_SV_SHAPE'), r.error);
   assert.equal(`${await md5(D1, SV)}|${await shape(D1, SV)}`, sv, 'the D1 body and the drift both stay');
   await sql(D1, `alter function ${SV} called on null input`);
+  // (G5-29) a protrftypes drift (stand-in) after the install refuses the rollback the same way
+  await sql(D1, standIn(R0, "array['jsonb'::regtype::oid]::oid[]"), superUser);
+  const r0 = `${await md5(D1, R0)}|${await shape(D1, R0)}`;
+  r = await run(D1, ['-f', env('S27_ROLLBACK')]);
+  assert.ok(!r.ok && r.error.includes('D1_ROLLBACK_PRECONDITION_R0_SHAPE'), r.error);
+  assert.equal(`${await md5(D1, R0)}|${await shape(D1, R0)}`, r0, 'the D1 body and the drift both stay');
+  await sql(D1, standIn(R0, 'null'), superUser);
   r = await run(D1, ['-f', env('S27_ROLLBACK')]);
   assert.ok(r.ok, r.error);
   for (const [k, fn] of Object.entries(FNS)) {

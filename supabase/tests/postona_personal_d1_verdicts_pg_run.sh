@@ -51,6 +51,13 @@ if [ -z "${S27_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "$p2^{commit}" 2>
   git -C "$repo" show "$p2:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict_rollback.sql" > "$work/p2_rollback.sql"
   p2_c="$work/p2_candidate.sql"; p2_r="$work/p2_rollback.sql"
 fi
+# (G5-29) PR #487's candidate at its reviewed head, to reproduce H4's P2 on it (a protrftypes drift accepted and erased)
+p3=e282c563945f2f284e20b4d35aff123448d29aed; p3_c=""; p3_r=""
+if [ -z "${S27_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "$p3^{commit}" 2>/dev/null; then
+  git -C "$repo" show "$p3:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict.sql" > "$work/p3_candidate.sql"
+  git -C "$repo" show "$p3:supabase/candidates/postona_personal_auth/002_verdicts_anonymous_strict_rollback.sql" > "$work/p3_rollback.sql"
+  p3_c="$work/p3_candidate.sql"; p3_r="$work/p3_rollback.sql"
+fi
 
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
@@ -90,12 +97,13 @@ done
 if [ -n "${S27_BUILD_ONLY:-}" ]; then
   psql -X -q -A -t -h "$host" -p "$port" -U "$owner" -d "${prefix}_rev" -c "select p.oid::regprocedure, p.proconfig, md5(p.prosrc), array_to_string(p.proacl::text[], ','),
     p.proisstrict, p.proleakproof, p.proparallel, p.prokind, p.proretset, p.procost, p.prorows, p.prosupport, p.prorettype::regtype, l.lanname, p.provolatile, p.prosecdef,
-    p.proargnames, p.proargmodes, p.pronargdefaults from pg_proc p join pg_language l on l.oid = p.prolang
+    p.proargnames, p.proargmodes, p.pronargdefaults, p.protrftypes from pg_proc p join pg_language l on l.oid = p.prolang
     where p.oid in ('public.common_account_authorization_verdict(text,text,text)'::regprocedure, 'public.common_account_bootstrap_verdict(text,text)'::regprocedure,
                     'private.account_lifecycle_session_verdict()'::regprocedure)"
   exit 0
 fi
 ( cd "$repo" && CAL_E2E=1 S27_CANDIDATE="$cand/002_verdicts_anonymous_strict.sql" S27_ROLLBACK="$cand/002_verdicts_anonymous_strict_rollback.sql" \
     S27_P2_CANDIDATE="$p2_c" S27_P2_ROLLBACK="$p2_r" \
+    S27_P3_CANDIDATE="$p3_c" S27_P3_ROLLBACK="$p3_r" \
     S27_OWNER="$owner" S27_DB="${prefix}_d1" S27_REV="${prefix}_rev" PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_d1_verdicts_pg_test.ts" )

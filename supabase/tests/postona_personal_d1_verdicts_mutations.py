@@ -52,6 +52,11 @@ M += [
     ('SV: a COST drift is accepted by the install', C, 'p.procost = 100', 'true', 2, 6),
     ('R1: a LEAKPROOF drift is accepted by the install', C, 'and not p.proleakproof and', 'and', 0, 6),
     ('SV: a STRICT drift is accepted by the rollback', RB, 'and not p.proisstrict and not p.proleakproof', 'and not p.proleakproof', 2, 6),
+    # ---- (G5-29, H4 P2 on PR #487) protrftypes IS NULL, before the install (R1, R0, SV) and before the rollback (R0)
+    ('R1: a protrftypes drift is accepted by the install', C, 'and p.protrftypes is null', '', 0, 6),
+    ('R0: a protrftypes drift is accepted by the install', C, 'and p.protrftypes is null', '', 1, 6),
+    ('SV: a protrftypes drift is accepted by the install', C, 'and p.protrftypes is null', '', 2, 6),
+    ('R0: a protrftypes drift is accepted by the rollback', RB, 'and p.protrftypes is null', '', 1, 6),
 ]
 
 
