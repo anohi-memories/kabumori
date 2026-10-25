@@ -15,7 +15,7 @@ create function g4c.claims(p_user uuid, p_session uuid) returns void language pl
 begin
   perform set_config('request.jwt.claim.sub', '', true);
   perform set_config('request.jwt.claims', case when p_user is null then '' else
-    jsonb_build_object('sub', p_user, 'role', 'authenticated', 'session_id', p_session)::text end, true);
+    jsonb_build_object('sub', p_user, 'role', 'authenticated', 'session_id', p_session, 'is_anonymous', false)::text end, true);
 end $$;
 create function g4c.session(p_user uuid) returns uuid language sql as $$
   select (select s.id from auth.sessions s where s.user_id = p_user and s.not_after is null order by s.created_at limit 1) $$;

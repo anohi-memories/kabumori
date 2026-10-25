@@ -151,21 +151,31 @@ export async function runReservationDelivery(input: {
     }
     // Only the outcome the store actually recorded counts. Anything else -- 'lease_lost' (the lease ran out
     // before finish: the store fenced the row to uncertain) or an unexpected answer -- is uncertain.
+    // G3-32 C3: a finish whose answer could not be read is asked ONCE more with the same arguments (the store's finish
+    // is idempotent for the same lease + the same success; any other repeat answers lease_lost / LEASE_LOST). This only
+    // re-reads the record: the provider is never called again.
+    const finishOnce = async (outcome: FinishOutcome, providerPostId: string | null, code: string | null) => {
+      try {
+        return await input.store.finish(item.reservationId, item.leaseToken, outcome, providerPostId, code);
+      } catch {
+        return await input.store.finish(item.reservationId, item.leaseToken, outcome, providerPostId, code);
+      }
+    };
     try {
       if (result.kind === "published") {
-        const recorded = await input.store.finish(item.reservationId, item.leaseToken, "published", result.providerPostId, null);
+        const recorded = await finishOnce("published", result.providerPostId, null);
         if (recorded === "published") report.published += 1;
         else report.uncertain += 1;
       } else if (result.kind === "rejected_before_send") {
-        const recorded = await input.store.finish(item.reservationId, item.leaseToken, "failed_before_send", null, safeCode(result.code, "REJECTED_BEFORE_SEND"));
+        const recorded = await finishOnce("failed_before_send", null, safeCode(result.code, "REJECTED_BEFORE_SEND"));
         if (recorded === "failed_before_send") report.failedBeforeSend += 1;
         else report.uncertain += 1;
       } else {
-        await input.store.finish(item.reservationId, item.leaseToken, "uncertain", null, safeCode(result.code, "OUTCOME_UNKNOWN"));
+        await finishOnce("uncertain", null, safeCode(result.code, "OUTCOME_UNKNOWN"));
         report.uncertain += 1;
       }
     } catch {
-      // The outcome could not be recorded: the lease will expire into 'uncertain'. Never re-send.
+      // The outcome could not be recorded (twice): the lease will expire into 'uncertain'. Never re-send.
       report.uncertain += 1;
     }
   }

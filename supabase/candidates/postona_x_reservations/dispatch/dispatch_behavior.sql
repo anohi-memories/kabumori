@@ -11,10 +11,21 @@ begin if not coalesce(p_ok, false) then raise exception 'FAIL %', p_label; end i
 create function pg_temp.uid(p_n integer) returns uuid language sql immutable as $$
   select ('00000000-0000-4000-8000-' || lpad(p_n::text, 12, '0'))::uuid $$;
 create function pg_temp.set_claims(p_sub uuid) returns void language plpgsql as $$
+declare v_session uuid;
 begin
+  -- G3-34: a live session of this person (made once) and a proven non-anonymous sign-in, as G5's person-session gate S2-2 reads them
+  if p_sub is not null and exists (select 1 from auth.users u where u.id = p_sub) then
+    select s.id into v_session from auth.sessions s where s.user_id = p_sub and (s.not_after is null or s.not_after > clock_timestamp()) order by s.id limit 1;
+    if v_session is null then
+      insert into auth.sessions (user_id) values (p_sub) returning id into v_session;
+    end if;
+  end if;
   perform set_config('request.jwt.claim.sub', coalesce(p_sub::text, ''), true);
   perform set_config('request.jwt.claim.role', case when p_sub is null then '' else 'authenticated' end, true);
-  perform set_config('request.jwt.claims', case when p_sub is null then '' else json_build_object('sub', p_sub, 'role', 'authenticated')::text end, true);
+  perform set_config('request.jwt.claim.session_id', coalesce(v_session::text, ''), true);
+  perform set_config('request.jwt.claim.is_anonymous', case when p_sub is null then '' else 'false' end, true);
+  perform set_config('request.jwt.claims', case when p_sub is null then '' else json_build_object('sub', p_sub, 'role', 'authenticated',
+    'session_id', v_session, 'is_anonymous', false)::text end, true);
 end $$;
 create function pg_temp.as_role(p_sql text, p_role text, p_sub uuid default null) returns text language plpgsql as $$
 declare v text;
@@ -98,6 +109,18 @@ select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_c
 select pg_temp.expect(pg_temp.status(:'w2') = 'planned', 'W3 planned');
 select pg_temp.expect((select count(*) from postona_x_resv.audit where reservation_id = :'w2' and detail ->> 'reason' = 'LEASE_EXPIRED_BEFORE_SEND') = 1, 'W3 audit');
 select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_check(%L, %L)', :'w2', :'w2lease')) = 'LEASE_LOST', 'W3 not ours any more');
+-- W3b (G3-32 C2): less lease left than one provider call (X timeout 20 s) + the finish needs: handed back before any send.
+select pg_temp.expect(pg_temp.claim() like '%' || :'w2' || '%', 'W3b claimed');
+select pg_temp.lease_of(:'w2') as w2lease \gset
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '10 seconds' where id = :'w2';
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_check(%L, %L)', :'w2', :'w2lease')) = 'RELEASED', 'W3b 10 s left: released');
+select pg_temp.expect((select status = 'planned' and lease_token is null from postona_x_resv.reservations where id = :'w2'), 'W3b planned, nothing sent');
+select pg_temp.expect((select count(*) from postona_x_resv.audit where reservation_id = :'w2' and detail ->> 'reason' = 'LEASE_TOO_SHORT_BEFORE_SEND') = 1, 'W3b audit');
+select pg_temp.expect(pg_temp.claim() like '%' || :'w2' || '%', 'W3b claimed again');
+select pg_temp.lease_of(:'w2') as w2lease \gset
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '30 seconds' where id = :'w2';
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_check(%L, %L)', :'w2', :'w2lease')) = 'OK', 'W3b 30 s left: OK');
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.release_unsent(%L, %L)', :'w2', :'w2lease')) = 'released', 'W3b handed back for the next step');
 -- a valid lease: OK; then finish 'published'; a published row is never claimed or released again
 select pg_temp.expect(pg_temp.claim() like '%' || :'w2' || '%', 'W3 claimed');
 select pg_temp.lease_of(:'w2') as w2lease \gset

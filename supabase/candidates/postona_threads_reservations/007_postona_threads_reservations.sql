@@ -108,6 +108,19 @@ create table postona_threads_resv.reservations (
 create index reservations_due on postona_threads_resv.reservations (scheduled_at) where status = 'planned';
 alter table postona_threads_resv.reservations enable row level security;
 revoke all on table postona_threads_resv.reservations from public, anon, authenticated, service_role, postona_resv_api, postona_resv_worker;
+-- G3-33 T5: the person-facing cancel leaves one audit row (X keeps one in postona_x_resv.audit). Codes and times only:
+-- never the post text, its hash or a token. Written only by the SECURITY DEFINER functions; no role reads or writes it.
+-- Its retention / pseudonymisation on account deletion is not decided here (PR #475 Q2).
+create table postona_threads_resv.audit (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  user_id uuid,
+  reservation_id uuid,
+  action text not null check (action ~ '^[a-z_]{1,40}$'),
+  detail jsonb not null default '{}'::jsonb
+);
+alter table postona_threads_resv.audit enable row level security;
+revoke all on table postona_threads_resv.audit from public, anon, authenticated, service_role, postona_resv_api, postona_resv_worker;
 
 /** G4 (DENY until delivered): is this a Threads account the person verified through the reviewed connection? */
 create function postona_threads_resv.g4_threads_account_verified(p_user_id uuid, p_social_account_id text) returns boolean
@@ -257,7 +270,11 @@ declare v_user uuid := postona_x_resv.caller();
 begin
   update postona_threads_resv.reservations r set status = 'cancelled', updated_at = pg_catalog.now()
   where r.id = p_reservation_id and r.user_id = v_user and r.status = 'planned';
-  if found then return 'cancelled'; end if;
+  if found then
+    insert into postona_threads_resv.audit (user_id, reservation_id, action, detail)
+    values (v_user, p_reservation_id, 'cancel', pg_catalog.jsonb_build_object('from_status', 'planned'));
+    return 'cancelled';
+  end if;
   if exists (select 1 from postona_threads_resv.reservations r where r.id = p_reservation_id and r.user_id = v_user) then
     raise exception 'POSTONA_THREADS_RESV_NOT_CANCELLABLE' using errcode = 'P0001';
   end if;
@@ -448,7 +465,8 @@ begin
     end if;
   end loop;
   if exists (select 1 from unnest(array['anon', 'authenticated', 'service_role', 'postona_resv_api', 'postona_resv_worker']) r(role)
-             where pg_catalog.has_table_privilege(r.role, 'postona_threads_resv.reservations', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) then
+             cross join unnest(array['postona_threads_resv.reservations', 'postona_threads_resv.audit']) t(tbl)
+             where pg_catalog.has_table_privilege(r.role, t.tbl, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) then
     raise exception 'POSTONA_THREADS_RESV_POSTCONDITION: table reachable';
   end if;
   if exists (select 1 from pg_catalog.pg_proc p where p.pronamespace = 'postona_threads_resv'::regnamespace

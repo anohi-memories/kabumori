@@ -100,13 +100,19 @@ function parseBody(raw: string): Input | null {
   return { socialAccountId: v.socialAccountId, clientRequestId: v.clientRequestId, text: v.text, contentSha256: consent.contentSha256 };
 }
 
-/** The session id of an access token Supabase Auth has ALREADY verified (never used as proof on its own). */
-function sessionIdOf(token: string, userId: string): string | null {
+/**
+ * The session id of an access token Supabase Auth has ALREADY verified (never used as proof on its own), returned only when the
+ * SAME token names the same subject and states is_anonymous as the JSON boolean false (G3-34 F1: missing, null, another type or
+ * true is not proof of a non-anonymous sign-in -> null -> 401, before any permission, database or provider call).
+ */
+function nonAnonymousSessionOf(token: string, userId: string): string | null {
   const part = token.split(".")[1];
   if (!part) return null;
   try {
     const claims = JSON.parse(atob(part.replace(/-/gu, "+").replace(/_/gu, "/").padEnd(Math.ceil(part.length / 4) * 4, "="))) as Record<string, unknown>;
-    return claims.sub === userId && typeof claims.session_id === "string" && UUID_RE.test(claims.session_id) ? claims.session_id : null;
+    return claims.sub === userId && claims.is_anonymous === false && typeof claims.session_id === "string" && UUID_RE.test(claims.session_id)
+      ? claims.session_id
+      : null;
   } catch {
     return null;
   }
@@ -142,9 +148,9 @@ export function createSinglePostHandler(deps: {
     try {
       const verified = await deps.auth.verify(match[1]);
       if (!verified || !UUID_RE.test(verified.userId)) return fail(401, "AUTH_REQUIRED");
-      const sessionId = sessionIdOf(match[1], verified.userId);
+      const sessionId = nonAnonymousSessionOf(match[1], verified.userId);
       if (!sessionId) return fail(401, "AUTH_REQUIRED");
-      subject = { userId: verified.userId, sessionId };
+      subject = { userId: verified.userId, sessionId, isAnonymous: false };
     } catch {
       return fail(503, "AUTH_UNAVAILABLE");
     }
@@ -201,13 +207,18 @@ export function createSinglePostHandler(deps: {
     }
     let verdict: unknown;
     let generation: unknown;
+    let sessionRefused = false;
     try {
       const checked = await deps.db.call("preflight", [reservationId, lease], subject);
       verdict = checked.ok ? first(checked)?.verdict : null;
       generation = checked.ok ? first(checked)?.credential_generation : null;
+      sessionRefused = !checked.ok && checked.code === "POSTONA_RESV_AUTH_REQUIRED";
     } catch {
       verdict = null;
     }
+    // G3-36: the person-session gate refused the check (signed out / expired / revoked since begin): nothing was sent and a dead
+    // session is told nothing about the row -> 401, as at the start. After any X call the answer stays the stored / uncertain one.
+    if (sessionRefused) return fail(401, "AUTH_REQUIRED");
     if (verdict !== "OK") return readBack(null); // RELEASED -> pending, NOT_PUBLISHABLE -> failed, unreadable -> as stored
 
     // 5. exactly one X create, only with a token of the generation the database just answered

@@ -5,8 +5,9 @@
  *   BEGIN
  *   SET LOCAL ROLE postona_resv_api            -- a constant; the role is never taken from input
  *   SET LOCAL statement_timeout = '15s'
- *   set_config('request.jwt.claims' / 'request.jwt.claim.sub' / 'request.jwt.claim.role', ..., true)
- *                                              -- the VERIFIED subject only, local to the transaction
+ *   set_config('request.jwt.claims', {sub, role, session_id, is_anonymous}, true), request.jwt.claim.sub = ''
+ *                                              -- the VERIFIED subject and its session only, local to the transaction
+ *                                                 (G3-34: what G5's person-session gate S2-2 reads; as single_post_db.ts)
  *   SELECT ... FROM postona_x_resv.<one fixed owner function>($1, ...)   -- every value is a bind parameter
  *   COMMIT
  * The owner function re-checks owner, account, G5 and G4 inside this same transaction (and, with the G5 binding
@@ -17,7 +18,7 @@
  * connection failure or an error after the call may have committed => THROW (the outcome is unknown and the
  * client must read back). The adapter logs nothing (no token, subject or row ever reaches a log).
  */
-import type { DbResult, ReservationDb, ReservationDbFunction, ReservationRow } from "./api.ts";
+import type { DbResult, ReservationDb, ReservationDbFunction, ReservationRow, ReservationSubject } from "./api.ts";
 
 /** The subset of a Postgres client this adapter needs; jsr:@db/postgres `Client` satisfies it. */
 export type PgQueryClient = {
@@ -58,9 +59,11 @@ function serverError(error: unknown): { code: string; message: string } | null {
 
 export function createPostgresReservationDb(connect: PgConnect): ReservationDb {
   return {
-    async call(fn: ReservationDbFunction, args: readonly unknown[], subject: string): Promise<DbResult> {
+    async call(fn: ReservationDbFunction, args: readonly unknown[], subject: ReservationSubject): Promise<DbResult> {
       const target = CALLS[fn];
-      if (!target || args.length !== target.arity || !UUID_RE.test(subject)) return { ok: false, code: "DB_REQUEST_INVALID" };
+      if (!target || args.length !== target.arity || !UUID_RE.test(subject.userId) || !UUID_RE.test(subject.sessionId) || subject.isAnonymous !== false) {
+        return { ok: false, code: "DB_REQUEST_INVALID" };
+      }
       const session = await connect(); // throws: unreachable, outcome unknown (nothing was sent)
       const { client } = session;
       let phase: "before_call" | "after_call" = "before_call";
@@ -69,9 +72,9 @@ export function createPostgresReservationDb(connect: PgConnect): ReservationDb {
         await client.queryArray({ text: `SET LOCAL ROLE ${API_ROLE}` });
         await client.queryArray({ text: "SET LOCAL statement_timeout = '15s'" });
         await client.queryArray({
-          text: "SELECT set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', $2, true), " +
-            "set_config('request.jwt.claim.role', 'authenticated', true)",
-          args: [JSON.stringify({ sub: subject, role: "authenticated" }), subject],
+          text: "SELECT set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', '', true)",
+          // G3-34 F1: is_anonymous is the token's own explicit false carried in the subject (checked above), never a default.
+          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId, is_anonymous: subject.isAnonymous })],
         });
         const result = await client.queryArray({
           text: `SELECT coalesce(json_agg(r), '[]'::json)::text FROM ${target.sql} r`,

@@ -28,11 +28,19 @@ const USERS: Record<string, unknown> = {
   "token-deleted-012345678": { id: A, aud: "authenticated", role: "authenticated", deleted_at: "2026-10-01T00:00:00Z" },
   "token-anon-0123456789ab": { id: A, aud: "authenticated", role: "authenticated", is_anonymous: true },
 };
+// G3-34: the Edge reads the session id from an Auth-shaped token (only after Auth accepted it); the aliases above stay the names.
+// This world's person-session gate is the test_fixture double (no auth.sessions), so the session ids are fixed fakes.
+const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+const jwtOf = (alias: string): string => {
+  const user = USERS[alias] as { id: string } | undefined;
+  return user ? `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: user.id, session_id: "00000000-0000-4000-8000-0000000000e1", is_anonymous: false }))}.sig-${alias}` : alias;
+};
+const ALIAS_OF_JWT: Record<string, string> = Object.fromEntries(Object.keys(USERS).map((alias) => [jwtOf(alias), alias]));
 let authCalls = 0;
 const fakeAuth = (_url: string, init?: RequestInit) => {
   authCalls += 1;
   const token = String((init?.headers as Record<string, string>).Authorization).replace(/^Bearer /u, "");
-  const user = USERS[token];
+  const user = USERS[ALIAS_OF_JWT[token] ?? ""];
   return Promise.resolve(user ? Response.json(user) : new Response(JSON.stringify({ message: "invalid JWT" }), { status: 401 }));
 };
 const ENV = new Map([["SUPABASE_URL", "https://project.example.invalid"], ["SUPABASE_ANON_KEY", "publishable"]]);
@@ -48,7 +56,7 @@ const handler = handlerWith(countingConnect);
 /** HTTP transport: a real Request / Response pair through the function handler. */
 const transportFor = (h: (r: Request) => Promise<Response>) => async (call: unknown, token: string) => {
   const response = await h(new Request("http://localhost/functions/v1/postona-x-reservations", {
-    method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(call),
+    method: "POST", headers: { authorization: `Bearer ${jwtOf(token)}`, "content-type": "application/json" }, body: JSON.stringify(call),
   }));
   return { status: response.status, body: await response.json().catch(() => null) };
 };

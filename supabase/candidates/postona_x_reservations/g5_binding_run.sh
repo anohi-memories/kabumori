@@ -69,6 +69,11 @@ own "$db" -f "$tests/common_account_write_guard_fixture.sql" >/dev/null
 own "$db" -f "$m/20261010051938_common_account_service_write_guard.sql" >/dev/null
 own "$db" -f "$m/20261012130000_common_account_core_service_fence.sql" >/dev/null
 echo "G5_BASELINE_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$here/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own "$db" -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # The reservation candidate on top: 001 (+ its DENY stubs) and 002 (API role).
 own "$db" -f "$here/001_postona_x_reservations.sql" >/dev/null
@@ -113,11 +118,14 @@ done
 # B2: lock ordering against a freeze, two sessions (the person A of the behaviour suite).
 A='00000000-0000-4000-8000-000000000031'
 ACC="x$(echo "$A" | tr -d '-')"
+# G3-34: a live session of A and a proven non-anonymous sign-in, as G5's person-session gate S2-2 (asked first by caller()) reads them
+SA="$(own "$db" -A -t -c "insert into auth.sessions (user_id) values ('$A') returning id")"
+CLAIMS_A="{\"sub\":\"$A\",\"role\":\"authenticated\",\"session_id\":\"$SA\",\"is_anonymous\":false}"
 api() {  # $1 = SQL; runs as the login role in ONE transaction with the API role and A's claims
   psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$login" -d "$db" <<SQL
 begin isolation level read committed;
 set local role postona_resv_api;
-select set_config('request.jwt.claim.sub', '$A', true), set_config('request.jwt.claims', '{"sub":"$A","role":"authenticated"}', true) \\g /dev/null
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '$CLAIMS_A', true) \\g /dev/null
 $1
 commit;
 SQL
@@ -152,7 +160,7 @@ own "$db" -c "update public.common_accounts set status = 'active' where user_id 
 if psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$login" -d "$db" >"$tmp/b2d" 2>&1 <<SQL
 begin isolation level repeatable read;
 set local role postona_resv_api;
-select set_config('request.jwt.claim.sub', '$A', true) \\g /dev/null
+select set_config('request.jwt.claim.sub', '', true), set_config('request.jwt.claims', '$CLAIMS_A', true) \\g /dev/null
 select count(*) from postona_x_resv.list_reservations('$ACC');
 commit;
 SQL

@@ -22,6 +22,12 @@ const A = '00000000-0000-4000-8000-00000000000a';
 const B = '00000000-0000-4000-8000-00000000000b';
 const C = '00000000-0000-4000-8000-00000000000c';
 const TOKENS = { 'token-user-a-000000000000': A, 'token-user-b-000000000000': B, 'token-user-c-000000000000': C };
+// G3-34: the Edge reads the session id from an Auth-shaped token (only after the verifier accepted it); the aliases above stay
+// the names. This world's person-session gate is the test_fixture double (no auth.sessions), so the session ids are fixed fakes.
+const b64url = (s) => Buffer.from(s, 'utf8').toString('base64url');
+const SESSION = { [A]: '00000000-0000-4000-8000-0000000000a1', [B]: '00000000-0000-4000-8000-0000000000b1', [C]: '00000000-0000-4000-8000-0000000000c1' };
+const jwtOf = (alias) => (TOKENS[alias] ? `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: TOKENS[alias], session_id: SESSION[TOKENS[alias]], is_anonymous: false }))}.sig-${alias}` : alias);
+const USER_OF_JWT = Object.fromEntries(Object.keys(TOKENS).map((alias) => [jwtOf(alias), TOKENS[alias]]));
 const sha256 = async (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const DAY = 24 * 60 * 60 * 1000;
 const dayAhead = (n) => jstDateOf(Date.now() + n * DAY);
@@ -31,13 +37,13 @@ const db = psqlReservationDb({ ...conn, loginRole: env('RESV_E2E_LOGIN'), onCall
 // MOCK_ONLY permission sources: allow at the TS layer so the DATABASE predicates are what is proven to refuse.
 const api = createReservationApi({
   enabled: true,
-  auth: { verify: (token) => Promise.resolve(TOKENS[token] ? { userId: TOKENS[token] } : null) },
+  auth: { verify: (token) => Promise.resolve(USER_OF_JWT[token] ? { userId: USER_OF_JWT[token] } : null) },
   permissions: { xAutopostAllowed: () => Promise.resolve(true), xAccountVerified: () => Promise.resolve(true) },
   db,
 });
 /** HTTP-like transport: the call and the answer are serialised as JSON, exactly like the wire. */
 const httpTransport = async (call, token) => {
-  const response = await api({ method: 'POST', authorization: `Bearer ${token}`, body: JSON.stringify(call) });
+  const response = await api({ method: 'POST', authorization: `Bearer ${jwtOf(token)}`, body: JSON.stringify(call) });
   return { status: response.status, body: JSON.parse(JSON.stringify(response.body)) };
 };
 const storeFor = (token, transport = httpTransport) => createRemoteReservationStore({ transport, getAccessToken: () => Promise.resolve(token) });
@@ -73,7 +79,7 @@ test('save: confirmed manual posts -> create -> independent read-back -> saved; 
   const outcome = await storeA().save(request);
   assert.equal(outcome.kind, 'saved', JSON.stringify(outcome));
   assert.deepEqual(dbCalls.map(([fn]) => fn), ['create_batch', 'list_reservations'], 'the write is followed by a separate read');
-  assert.ok(dbCalls.every(([, subject]) => subject === A), 'every call runs as the verified subject');
+  assert.ok(dbCalls.every(([, subject]) => subject.userId === A && subject.sessionId === SESSION[A]), 'every call runs as the verified subject and its session');
   saved = outcome.reservations;
   assert.equal(saved.length, 3);
   assert.ok(saved.every((row) => row.status === 'planned' && row.consentState === 'confirmed' && row.revision === 1));

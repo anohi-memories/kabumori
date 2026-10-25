@@ -37,7 +37,7 @@ const b64 = (v: unknown) => btoa(JSON.stringify(v)).replace(/\+/gu, "-").replace
 const tokens = new Map<string, string>();
 async function signIn(n: number) {
   const session = String((await owner<[string]>("insert into auth.sessions (user_id) values ($1::uuid) returning id::text", [P(n).user]))[0][0]);
-  const token = `${b64({ alg: "HS256" })}.${b64({ sub: P(n).user, session_id: session, role: "authenticated" })}.sig`;
+  const token = `${b64({ alg: "HS256" })}.${b64({ sub: P(n).user, session_id: session, role: "authenticated", is_anonymous: false })}.sig`;
   tokens.set(token, P(n).user);
   return { token, session };
 }
@@ -156,8 +156,15 @@ Deno.test("E3 a change after begin, before the X call: failed (never sent, X 0) 
     const s = await signIn(n);
     const before = xCalls.length;
     const answer = await post(s.token, P(n).account, `直前の変更 ${label}`, undefined, handler({ connect: afterCommit(1, () => change(n, s.session)) }));
-    assert.deepEqual([answer.result.kind, codeOf(answer.body)], ["failed", "NOT_PUBLISHABLE_AT_SEND"], `${label}: ${JSON.stringify(answer.body)}`);
     assert.equal(xCalls.length, before, `${label}: X never called`);
+    if (label === "signed out") {
+      // G3-34 / G3-36: the person-session gate (S2-2, asked first by caller()) refuses the dead session's check before any row is
+      // read: 401 (nothing sent, the dead session is told nothing); the row stays claimed until its lease is fenced -- never sent.
+      assert.deepEqual(answer.result, { kind: "refused", code: "AUTH_REQUIRED", retryable: true }, `${label}: ${JSON.stringify(answer.body)}`);
+      assert.deepEqual((await owner<[string, string | null, string | null]>("select status, provider_post_id, outcome_code from postona_x_resv.reservations where user_id = $1::uuid order by created_at desc limit 1", [P(n).user]))[0], ["claimed", null, null], label);
+      continue;
+    }
+    assert.deepEqual([answer.result.kind, codeOf(answer.body)], ["failed", "NOT_PUBLISHABLE_AT_SEND"], `${label}: ${JSON.stringify(answer.body)}`);
     assert.deepEqual((await stored(ridOf(answer.body))).slice(0, 3), ["failed", null, "NOT_PUBLISHABLE_AT_SEND"], label);
   }
 });

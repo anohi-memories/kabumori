@@ -17,7 +17,7 @@ const GEN = "c".repeat(64);
 const X_TOKEN = "fake-x-token-sa_x-0001";
 const b64 = (v: unknown) => btoa(JSON.stringify(v)).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 const token = (claims: Record<string, unknown>) => `${b64({ alg: "HS256" })}.${b64(claims)}.sig`;
-const TOKEN = token({ sub: USER, session_id: SESSION });
+const TOKEN = token({ sub: USER, session_id: SESSION, is_anonymous: false });
 const SHA = "a".repeat(64);
 const body = (over: Record<string, unknown> = {}) => JSON.stringify({ socialAccountId: "sa_x", clientRequestId: REQ, text: "本文", consent: { confirmed: true, contentSha256: SHA }, ...over });
 const auth = { verify: (t: string) => Promise.resolve(t === TOKEN || t.startsWith(TOKEN.split(".")[0]) ? { userId: USER } : null) };
@@ -106,7 +106,10 @@ test("refused before anything is recorded: bad body, no / unverified token, no s
     assert.equal((await run({ db, x: fakeX(published("1")) }, { body: b })).status, 400, b);
     assert.equal(calls.length, 0);
   }
-  for (const authorization of [null, "Bearer short", `Basic ${TOKEN}`, `Bearer ${token({ sub: USER })}`, `Bearer ${token({ sub: "other", session_id: SESSION })}`]) {
+  // G3-34 F1: the same token must also state is_anonymous as the JSON false (missing / null / "false" / true are refused)
+  for (const authorization of [null, "Bearer short", `Basic ${TOKEN}`, `Bearer ${token({ sub: USER })}`, `Bearer ${token({ sub: "other", session_id: SESSION, is_anonymous: false })}`,
+    `Bearer ${token({ sub: USER, session_id: SESSION })}`, `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: null })}`,
+    `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: "false" })}`, `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: true })}`]) {
     const { db, calls } = happyDb();
     const answer = await run({ db, x: fakeX(published("1")) }, { authorization });
     assert.equal(answer.status, 401, String(authorization));
@@ -247,4 +250,24 @@ test("source: no Vault, no service-role key, no console, no token or text in any
   for (const banned of ["vault", "SERVICE_ROLE", "console.", "Deno.env"]) assert.ok(!source.includes(banned), banned);
   const answer = await run({ db: happyDb().db, x: fakeX(published()) });
   assert.ok(!JSON.stringify(answer).includes(TOKEN) && !JSON.stringify(answer).includes(X_TOKEN) && !JSON.stringify(answer).includes("本文"));
+});
+
+test("G3-36: the session ends between begin and the check (the gate refuses the check) -> 401 AUTH_REQUIRED, no X call, no record, no read-back", async () => {
+  const x = fakeX(published("1"));
+  const f = fakeDb({
+    begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }),
+    preflight: () => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_AUTH_REQUIRED" }),
+  });
+  assert.deepEqual(await run({ db: f.db, x }), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } });
+  assert.deepEqual(f.calls.map((c) => c.fn), ["begin", "preflight"]);
+  assert.equal(x.sent.length, 0, "nothing was sent");
+  // any other refusal of the check keeps the stored answer (read-back), as before
+  const g = fakeDb({
+    begin: rows({ reservation_id: RID, lease_token: LEASE, state: "claimed" }),
+    preflight: () => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_SERVICE_BUSY" }),
+    readback: rows({ reservation_id: RID, state: "pending", after_freeze: false, simulated: false }),
+  });
+  assert.equal((await run({ db: g.db, x })).status, 200);
+  assert.deepEqual(g.calls.map((c) => c.fn), ["begin", "preflight", "readback"]);
+  assert.equal(x.sent.length, 0);
 });

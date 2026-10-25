@@ -151,6 +151,14 @@ select pg_temp.expect(pg_temp.api(pg_temp.readback(:'l6id'), pg_temp.person(90),
 -- a row the handler never recorded (released) has no transport: never reported as a real post.
 select pg_temp.expect(pg_temp.api(pg_temp.readback(r.id::text), pg_temp.person(88), :'s88') like 'pending/-/%/false/true', 'L6 unrecorded row is simulated')
   from postona_x_resv.reservations r where r.user_id = pg_temp.person(88) and r.status = 'planned';
+-- G3-33 X5: a claimed single post whose lease ran out (no sweep yet) reads 'uncertain', not 'pending'; the read changes nothing.
+select pg_temp.api(pg_temp.begin_sp(pg_temp.account(89), gen_random_uuid(), 'X5 lease'), pg_temp.person(89), :'s89') as bx5 \gset
+select split_part(:'bx5', '/', 3) as x5id \gset
+select pg_temp.expect(pg_temp.api(pg_temp.readback(:'x5id'), pg_temp.person(89), :'s89') like 'pending/%', 'X5 live lease reads pending');
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() - interval '1 second' where id = :'x5id';
+select pg_temp.expect(pg_temp.api(pg_temp.readback(:'x5id'), pg_temp.person(89), :'s89') = 'uncertain/-/-/false/true', 'X5 lease ran out reads uncertain');
+select pg_temp.expect((select status from postona_x_resv.reservations where id = :'x5id') = 'claimed', 'X5 the readback changes nothing');
+select pg_temp.expect(pg_temp.api(pg_temp.readback(:'x5id'), pg_temp.person(90), :'s90') = 'ERR:POSTONA_RESV_NOT_FOUND', 'X5 another person still cannot read');
 select 'L6_RECORD_AFTER_FREEZE_SIMULATED_READBACK_PASS' as result;
 
 -- L7: the delivery worker still never claims a single post and its four functions are unchanged.

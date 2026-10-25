@@ -105,6 +105,11 @@ xfp() { val -c "select md5(coalesce(string_agg(p.oid::regprocedure::text || ':' 
   from pg_proc p where p.pronamespace = 'postona_x_resv'::regnamespace"; }
 FPX="$(xfp)"
 echo "BASELINE_001_006_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$resv/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own "$db" -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # G5 R1 / W1 TEST DOUBLE (007 requires them; the counters must see every later change).
 own "$db" -f "$t/g5_verdict_test_double.sql" >/dev/null
@@ -152,7 +157,7 @@ grep -q POSTONA_THREADS_RESV_ALREADY_APPLIED "$tmp/s0" || fail "re-apply: $(tail
 P61="$(val -c "select user_id from t_ids.people where n = 61")"; T61="$(val -c "select threads_account from t_ids.people where n = 61")"
 S61="$(val -c "insert into auth.sessions (user_id) values ('$P61') returning id")"
 deny="$(psql -X -q -A -t -h "$host" -p "$port" -U "$apilogin" -d "$db" -c "begin" -c "set local role postona_resv_api" \
-  -c "do \$\$ begin perform set_config('request.jwt.claims', '{\"sub\":\"$P61\",\"role\":\"authenticated\",\"session_id\":\"$S61\"}', true); end \$\$" \
+  -c "do \$\$ begin perform set_config('request.jwt.claims', '{\"sub\":\"$P61\",\"role\":\"authenticated\",\"session_id\":\"$S61\",\"is_anonymous\":false}', true); end \$\$" \
   -c "select status from postona_threads_resv.create_reservation('$T61', gen_random_uuid(), 'x', encode(sha256(convert_to('x', 'UTF8')), 'hex'), now() + interval '10 minutes')" -c "commit" 2>&1 || true)"
 [[ "$deny" == *POSTONA_THREADS_RESV_ACCOUNT_NOT_VERIFIED* ]] || fail "S0 shipped stubs did not deny: $deny"
 echo "S0_REFUSALS_ATOMIC_REAPPLY_X_UNCHANGED_SHIPPED_DENY_PASS"

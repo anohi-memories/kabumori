@@ -153,10 +153,24 @@ $$;
 -- ---------------------------------------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------------------------------------
+/**
+ * The person behind a person-facing call (every X and Threads reservation entry identifies the caller here, before any row is
+ * read). G3-34: G5's person-session gate S2-2 (private.postona_personal_session(), PR #510) is asked FIRST: only exactly
+ * 'active' (a signed-in, non-anonymous person whose session row is live, sub = auth.uid()) proceeds; any other answer, a NULL or
+ * a missing gate refuses with AUTH_REQUIRED -- so another person's row and an unknown id keep answering alike. Fail-closed until
+ * S2-2 is installed by the same owner.
+ */
 create function postona_x_resv.caller() returns uuid
 language plpgsql stable security definer set search_path = '' as $$
-declare v uuid := auth.uid();
+declare v uuid;
 begin
+  if to_regprocedure('private.postona_personal_session()') is null then
+    raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = 'P0001';
+  end if;
+  if private.postona_personal_session() is distinct from 'active' then
+    raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = 'P0001';
+  end if;
+  v := auth.uid();
   if v is null then raise exception 'POSTONA_RESV_AUTH_REQUIRED' using errcode = 'P0001'; end if;
   return v;
 end $$;
@@ -622,7 +636,8 @@ end $$;
 /**
  * Lease holder reports the outcome:
  *   published (with the provider post id), failed_before_send (provably never sent), uncertain (unknown).
- * Returns the recorded outcome, or 'lease_lost' when the lease had already expired (row fenced to uncertain).
+ * Returns the recorded outcome, or 'lease_lost' when the lease had already expired (row fenced to uncertain) or the
+ * row is already 'uncertain' (the late report is kept in the audit trail only; G3-32).
  * A repeated identical 'published' report is idempotent; anything else on a finished row is refused.
  */
 create function postona_x_resv.finish(p_reservation_id uuid, p_lease_token uuid, p_outcome text, p_provider_post_id text, p_code text)
@@ -643,8 +658,20 @@ begin
   if v_row.status = 'published' and p_outcome = 'published' and v_row.provider_post_id = p_provider_post_id then
     return 'published';  -- idempotent replay
   end if;
+  if v_row.status = 'uncertain' then
+    -- G3-32 C1: the same lease reporting after the row was fenced to 'uncertain' (swept, or an earlier uncertain report).
+    -- The row is NOT changed (never 'published', never re-claimed); the late report is kept in the audit trail only, so a
+    -- future reviewed reconciliation can verify it with X. Nothing is raised, so the audit row commits; the caller gets
+    -- 'lease_lost', never its outcome.
+    insert into postona_x_resv.audit (user_id, reservation_id, action, detail)
+    values (v_row.user_id, v_row.id, 'finish_after_fence', pg_catalog.jsonb_build_object(
+      'reported_outcome', p_outcome, 'reported_provider_post_id', p_provider_post_id, 'reported_code', p_code,
+      'row_outcome_code', v_row.outcome_code));
+    return 'lease_lost';
+  end if;
   if v_row.status <> 'claimed' then
-    -- Includes a lease swept to 'uncertain': a late success is recorded only by a reviewed reconciliation.
+    -- published (another id / outcome), failed, cancelled, expired, planned: refused; a late success is recorded only by a
+    -- reviewed reconciliation.
     raise exception 'POSTONA_RESV_LEASE_LOST' using errcode = 'P0001';
   end if;
   -- The lease deadline is enforced here, at the decision point, on the real clock (not the transaction start)

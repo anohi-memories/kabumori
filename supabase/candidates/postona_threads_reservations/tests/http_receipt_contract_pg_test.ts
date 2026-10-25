@@ -182,17 +182,19 @@ Deno.test("P6 G5's REAL W1 stops (stale generation, missing pair) -> receipt ask
   assert.deepEqual((await rowOf(stale.id)).slice(0, 2), ["failed", "SERVICE_GENERATION_CHANGED"]);
 });
 
-Deno.test("P7 FINDING (documented, not fixed): 007's cancel and receipt check only auth.uid(); with the person's session row removed or expired they still answer the owner", async () => {
+Deno.test("P7 FIXED (G3-34): with the person's session row removed or expired, cancel and receipt refuse (401 AUTH_REQUIRED, G5's S2-2 asked first by caller()) and change nothing", async () => {
   const me = await tokenOf(110);
   const a = await plant(110, "P7 session");
   await owner("delete from auth.sessions where id = $1::uuid", [me.session]);
   const r = await receipt(me.token, P(110).threads, a.clientId);
-  assert.equal(r.status, 200, "receipt still answers: the session is the verifier's job (G5), 007 does not re-check it");
+  assert.equal(r.status, 401, "a removed session row: the receipt refuses before any row is read");
   const exp = await tokenOf(110);
   await owner("update auth.sessions set not_after = now() - interval '1 minute' where id = $1::uuid", [exp.session]);
   const c = await cancel(exp.token, a.id);
-  assert.equal(c.status, 200, "cancel still works with an expired session row");
-  console.log("P7 FINDING: receipt / cancel do not re-check the session (create does, through G5's R1)");
+  assert.equal(c.status, 401, "an expired session row: cancel refuses");
+  assert.deepEqual((await owner<[string]>("select status from postona_threads_resv.reservations where id = $1::uuid", [a.id]))[0], ["planned"], "nothing changed");
+  const live = await tokenOf(110);
+  assert.equal((await receipt(live.token, P(110).threads, a.clientId)).status, 200, "a live session of the same person still reads it");
 });
 
 Deno.test("P8 nothing published, nothing pending, the U8 CHECK untouched", async () => {

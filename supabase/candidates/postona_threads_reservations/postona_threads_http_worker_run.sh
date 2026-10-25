@@ -96,6 +96,11 @@ xfp() { val -c "select md5(coalesce(string_agg(p.oid::regprocedure::text || ':' 
   from pg_proc p where p.pronamespace = 'postona_x_resv'::regnamespace"; }
 FPX="$(xfp)"
 echo "BASELINE_001_006_READY"
+# G3-34: G5's person-session gate S2-2 (caller() asks it first), pinned at PR #510's head, installed by the schema owner
+. "$resv/g5_s2_2_pinned.sh"
+s22_pinned "$tmp/s22.sql"
+own "$db" -f "$tmp/s22.sql" >/dev/null
+echo "G5_S2_2_PINNED_INSTALLED"
 
 # G5 R1 / W1 TEST DOUBLE (007 requires them; the counters must see every later change).
 own "$db" -f "$t/g5_verdict_test_double.sql" >/dev/null

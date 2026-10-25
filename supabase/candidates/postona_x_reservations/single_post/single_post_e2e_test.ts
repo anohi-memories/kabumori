@@ -36,7 +36,7 @@ const tokens = new Map<string, string>();
 const revoked = new Set<string>();
 async function signIn(n: number) {
   const session = String((await owner<[string]>("insert into auth.sessions (user_id) values ($1::uuid) returning id::text", [P(n).user]))[0][0]);
-  const token = `${b64({ alg: "HS256" })}.${b64({ sub: P(n).user, session_id: session, role: "authenticated" })}.sig`;
+  const token = `${b64({ alg: "HS256" })}.${b64({ sub: P(n).user, session_id: session, role: "authenticated", is_anonymous: false })}.sig`;
   tokens.set(token, P(n).user);
   return { token, session };
 }
@@ -209,11 +209,14 @@ Deno.test("the service ends between begin and the X call: failed (not sent); the
   assert.equal(ended.result.kind, "failed", JSON.stringify(ended.body));
   assert.equal((ended.body as { code: string }).code, "NOT_PUBLISHABLE_AT_SEND");
   assert.equal(xCalls.length, before);
-  // ... and the person signs out between begin and the X call: refused at the check (T13 re-checks the session), not sent.
+  // ... and the person signs out between begin and the X call: refused at the check, not sent. G3-34 / G3-36: the person-session
+  // gate (S2-2, asked first by caller()) refuses the check of a dead session before any row is read; the Edge answers 401 (nothing
+  // was sent, the dead session is told nothing) and the row stays claimed until its lease is fenced -- never sent.
   const s = await signIn(75);
   const signedOut = await post(s.token, P(75).account, "直前にサインアウト", undefined, handler({ connect: afterCommit(1, () =>
     owner("delete from auth.sessions where id = $1::uuid", [s.session])) }));
-  assert.equal(signedOut.result.kind, "failed", JSON.stringify(signedOut.body));
+  assert.deepEqual(signedOut.result, { kind: "refused", code: "AUTH_REQUIRED", retryable: true }, JSON.stringify(signedOut.body));
+  assert.deepEqual((await owner<[string]>("select status from postona_x_resv.reservations where user_id = $1::uuid order by created_at desc limit 1", [P(75).user]))[0], ["claimed"]);
   assert.equal(xCalls.length, before);
   const b = await signIn(71);
   let rid = "";
