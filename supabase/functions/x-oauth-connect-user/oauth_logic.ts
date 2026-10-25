@@ -25,6 +25,28 @@ function fail(code: string, status: number): never {
   throw new OAuthConnectUserError(code, status);
 }
 
+// G4-41: RPC refusals the app must tell apart. A dead or anonymous session means "sign in again" (401, like the
+// missing-token answer of index.ts); the person's workspace failing the one personal-workspace rule (G5's verdict, see
+// supabase/candidates/postona_g4_x_oauth_personal_epoch) means "a retry will not help" (409). Everything else stays 400.
+const SESSION_REFUSALS = new Set([
+  "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED",
+  "SOCIAL_MOBILE_OAUTH_SESSION_NOT_ACTIVE",
+]);
+const WORKSPACE_REFUSALS = new Set([
+  "OWN_WORKSPACE_CONFLICT",
+  "WORKSPACE_OWNER_UNKNOWN",
+  "WORKSPACE_VERDICT_UNKNOWN",
+  "OWNER_EPOCH_UNAVAILABLE",
+  "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED",
+]);
+
+export function rpcRefusalStatus(code: string, httpStatus: number): number {
+  if (httpStatus === 401 || httpStatus === 403) return httpStatus;
+  if (SESSION_REFUSALS.has(code)) return 401;
+  if (WORKSPACE_REFUSALS.has(code)) return 409;
+  return 400;
+}
+
 export async function hashState(state: string): Promise<string> {
   const bytes = new TextEncoder().encode(state);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -102,7 +124,7 @@ export async function rpcAsUser({
     } catch {
       // keep the generic code
     }
-    fail(code, response.status === 401 || response.status === 403 ? response.status : 400);
+    fail(code, rpcRefusalStatus(code, response.status));
   }
   const text = await response.text();
   return text.trim() === "" ? null : JSON.parse(text);
