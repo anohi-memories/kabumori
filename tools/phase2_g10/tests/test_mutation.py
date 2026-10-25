@@ -362,10 +362,10 @@ MUTANTS = [
      "        if not self._token_verified:", "        if False:",
      "test_github_auth_budget.TokenBeforeSending.test_fetch_before_verification_sends_nothing"),
     ("edit by an untrusted actor accepted", "g10runner/github_graphql.py",
-     '        if _login(node.get("editor")) != trusted:', "        if False:",
+     '        if not _actor_ok(node["editor"]) or _login(node["editor"]) != trusted:', "        if False:",
      "test_github_auth_budget.EditorProvenance.test_unknown_cases"),
     ("deleted revision accepted", "g10runner/github_graphql.py",
-     '        if node.get("deletedAt") is not None:', "        if False:",
+     '        if node["deletedAt"] is not None:', "        if False:",
      "test_github_auth_budget.EditorProvenance.test_unknown_cases"),
     ("incomplete edit history accepted", "g10runner/github_graphql.py",
      "    if total > MAX_EDITS or len(nodes) != total:", "    if False:",
@@ -394,6 +394,28 @@ MUTANTS = [
     ("budget plan ignores the fixed per-run fetches", "g10runner/rate_budget.py",
      "    fixed = FIXED_FETCHES_PER_RUN * starts_per_hour", "    fixed = 0.0",
      "test_github_auth_budget.BudgetPlan.test_s2_and_concurrency_are_counted"),
+    # --- H2 第9TASK R1/R2（TASK 12）---
+    ("missing provenance fields treated as null", "g10runner/github_graphql.py",
+     '            return UNKNOWN_EDITOR, "provenance field missing: " + key',
+     '            issue = dict(issue, **{key: False if key == "includesCreatedEdit" else None})',
+     "test_review_regressions_gate1_p2.R1MissingProvenance.test_missing_editor_and_last_edited_fields_are_not_never_edited"),
+    ("missing deletedAt treated as not deleted", "g10runner/github_graphql.py",
+     '        if not isinstance(node, dict) or any(key not in node for key in EDIT_NODE_FIELDS):\n'
+     '            return UNKNOWN_EDITOR, "edit history node missing fields"',
+     '        if not isinstance(node, dict):\n'
+     '            return UNKNOWN_EDITOR, "edit history malformed"\n'
+     '        node = dict({"deletedAt": None}, **node)',
+     "test_review_regressions_gate1_p2.R1MissingProvenance.test_missing_deleted_at_is_not_an_undeleted_revision"),
+    ("includesCreatedEdit ignored for an empty history", "g10runner/github_graphql.py",
+     "        if last_edited is None and editor is None and not nodes and created_edit is False:",
+     "        if last_edited is None and editor is None and not nodes:",
+     "test_review_regressions_gate1_p2.R1MissingProvenance.test_includes_created_edit_with_an_empty_history_is_inconsistent"),
+    ("includesCreatedEdit ignored for a single entry", "g10runner/github_graphql.py",
+     "    if created_edit and total < 2:", "    if False:",
+     "test_review_regressions_gate1_p2.R1ProvenanceBoundaries.test_unknown_cases"),
+    ("RateBudget reservation not atomic", "g10runner/rate_budget.py",
+     "        with self._lock:\n            self._reserve(now)", "        self._reserve(now)",
+     "test_review_regressions_gate1_p2.R2ConcurrentReservation.test_two_threads_cannot_take_the_last_slot"),
 ]
 
 

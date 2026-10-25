@@ -10,6 +10,7 @@ GitHub の回数制限（公開資料の値。実機では認証なしの 60回�
   S1 の監督 3600/issue_monitor_interval ＋ S2 の予備（S1 が止まっていれば毎周期）3600/watchdog_interval
   ＋ 1ランごとの固定（CLAIM・起動直前・finalize の3回）× 1時間の最大起動数（rate_guard から）
 """
+import threading
 import time
 
 from . import policy as policy_mod
@@ -67,7 +68,11 @@ def min_monitor_interval(policy, mode, watchdog_interval, api="rest", safety=DEF
 
 
 class RateBudget:
-    """実行時の歯止め: 直近1時間の送信数・サーバの残り回数・Retry-After を見て、超えそうなら送らない（RateLimited）。"""
+    """実行時の歯止め: 直近1時間の送信数・サーバの残り回数・Retry-After を見て、超えそうなら送らない（RateLimited）。
+
+    TASK 12（H2 R2）: 同じ予算を複数のスレッドが共有しても、古い記録の切り捨て・判定・枠の予約（記録）、および
+    observe／block は、1つのロックの下で一体に行う（残り1枠を2つの呼び出しが同時に取ることはない）。
+    別のプロセス（S1 と S2 が別プロセスの場合など）での共有は対象外（共有の台帳は、結線のときの別設計）。"""
 
     def __init__(self, limit_per_hour, reserve_fraction=0.2, now=time.time):
         if not (isinstance(limit_per_hour, int) and not isinstance(limit_per_hour, bool) and limit_per_hour > 0):
@@ -81,12 +86,17 @@ class RateBudget:
         self.server_remaining = None
         self.server_reset = None
         self.blocked_until = None
+        self._lock = threading.RLock()  # observe の中から block を呼ぶので再入可能
 
     def _prune(self, now):
         self.sent = [t for t in self.sent if now - t < 3600.0]
 
     def before_request(self, now=None):
         now = self.now() if now is None else now
+        with self._lock:
+            self._reserve(now)
+
+    def _reserve(self, now):
         self._prune(now)
         if self.blocked_until is not None and now < self.blocked_until:
             raise RateLimited("rate budget: backing off", self.blocked_until - now)
@@ -100,6 +110,10 @@ class RateBudget:
 
     def observe(self, headers, now=None):
         now = self.now() if now is None else now
+        with self._lock:
+            self._observe(headers, now)
+
+    def _observe(self, headers, now):
         remaining = str(headers.get("X-RateLimit-Remaining", "")).strip()
         reset = str(headers.get("X-RateLimit-Reset", "")).strip()
         if remaining.isdigit():
@@ -108,10 +122,14 @@ class RateBudget:
             self.server_reset = float(reset)
         ra = str(headers.get("Retry-After", "")).strip()
         if ra.isdigit():
-            self.block(float(ra), now)
+            self._block(float(ra), now)
 
     def block(self, retry_after, now=None):
         now = self.now() if now is None else now
+        with self._lock:
+            self._block(retry_after, now)
+
+    def _block(self, retry_after, now):
         wait = retry_after if isinstance(retry_after, (int, float)) and retry_after > 0 else 60.0
         until = now + wait
         if self.blocked_until is None or until > self.blocked_until:

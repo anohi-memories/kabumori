@@ -8,10 +8,12 @@
 - 応答の "errors" は1件でもあれば失敗。リポジトリ名・Issue 番号・state・作成者・本文・updatedAt を検証する。
 - 最後の編集者（determine_editor）: 次をすべて満たすときだけ、編集者を確定する。満たさなければ UNKNOWN_EDITOR
   （IssueWitness の証拠の検査で必ず拒否）。推測で「未編集」「信頼済み」にしない。
-  - 未編集: userContentEdits.totalCount＝0、かつ lastEditedAt と editor がともに null → editor＝None
+  - 要求した項目（editor・lastEditedAt・includesCreatedEdit・userContentEdits、各版の editedAt・deletedAt・editor）が
+    すべて**ある**こと（項目が無いのを null と同じに扱わない。TASK 12）
+  - 未編集: userContentEdits.totalCount＝0、lastEditedAt と editor がともに null、includesCreatedEdit が false → editor＝None
   - 編集あり: 編集履歴が欠けていない（totalCount≦100 かつ取得した件数＝totalCount）、すべての編集の editor が
     信頼済みのアカウント、削除された版（deletedAt）が無い、Issue の editor が信頼済み、lastEditedAt が編集履歴の
-    最新の editedAt と一致 → editor＝信頼済みのアカウント
+    最新の editedAt と一致、includesCreatedEdit が true なら履歴が2件以上 → editor＝信頼済みのアカウント
   ※ 編集履歴の完全性（GitHub が短時間の連続編集をまとめる・版を削除できる等）は GitHub の仕様に依存し、
     実機では未検証（NOT_VERIFIED）。上の条件は、分からないものを通さない側に倒している。
 """
@@ -40,31 +42,55 @@ def _login(actor):
     return actor.get("login") if isinstance(actor, dict) and isinstance(actor.get("login"), str) else None
 
 
+ISSUE_PROVENANCE_FIELDS = ("lastEditedAt", "editor", "includesCreatedEdit", "userContentEdits")
+EDIT_NODE_FIELDS = ("editedAt", "deletedAt", "editor")
+
+
+def _actor_ok(value):
+    """editor の値は null か {login: 文字列}。それ以外の形は不正。"""
+    return value is None or (isinstance(value, dict) and isinstance(value.get("login"), str) and value["login"])
+
+
 def determine_editor(issue, trusted=issue_mod.TRUSTED_LOGIN):
-    """(editor, 根拠) を返す。確定できなければ (UNKNOWN_EDITOR, 理由)。"""
-    edits = issue.get("userContentEdits")
-    if not isinstance(edits, dict):
+    """(editor, 根拠) を返す。確定できなければ (UNKNOWN_EDITOR, 理由)。
+
+    TASK 12（H2 R1）: 固定の問い合わせで要求した provenance の項目は、まず「あること」と型を確かめる。
+    項目が**無い**ことを null（未編集・未削除）と同じに扱わない。includesCreatedEdit と編集履歴の矛盾も不明にする。
+    """
+    if not isinstance(issue, dict):
+        return UNKNOWN_EDITOR, "issue malformed"
+    for key in ISSUE_PROVENANCE_FIELDS:
+        if key not in issue:
+            return UNKNOWN_EDITOR, "provenance field missing: " + key
+    last_edited, editor = issue["lastEditedAt"], issue["editor"]
+    created_edit, edits = issue["includesCreatedEdit"], issue["userContentEdits"]
+    if not isinstance(created_edit, bool):
+        return UNKNOWN_EDITOR, "includesCreatedEdit malformed"
+    if not (last_edited is None or isinstance(last_edited, str)) or not _actor_ok(editor):
+        return UNKNOWN_EDITOR, "edit markers malformed"
+    if not isinstance(edits, dict) or "totalCount" not in edits or "nodes" not in edits:
         return UNKNOWN_EDITOR, "edit history missing"
-    total, nodes = edits.get("totalCount"), edits.get("nodes")
+    total, nodes = edits["totalCount"], edits["nodes"]
     if not (isinstance(total, int) and not isinstance(total, bool) and total >= 0 and isinstance(nodes, list)):
         return UNKNOWN_EDITOR, "edit history malformed"
-    last_edited, editor = issue.get("lastEditedAt"), issue.get("editor")
     if total == 0:
-        if last_edited is None and editor is None and not nodes:
+        if last_edited is None and editor is None and not nodes and created_edit is False:
             return None, "never edited"
         return UNKNOWN_EDITOR, "no edit history but edit markers are present"
     if total > MAX_EDITS or len(nodes) != total:
         return UNKNOWN_EDITOR, "edit history incomplete (%d of %d)" % (len(nodes), total)
+    if created_edit and total < 2:  # 作成時のデータの版＋1回以上の編集があるはず
+        return UNKNOWN_EDITOR, "includesCreatedEdit is inconsistent with the edit history"
     times = []
     for node in nodes:
-        if not isinstance(node, dict):
-            return UNKNOWN_EDITOR, "edit history malformed"
-        if node.get("deletedAt") is not None:
+        if not isinstance(node, dict) or any(key not in node for key in EDIT_NODE_FIELDS):
+            return UNKNOWN_EDITOR, "edit history node missing fields"
+        if node["deletedAt"] is not None:
             return UNKNOWN_EDITOR, "edit history has a deleted revision"
-        if _login(node.get("editor")) != trusted:
+        if not _actor_ok(node["editor"]) or _login(node["editor"]) != trusted:
             return UNKNOWN_EDITOR, "an edit was made by an untrusted or unknown actor"
         try:
-            times.append(gh._parse_iso8601_z(node.get("editedAt"), "edit time"))
+            times.append(gh._parse_iso8601_z(node["editedAt"], "edit time"))
         except issue_mod.IssueSourceError:
             return UNKNOWN_EDITOR, "edit time malformed"
     if _login(editor) != trusted:

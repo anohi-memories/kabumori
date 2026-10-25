@@ -10,6 +10,7 @@ H4 C4 P2（遅延する再取得の後の HALT・期限の再判定）の修正�
 H2 C2 P2×2（監督スレッドの異常・正常時刻）の修正は TASK `g10-phase2-pr423-h2-c2-monitor-worker-stale-heartbeat-p2-fix-20261023`（同じ節の「監督スレッドの結果と正常時刻の契約」）。
 ゲート1（実 GitHub の Issue #323 の読み取り専用取得元の候補）は TASK `g10-phase2-gate1-github-readonly-witness-candidate-20261023`（下の「ゲート1」）。
 ゲート1追加（編集者の根拠・認証・回数の予算）は TASK `g10-phase2-gate1-editor-provenance-rate-budget-20261025`（下の「ゲート1追加」）。
+H2 第9TASK の P2×2（provenance の項目の欠落・予算の同時の呼び出し）の修正は TASK `g10-phase2-gate1-editor-rate-p2-fix-20261025`（同じ節の末尾）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -194,6 +195,12 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
   実行時の `RateBudget` は、直近1時間の送信数・サーバの残り回数（Reset まで）・Retry-After を見て、超えそうなら送らない
   （`RateLimited`。自動の再試行はしない）。REST は ETag の条件付き取得に対応（304 なら前回の内容を使う。
   **認証なしの 304 も回数に数えられることを実測**）。スケジューラ（S1/S2・起動）には結線していない。
+- **TASK 12（H2 R1・R2 の修正）**:
+  - 編集者の根拠: 固定の問い合わせで要求した項目（editor・lastEditedAt・includesCreatedEdit・userContentEdits、各版の
+    editedAt・deletedAt・editor）は、まず**あること**と型を確かめる。項目が無いのを null（未編集・未削除）と同じに扱わない。
+    includesCreatedEdit が true なのに履歴が0件・1件の矛盾は不明にする（true なら作成時の版＋編集で2件以上のはず）。
+  - 予算: `RateBudget` の古い記録の切り捨て・判定・枠の予約と、observe／block を1つのロックの下で一体に行う
+    （同じ予算を共有するスレッドが、残り1枠を同時に取らない）。別プロセスでの共有（共有の台帳）は対象外で、結線のときの別設計。
 
 ## 実装していないもの・未検証（NOT_VERIFIED）
 - 実Claude CLI の起動・Max認証・`--restricted`／`--tools` の実効性・modelUsage の実際の形式（実CLI試験は別TASK）。
