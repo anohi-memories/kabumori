@@ -22,7 +22,8 @@ export function psqlReservationDb({ host, port, database, loginRole, onCall }) {
       const target = SQL[fn];
       if (!target) return { ok: false, code: 'DB_FUNCTION_UNKNOWN' };
       onCall?.(fn, subject);
-      const vars = ['-v', `sub=${subject}`, '-v', `claims=${JSON.stringify({ sub: subject, role: 'authenticated' })}`];
+      // G3-34: the verified subject and its session, not anonymous (as postgres_db.ts sets them)
+      const vars = ['-v', `sub=${subject.userId}`, '-v', `claims=${JSON.stringify({ sub: subject.userId, role: 'authenticated', session_id: subject.sessionId, is_anonymous: false })}`];
       args.forEach((value, index) => vars.push('-v', `a${index}=${asText(value)}`));
       const script = [
         '\\set ON_ERROR_STOP on',

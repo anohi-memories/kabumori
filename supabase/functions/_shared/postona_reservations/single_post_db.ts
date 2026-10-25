@@ -52,7 +52,8 @@ export function createSinglePostDb(connect: PgConnect): SinglePostDb {
         await client.queryArray({ text: "SET LOCAL statement_timeout = '15s'" });
         await client.queryArray({
           text: "SELECT set_config('request.jwt.claims', $1, true), set_config('request.jwt.claim.sub', '', true)",
-          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId })],
+          // G3-34: Auth already refused an anonymous sign-in, so is_anonymous is the proven false G5's S2-2 requires.
+          args: [JSON.stringify({ sub: subject.userId, role: "authenticated", session_id: subject.sessionId, is_anonymous: false })],
         });
         const text = target.scalar ? `SELECT json_build_array(json_build_object('answer', ${target.sql}))::text` : `SELECT coalesce(json_agg(r), '[]'::json)::text FROM ${target.sql} r`;
         const result = await client.queryArray({ text, args: args.map((v) => (v === null || v === undefined ? null : String(v))) });

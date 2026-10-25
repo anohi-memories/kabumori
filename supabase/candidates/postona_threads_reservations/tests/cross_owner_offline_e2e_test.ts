@@ -322,10 +322,13 @@ Deno.test("X10 the record answer is lost after the publish -> the report says un
 });
 
 // ---- HTTP: actor / tenant / idempotency / receipt -----------------------------------------------------------------------
+// G3-34: one live auth.sessions row per person -- G5's person-session gate S2-2 (asked first by caller()) checks it; the MOCK
+// verdicts carry it as the verified token's session id.
+const sessionOfUser = new Map((await owner<[string, string]>("insert into auth.sessions (user_id) select user_id from t_ids.people returning user_id::text, id::text")).map(([u, s]) => [u, s]));
 const verdicts = new Map<string, VerifiedCaller>();
 const tokenOf = (n: number) => {
   const token = `tok-${n}-0123456789abcdef`;
-  verdicts.set(token, { userId: P(n).user, sessionId: crypto.randomUUID() });
+  verdicts.set(token, { userId: P(n).user, sessionId: sessionOfUser.get(P(n).user)! });
   return token;
 };
 const http = createThreadsReservationHttpFixture({ enabled: true, verify: (t: string) => Promise.resolve(verdicts.get(t) ?? null), store: createPgPersonStore(API_URL) });

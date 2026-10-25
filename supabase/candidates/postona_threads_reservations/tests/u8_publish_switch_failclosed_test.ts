@@ -58,7 +58,7 @@ const people = new Map((await owner<[number, string, string, string, string]>("s
   .map(([n, user, threads, brand, token]) => [Number(n), { user, threads, brand, token } as Person]));
 const P = (n: number) => people.get(n)!;
 const session = async (user: string) => String((await owner<[string]>("insert into auth.sessions (user_id) values ($1::uuid) returning id::text", [user]))[0][0]);
-const claims = (user: string, sessionId: string) => JSON.stringify({ sub: user, role: "authenticated", session_id: sessionId });
+const claims = (user: string, sessionId: string) => JSON.stringify({ sub: user, role: "authenticated", session_id: sessionId, is_anonymous: false });
 const reservations = async () => Number((await owner<[bigint]>("select count(*) from postona_threads_resv.reservations"))[0][0]);
 const switchesOn = async () => Number((await owner<[bigint]>("select count(*) from public.social_accounts where platform = 'threads' and publish_enabled"))[0][0]);
 const counters = async (n: number) => (await owner<[string, string]>(
