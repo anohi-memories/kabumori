@@ -1,7 +1,7 @@
 // G4-41: the HTTP status the Edge answers for each RPC refusal of the X begin / complete (incl. the G4 candidate's codes).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OAuthConnectUserError, rpcRefusalStatus, startConnection } from "./oauth_logic.ts";
+import { OAuthConnectUserError, rpcRefusalCode, rpcRefusalStatus, startConnection } from "./oauth_logic.ts";
 
 const SUPABASE_URL = "https://example.supabase.co";
 const ANON_KEY = "anon-key-fixture";
@@ -69,4 +69,47 @@ test("startConnection: an unreadable refusal body keeps the generic code and 400
     (error: unknown) =>
       error instanceof OAuthConnectUserError && error.message === "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED" && error.status === 400,
   );
+});
+
+// G4-43: fixed codes only, and the registered redirect URI only (both carried over from PR #353)
+test("rpcRefusalCode: a known code passes, anything else becomes the generic code", () => {
+  for (const code of ["OWN_WORKSPACE_CONFLICT", "OAUTH_STATE_SUPERSEDED", "X_ACCOUNT_ALREADY_CONNECTED", "OAUTH_STATE_NOT_BOUND"]) {
+    assert.equal(rpcRefusalCode(code), code);
+  }
+  for (const message of [
+    'duplicate key value violates unique constraint "social_accounts_platform_user_id_key"',
+    "permission denied for function begin_social_mobile_x_oauth_connection",
+    "JWT expired", "", null, 42, undefined,
+  ]) {
+    assert.equal(rpcRefusalCode(message), "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED", String(message));
+  }
+});
+
+test("startConnection: a database's own error text is never echoed; PostgREST's 401 is kept", async () => {
+  await assert.rejects(
+    () => startWithRefusal('duplicate key value violates unique constraint "x"'),
+    (error: unknown) =>
+      error instanceof OAuthConnectUserError && error.message === "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED" && error.status === 400,
+  );
+  await assert.rejects(
+    () => startWithRefusal("JWT expired", 401),
+    (error: unknown) =>
+      error instanceof OAuthConnectUserError && error.message === "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED" && error.status === 401,
+  );
+});
+
+test("startConnection: only the registered redirect URI begins (no RPC call otherwise)", async () => {
+  for (const redirectUri of ["kabumori-social://oauth-callback/", "https://evil.example/cb", "KABUMORI-SOCIAL://oauth-callback"]) {
+    let calls = 0;
+    await assert.rejects(
+      () => startConnection({
+        request: { rawState: "client-generated-raw-state-value-1234567890", codeChallenge: "challenge-value", redirectUri },
+        userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
+        fetchImpl: () => { calls += 1; return Promise.resolve(Response.json([{ brand_id: "u_x", social_account_id: "sa_x" }])); },
+      }),
+      (error: unknown) => error instanceof OAuthConnectUserError && error.message === "OAUTH_STATE_INPUT_INVALID",
+      redirectUri,
+    );
+    assert.equal(calls, 0, redirectUri);
+  }
 });

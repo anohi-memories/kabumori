@@ -130,6 +130,50 @@ export const THREADS_CONNECT_RPC_REFUSAL_CODES = Object.freeze([
   "SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS",
 ] as const);
 
+/**
+ * G4-43: the Threads callback entry (postona_threads_binding.complete_and_attest_binding: binding-epoch 001 + G4-42's
+ * workspace recheck + G4-43's person-session check) refuses with these, on top of PR #124's and the guard's.
+ */
+export const THREADS_CONNECT_ENTRY_REFUSAL_CODES = Object.freeze([
+  "THREADS_BINDING_INPUT_INVALID",
+  "THREADS_BINDING_COMPLETE_UNPINNED",
+  "THREADS_BINDING_GENERATION_UNRECORDED",
+  "THREADS_BINDING_NOT_INITIATOR",
+  "THREADS_BINDING_ALREADY_ATTESTED",
+  "THREADS_BINDING_STATE_NOT_COMPLETED",
+  "THREADS_BINDING_ACCOUNT_MISMATCH",
+  "THREADS_BINDING_NOT_OWNER",
+  "THREADS_BINDING_OWNER_EPOCH_UNKNOWN",
+  "THREADS_BINDING_OWNER_EPOCH_CHANGED",
+  "THREADS_BINDING_SERVICE_GENERATION_CHANGED",
+  "THREADS_SESSION_NOT_ACTIVE",
+  // G5's S2-3 answers, passed through by G4-42's recheck
+  "OWN_WORKSPACE_CONFLICT",
+  "WORKSPACE_OWNER_UNKNOWN",
+  "WORKSPACE_VERDICT_UNKNOWN",
+] as const);
+
+/** What the person can do after a refused Threads connect (the same three outcomes as X's x-oauth-connect-user, G4-41). */
+export type ThreadsConnectRefusalKind = "session_required" | "workspace_blocked" | "restart";
+
+const THREADS_SESSION_REFUSALS: ReadonlySet<string> = new Set(["THREADS_SESSION_NOT_ACTIVE", "ACCOUNT_LIFECYCLE_AUTH_REQUIRED"]);
+const THREADS_WORKSPACE_REFUSALS: ReadonlySet<string> = new Set([
+  "OWN_WORKSPACE_CONFLICT",
+  "WORKSPACE_OWNER_UNKNOWN",
+  "WORKSPACE_VERDICT_UNKNOWN",
+  "SOCIAL_MOBILE_WORKSPACE_CONFLICT",
+  "SOCIAL_MOBILE_WORKSPACE_NOT_SELF_SERVICE",
+  "SOCIAL_MOBILE_WORKSPACE_SHARED",
+  "SOCIAL_MOBILE_WORKSPACE_ROLE_MISMATCH",
+]);
+
+/** Sign in again, stop (the workspace cannot take a Threads connection yet), or start over; unknown codes start over. */
+export function threadsConnectRefusalKind(code: string): ThreadsConnectRefusalKind {
+  if (THREADS_SESSION_REFUSALS.has(code)) return "session_required";
+  if (THREADS_WORKSPACE_REFUSALS.has(code)) return "workspace_blocked";
+  return "restart";
+}
+
 // --- T10: provider-aware cleanup results (contract only; G5 owns the lifecycle state machine) ----------------
 
 export const PROVIDER_CLEANUP_RESULTS = Object.freeze([
