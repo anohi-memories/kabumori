@@ -47,6 +47,13 @@ if [ -z "${S21_PINNED_DIR:-}" ] && git -C "$repo" cat-file -e "$p2^{commit}" 2>/
   git -C "$repo" show "$p2:supabase/candidates/postona_personal_auth/001_t13_anonymous_refusal_rollback.sql" > "$work/p2_rollback.sql"
   p2_c="$work/p2_candidate.sql"; p2_r="$work/p2_rollback.sql"
 fi
+# (G5-30) PR #483's candidate at its head, to reproduce the attribute drift it erases; skipped in a copy without .git (the mutation runs)
+p3=9d7399047affcac44649aeb7d204be3a609dc528; p3_c=""; p3_r=""
+if [ -z "${S21_PINNED_DIR:-}" ] && git -C "$repo" cat-file -e "$p3^{commit}" 2>/dev/null; then
+  git -C "$repo" show "$p3:supabase/candidates/postona_personal_auth/001_t13_anonymous_refusal.sql" > "$work/p3_candidate.sql"
+  git -C "$repo" show "$p3:supabase/candidates/postona_personal_auth/001_t13_anonymous_refusal_rollback.sql" > "$work/p3_rollback.sql"
+  p3_c="$work/p3_candidate.sql"; p3_r="$work/p3_rollback.sql"
+fi
 
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
@@ -75,6 +82,6 @@ for w in s21 rev; do
   "${S[@]}" -d "${prefix}_$w" -c "grant usage on schema private to $other" >/dev/null
 done
 ( cd "$repo" && CAL_E2E=1 S21_CANDIDATE="$cand/001_t13_anonymous_refusal.sql" S21_ROLLBACK="$cand/001_t13_anonymous_refusal_rollback.sql" \
-    S21_P2_CANDIDATE="$p2_c" S21_P2_ROLLBACK="$p2_r" \
+    S21_P2_CANDIDATE="$p2_c" S21_P2_ROLLBACK="$p2_r" S21_P3_CANDIDATE="$p3_c" S21_P3_ROLLBACK="$p3_r" \
     S21_OWNER="$owner" S21_OTHER="$other" S21_DB="${prefix}_s21" S21_REV="${prefix}_rev" PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_t13_anon_pg_test.ts" )

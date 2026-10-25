@@ -1,4 +1,4 @@
-"""Mutation check for the G5-24 / G5-25 (S2-1) T13 anonymous-refusal candidate: ONE rule of the candidate is broken in a scratch COPY (a body mutant
+"""Mutation check for the G5-24 / G5-25 / G5-30 (S2-1) T13 anonymous-refusal candidate: ONE rule of the candidate is broken in a scratch COPY (a body mutant
 also gets its md5 constants recomputed in the candidate and the rollback, so it fails for the rule and not for the checksum); the suite
 (postona_personal_t13_anon_pg_run.sh) must fail. A control must pass first. The copy has no .git: the two pinned files are extracted once
 with `git show` and handed over in S21_PINNED_DIR. Usage (needs the socket variables of a THROW-AWAY local cluster):
@@ -41,6 +41,23 @@ M = [
     ('the rollback restores a different body', RB, "    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\n\n  -- 2. I1 lock order",
      "    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\n  -- edited\n\n  -- 2. I1 lock order"),
 ]
+# (G5-30) the reviewed attributes, removed one at a time from the PRECONDITION of the install and of the rollback (the first of the two
+# shape checks in each file, so each site occurs exactly twice). The postcondition copies are not mutated: the CREATE OR REPLACE just before
+# them resets every one of these attributes to the declared value, so removing one there cannot change any outcome (equivalent mutants).
+ATTRIBUTE_SITES = [
+    ('STRICT', 'not p.proisstrict and ', ''),
+    ('LEAKPROOF', 'and not p.proleakproof ', ''),
+    ('PARALLEL', "and p.proparallel = 'u' ", ''),
+    ('COST', 'and p.procost = 100\n', '\n'),
+    ('SUPPORT', 'p.prosupport::oid = 0 and ', ''),
+    ('TRANSFORM', 'and p.protrftypes is null ', ''),
+    ('ROWS', 'and p.prorows = 0 ', ''),
+    ('argument modes', 'and p.proargmodes is null\n', '\n'),
+    ('a NULL passes (`is not true` -> `is false`, the PR #483 `not (...)`)', ') is not true\n', ') is false\n'),
+]
+for where, target in (('install', C), ('rollback', RB)):
+    for what, old, new in ATTRIBUTE_SITES:
+        M.append((f'the {where} precondition does not check {what}', target, old, new, 1, 2))
 # the refusal-after-the-locks mutant also adds the check right after the session is read (step 3), keeping the rule but moving it past the locks
 AFTER_LOCKS = ("  if not v_live then\n    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\nend;",
                "  if not v_live or v_anonymous is distinct from 'false' then\n    raise exception 'ACCOUNT_LIFECYCLE_AUTH_REQUIRED' using errcode = '42501';\n  end if;\nend;")
@@ -83,17 +100,21 @@ if control != 0:
     sys.exit(1)
 detected = 0
 invalid = 0
-for label, target, old, new in M:
+for label, target, old, new, *where in M:
+    nth, count = where or (1, 1)  # mutate the nth (1-based) of exactly `count` occurrences
     root = fresh_copy()
     try:
         path = os.path.join(root, target)
         text = open(path, encoding='utf-8').read()
-        if text.count(old) != 1 or (label == 'the refusal is after the locks' and text.count(AFTER_LOCKS[0]) != 1):
-            print(f'INVALID   {label}: the site does not occur exactly once', flush=True)
+        if text.count(old) != count or (label == 'the refusal is after the locks' and text.count(AFTER_LOCKS[0]) != 1):
+            print(f'INVALID   {label}: the site does not occur exactly {count} time(s)', flush=True)
             invalid += 1
             continue
         old_md5 = body_md5(text)
-        text = text.replace(old, new)
+        at = -1
+        for _ in range(nth):
+            at = text.index(old, at + 1)
+        text = text[:at] + new + text[at + len(old):]
         if label == 'the refusal is after the locks':
             text = text.replace(AFTER_LOCKS[0], AFTER_LOCKS[1])
         new_md5 = body_md5(text)

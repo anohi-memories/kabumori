@@ -1,7 +1,8 @@
 -- Rollback of 001_t13_anonymous_refusal.sql (G5-24, S2-1). Puts back the reviewed T13 body of 20261010051938 BYTE FOR BYTE (CREATE OR REPLACE:
 -- same OID, owner, ACL). It refuses unless the function is exactly the S2-1 body (another body is someone else's change and is left alone),
--- with the same shape checks as the candidate. After it, an anonymous sign-in passes T13 again (the reviewed behaviour); the consumers keep
--- working unchanged. It writes no row, creates nothing, grants nothing.
+-- with the same shape checks as the candidate (G5-30: including the reviewed attributes; a drift is refused, not erased). After it, an
+-- anonymous sign-in passes T13 again (the reviewed behaviour); the consumers keep working unchanged. It writes no row, creates nothing,
+-- grants nothing.
 begin;
 
 set local lock_timeout = '5s';
@@ -26,13 +27,18 @@ begin
   if v_md5 is distinct from '1f8cd9c764c251f3232c61b7a77ff597' then
     raise exception 'T13_ANON_ROLLBACK_PRECONDITION_BODY_NOT_REVIEWED';
   end if;
-  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void,
-  -- EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not)
+  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void, the
+  -- attributes below, EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not).
+  -- (G5-30) `is not true`: a NULL (a RESET ALL leaves proconfig NULL) refuses, it no longer slips through `not (...)`
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
-                    and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
-                    and p.proconfig = array['search_path=""']
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+     or (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
+                and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                and p.proconfig = array['search_path=""']
+                -- (G5-30) every attribute a CREATE OR REPLACE resets without an error, at the value measured on the reviewed T13: not STRICT,
+                -- not LEAKPROOF, PARALLEL UNSAFE, COST 100, no support function, no TRANSFORM, ROWS 0, no argument modes
+                and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.procost = 100
+                and p.prosupport::oid = 0 and p.protrftypes is null and p.prorows = 0 and p.proargmodes is null
+           from pg_catalog.pg_proc p where p.oid = v_fn) is not true
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn)
           is distinct from pg_catalog.format('%s=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r
@@ -152,13 +158,18 @@ begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from '08840016794a973225be767952265e79' then
     raise exception 'T13_ANON_ROLLBACK_POSTCONDITION_BODY';
   end if;
-  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void,
-  -- EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not)
+  -- the function is the reviewed T13 in every other respect: owner, definer, volatile, empty search_path, plpgsql, returns void, the
+  -- attributes below, EXECUTE for its owner alone, and no API role reaches it through any membership (direct or indirect, INHERIT or not).
+  -- (G5-30) `is not true`: a NULL (a RESET ALL leaves proconfig NULL) refuses, it no longer slips through `not (...)`
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from v_owner
-     or not (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
-                    and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
-                    and p.proconfig = array['search_path=""']
-               from pg_catalog.pg_proc p where p.oid = v_fn)
+     or (select p.prosecdef and p.provolatile = 'v' and p.prorettype = 'void'::pg_catalog.regtype
+                and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                and p.proconfig = array['search_path=""']
+                -- (G5-30) every attribute a CREATE OR REPLACE resets without an error, at the value measured on the reviewed T13: not STRICT,
+                -- not LEAKPROOF, PARALLEL UNSAFE, COST 100, no support function, no TRANSFORM, ROWS 0, no argument modes
+                and not p.proisstrict and not p.proleakproof and p.proparallel = 'u' and p.procost = 100
+                and p.prosupport::oid = 0 and p.protrftypes is null and p.prorows = 0 and p.proargmodes is null
+           from pg_catalog.pg_proc p where p.oid = v_fn) is not true
      or (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn)
           is distinct from pg_catalog.format('%s=X/%s', pg_catalog.quote_ident(current_user), pg_catalog.quote_ident(current_user))
      or exists (select 1 from pg_catalog.pg_roles r
