@@ -1,0 +1,31 @@
+✔ G2-SC1 (M3, paired): a FIRST send never explains the same id while confirming or sending -- and the SAME screen does explain it on the real re-ask that follows (so the "not shown" half cannot pass vacuously) (64.875ms)
+✔ G2-SC2 (M1, M2): "結果を確認できません" -- the sentence asks to check X, states no server guarantee, and the same-id re-ask and "I checked X" are both offered (33.634416ms)
+✔ G2-SC3 (M1, M2, M3): a real re-ask after "結果を確認できません" -- confirming AND sending explain the same id and ask to check X, no frame states a guarantee, and the request reuses the first id (34.376417ms)
+✔ G2-SC4 (M1-M3): "まだ送信されていません" (pending) -- the re-ask is offered with the same id and its confirmation asks to check X; no guarantee. Measured: the pending result itself asks to "confirm with the same content", not to look at X (UC1 area, known, not re-reported) (27.783458ms)
+ℹ pending result asks to check X: false
+✔ G2-SC5 (M4): "uncertain" and a SIMULATED answer -- no re-ask, no same-id sentence, no guarantee, no success; the screen asks to check X before sending the same content again (46.855667ms)
+✔ G2-SC6: after "I checked X" the editor is empty, the next send is a FIRST send again (no same-id sentence), and the consent / text are not brought back (17.927125ms)
+✔ G2-SC7 (M2, M3): after an app restart (hash-only record) the re-ask by re-typing the same text explains the same id and asks to check X; no guarantee in any frame (35.362125ms)
+✔ G2-SC8: the shipped build (the real UNCONNECTED port) -- "Xに投稿する" cannot fire, nothing is sent, and no frame states a guarantee (15.116791ms)
+✔ G2-SC9 (old pins): #497 shows neither old pinned sentence anywhere, and shows the new ones exactly where the old ones were -- so the old positive pins (#403 G2-R2, #411 NC-3, #448 RK3) fail by design, and every old "not shown" pin is now vacuous (22.730458ms)
+✔ mutant 1 (the old sentences back): M1 catches the guarantee in the re-ask and in "結果を確認できません", and M2 catches the missing "check X" there (16.45675ms)
+✔ mutant 2 (a NEW wording of the same promise): "同じ送信IDなら、サーバーが二重に投稿することはありません。" is caught too -- M1 is not a check for one old string (17.696333ms)
+✔ mutant 3 ("check X" dropped from "結果を確認できません"): M2 fails (18.55425ms)
+✔ mutant 4 (the same-id sentence on ANY unresolved attempt, the pre-#398 condition): M3 catches it on a first send -- while the old exact "not shown" pin (`!includes(SAME_ID_LINE)`) still passes on the same frames (the vacuous case, measured) (15.6725ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 744.051042
+ℹ deny-net run (fetch / WebSocket / XMLHttpRequest / net / tls / http(s) trapped): see README §4 -- tests 13 / pass 13 / fail 0
+ℹ full suite (node --test tests/*.test.mjs, #497 + this file):
+ℹ tests 625
+ℹ suites 0
+ℹ pass 624
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
