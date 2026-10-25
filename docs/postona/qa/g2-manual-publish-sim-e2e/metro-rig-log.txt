@@ -1,0 +1,28 @@
+# Metro log lines from the rig only ([G2E2E] fake-session switches, [F2QA] scripted send port). No tokens/secrets.
+## metro.log
+iOS Bundled 9674ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1399 modules)
+iOS Bundled 47ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1 module)
+ LOG  [G2E2E] session -> user=A mark=1 t=1792925985498
+ LOG  [G2E2E] session -> user=B mark=1 t=1792926103834
+ LOG  [G2E2E] session -> user=A mark=2 t=1792926123261
+## metro2.log
+iOS Bundled 3677ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1399 modules)
+ LOG  [G2E2E] session -> user=A mark=1 t=1792926269845
+ LOG  [F2QA] readiness account=account-x-main
+ LOG  [F2QA] send call#1 targetId=3b5cba89-5cda-4e30-b302-f7c60c3f133b account=account-x-main scenario=#net consentSha=c16fa165074e chars=5
+ LOG  [F2QA] readiness account=account-x-main
+ LOG  [G2E2E] session -> user=B mark=1 t=1792926376205
+ LOG  [G2E2E] session -> user=A mark=1 t=1792926389498
+iOS Bundled 55ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1 module)
+ LOG  [G2E2E] session -> user=A mark=1 t=1792926438633
+ LOG  [F2QA] readiness account=account-x-main
+ LOG  [F2QA] send call#1 targetId=d2bc910a-7196-4235-a91d-7edac2d2df1c account=account-x-main scenario=#sim consentSha=2be3414115e2 chars=4
+iOS Bundled 45ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1 module)
+ LOG  [G2E2E] session -> user=A mark=1 t=1792926516644
+ LOG  [F2QA] readiness account=account-x-main
+ LOG  [F2QA] send call#1 targetId=68780edc-bc75-43db-ab57-7d67f0f94b46 account=account-x-main scenario=#pending consentSha=cb3a809ba87f chars=4
+ LOG  [F2QA] readiness account=account-x-main
+ LOG  [F2QA] send call#2 targetId=68780edc-bc75-43db-ab57-7d67f0f94b46 account=account-x-main scenario=#ok consentSha=cb3a809ba87f chars=4
+## metro3.log
+iOS Bundled 4136ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1399 modules)
+ LOG  [G2E2E] session -> user=A mark=1 t=1792926678088

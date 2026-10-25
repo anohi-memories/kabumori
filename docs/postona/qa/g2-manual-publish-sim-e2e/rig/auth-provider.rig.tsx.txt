@@ -1,0 +1,74 @@
+// G2 QA RIG ONLY (2026-10-25, gen47 Simulator E2E; untracked, never committed). Replaces the auth provider in THIS
+// worktree's Metro bundle with a FAKE session so the Simulator reaches the manual-publish screen without any sign-in,
+// network or token. The person / sign-in mark can be switched by a deep link (values are fixed fakes, no secrets):
+//   kabumori-social://manual-publish?g2user=A|B|none&g2mark=1|2
+// A / B are fake user ids; g2mark changes `last_sign_in_at` (a new sign-in session of the same person); none = signed out.
+import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import * as Linking from 'expo-linking';
+
+const USERS: Record<string, string> = { A: '00000000-0000-4000-8000-0000000e2e0a', B: '00000000-0000-4000-8000-0000000e2e0b' };
+const MARKS: Record<string, string> = { '1': '2026-10-25T01:00:00.000000Z', '2': '2026-10-25T02:00:00.000000Z' };
+type RigSession = { user: { id: string; last_sign_in_at: string }; access_token: string } | null;
+const sessionOf = (who: string, mark: string): RigSession =>
+  who === 'none' || !USERS[who] ? null : { user: { id: USERS[who], last_sign_in_at: MARKS[mark] ?? MARKS['1'] }, access_token: `g2-e2e-rig-not-a-token-${who}` };
+
+const notAvailable = async () => ({ ok: false, message: 'QA rig: not available' });
+const flow = async () => ({ ok: false, message: 'QA rig: not available' }) as never;
+const Ctx = createContext<unknown>(null);
+
+function parse(url: string | null): { who: string; mark: string } | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const who = u.searchParams.get('g2user');
+    if (who === null) return null;
+    return { who, mark: u.searchParams.get('g2mark') ?? '1' };
+  } catch {
+    return null;
+  }
+}
+
+export function AuthProvider({ children }: PropsWithChildren) {
+  const [state, setState] = useState<{ who: string; mark: string }>({ who: 'A', mark: '1' });
+  useEffect(() => {
+    const apply = (url: string | null) => {
+      const next = parse(url);
+      if (next) {
+        console.log(`[G2E2E] session -> user=${next.who} mark=${next.mark} t=${Date.now()}`);
+        setState(next);
+      }
+    };
+    void Linking.getInitialURL().then(apply);
+    const sub = Linking.addEventListener('url', ({ url }) => apply(url));
+    return () => sub.remove();
+  }, []);
+  const value = useMemo(() => ({
+    loading: false,
+    session: sessionOf(state.who, state.mark),
+    error: null,
+    backendAvailable: false,
+    readiness: () => ({ available: false, reason: 'QA rig' }),
+    email: { signIn: false, signUp: false, reset: false },
+    settingsKnown: false,
+    releaseReport: { ready: false, items: [] },
+    recoveryMode: false,
+    signIn: notAvailable,
+    signUpWithEmail: notAvailable,
+    requestPasswordReset: notAvailable,
+    completePasswordRecovery: notAvailable,
+    signInWithProvider: flow,
+    linkProvider: flow,
+    signOut: async () => { setState({ who: 'none', mark: '1' }); return { ok: true }; },
+    accountDeletion: { available: false },
+    deletionNotice: null,
+    dismissDeletionNotice: () => {},
+    reauthenticate: notAvailable,
+    previewDeletion: notAvailable,
+    deleteAccount: notAvailable,
+  }), [state]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useAuth() {
+  return useContext(Ctx) as never;
+}

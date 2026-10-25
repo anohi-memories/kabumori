@@ -1,0 +1,10 @@
+// F2 QA RIG ONLY (never committed): the original mock preview plus two more X accounts, so account switching can be
+// exercised (one more connected X account, one X account that is not connected).
+import { mockRepository as original } from '../src/data/mock-repository';
+
+const extra = [
+  { id: 'account-x-sub', platform: 'x', profile: { displayName: 'POSTONA検証用サブ', handle: '@postona_qa_sub', avatarColor: '#0F766E', voice: { tone: '丁寧', language: '日本語', avoid: [] } }, connectionStatus: 'connected', postingState: 'active' },
+  { id: 'account-x-off', platform: 'x', profile: { displayName: '未接続のX', handle: '@postona_qa_off', avatarColor: '#9CA3AF', voice: { tone: '丁寧', language: '日本語', avoid: [] } }, connectionStatus: 'not_connected', postingState: 'paused' },
+];
+
+export const mockRepository = { ...original, getAccounts: () => [...original.getAccounts(), ...extra] } as typeof original;
