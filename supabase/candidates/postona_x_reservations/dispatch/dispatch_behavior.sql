@@ -98,6 +98,18 @@ select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_c
 select pg_temp.expect(pg_temp.status(:'w2') = 'planned', 'W3 planned');
 select pg_temp.expect((select count(*) from postona_x_resv.audit where reservation_id = :'w2' and detail ->> 'reason' = 'LEASE_EXPIRED_BEFORE_SEND') = 1, 'W3 audit');
 select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_check(%L, %L)', :'w2', :'w2lease')) = 'LEASE_LOST', 'W3 not ours any more');
+-- W3b (G3-32 C2): less lease left than one provider call (X timeout 20 s) + the finish needs: handed back before any send.
+select pg_temp.expect(pg_temp.claim() like '%' || :'w2' || '%', 'W3b claimed');
+select pg_temp.lease_of(:'w2') as w2lease \gset
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '10 seconds' where id = :'w2';
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_check(%L, %L)', :'w2', :'w2lease')) = 'RELEASED', 'W3b 10 s left: released');
+select pg_temp.expect((select status = 'planned' and lease_token is null from postona_x_resv.reservations where id = :'w2'), 'W3b planned, nothing sent');
+select pg_temp.expect((select count(*) from postona_x_resv.audit where reservation_id = :'w2' and detail ->> 'reason' = 'LEASE_TOO_SHORT_BEFORE_SEND') = 1, 'W3b audit');
+select pg_temp.expect(pg_temp.claim() like '%' || :'w2' || '%', 'W3b claimed again');
+select pg_temp.lease_of(:'w2') as w2lease \gset
+update postona_x_resv.reservations set lease_expires_at = clock_timestamp() + interval '30 seconds' where id = :'w2';
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.pre_publish_check(%L, %L)', :'w2', :'w2lease')) = 'OK', 'W3b 30 s left: OK');
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.release_unsent(%L, %L)', :'w2', :'w2lease')) = 'released', 'W3b handed back for the next step');
 -- a valid lease: OK; then finish 'published'; a published row is never claimed or released again
 select pg_temp.expect(pg_temp.claim() like '%' || :'w2' || '%', 'W3 claimed');
 select pg_temp.lease_of(:'w2') as w2lease \gset
