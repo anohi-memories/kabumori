@@ -36,7 +36,7 @@ const tokens = new Map<string, string>();
 const revoked = new Set<string>();
 async function signIn(n: number) {
   const session = String((await owner<[string]>("insert into auth.sessions (user_id) values ($1::uuid) returning id::text", [P(n).user]))[0][0]);
-  const token = `${b64({ alg: "HS256" })}.${b64({ sub: P(n).user, session_id: session, role: "authenticated" })}.sig`;
+  const token = `${b64({ alg: "HS256" })}.${b64({ sub: P(n).user, session_id: session, role: "authenticated", is_anonymous: false })}.sig`;
   tokens.set(token, P(n).user);
   return { token, session };
 }

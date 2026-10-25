@@ -41,7 +41,7 @@ const jwtOf = (alias: string): Promise<string> => {
   const user = TOKENS[alias];
   if (!user) return Promise.resolve(alias);
   return JWT[alias] ??= sessionOf(user).then((session) => {
-    const jwt = `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: user, session_id: session }))}.signature-0123456789`;
+    const jwt = `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: user, session_id: session, is_anonymous: false }))}.signature-0123456789`;
     USER_OF_JWT[jwt] = user;
     return jwt;
   });

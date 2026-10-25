@@ -5,7 +5,7 @@ import { createDriverConnect } from "./postgres_driver.ts";
 import { createSupabaseAuthVerifier } from "./supabase_auth.ts";
 
 const USER = "00000000-0000-4000-8000-00000000000a";
-const SUBJECT = { userId: USER, sessionId: "00000000-0000-4000-8000-0000000000c1" };
+const SUBJECT = { userId: USER, sessionId: "00000000-0000-4000-8000-0000000000c1", isAnonymous: false as const };
 const NOW = Date.parse("2026-10-13T00:00:00Z");
 
 // ---------------------------------------------------------------------------------------------------
@@ -103,7 +103,7 @@ test("db: refuses an unknown function, a wrong arity or a non-UUID subject befor
   const db = createPostgresReservationDb(() => { connected += 1; return Promise.reject(new Error("x")); });
   assert.deepEqual(await db.call("claim_due" as never, [], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" });
   assert.deepEqual(await db.call("cancel", ["r"], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" });
-  assert.deepEqual(await db.call("list_reservations", ["x_a"], { userId: "00000000-0000-4000-8000-00000000000a' or '1'='1", sessionId: SUBJECT.sessionId }), { ok: false, code: "DB_REQUEST_INVALID" });
+  assert.deepEqual(await db.call("list_reservations", ["x_a"], { userId: "00000000-0000-4000-8000-00000000000a' or '1'='1", sessionId: SUBJECT.sessionId, isAnonymous: false }), { ok: false, code: "DB_REQUEST_INVALID" });
   assert.equal(connected, 0);
 });
 
@@ -147,4 +147,14 @@ test("source: adapters log nothing and hold no service-role key; the driver is p
   assert.match(driver, /from "jsr:@db\/postgres@0\.19\.5";/u);
   assert.match(driver, /tls: insecure \? \{ enabled: false \} : \{ enabled: true, enforce: true \}/u);
   assert.match(driver, /const insecure = loopback && config\.allowInsecureLoopback === true;/u);
+});
+
+test("G3-34 F1: a subject without the token's explicit non-anonymous false never reaches the database (refused before connecting)", async () => {
+  let connected = 0;
+  const db = createPostgresReservationDb(() => { connected += 1; return Promise.reject(new Error("x")); });
+  for (const isAnonymous of [undefined, null, "false", true]) {
+    const subject = { ...SUBJECT, isAnonymous } as unknown as typeof SUBJECT;
+    assert.deepEqual(await db.call("list_reservations", ["x_a"], subject), { ok: false, code: "DB_REQUEST_INVALID" }, String(isAnonymous));
+  }
+  assert.equal(connected, 0);
 });

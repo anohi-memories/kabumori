@@ -49,8 +49,11 @@ export type ReservationRow = {
 
 export type DbResult = { ok: true; rows: ReservationRow[] } | { ok: false; code: string };
 
-/** The verified caller: Auth's user id and the session id of the same (already verified) token. */
-export type ReservationSubject = { userId: string; sessionId: string };
+/**
+ * The verified caller: Auth's user id, the session id of the same (already verified) token, and that token's explicit
+ * non-anonymous claim (only the literal false can be carried: the database adapter passes nothing else).
+ */
+export type ReservationSubject = { userId: string; sessionId: string; isAnonymous: false };
 
 /**
  * Runs ONE owner function in ONE transaction as the dedicated API role, with request.jwt.claims set locally to
@@ -103,13 +106,19 @@ export type ApiResponse = { status: number; body: { ok: true; reservations: Rese
 const MAX_BODY_BYTES = 64 * 1024;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-/** The session id of an access token Supabase Auth has ALREADY verified (never used as proof on its own; as single_post.ts). */
-function sessionIdOf(token: string, userId: string): string | null {
+/**
+ * The session id of an access token Supabase Auth has ALREADY verified (never used as proof on its own), returned only when the
+ * SAME token names the same subject and states is_anonymous as the JSON boolean false (G3-34 F1: missing, null, another type or
+ * true is not proof of a non-anonymous sign-in -> null -> 401, before any permission, database or provider call).
+ */
+function nonAnonymousSessionOf(token: string, userId: string): string | null {
   const part = token.split(".")[1];
   if (!part) return null;
   try {
     const claims = JSON.parse(atob(part.replace(/-/gu, "+").replace(/_/gu, "/").padEnd(Math.ceil(part.length / 4) * 4, "="))) as Record<string, unknown>;
-    return claims.sub === userId && typeof claims.session_id === "string" && UUID_RE.test(claims.session_id) ? claims.session_id : null;
+    return claims.sub === userId && claims.is_anonymous === false && typeof claims.session_id === "string" && UUID_RE.test(claims.session_id)
+      ? claims.session_id
+      : null;
   } catch {
     return null;
   }
@@ -258,8 +267,9 @@ export function createReservationApi(deps: {
     try {
       const verified = await auth.verify(match[1]);
       if (!verified || !UUID_RE.test(verified.userId)) return fail(401, "AUTH_REQUIRED");
-      // G3-34: the session the database's person-session gate (S2-2) checks is live. A token without one is refused.
-      const session = sessionIdOf(match[1], verified.userId);
+      // G3-34: the session the database's person-session gate (S2-2) checks is live, and the same token says the sign-in is not
+      // anonymous (JSON false). A token without both is refused.
+      const session = nonAnonymousSessionOf(match[1], verified.userId);
       if (!session) return fail(401, "AUTH_REQUIRED");
       userId = verified.userId;
       sessionId = session;
@@ -278,7 +288,7 @@ export function createReservationApi(deps: {
 
     let result: DbResult;
     try {
-      result = await db.call(call.fn, call.args, { userId, sessionId });
+      result = await db.call(call.fn, call.args, { userId, sessionId, isAnonymous: false });
     } catch {
       return fail(503, "STORE_UNAVAILABLE");
     }

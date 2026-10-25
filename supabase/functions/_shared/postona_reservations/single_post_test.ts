@@ -17,7 +17,7 @@ const GEN = "c".repeat(64);
 const X_TOKEN = "fake-x-token-sa_x-0001";
 const b64 = (v: unknown) => btoa(JSON.stringify(v)).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 const token = (claims: Record<string, unknown>) => `${b64({ alg: "HS256" })}.${b64(claims)}.sig`;
-const TOKEN = token({ sub: USER, session_id: SESSION });
+const TOKEN = token({ sub: USER, session_id: SESSION, is_anonymous: false });
 const SHA = "a".repeat(64);
 const body = (over: Record<string, unknown> = {}) => JSON.stringify({ socialAccountId: "sa_x", clientRequestId: REQ, text: "本文", consent: { confirmed: true, contentSha256: SHA }, ...over });
 const auth = { verify: (t: string) => Promise.resolve(t === TOKEN || t.startsWith(TOKEN.split(".")[0]) ? { userId: USER } : null) };
@@ -106,7 +106,10 @@ test("refused before anything is recorded: bad body, no / unverified token, no s
     assert.equal((await run({ db, x: fakeX(published("1")) }, { body: b })).status, 400, b);
     assert.equal(calls.length, 0);
   }
-  for (const authorization of [null, "Bearer short", `Basic ${TOKEN}`, `Bearer ${token({ sub: USER })}`, `Bearer ${token({ sub: "other", session_id: SESSION })}`]) {
+  // G3-34 F1: the same token must also state is_anonymous as the JSON false (missing / null / "false" / true are refused)
+  for (const authorization of [null, "Bearer short", `Basic ${TOKEN}`, `Bearer ${token({ sub: USER })}`, `Bearer ${token({ sub: "other", session_id: SESSION, is_anonymous: false })}`,
+    `Bearer ${token({ sub: USER, session_id: SESSION })}`, `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: null })}`,
+    `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: "false" })}`, `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: true })}`]) {
     const { db, calls } = happyDb();
     const answer = await run({ db, x: fakeX(published("1")) }, { authorization });
     assert.equal(answer.status, 401, String(authorization));

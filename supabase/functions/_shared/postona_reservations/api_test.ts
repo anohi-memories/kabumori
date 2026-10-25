@@ -17,7 +17,7 @@ const SESSION = "00000000-0000-4000-8000-0000000000c1";
 const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
 /** A token shaped like Auth's (header.payload.signature); the payload's session_id is read only after the verifier accepted it. */
 const tokenFor = (claims: Record<string, unknown>) => `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify(claims))}.signature-0123456789`;
-const TOKEN = tokenFor({ sub: USER, session_id: SESSION });
+const TOKEN = tokenFor({ sub: USER, session_id: SESSION, is_anonymous: false });
 const BATCH = "0f9d2a52-8c1b-4b6a-9d55-1a2b3c4d5e6f";
 const RID = "11111111-2222-4333-8444-555555555555";
 const SHA = "a".repeat(64);
@@ -159,7 +159,7 @@ test("each action calls exactly one owner function as the VERIFIED subject with 
     const last = calls[calls.length - 1];
     assert.equal(last.fn, fn);
     assert.deepEqual(last.args, args);
-    assert.deepEqual(last.subject, { userId: USER, sessionId: SESSION });
+    assert.deepEqual(last.subject, { userId: USER, sessionId: SESSION, isAnonymous: false });
   }
   const ok = await api(req({ action: "get", payload: { reservationId: RID } }));
   assert.deepEqual(ok.body, {
@@ -213,4 +213,28 @@ test("G3-34: a verified token without a session id of the same subject is refuse
   }
   assert.equal(asked, 0);
   assert.equal(calls.length, 0);
+});
+
+test("G3-34 F1: the same verified token must state is_anonymous as the JSON false; missing / null / \"false\" / true -> 401, no permission, database or provider call", async () => {
+  const { db, calls } = recordingDb();
+  let asked = 0;
+  const api = createReservationApi({
+    enabled: true,
+    auth: { verify: () => Promise.resolve({ userId: USER }) }, // Auth accepted the token (its own is_anonymous field is not trusted here)
+    permissions: { xAutopostAllowed: () => { asked += 1; return Promise.resolve(true); }, xAccountVerified: () => Promise.resolve(true) },
+    db,
+  });
+  const cases: [string, Record<string, unknown>][] = [
+    ["missing", { sub: USER, session_id: SESSION }],
+    ["null", { sub: USER, session_id: SESSION, is_anonymous: null }],
+    ["string false", { sub: USER, session_id: SESSION, is_anonymous: "false" }],
+    ["true", { sub: USER, session_id: SESSION, is_anonymous: true }],
+    ["false for another subject", { sub: OTHER, session_id: SESSION, is_anonymous: false }],
+  ];
+  for (const [label, claims] of cases) {
+    assert.deepEqual(await api(req(createPayload(), { authorization: `Bearer ${tokenFor(claims)}` })), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, label);
+  }
+  assert.deepEqual([asked, calls.length], [0, 0]);
+  assert.equal((await api(req(createPayload(), { authorization: `Bearer ${tokenFor({ sub: USER, session_id: SESSION, is_anonymous: false })}` }))).status, 200, "the strict false of the same subject and session passes");
+  assert.deepEqual(calls.at(-1)?.subject, { userId: USER, sessionId: SESSION, isAnonymous: false });
 });

@@ -26,7 +26,7 @@ const TOKENS = { 'token-user-a-000000000000': A, 'token-user-b-000000000000': B,
 // the names. This world's person-session gate is the test_fixture double (no auth.sessions), so the session ids are fixed fakes.
 const b64url = (s) => Buffer.from(s, 'utf8').toString('base64url');
 const SESSION = { [A]: '00000000-0000-4000-8000-0000000000a1', [B]: '00000000-0000-4000-8000-0000000000b1', [C]: '00000000-0000-4000-8000-0000000000c1' };
-const jwtOf = (alias) => (TOKENS[alias] ? `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: TOKENS[alias], session_id: SESSION[TOKENS[alias]] }))}.sig-${alias}` : alias);
+const jwtOf = (alias) => (TOKENS[alias] ? `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify({ sub: TOKENS[alias], session_id: SESSION[TOKENS[alias]], is_anonymous: false }))}.sig-${alias}` : alias);
 const USER_OF_JWT = Object.fromEntries(Object.keys(TOKENS).map((alias) => [jwtOf(alias), TOKENS[alias]]));
 const sha256 = async (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const DAY = 24 * 60 * 60 * 1000;
