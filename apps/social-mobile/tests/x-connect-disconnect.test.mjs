@@ -51,7 +51,15 @@ function harness({ rpcAnswer = { error: null, status: 200 }, startError = null }
       functions: { invoke: async () => (startError
         ? { data: null, error: startError }
         : { data: { authorization_url: 'https://x.com/i/oauth2/authorize' }, error: null }) },
-      rpc: async (name, args) => { rpcs.push({ name, args }); return { data: null, ...rpcAnswer }; },
+      // a postgrest builder: per-request headers, then awaited (G4-45)
+      rpc: (name, args) => {
+        const request = { name, args, headers: {} };
+        rpcs.push(request);
+        return {
+          setHeader(key, value) { request.headers[key] = value; return this; },
+          then(resolve, reject) { return Promise.resolve({ data: null, ...rpcAnswer }).then(resolve, reject); },
+        };
+      },
     } },
   };
   const js = ts.transpileModule(hookSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -63,10 +71,11 @@ function harness({ rpcAnswer = { error: null, status: 200 }, startError = null }
   return { auth, rpcs, render, completed: () => completed };
 }
 
-test('disconnect: the signed-in person -> one RPC call without arguments, disconnected, one reload', async () => {
+test('disconnect: the signed-in person -> one RPC call without arguments, with that session\'s token, disconnected, one reload', async () => {
   const h = harness();
   await h.render().disconnect();
-  assert.deepEqual(h.rpcs, [{ name: 'disconnect_social_mobile_x_connection', args: undefined }]);
+  assert.deepEqual(h.rpcs, [{ name: 'disconnect_social_mobile_x_connection', args: undefined,
+    headers: { Authorization: `Bearer ${A.access_token}` } }]);
   assert.equal(h.render().state, 'disconnected');
   assert.equal(h.completed(), 1);
 });

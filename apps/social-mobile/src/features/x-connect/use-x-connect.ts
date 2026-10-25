@@ -198,12 +198,23 @@ export function useXConnect(onConnected?: () => void) {
     setState('disconnecting');
     try {
       if (!supabase || !session?.access_token) throw new Error('AUTH_SESSION_UNAVAILABLE');
-      const current = await currentSession();
-      if (!current || current.user.id !== session.user.id) {
+      // G4-45 (H1 F2): the person AND the Supabase session that start the disconnect (as connect), and that session's own
+      // token for this one request. The SDK fills Authorization at send time only when the request has none, so without
+      // this header it would send whichever session it reads then (B after A -> B). The shared client is not changed.
+      const startSession = await currentSession();
+      const owner = connectOwnerOf(startSession);
+      if (!owner || !startSession || owner.userId !== session.user.id) {
         setState('session_changed');
         return;
       }
-      const { error, status } = await supabase.rpc('disconnect_social_mobile_x_connection');
+      const { error, status } = await supabase
+        .rpc('disconnect_social_mobile_x_connection')
+        .setHeader('Authorization', `Bearer ${startSession.access_token}`);
+      // The answer (success or refusal) is shown, and data reloaded, only for the same person and session.
+      if (!isConnectOwner(owner, await currentSession())) {
+        setState('session_changed');
+        return;
+      }
       if (error) {
         setState(FAILURE_STATE[classifyXDisconnectFailure(error.message, status)]);
         return;

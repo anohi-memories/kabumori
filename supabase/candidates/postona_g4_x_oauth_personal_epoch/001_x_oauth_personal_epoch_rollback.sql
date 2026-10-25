@@ -4,14 +4,17 @@
 -- state_bindings, disconnect, the epoch reader, the CAS store). Refuses unless the candidate is what is installed.
 -- Kept on purpose: oauth state rows begun under the candidate (they then complete under the original rules, as before the candidate),
 -- the workspace / membership rows begin created, tokens. Any consumer already wired to x_connection_epoch / store_refreshed_x_tokens must be
--- unwired FIRST (this rollback refuses while another function's body names the G4 schema).
+-- unwired FIRST (this rollback refuses while another function's body names the G4 schema, in any letter case, or while the
+-- catalog records anything outside the schema depending on it; G4-45 / H1 F1: no DROP ... CASCADE any more).
 begin;
 
 set local lock_timeout = '5s';
 
 do $$
+declare
+  v_ns oid := to_regnamespace('postona_g4_x_oauth');
 begin
-  if to_regnamespace('postona_g4_x_oauth') is null then
+  if v_ns is null then
     raise exception 'G4X_ROLLBACK_NOT_APPLIED';
   end if;
   if (select md5(p.prosrc) from pg_proc p
@@ -24,12 +27,40 @@ begin
      is distinct from '3ea5686f26e8de515d902cd408ef5275' then
     raise exception 'G4X_ROLLBACK_COMPLETE_BODY_UNEXPECTED';
   end if;
+  -- G4-45 (H1 F1): unquoted identifiers are case-insensitive, so the body check is too (POSTONA_G4_X_OAUTH.X_... is a caller).
+  -- Function bodies run as text (PL/pgSQL, plain SQL) are not in pg_depend; a name built by dynamic SQL is not found here
+  -- either, so consumers are still to be removed before this rollback (an operating precondition, not something proven).
   if exists (select 1 from pg_proc p
-               where p.pronamespace <> 'postona_g4_x_oauth'::regnamespace
+               where p.pronamespace <> v_ns
                  and p.oid not in (to_regprocedure('public.begin_social_mobile_x_oauth_connection(text,text,timestamptz)'),
                                    to_regprocedure('public.complete_social_mobile_x_oauth_connection(uuid,text,text,text,text)'))
-                 and p.prosrc like '%postona_g4_x_oauth%') then
+                 and p.prosrc ilike '%postona_g4_x_oauth%') then
     raise exception 'G4X_ROLLBACK_STILL_REFERENCED';
+  end if;
+  -- G4-45 (H1 F1): whatever the catalog records as depending on an object of this schema from OUTSIDE it (a view or
+  -- materialized view, a SQL-standard function body, a default, a constraint, a trigger, a policy, ...) refuses the
+  -- rollback. Nothing outside the schema is ever dropped (no CASCADE below). A dependent of a kind not listed here counts
+  -- as outside.
+  if exists (
+    select 1 from pg_depend d
+    where d.deptype in ('n', 'a')
+      and ((d.refclassid = 'pg_class'::regclass and d.refobjid in (select c.oid from pg_class c where c.relnamespace = v_ns))
+        or (d.refclassid = 'pg_proc'::regclass and d.refobjid in (select p.oid from pg_proc p where p.pronamespace = v_ns))
+        or (d.refclassid = 'pg_type'::regclass and d.refobjid in (select t.oid from pg_type t where t.typnamespace = v_ns))
+        or (d.refclassid = 'pg_namespace'::regclass and d.refobjid = v_ns))
+      and coalesce(case d.classid
+            when 'pg_class'::regclass then (select c.relnamespace from pg_class c where c.oid = d.objid)
+            when 'pg_proc'::regclass then (select p.pronamespace from pg_proc p where p.oid = d.objid)
+            when 'pg_type'::regclass then (select t.typnamespace from pg_type t where t.oid = d.objid)
+            when 'pg_constraint'::regclass then (select k.connamespace from pg_constraint k where k.oid = d.objid)
+            when 'pg_attrdef'::regclass then
+              (select c.relnamespace from pg_attrdef a join pg_class c on c.oid = a.adrelid where a.oid = d.objid)
+            when 'pg_rewrite'::regclass then
+              (select c.relnamespace from pg_rewrite r join pg_class c on c.oid = r.ev_class where r.oid = d.objid)
+            when 'pg_trigger'::regclass then
+              (select c.relnamespace from pg_trigger g join pg_class c on c.oid = g.tgrelid where g.oid = d.objid)
+          end, 0::oid) <> v_ns) then
+    raise exception 'G4X_ROLLBACK_DEPENDED_ON';
   end if;
 end $$;
 
@@ -195,7 +226,17 @@ exception
 end;
 $$;
 
-drop schema postona_g4_x_oauth cascade;
+-- G4-45 (H1 F1): 001's own objects, each by name and RESTRICT (the default), then the schema RESTRICT: anything else found in
+-- it, or depending on it, makes this whole transaction fail with nothing dropped (no CASCADE).
+drop function postona_g4_x_oauth.disconnect_x_connection();
+drop function postona_g4_x_oauth.store_refreshed_x_tokens(text, bigint, text, text);
+drop function postona_g4_x_oauth.x_connection_epoch(text);
+drop function postona_g4_x_oauth.require_owner_epoch(text);
+drop function postona_g4_x_oauth.require_person(uuid);
+drop function postona_g4_x_oauth.lock_workspace(text);
+drop table postona_g4_x_oauth.state_bindings;
+drop table postona_g4_x_oauth.connections;
+drop schema postona_g4_x_oauth restrict;
 
 do $$
 begin
