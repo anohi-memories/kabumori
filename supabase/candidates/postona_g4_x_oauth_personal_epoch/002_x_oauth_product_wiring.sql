@@ -44,9 +44,15 @@ begin
        is distinct from '3ea5686f26e8de515d902cd408ef5275' then
     raise exception 'G4X_WIRING_PRECONDITION_001_BODY';
   end if;
-  -- nothing outside the G4 schema calls the writer this file drops
+  -- nothing calls the writer this file drops: no other body names it, in any letter case (G4-45 / H1 F1), and the catalog
+  -- records nothing depending on it (a SQL-standard body, a view, a default...). A name built by dynamic SQL is not found:
+  -- consumers are to be removed first.
   if exists (select 1 from pg_proc p
-               where p.pronamespace <> 'postona_g4_x_oauth'::regnamespace and p.prosrc like '%store_refreshed_x_tokens%') then
+               where p.oid <> to_regprocedure('postona_g4_x_oauth.store_refreshed_x_tokens(text,bigint,text,text)')
+                 and p.prosrc ilike '%store_refreshed_x_tokens%')
+     or exists (select 1 from pg_depend d
+                 where d.refclassid = 'pg_proc'::regclass and d.deptype in ('n', 'a')
+                   and d.refobjid = to_regprocedure('postona_g4_x_oauth.store_refreshed_x_tokens(text,bigint,text,text)')) then
     raise exception 'G4X_WIRING_PRECONDITION_WRITER_IN_USE';
   end if;
   -- every CHECK that names connection_status (and not only for other platforms) must allow 'unconnected'
