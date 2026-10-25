@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+"""Measure how G2's old QA tests react when G1 replaces the two server-guarantee sentences (temp worktree only)."""
+import json, os, re, subprocess, sys
+
+WT = sys.argv[1]
+NM = '<node_modules of a G2 worktree>'
+OLD1 = '前回と同じ内容・同じ送信IDで確認します。同じ送信IDは、サーバーが2回送ることはありません。'
+OLD2 = '通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。'
+VARIANTS = {
+    'baseline': None,
+    # G1 #316 REPORT 6394622991 candidates (keep the leading "前回と同じ内容・同じ送信IDで確認します")
+    'g1-report-candidate': (
+        '前回と同じ内容・同じ送信IDで確認します。同じ送信IDを使うのは二重投稿を防ぐためですが、Xで投稿済みでないことを確認してから送ってください。',
+        '通信できず、投稿されたかどうか分かりません。確認し直すときは同じ送信IDを使います。Xで投稿済みでないことを確認してから送ってください。',
+    ),
+    # G1 coordination 6394708371 candidate (different opening words)
+    'g1-coordination-candidate': (
+        '前回と同じ送信IDを使用して再確認します。二重投稿を避けるため、Xで投稿済みでないことを確認してください。',
+        '通信できず、投稿されたかどうか分かりません。確認し直すときは同じ送信IDを使います。Xで投稿済みでないことを確認してください。',
+    ),
+}
+TARGETS = [
+    ('394', '7384aa5abb29496c01d63c2d0add2cce5dcddc2b', 'tests/g2-x-manual-result-gate.test.mjs'),
+    ('403', 'ffed4d8735c5b270c87679f259cdc3aa30007f2c', 'tests/g2-pr398-regression.test.mjs'),
+    ('411', '38501193d7baf921f673e5e169e69752f34eae3e', 'tests/g2-postfix-baseline.test.mjs'),
+    ('414', '7b150a89d52bae0692487654fa4c1ae7db398112', 'tests/g2-pr410-transitions.test.mjs'),
+    ('448', 'd44713bc84407847aee66a131c3c67adad6fc320', 'tests/g2-pr435-retry-kind.test.mjs'),
+    ('468-G1', '45ee9ac3296fdc6f5e53942faa93a1e73e61c1c9', 'tests/manual-publish-screen.test.mjs'),
+]
+APP = os.path.join(WT, 'apps/social-mobile')
+SRC = os.path.join(APP, 'src/app/manual-publish.tsx')
+LINE = re.compile(r'^(✔|✖|﹣) (.*?)(?: \(\d+(?:\.\d+)?m?s\))?(?: # (TODO|SKIP).*)?$')
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+
+out = {}
+for pr, sha, test in TARGETS:
+    for name, repl in VARIANTS.items():
+        assert run(['git', '-C', WT, 'checkout', '-q', '--detach', '--force', sha]).returncode == 0
+        src = open(SRC, encoding='utf-8').read()
+        assert src.count(OLD1) == 1 and src.count(OLD2) == 1, (pr, 'anchors')
+        if repl:
+            src = src.replace(OLD1, repl[0]).replace(OLD2, repl[1])
+            open(SRC, 'w', encoding='utf-8').write(src)
+        link = os.path.join(APP, 'node_modules')
+        if not os.path.lexists(link):
+            os.symlink(NM, link)
+        r = run(['node', '--test', '--test-timeout=60000', test], cwd=APP)
+        res = {}
+        for ln in (r.stdout + r.stderr).splitlines():
+            m = LINE.match(ln)
+            if m and m.group(2) not in res:
+                res[m.group(2)] = 'TODO' if m.group(3) == 'TODO' else ('PASS' if m.group(1) == '✔' else 'FAIL')
+        summ = {k: v for k, v in re.findall(r'^ℹ (tests|pass|fail|todo|skipped) (\d+)$', r.stdout + r.stderr, re.M)}
+        out.setdefault(pr, {'sha': sha, 'test': test})[name] = {'summary': summ, 'results': res}
+        os.remove(link)
+        run(['git', '-C', WT, 'checkout', '-q', '--force', '--', '.'])
+json.dump(out, sys.stdout, ensure_ascii=False, indent=1)

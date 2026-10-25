@@ -1,0 +1,43 @@
+== PR 394 HEAD 7384aa5abb29496c01d63c2d0add2cce5dcddc2b tests/g2-x-manual-result-gate.test.mjs
+  baseline: tests 6 / pass 6 / fail 0 / todo 0 / skipped 0
+  g1-report-candidate: tests 6 / pass 5 / fail 1 / todo 0 / skipped 0
+  g1-coordination-candidate: tests 6 / pass 4 / fail 2 / todo 0 / skipped 0
+  [g1-report-candidate] PASS -> FAIL: FINDING G2-X1 (P3, owner G1): during the FIRST send of a new text the confirmation already says "前回と同じ内容・同じ送信IDで確認します" -- there was no earlier attempt
+  [g1-coordination-candidate] PASS -> FAIL: FINDING G2-X1 (P3, owner G1): during the FIRST send of a new text the confirmation already says "前回と同じ内容・同じ送信IDで確認します" -- there was no earlier attempt
+  [g1-coordination-candidate] PASS -> FAIL: negative controls: a route without the per-user key lets B see A's send; showing the same-id line only on a retry flips G2-X1
+== PR 403 HEAD ffed4d8735c5b270c87679f259cdc3aa30007f2c tests/g2-pr398-regression.test.mjs
+  baseline: tests 6 / pass 6 / fail 0 / todo 0 / skipped 0
+  g1-report-candidate: tests 6 / pass 4 / fail 2 / todo 0 / skipped 0
+  g1-coordination-candidate: tests 6 / pass 4 / fail 2 / todo 0 / skipped 0
+  [g1-report-candidate] PASS -> FAIL: G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+  [g1-report-candidate] PASS -> FAIL: negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+  [g1-coordination-candidate] PASS -> FAIL: G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+  [g1-coordination-candidate] PASS -> FAIL: negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+== PR 411 HEAD 38501193d7baf921f673e5e169e69752f34eae3e tests/g2-postfix-baseline.test.mjs
+  baseline: tests 14 / pass 14 / fail 0 / todo 0 / skipped 0
+  g1-report-candidate: tests 14 / pass 13 / fail 1 / todo 0 / skipped 0
+  g1-coordination-candidate: tests 14 / pass 13 / fail 1 / todo 0 / skipped 0
+  [g1-report-candidate] PASS -> FAIL: NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+  [g1-coordination-candidate] PASS -> FAIL: NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+== PR 414 HEAD 7b150a89d52bae0692487654fa4c1ae7db398112 tests/g2-pr410-transitions.test.mjs
+  baseline: tests 6 / pass 6 / fail 0 / todo 0 / skipped 0
+  g1-report-candidate: tests 6 / pass 5 / fail 1 / todo 0 / skipped 0
+  g1-coordination-candidate: tests 6 / pass 5 / fail 1 / todo 0 / skipped 0
+  [g1-report-candidate] PASS -> FAIL: FINDING G2-410-3 (P3, owner G1): a take-over of a same-id RE-ASK drops the "same content, same id" line the starting screen showed -- the take-over state is created with retrying:false
+  [g1-coordination-candidate] PASS -> FAIL: FINDING G2-410-3 (P3, owner G1): a take-over of a same-id RE-ASK drops the "same content, same id" line the starting screen showed -- the take-over state is created with retrying:false
+== PR 448 HEAD d44713bc84407847aee66a131c3c67adad6fc320 tests/g2-pr435-retry-kind.test.mjs
+  baseline: tests 8 / pass 8 / fail 0 / todo 0 / skipped 0
+  g1-report-candidate: tests 8 / pass 7 / fail 1 / todo 0 / skipped 0
+  g1-coordination-candidate: tests 8 / pass 7 / fail 1 / todo 0 / skipped 0
+  [g1-report-candidate] PASS -> FAIL: OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted
+  [g1-coordination-candidate] PASS -> FAIL: OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted
+== PR 468-G1 HEAD 45ee9ac3296fdc6f5e53942faa93a1e73e61c1c9 tests/manual-publish-screen.test.mjs
+  baseline: tests 146 / pass 146 / fail 0 / todo 0 / skipped 0
+  g1-report-candidate: tests 146 / pass 145 / fail 1 / todo 0 / skipped 0
+  g1-coordination-candidate: tests 146 / pass 141 / fail 5 / todo 0 / skipped 0
+  [g1-report-candidate] PASS -> FAIL: unconfirmed (nothing known: transport / 503 / unreadable): retry with the same id or acknowledge; never "failed", never "sent"
+  [g1-coordination-candidate] PASS -> FAIL: pending: "not sent yet", never shown as posted or as uncertain; the retry reuses the SAME attempt id and body
+  [g1-coordination-candidate] PASS -> FAIL: unconfirmed (nothing known: transport / 503 / unreadable): retry with the same id or acknowledge; never "failed", never "sent"
+  [g1-coordination-candidate] PASS -> FAIL: N1: a FIRST send does not say "same content, same send id" -- only a real re-ask does
+  [g1-coordination-candidate] PASS -> FAIL: P2-2: a screen that takes over a RE-ASK that is out says it is a re-ask, and offers neither another re-ask nor a discard
+  [g1-coordination-candidate] PASS -> FAIL: P2-1: a record read late by an older screen while a RE-ASK is out is taken over as a re-ask
