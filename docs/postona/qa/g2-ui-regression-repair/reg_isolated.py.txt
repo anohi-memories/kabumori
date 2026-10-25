@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""Run every test of the g2-reg-* files ALONE (by exact name) and compare with the whole-file run: order independence."""
+import json, os, re, subprocess, sys
+
+APP = sys.argv[1]
+LINE = re.compile(r'^(✔|✖) (.*?)(?: \(\d+(?:\.\d+)?m?s\))?$')
+files = sorted(f for f in os.listdir(os.path.join(APP, 'tests')) if f.startswith('g2-reg-') and f.endswith('.test.mjs'))
+out = {}
+for f in files:
+    r = subprocess.run(['node', '--test', '--test-timeout=30000', f'tests/{f}'], cwd=APP, capture_output=True, text=True)
+    whole = {}
+    for ln in (r.stdout + r.stderr).splitlines():
+        m = LINE.match(ln)
+        if m and m.group(2) != 'failing tests:' and m.group(2) not in whole:
+            whole[m.group(2)] = 'PASS' if m.group(1) == '✔' else 'FAIL'
+    alone = {}
+    for name in whole:
+        pat = '^' + re.escape(name) + '$'
+        q = subprocess.run(['node', '--test', '--test-timeout=30000', '--test-name-pattern', pat, f'tests/{f}'], cwd=APP, capture_output=True, text=True)
+        p = re.search(r'^ℹ pass (\d+)$', q.stdout, re.M); fl = re.search(r'^ℹ fail (\d+)$', q.stdout, re.M)
+        alone[name] = f"pass={p.group(1) if p else '?'} fail={fl.group(1) if fl else '?'}"
+    out[f] = {'whole': whole, 'alone': alone}
+json.dump(out, sys.stdout, ensure_ascii=False, indent=1)

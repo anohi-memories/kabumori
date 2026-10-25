@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Controls for the repaired g2-reg-* suites, in a throwaway worktree at G1 #497 (the PR worktree is not touched).
+1. order dependence: the repaired #403 copy WITHOUT the per-app in-flight registry (whole file vs each test alone);
+2. copy mutants of manual-publish.tsx (old sentences back / a new wording of the promise / check-X dropped): which
+   g2-reg-* tests fail (they must, via the meaning helper)."""
+import json, os, re, shutil, subprocess, sys
+
+WT, SRC_TESTS = sys.argv[1], sys.argv[2]
+NM = '<node_modules of a G2 worktree>'
+APP = os.path.join(WT, 'apps/social-mobile')
+ROUTE = os.path.join(APP, 'src/app/manual-publish.tsx')
+LINE = re.compile(r'^(✔|✖) (.*?)(?: \(\d+(?:\.\d+)?m?s\))?$')
+NEW1 = '前回と同じ内容・同じ送信IDで確認します。同じ送信IDを使うのは二重投稿を避けるためですが、送る前にXで投稿済みでないことを確認してください。'
+NEW2 = '通信できず、投稿されたかどうか分かりません。同じ内容で確認し直すときは同じ送信IDを使います。送る前に、Xで投稿済みでないことを確認してください。'
+OLD1 = '前回と同じ内容・同じ送信IDで確認します。同じ送信IDは、サーバーが2回送ることはありません。'
+OLD2 = '通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。'
+MUTANTS = {
+    'old-sentences': [(NEW1, OLD1), (NEW2, OLD2)],
+    'new-wording-promise': [(NEW1, '前回と同じ内容・同じ送信IDで確認します。同じ送信IDなら、サーバーが二重に投稿することはありません。')],
+    'check-x-dropped': [(NEW1, '前回と同じ内容・同じ送信IDで確認します。'), (NEW2, '通信できず、投稿されたかどうか分かりません。同じ内容で確認し直すときは同じ送信IDを使います。')],
+}
+
+def run(args):
+    r = subprocess.run(['node', '--test', '--test-timeout=30000', *args], cwd=APP, capture_output=True, text=True)
+    res = {}
+    for ln in (r.stdout + r.stderr).splitlines():
+        m = LINE.match(ln)
+        if m and m.group(2) != 'failing tests:' and m.group(2) not in res:
+            res[m.group(2)] = 'PASS' if m.group(1) == '✔' else 'FAIL'
+    return res
+
+os.symlink(NM, os.path.join(APP, 'node_modules'))
+for f in os.listdir(SRC_TESTS):
+    if f.startswith('g2-reg-'):
+        shutil.copy(os.path.join(SRC_TESTS, f), os.path.join(APP, 'tests', f))
+out = {}
+# 1. order dependence
+f403 = os.path.join(APP, 'tests', 'g2-reg-403-pr398-regression.test.mjs')
+src = open(f403, encoding='utf-8').read()
+fixed = "attemptMemory: memory, inFlightSends: realFlow.createInFlightSends() },"
+assert src.count(fixed) == 1
+shared = src.replace(fixed, "attemptMemory: memory },")
+open(os.path.join(APP, 'tests', 'g2-reg-403-shared-registry.test.mjs'), 'w', encoding='utf-8').write(shared)
+whole = run(['tests/g2-reg-403-shared-registry.test.mjs'])
+alone = {n: run(['--test-name-pattern', '^' + re.escape(n) + '$', 'tests/g2-reg-403-shared-registry.test.mjs']).get(n) for n in whole}
+out['order'] = {'shared_registry_whole': whole, 'shared_registry_alone': alone, 'repaired_whole': run(['tests/g2-reg-403-pr398-regression.test.mjs'])}
+os.remove(os.path.join(APP, 'tests', 'g2-reg-403-shared-registry.test.mjs'))
+# 2. copy mutants
+base = open(ROUTE, encoding='utf-8').read()
+targets = sorted('tests/' + f for f in os.listdir(os.path.join(APP, 'tests')) if f.startswith('g2-reg-') and f.endswith('.test.mjs'))
+for name, pairs in MUTANTS.items():
+    s = base
+    for a, b in pairs:
+        assert s.count(a) == 1, (name, a[:20])
+        s = s.replace(a, b)
+    open(ROUTE, 'w', encoding='utf-8').write(s)
+    res = run(targets)
+    out[name] = {'fail': sorted(n for n, v in res.items() if v == 'FAIL'), 'total': len(res)}
+    open(ROUTE, 'w', encoding='utf-8').write(base)
+os.remove(os.path.join(APP, 'node_modules'))
+json.dump(out, sys.stdout, ensure_ascii=False, indent=1)

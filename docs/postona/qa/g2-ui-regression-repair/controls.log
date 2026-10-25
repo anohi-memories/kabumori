@@ -1,0 +1,74 @@
+Each g2-reg-* test run ALONE (--test-name-pattern exact) vs the whole file, on G1 #497 446a9c39:
+g2-reg-394-x-manual-result-gate.test.mjs | whole PASS | alone pass=1 fail=0 | control (this build): with the unconnected port nothing is sent and nothing says it was -- the send button stays disabled even after the consent
+g2-reg-394-x-manual-result-gate.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED G2-X1 (regression guard, was FINDING on #366): the FIRST send of a new text does not explain the same id -- and the real re-ask after "unavailable" does
+g2-reg-394-x-manual-result-gate.test.mjs | whole PASS | alone pass=1 fail=0 | G2-X2: another person signs in while A's send is still out -- B gets a fresh screen with nothing of A, and A's late "published" never reaches B
+g2-reg-394-x-manual-result-gate.test.mjs | whole PASS | alone pass=1 fail=0 | G2-X3: the chosen account disappears while the send is out and the answer is "pending" / "unavailable" -- the same-id retry is not offered for a missing account and nothing is sent again
+g2-reg-394-x-manual-result-gate.test.mjs | whole PASS | alone pass=1 fail=0 | G2-X4: after an "uncertain" answer and the explicit "Xで確認しました", the editor is EMPTY (no old text to re-send by mistake), and a new send gets a NEW id
+g2-reg-394-x-manual-result-gate.test.mjs | whole PASS | alone pass=1 fail=0 | negative controls: a route without the per-user key lets B see A's send; the pre-#398 same-id condition brings G2-X1 back
+g2-reg-403-pr398-regression.test.mjs | whole PASS | alone pass=1 fail=0 | G2-R1: a token refresh that KEEPS the mark does not re-create the open screen -- the text and the chosen account stay, the record keeps its mark, and it comes back after leaving
+g2-reg-403-pr398-regression.test.mjs | whole PASS | alone pass=1 fail=0 | G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+g2-reg-403-pr398-regression.test.mjs | whole PASS | alone pass=1 fail=0 | FINDING G2-SM3R (P3, owner G1 / G5; MOCK of G2-SM2): a refresh whose user carries a NEW last_sign_in_at re-creates the open screen -- the typed text is gone at once and its record is discarded on the next look
+g2-reg-403-pr398-regression.test.mjs | whole PASS | alone pass=1 fail=0 | G2-SM3R-C: the same change while confirming drops the confirmation and the consent (nothing can be sent with them)
+g2-reg-403-pr398-regression.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED G2-SM3R-S (regression guard, was an observation on #398): the same change WHILE a send is out -- the new screen takes the send over (still sending, same id), offers no second request while it is out, and after the answer shows it as unresolved, never as sent
+g2-reg-403-pr398-regression.test.mjs | whole PASS | alone pass=1 fail=0 | negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED-SM1: with no usable last_sign_in_at nothing is kept and a new session gets nothing back
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED-SM3: a new sign-in of the same person while the screen is open re-creates it -- the old text is neither shown nor saved under the new mark
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED-X1: a first send does not say "same content, same id"
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED-HOLD: sign-out + sign-in gets nothing back; a refresh that keeps the mark keeps the open text; an account removed during a pending restore is not restored
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FINDING-SM2 (MOCK): the same person signing in elsewhere changes the mark on refresh -- this device's stored draft is discarded
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FINDING-SM3R-T (since #398, MOCK): a refresh with a changed mark re-creates the OPEN screen and the typed text is gone at once
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED-SM3R-S (regression guard since #410, was FINDING on #398): the same change while a send is out -- the new screen takes the send over (in_flight, same id) and offers no re-ask before the first answer
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FINDING-SM4: sign-out leaves the text on the device and 24 hours are only checked when the same person reads it again
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | FINDING-SM4-D (static): the account-deletion clean-up removes the onboarding state but nothing of the manual post
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | NC-1: the route keyed by the user only (AST) carries the text into a new sign-in
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | NC-2: a constant session mark (AST) brings the old text back after sign-out + sign-in
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | NC-4: the restore without its cancel check (AST) restores a draft whose account was removed meanwhile
+g2-reg-411-postfix-baseline.test.mjs | whole PASS | alone pass=1 fail=0 | NC-5: a draft store whose decideRestore ignores the session mark (AST) brings the old text back after sign-out + sign-in
+g2-reg-414-pr410-transitions.test.mjs | whole PASS | alone pass=1 fail=0 | G2-410-1: a SIGNED_OUT gap while the request is out -- the signed-out screen shows nothing; the same person signing back in (new mark) gets "sending" (no verdict, no re-ask), then the real answer
+g2-reg-414-pr410-transitions.test.mjs | whole PASS | alone pass=1 fail=0 | G2-410-2: another person signs in while A's request is out and A's answer arrives meanwhile -- B never sees it; when A signs in again, A sees only what the answer left (posted -> a clean editor; uncertain -> uncertain, no re-ask)
+g2-reg-414-pr410-transitions.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED G2-410-3 (regression guard since #468 P2-2, was FINDING on #410): a take-over of a same-id RE-ASK keeps explaining the same id (retrying), and the real answer of the re-ask reaches it
+g2-reg-414-pr410-transitions.test.mjs | whole PASS | alone pass=1 fail=0 | G2-410-4: after a taken-over send ends as posted, the next post gets a NEW request id
+g2-reg-414-pr410-transitions.test.mjs | whole PASS | alone pass=1 fail=0 | G2-410-5: a forced press of the send button on the take-over screen sends nothing (the gate says "sending")
+g2-reg-414-pr410-transitions.test.mjs | whole PASS | alone pass=1 fail=0 | negative controls: without the take-over branch, without registering the send, or with a take-over that never applies the answer, the SIGNED_OUT-gap scenario shows the regression
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | G2-HP1 (evidence heads): G2 #430 was measured on #427, #435 sits on #427, and H1 refused both -- #430 is not #435 evidence, and no head here is accepted
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | G2-RK1: B's stale re-ask (B still shows "pending") after A's re-ask ended uncertain -- tapped three times, twice over: no request, B is brought to "uncertain" with no re-ask, the code of the refusal is not shown as an answer
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | G2-RK2: a sign-out and the same person signing in again between A's uncertain re-ask and B's stale view -- B is re-created and shows "uncertain" from the memory; nothing to re-ask, no request
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED H1 P2, the RK3 entrance (regression guard since #468, was KNOWN on #435): from that stale screen of RK3, "Xで確認しました" does NOT remove the record and memory of A's NEW post while it is still out
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | FIXED gate (regression guard since #468, was KNOWN on #435): A's re-ask ends POSTED -- B's stale re-ask of the same id is NOT sent again, and B drops that attempt with the "settled on another screen" note
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | negative controls (heads with #435's kind check): (1) without "may be re-asked NOW", RK1 sees a second same-id request after uncertain; (2) without the screen re-sync, RK1 shows the refusal code as the answer
+g2-reg-448-pr435-retry-kind.test.mjs | whole PASS | alone pass=1 fail=0 | negative control (re-anchored G2 #430 NC1 on #435): #435 names the refusal code as a constant, so #430's anchor no longer matches -- here the same wall is found by its condition and removed, and a screen loaded before the send again sends a NEW id after uncertain (SN1 turns red)
+
+Order dependence (throwaway worktree): the repaired #403 copy with the module-singleton in-flight registry put back:
+  shared registry whole PASS | alone PASS | repaired whole PASS | G2-R1: a token refresh that KEEPS the mark does not re-create the open screen -- the text and the chosen account stay, the record keeps its mark, and it comes back after leaving
+  shared registry whole PASS | alone PASS | repaired whole PASS | G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+  shared registry whole FAIL | alone PASS | repaired whole PASS | FINDING G2-SM3R (P3, owner G1 / G5; MOCK of G2-SM2): a refresh whose user carries a NEW last_sign_in_at re-creates the open screen -- the typed text is gone at once and its record is discarded on the next look
+  shared registry whole FAIL | alone PASS | repaired whole PASS | G2-SM3R-C: the same change while confirming drops the confirmation and the consent (nothing can be sent with them)
+  shared registry whole FAIL | alone PASS | repaired whole PASS | FIXED G2-SM3R-S (regression guard, was an observation on #398): the same change WHILE a send is out -- the new screen takes the send over (still sending, same id), offers no second request while it is out, and after the answer shows it as unresolved, never as sent
+  shared registry whole FAIL | alone PASS | repaired whole PASS | negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+
+Copy mutants of manual-publish.tsx (throwaway worktree): g2-reg-* tests that FAIL (they must):
+  old-sentences: 7 / 40 fail
+    - FIXED G2-410-3 (regression guard since #468 P2-2, was FINDING on #410): a take-over of a same-id RE-ASK keeps explaining the same id (retrying), and the real answer of the re-ask reaches it
+    - FIXED G2-X1 (regression guard, was FINDING on #366): the FIRST send of a new text does not explain the same id -- and the real re-ask after "unavailable" does
+    - G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+    - NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+    - OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted
+    - negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+    - negative controls: a route without the per-user key lets B see A's send; the pre-#398 same-id condition brings G2-X1 back
+  new-wording-promise: 6 / 40 fail
+    - FIXED G2-410-3 (regression guard since #468 P2-2, was FINDING on #410): a take-over of a same-id RE-ASK keeps explaining the same id (retrying), and the real answer of the re-ask reaches it
+    - FIXED G2-X1 (regression guard, was FINDING on #366): the FIRST send of a new text does not explain the same id -- and the real re-ask after "unavailable" does
+    - G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+    - NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+    - negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+    - negative controls: a route without the per-user key lets B see A's send; the pre-#398 same-id condition brings G2-X1 back
+  check-x-dropped: 7 / 40 fail
+    - FIXED G2-410-3 (regression guard since #468 P2-2, was FINDING on #410): a take-over of a same-id RE-ASK keeps explaining the same id (retrying), and the real answer of the re-ask reaches it
+    - FIXED G2-X1 (regression guard, was FINDING on #366): the FIRST send of a new text does not explain the same id -- and the real re-ask after "unavailable" does
+    - G2-R2: a real re-ask after an app restart (pending attempt, text typed again) shows "same content, same id" while confirming and while sending, and reuses the stored id -- a first send of the next text does not
+    - NC-3: the same-id line on any unresolved attempt (AST) shows it on a first send
+    - OBSERVATION G2-RK3 (P3 display, owner G1, on #435): B's stale re-ask of the OLD attempt while A's NEW post is out -- refused (no request) by the "send in progress" rule, so #435's re-sync does not run: B keeps showing the old attempt as unresolved although it was posted
+    - negative controls: a route keyed by the user only brings SM3 back (text survives a new sign-in), and the old same-id condition brings G2-X1 back (a first send says "same id")
+    - negative controls: a route without the per-user key lets B see A's send; the pre-#398 same-id condition brings G2-X1 back
