@@ -8,6 +8,7 @@ socket variables of a THROW-AWAY local cluster):
 import hashlib
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -42,7 +43,10 @@ M = [
      "revoke all on function private.postona_personal_session() from public, anon, authenticated, service_role;\n"
      "grant execute on function private.postona_personal_session() to authenticated;", 0, 1),
     ('the install does not check the superuser', C, "    raise exception 'S22_PRECONDITION_OWNER_IS_SUPERUSER';", "    null;", 0, 1),
-    ('a second install is not refused', C, "      raise exception 'S22_ALREADY_APPLIED';", "      null;", 0, 1),
+    # (G5-38) the suite reads its checksum from this very line, so the refusal is kept as a comment: the mutant must fail a SUITE test, not the
+    # suite's own parse of the candidate (it was STATIC before, found by the outcome classes)
+    ('a second install is not refused', C, "      raise exception 'S22_ALREADY_APPLIED';",
+     "      null; -- was: = 'a5d4d71c532847a8573e86a4bd0c791d' then raise exception 'S22_ALREADY_APPLIED';", 0, 1),
     ('the install does not refuse a taken name', C, "    raise exception 'S22_PRECONDITION_NAME_TAKEN';", "    null;", 0, 1),
     ('the install accepts FORCE RLS', C, "      raise exception 'S22_PRECONDITION_RLS_FORCED %', v_rel;", "      null;", 0, 1),
     ('the install accepts RLS hiding rows', C, "      raise exception 'S22_PRECONDITION_RLS_HIDES_ROWS %', v_rel;", "      null;", 0, 1),
@@ -59,6 +63,10 @@ M = [
     ('the rollback ignores an API role reaching it', RB, "    raise exception 'S22_ROLLBACK_PRECONDITION_API_ROLE_REACHES';", "    null;", 0, 1),
     ('the rollback ignores a caller', RB, "    raise exception 'S22_ROLLBACK_PRECONDITION_CALLERS';", "    null;", 0, 1),
     ('the rollback leaves the gate', RB, "drop function private.postona_personal_session();\n", "", 0, 1),
+    # ---- (G5-38) the callers check in any letter case, and recorded dependents
+    ('the rollback compares callers case-sensitively (the G5-34 defect)', RB, "pg_catalog.strpos(pg_catalog.lower(p.prosrc), 'postona_personal_session')",
+     "pg_catalog.strpos(p.prosrc, 'postona_personal_session')", 0, 1),
+    ('the rollback ignores recorded dependents (left to DROP RESTRICT)', RB, "    raise exception 'S22_ROLLBACK_PRECONDITION_DEPENDENTS';", "    null;", 0, 1),
 ]
 
 # The install's postcondition attribute clauses are not mutated: the function was just created with the declared attributes, so removing a clause
@@ -81,9 +89,34 @@ def replace_nth(text, old, new, n):
 def run(root, pinned, behaviour_only=False):
     env = dict(os.environ, S34_BEHAVIOUR_ONLY='1' if behaviour_only else '0', S34_REPO_ROOT=root, S34_PINNED_TREE=pinned)
     try:
-        return subprocess.run(['bash', os.path.join(root, RUNNER)], cwd=root, capture_output=True, text=True, timeout=900, env=env).returncode
+        r = subprocess.run(['bash', os.path.join(root, RUNNER)], cwd=root, capture_output=True, text=True, timeout=900, env=env)
+        return r.returncode, r.stdout + r.stderr
     except subprocess.TimeoutExpired:
-        return 124
+        return 124, ''
+
+
+ANSI = re.compile(r'\x1b\[[0-9;]*m')
+
+
+def classify(code, output, body_mutant):
+    """(G5-38, as G5-35) Why the suite failed, so that only a failed SUITE ASSERTION counts as a detection: SURVIVED (it passed); TIMEOUT; SETUP
+    (no test reported a failure: the world, the runner or a pinned file broke); STATIC (the test module's checks on the candidate's TEXT failed
+    before any test ran); CHECKSUM (a body mutant failed on a body-checksum guard, i.e. the md5 rewrite did not hold); ASSERTION (a suite test
+    failed on its assertions). The second value names the first failed test, for the record."""
+    if code == 0:
+        return 'SURVIVED', ''
+    if code == 124:
+        return 'TIMEOUT', ''
+    text = ANSI.sub('', output)
+    if '(uncaught error)' in text:
+        return 'STATIC', next((line for line in text.splitlines() if 'Error' in line), '')[:140]
+    failed = re.findall(r'^(.+?) \.\.\. FAILED', text, re.M)
+    if not failed or not re.search(r'FAILED \| \d+ passed \| [1-9]\d* failed', text):
+        return 'SETUP', ((text.strip().splitlines() or [''])[-1])[:140]
+    errors = text[text.index(' ERRORS '):] if ' ERRORS ' in text else text
+    if body_mutant and re.search(r'[A-Z0-9]_BODY\b|checksum', errors):
+        return 'CHECKSUM', failed[0][:140]
+    return 'ASSERTION', failed[0][:140]
 
 
 def fresh_copy():
@@ -101,13 +134,14 @@ archive = subprocess.run(['git', '-C', src_root, 'archive', PIN, 'supabase/migra
                           'supabase/candidates/common_account_authorization_verdict'], capture_output=True, check=True).stdout
 tarfile.open(fileobj=io.BytesIO(archive)).extractall(pinned)
 root = fresh_copy()
-control = run(root, pinned)
+control, _ = run(root, pinned)
 shutil.rmtree(root, ignore_errors=True)
 print(f'CONTROL   {"PASS" if control == 0 else "FAIL"}', flush=True)
 if control != 0:
     sys.exit(1)
 detected = 0
 invalid = 0
+kinds = {}
 for label, target, old, new, nth, count in M:
     root = fresh_copy()
     try:
@@ -129,11 +163,13 @@ for label, target, old, new, nth, count in M:
                 content = open(p, encoding='utf-8').read().replace(before, body(text))
                 open(p, 'w', encoding='utf-8').write(content)
                 assert content.strip() != '', f'{f} would be empty'
-        code = run(root, pinned, behaviour_only=body_mutant)
-        print(f'{"DETECTED " if code != 0 else "SURVIVED "} {label}', flush=True)
-        detected += 1 if code != 0 else 0
+        code, output = run(root, pinned, behaviour_only=body_mutant)
+        kind, where = classify(code, output, body_mutant)
+        print(f'{kind:<10} {"body " if body_mutant else "guard"} {label}{"  :: " + where if where else ""}', flush=True)
+        kinds[kind] = kinds.get(kind, 0) + 1
+        detected += 1 if kind == 'ASSERTION' else 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
 shutil.rmtree(pinned, ignore_errors=True)
-print(f'MUTANTS   {detected}/{len(M)} detected, {invalid} invalid', flush=True)
+print(f'MUTANTS   {detected}/{len(M)} detected by a suite assertion, {invalid} invalid; by kind: {kinds}', flush=True)
 sys.exit(0 if detected == len(M) and invalid == 0 else 1)

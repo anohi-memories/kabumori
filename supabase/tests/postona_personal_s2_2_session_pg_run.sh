@@ -50,6 +50,12 @@ d1="$cand/002_verdicts_anonymous_strict.sql"
 [ "$(git hash-object "$d1")" = "4f58351e98f039c0d71b103be5152854fe4f7a90" ] || { echo "D1 candidate differs from PR #494's blob." >&2; exit 2; }
 # S2-3 (PR #506 head bbc52a6b): installed in "full" so S2-2 is shown to change none of it
 s23="$cand/003_s2_3_workspace_eligibility.sql"
+# (G5-38) PR #510's own rollback (6d59f3b6), to reproduce the case-sensitive callers check on it; skipped in a copy without .git (mutation runs)
+old_rb=""
+if [ -z "${S34_PINNED_TREE:-}" ] && git -C "$repo" cat-file -e "6d59f3b6690e237c203ba4ee8a8afbf42e7a5e11^{commit}" 2>/dev/null; then
+  git -C "$repo" show "6d59f3b6690e237c203ba4ee8a8afbf42e7a5e11:supabase/candidates/postona_personal_auth/004_s2_2_personal_session_rollback.sql" > "$work/old_rb.sql"
+  old_rb="$work/old_rb.sql"
+fi
 [ "$(git hash-object "$s23")" = "84a9ad79484b68b5b05691c6b17ce4b3f32a13a6" ] || { echo "S2-3 candidate differs from PR #506's blob." >&2; exit 2; }
 
 "${S[@]}" -d postgres >/dev/null <<SQL
@@ -96,7 +102,7 @@ bare -f "$t/social_mobile_account_deletion_fixture.sql" >/dev/null
 bare -c "create table if not exists auth.sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users (id) on delete cascade, created_at timestamptz not null default now(), not_after timestamptz)" >/dev/null
 bare -c "create or replace function auth.uid() returns uuid language sql stable as \$\$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid \$\$" >/dev/null
 bare -c "create schema if not exists private" >/dev/null
-( cd "$repo" && CAL_E2E=1 S34_CANDIDATE="$cand/004_s2_2_personal_session.sql" S34_ROLLBACK="$cand/004_s2_2_personal_session_rollback.sql" \
+( cd "$repo" && CAL_E2E=1 S34_CANDIDATE="$cand/004_s2_2_personal_session.sql" S34_ROLLBACK="$cand/004_s2_2_personal_session_rollback.sql" S34_OLD_ROLLBACK="$old_rb" \
     S34_SV_INSTALL="$v/003_session_verdict.sql" S34_OWNER="$owner" S34_FULL="${prefix}_full" S34_BARE="${prefix}_bare" \
     PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_s2_2_session_pg_test.ts" )
