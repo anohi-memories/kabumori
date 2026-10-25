@@ -467,7 +467,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
               <Text style={styles.muted}>{draft.kind === 'ok' ? `${draft.used} / ${draft.limit}` : ''}</Text>
               <Text style={{ color: colors.warning, fontWeight: '700' }}>送信するとXに公開されます。この画面から取り消すことはできません。</Text>
               {(state.phase === 'confirming' && state.unresolved !== null) || (state.phase === 'sending' && state.retrying) ? (
-                <Text style={styles.muted}>前回と同じ内容・同じ送信IDで確認します。同じ送信IDは、サーバーが2回送ることはありません。</Text>
+                <Text style={styles.muted}>前回と同じ内容・同じ送信IDで確認します。同じ送信IDを使うのは二重投稿を避けるためですが、送る前にXで投稿済みでないことを確認してください。</Text>
               ) : null}
             </Card>
             {state.phase === 'confirming' && state.unresolved !== null && state.unresolved.text === null ? (
@@ -561,7 +561,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
             ) : result.kind === 'unconfirmed' ? (
               <>
                 <SectionTitle>結果を確認できません</SectionTitle>
-                <Text style={{ color: colors.warning, fontWeight: '700' }}>通信できず、投稿されたかどうか分かりません。同じ内容の再送は、同じ送信IDで行います（サーバーは2回送りません）。</Text>
+                <Text style={{ color: colors.warning, fontWeight: '700' }}>通信できず、投稿されたかどうか分かりません。同じ内容で確認し直すときは同じ送信IDを使います。送る前に、Xで投稿済みでないことを確認してください。</Text>
                 {result.code ? <Text style={styles.muted}>コード: {result.code}</Text> : null}
                 <ActionButton label={retryLabel} onPress={() => dispatch({ type: 'retry_requested' })} />
                 <ActionButton label={discardLabel} onPress={() => acknowledge('unresolved_acknowledged')} />
