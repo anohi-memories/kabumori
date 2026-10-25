@@ -7,10 +7,16 @@
   - 環境変数は PATH と LANG だけ。token・key・secret・password を含む名前は不可。
   - KeepAlive（落ちたら再起動）、RunAtLoad、Umask 077（作るファイルは所有者だけが読める）。
   - ログはルートの下の logs/。パスはすべて絶対パス。
+- TASK 14（H2 R2）: 実行先を変えられないよう、plist のキーは ALLOWED_KEYS の10個と**完全に一致**すること
+  （Program・BundleProgram・WorkingDirectory・inetdCompatibility など、実行先や実行のしかたを変えるキーは不可）。
+  Python は ALLOWED_PYTHONS（/usr/bin/python3）だけ。ProgramArguments は
+  [python, "-I", 同梱の g10_watchdog.py, "--root", 絶対パス, "--interval", 有限の正の数] の7要素に完全に一致すること。
+  plutil -lint は形式の検査で、意味（何が実行されるか）の検査は validate_plan が行う。render_validated は検査を通った計画だけを plist にする。
 - 停止の方法（stop_commands）は、人が実行する手順の文字列として返すだけ（ここでは実行しない）。
 - plutil -lint（読み取りだけの検査）で、plist の形式を確かめられる（lint）。
 """
 import getpass
+import math
 import os
 import plistlib
 import re
@@ -21,6 +27,9 @@ PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WATCHDOG = os.path.join(PACKAGE_ROOT, "bin", "g10_watchdog.py")
 FORBIDDEN_ENV = re.compile(r"TOKEN|KEY|SECRET|PASSWORD|PASSWD|CREDENTIAL|ANTHROPIC|AWS_|GH_|GITHUB_", re.I)
 DEDICATED_USER = re.compile(r"_g10[a-z0-9_]{1,24}")
+ALLOWED_PYTHONS = ("/usr/bin/python3",)
+ALLOWED_KEYS = frozenset(("Label", "ProgramArguments", "UserName", "KeepAlive", "RunAtLoad", "ProcessType", "Umask",
+                          "EnvironmentVariables", "StandardOutPath", "StandardErrorPath"))
 
 
 class PlanError(ValueError):
@@ -47,6 +56,8 @@ def watchdog_daemon_plan(python, root, user, interval=30.0, package_root=PACKAGE
 def validate_plan(plan, current_user=None, package_root=PACKAGE_ROOT):
     """規則に合わなければ PlanError。"""
     current_user = current_user or getpass.getuser()
+    if not isinstance(plan, dict) or set(plan) != ALLOWED_KEYS:
+        raise PlanError("plist keys must be exactly %s (no Program/BundleProgram or other keys)" % sorted(ALLOWED_KEYS))
     user = plan.get("UserName")
     if not isinstance(user, str) or not DEDICATED_USER.fullmatch(user):
         raise PlanError("the daemon must run as a dedicated _g10* user")
@@ -55,10 +66,18 @@ def validate_plan(plan, current_user=None, package_root=PACKAGE_ROOT):
     if not str(plan.get("Label", "")).startswith(LABEL_PREFIX + "."):
         raise PlanError("unexpected label")
     args = plan.get("ProgramArguments")
-    if not (isinstance(args, list) and len(args) >= 3 and all(isinstance(a, str) for a in args)):
-        raise PlanError("ProgramArguments malformed")
-    if not os.path.isabs(args[0]) or args[1] != "-I":
-        raise PlanError("python must be an absolute path run with -I")
+    if not (isinstance(args, list) and len(args) == 7 and all(isinstance(a, str) for a in args)):
+        raise PlanError("ProgramArguments must be [python, -I, watchdog, --root, ROOT, --interval, SECONDS]")
+    if args[0] not in ALLOWED_PYTHONS or args[1] != "-I":
+        raise PlanError("python must be one of %s run with -I" % (ALLOWED_PYTHONS,))
+    if args[3] != "--root" or args[5] != "--interval":
+        raise PlanError("ProgramArguments must be [python, -I, watchdog, --root, ROOT, --interval, SECONDS]")
+    try:
+        interval = float(args[6])
+    except ValueError:
+        raise PlanError("--interval must be a number")
+    if not (math.isfinite(interval) and interval > 0):
+        raise PlanError("--interval must be a finite positive number")
     if os.path.realpath(args[2]) != os.path.realpath(os.path.join(package_root, "bin", "g10_watchdog.py")):
         raise PlanError("only the bundled g10_watchdog.py may be run")
     env = plan.get("EnvironmentVariables", {})
@@ -71,13 +90,24 @@ def validate_plan(plan, current_user=None, package_root=PACKAGE_ROOT):
     for key in ("StandardOutPath", "StandardErrorPath"):
         if not os.path.isabs(str(plan.get(key, ""))):
             raise PlanError("log paths must be absolute")
-    if "--root" not in args or not os.path.isabs(args[args.index("--root") + 1]):
+    if not os.path.isabs(args[4]):
         raise PlanError("--root must be an absolute path")
+    if plan.get("ProcessType") != "Background":
+        raise PlanError("ProcessType must be Background")
     return True
 
 
 def render(plan):
     return plistlib.dumps(plan, fmt=plistlib.FMT_XML, sort_keys=True)
+
+
+def render_validated(plan, current_user=None):
+    """検査（validate_plan）を通った計画だけを plist にする。検査したものと書き出すものが同じであることを保つ。"""
+    validate_plan(plan, current_user)
+    data = render(plan)
+    if plistlib.loads(data) != plan:
+        raise PlanError("rendered plist differs from the validated plan")
+    return data
 
 
 def lint(path):

@@ -12,6 +12,7 @@ H2 C2 P2×2（監督スレッドの異常・正常時刻）の修正は TASK `g1
 ゲート1追加（編集者の根拠・認証・回数の予算）は TASK `g10-phase2-gate1-editor-provenance-rate-budget-20261025`（下の「ゲート1追加」）。
 H2 第9TASK の P2×2（provenance の項目の欠落・予算の同時の呼び出し）の修正は TASK `g10-phase2-gate1-editor-rate-p2-fix-20261025`（同じ節の末尾）。
 監督付き初回自動起動の準備（G10 一枠）は TASK `g10-phase2-supervised-autostart-integration-prep-20261025`（下の「監督付き自動起動の準備」）。
+その P2×3（台帳の安定した識別・launchd の実行先・署名時の鍵の確認）の修正は TASK `g10-phase2-autostart-prep-three-p2-fix-20261025`（同じ節の §8）。
 仕様 v5 本体＋v5.1〜v5.4 差分（Mac上の `~/Library/Application Support/kabumori-agent-watch/phase2-spec/`、SHA256SUMS照合済み）を暫定基準として、
 **実Claudeを呼ばずに**、実行係の source と偽Claude試験を実装した。
 
@@ -242,6 +243,17 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 ### 6. G10 一枠のオフライン E2E（`tests/test_g10_offline_e2e.py`）
 承認済み TASK の受付 → 取得係の証拠 → CLAIM → 受理 → 起動直前の再取得 → 偽Claude の起動 → 実行中の監督 → 終了判定 → REPORT の下書き、
 および「起動直前に TASK が古くなった」「実行中の取消」「二重起動・再送」「時間切れ」「自己申告の秘密情報の伏せ字」を、模擬 Issue と偽Claude で確認。
+### 8. TASK 14（H2 第11TASK の P2×3 の修正）
+- 共有台帳: 台帳のパスは正規の絶対パス（シンボリックリンクを含まない）だけ。置き場所のフォルダは自分の所有・他人が書けないこと。
+  台帳とロックは自分の所有の通常ファイル（シンボリックリンク・dangling・ディレクトリ・ハードリンクは不可）で、O_NOFOLLOW で開いた
+  記述子の fstat で確かめる。ロックは作成時の実体（dev・inode）と一致するものだけを使い、保存の直前にもロックのパスが同じ実体かを
+  確かめて、差し替えられていたら保存しない（別名による分裂・差し替えによる予約の消失を防ぐ）。
+- launchd の計画: plist のキーは決まった10個と完全に一致（Program・BundleProgram 等は不可）、Python は /usr/bin/python3 のみ、
+  起動引数は7要素の決まった形に完全に一致。`render_validated` は検査を通った計画だけを plist にする（plutil -lint は形式の検査のみ）。
+- 署名: 署名のたびに、鍵を O_NOFOLLOW で開いた記述子で「通常ファイル・自分の所有・0600・ハードリンクなし・作成時と同じ実体」を確かめ、
+  その記述子を /dev/fd 経由で openssl に渡す（確認と使用の間にすり替わらない）。シンボリックリンク・別の鍵への置き換え・権限の緩みは拒否。
+- 同じユーザーの権限を持つ者がフォルダの中を書き換えることは防げない（信頼の範囲。専用ユーザーの分離は F0）。
+
 ### 7. 実 Claude の初回起動の前提（すべて未了）と、人が確認する GO チェックリスト
 前提（各項目に独立レビューの PASS とユーザーの承認が必要）:
 1. 読み取り専用 token の用意と、上の検証計画 1〜6 の実施（編集者の根拠・本文の一致・点数）

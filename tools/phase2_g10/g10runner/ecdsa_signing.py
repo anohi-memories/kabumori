@@ -6,6 +6,10 @@
 - この Mac の openssl（LibreSSL 3.3.6）は Ed25519 に対応していない（確認済み）。そのため ECDSA P-256 を使う。
   外部の Python パッケージは使わず、固定のパス /usr/bin/openssl を、最小の環境変数で呼ぶ。
 - 署名器は、持っている役割の秘密鍵でだけ署名する。秘密鍵のファイルは所有者だけが読める（0600）こと。
+  TASK 14（H2 R3）: 作成時に鍵の実体（dev・inode）を記録し、**署名のたびに** O_NOFOLLOW で開いた記述子の fstat で
+  「通常ファイル・自分の所有・0600（グループ／他人の権限なし）・ハードリンクなし・作成時と同じ実体」を確かめる。
+  確かめた同じ記述子を /dev/fd 経由で openssl に渡すので、確認と使用の間にパスで別のファイルへすり替わらない。
+  シンボリックリンクへの置き換え・別の鍵ファイルへの置き換え・0644 などへの権限の緩みは、署名を拒否する。
 - 検証器は公開鍵だけを受け付ける（秘密鍵のファイルを渡されたら拒否）。
 - 署名の形式は "ecdsa-p256-sha256:<DER の16進>"。それ以外の形式・壊れた署名は「検証失敗」。
 - 既定ではどこにも結線していない（現在の起動は試験用 HMAC のまま）。人の鍵のパスフレーズ・鍵の保管場所（Keychain 等）・
@@ -25,8 +29,8 @@ _ENV = {"PATH": "/usr/bin:/bin", "LANG": "C"}
 _HEX = re.compile(r"[0-9a-f]+")
 
 
-def _run(args, data=None):
-    return subprocess.run([OPENSSL] + args, input=data, capture_output=True, env=_ENV, timeout=20)
+def _run(args, data=None, pass_fds=()):
+    return subprocess.run([OPENSSL] + args, input=data, capture_output=True, env=_ENV, timeout=20, pass_fds=pass_fds)
 
 
 def generate_keypair(directory, role):
@@ -49,14 +53,33 @@ def generate_keypair(directory, role):
     return priv, pub
 
 
+def _open_private_key(path, expected_id=None):
+    """鍵を O_NOFOLLOW で開き、記述子の fstat で規則を確かめて (fd, (dev, inode)) を返す。違反は ValueError。"""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        raise ValueError("private key cannot be opened without following symlinks")
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+            raise ValueError("private key must be a regular file without hard links")
+        if st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) & 0o077:
+            raise ValueError("private key must be owned by this user and readable only by the owner (0600)")
+        ident = (st.st_dev, st.st_ino)
+        if expected_id is not None and ident != expected_id:
+            raise ValueError("private key file was replaced after the signer was created")
+        if b"PRIVATE KEY" not in os.pread(fd, 64, 0):
+            raise ValueError("not a private key file")
+        return fd, ident
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def _check_private_key(path):
-    st = os.stat(path)
-    if st.st_uid != os.getuid() or stat.S_IMODE(st.st_mode) & 0o077:
-        raise ValueError("private key must be owned by this user and readable only by the owner (0600)")
-    with open(path, "rb") as f:
-        head = f.read(64)
-    if b"PRIVATE KEY" not in head:
-        raise ValueError("not a private key file")
+    fd, ident = _open_private_key(path)
+    os.close(fd)
+    return ident
 
 
 def _check_public_key(path):
@@ -70,10 +93,11 @@ class EcdsaSigner:
     """持っている役割の秘密鍵でだけ署名する。signing.HmacTestSigner と同じインターフェース（can_sign／sign）。"""
 
     def __init__(self, private_keys):
+        self._ids = {}
         for role, path in private_keys.items():
             if role not in ROLES:
                 raise ValueError("unknown role: " + role)
-            _check_private_key(path)
+            self._ids[role] = _check_private_key(path)
         self._keys = dict(private_keys)
 
     def can_sign(self, role):
@@ -82,7 +106,14 @@ class EcdsaSigner:
     def sign(self, role, data):
         if role not in self._keys:
             raise SignatureError("no key for role: " + role)
-        r = _run(["dgst", "-sha256", "-sign", self._keys[role]], data)
+        try:
+            fd, _ = _open_private_key(self._keys[role], self._ids[role])  # 署名の直前に、記述子で確かめる
+        except ValueError as exc:
+            raise SignatureError("private key check failed at sign time: %s" % exc)
+        try:
+            r = _run(["dgst", "-sha256", "-sign", "/dev/fd/%d" % fd], data, pass_fds=(fd,))  # 確かめた同じ記述子を使う
+        finally:
+            os.close(fd)
         if r.returncode != 0 or not r.stdout:
             raise SignatureError("signing failed")
         return PREFIX + r.stdout.hex()

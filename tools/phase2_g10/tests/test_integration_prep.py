@@ -24,7 +24,9 @@ NOW = 1792800000.0
 
 class TmpDir(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="g10prep-", dir="/tmp")
+        # 正規のパス（/tmp は /private/tmp へのシンボリックリンクなので realpath にする）・所有者だけが書けるフォルダ
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="g10prep-", dir="/tmp"))
+        os.chmod(self.tmp, 0o700)
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
 
@@ -68,12 +70,12 @@ class SharedLedger(TmpDir):
         for led in (a, b):
             real = led._save
 
-            def waiting_save(state, real=real):
+            def waiting_save(*args, real=real):
                 try:
                     barrier.wait()
                 except threading.BrokenBarrierError:
                     pass
-                real(state)
+                real(*args)
             led._save = waiting_save
         results = []
 
@@ -209,7 +211,8 @@ class LaunchdPlan(TmpDir):
                  "not dedicated": self.plan(UserName="g10runner"),
                  "secret env": self.plan(EnvironmentVariables={"PATH": "/usr/bin", "GH_TOKEN": "x"}),
                  "extra env": self.plan(EnvironmentVariables={"PATH": "/usr/bin", "HOME": "/x"}),
-                 "other script": self.plan(ProgramArguments=["/usr/bin/python3", "-I", "/tmp/evil.py", "--root", "/r"]),
+                 "other script": self.plan(ProgramArguments=["/usr/bin/python3", "-I", "/tmp/evil.py", "--root", "/r",
+                                                             "--interval", "30.0"]),
                  "relative python": self.plan(ProgramArguments=["python3", "-I", lp.WATCHDOG, "--root", "/r"]),
                  "no -I": self.plan(ProgramArguments=["/usr/bin/python3", lp.WATCHDOG, "--root", "/r", "-I"]),
                  "umask": self.plan(Umask=0o022), "keepalive": self.plan(KeepAlive=False),
