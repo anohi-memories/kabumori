@@ -4,14 +4,32 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { xConnectAuthSessionOptions } from '@/features/x-connect/auth-session-options';
-import { base64ToBase64Url, bytesToHex, isRetryableOAuthError, parseOAuthReturn } from '@/lib/x-oauth-onboarding';
+import {
+  base64ToBase64Url,
+  bytesToHex,
+  classifyXConnectFailure,
+  classifyXDisconnectFailure,
+  parseOAuthReturn,
+  type XConnectFailure,
+} from '@/lib/x-oauth-onboarding';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
 WebBrowser.maybeCompleteAuthSession();
 
-export type ConnectState = 'idle' | 'connecting' | 'connected' | 'cancelled' | 'retryable_error' | 'terminal_error';
+export type ConnectState =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'cancelled'
+  | 'retryable_error'
+  | 'terminal_error'
+  | 'session_required'
+  | 'workspace_blocked'
+  | 'disconnecting'
+  | 'disconnected';
 
+// G4-41: session_required / workspace_blocked / disconnect* copy is provisional until the G1/G2 screen owners settle it.
 export const CONNECT_STATE_TEXT: Record<ConnectState, string> = {
   idle: 'Xアカウントを安全に接続できます。',
   connecting: 'Xの認証を確認しています…',
@@ -19,6 +37,17 @@ export const CONNECT_STATE_TEXT: Record<ConnectState, string> = {
   cancelled: '接続をキャンセルしました。必要なら再試行できます。',
   retryable_error: '一時的な通信エラーです。もう一度お試しください。',
   terminal_error: '安全確認を完了できませんでした。最初からやり直してください。',
+  session_required: 'ログインの有効期限が切れました。もう一度ログインしてから接続してください。',
+  workspace_blocked: 'このアカウントでは、まだXを接続できません。サポートにお問い合わせください。',
+  disconnecting: 'Xアカウントの接続を解除しています…',
+  disconnected: 'Xアカウントの接続を解除しました。',
+};
+
+const FAILURE_STATE: Record<XConnectFailure, ConnectState> = {
+  retryable: 'retryable_error',
+  session_required: 'session_required',
+  workspace_blocked: 'workspace_blocked',
+  restart: 'terminal_error',
 };
 
 /**
@@ -99,7 +128,7 @@ export function useXConnect(onConnected?: () => void) {
       setState('connected');
       onConnected?.();
     } catch (error) {
-      setState(isRetryableOAuthError(error) ? 'retryable_error' : 'terminal_error');
+      setState(FAILURE_STATE[classifyXConnectFailure(error)]);
     } finally {
       rawState = null;
       codeVerifier = null;
@@ -107,5 +136,28 @@ export function useXConnect(onConnected?: () => void) {
     }
   }, [onConnected, session]);
 
-  return { state, verifiedHandle, connect, stateText: CONNECT_STATE_TEXT[state] };
+  // The caller's own X connection only (the RPC derives everything from the forwarded JWT; no ids are sent).
+  // Server side it stays refused (X_DISCONNECT_NOT_ENABLED -> terminal_error) until the operator opens its gate.
+  const disconnect = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setState('disconnecting');
+    try {
+      if (!supabase || !session?.access_token) throw new Error('AUTH_SESSION_UNAVAILABLE');
+      const { error, status } = await supabase.rpc('disconnect_social_mobile_x_connection');
+      if (error) {
+        setState(FAILURE_STATE[classifyXDisconnectFailure(error.message, status)]);
+        return;
+      }
+      setVerifiedHandle(null);
+      setState('disconnected');
+      onConnected?.();
+    } catch (error) {
+      setState(FAILURE_STATE[classifyXConnectFailure(error)]);
+    } finally {
+      inFlight.current = false;
+    }
+  }, [onConnected, session]);
+
+  return { state, verifiedHandle, connect, disconnect, stateText: CONNECT_STATE_TEXT[state] };
 }
