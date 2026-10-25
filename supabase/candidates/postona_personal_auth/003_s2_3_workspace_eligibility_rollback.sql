@@ -2,6 +2,15 @@
 -- attributes) and drops the predicate. It refuses unless R0 is exactly the S2-3 body and the predicate exactly the installed one (another body
 -- or shape is someone else's change and is left alone), with the same shape checks as the install. Run R0 first, so nothing calls the predicate
 -- when it goes. After it, R0 answers as D1 again (C4 / C5 / a shared own workspace / an orphan membership are allowed again). It writes no row.
+--
+-- G5-37 REVISION (2026-10-25, Issue #320 task 37, F-2 of G5-36): after R0 is restored and BEFORE the drop, it refuses while anything else still
+-- uses the predicate, so the whole transaction rolls back and R0 and the predicate stay exactly as they were:
+--   S23_ROLLBACK_PRECONDITION_CALLERS     another function's source text names it (PL/pgSQL / plain SQL bodies; PL/pgSQL calls are not recorded
+--                                         as dependencies). Compared in lower case: an unquoted name may be written in any case.
+--   S23_ROLLBACK_PRECONDITION_DEPENDENTS  a recorded dependency on it (a view, a SQL-standard BEGIN ATOMIC body, a default ...): stated before
+--                                         PostgreSQL's own DROP ... RESTRICT would stop it anyway.
+-- What it CANNOT see: a name assembled at run time (dynamic SQL), a caller in another database, or callers outside the database (Edge / app).
+-- Those consumers must be removed first, by procedure; this check is a fence for the reachable cases, not a complete call graph.
 begin;
 
 set local lock_timeout = '5s';
@@ -190,6 +199,20 @@ begin
   end if;
   return pg_catalog.jsonb_build_object('v', 1, 'decision', 'allow', 'reason', null, 'scope', v_scope, 'subject', v_subject,
     'session', pg_catalog.jsonb_build_object('state', 'active', 'ref', v_session_ref), 'owner_epoch', null, 'entitlements', '["postona:x_autopost"]'::jsonb);
+end $$;
+
+-- (G5-37) nothing else may still use the predicate (checked AFTER R0 is restored: R0's S2-3 body itself names it)
+do $$
+declare
+  v_fn regprocedure := pg_catalog.to_regprocedure('private.postona_personal_workspace_eligibility(uuid)');
+begin
+  if exists (select 1 from pg_catalog.pg_proc p
+              where p.oid <> v_fn and pg_catalog.strpos(pg_catalog.lower(p.prosrc), 'postona_personal_workspace_eligibility') > 0) then
+    raise exception 'S23_ROLLBACK_PRECONDITION_CALLERS';
+  end if;
+  if exists (select 1 from pg_catalog.pg_depend d where d.refclassid = 'pg_catalog.pg_proc'::pg_catalog.regclass and d.refobjid = v_fn) then
+    raise exception 'S23_ROLLBACK_PRECONDITION_DEPENDENTS';
+  end if;
 end $$;
 
 drop function private.postona_personal_workspace_eligibility(uuid);

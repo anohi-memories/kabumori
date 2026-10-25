@@ -129,3 +129,15 @@ by no migration.
 - A membership (not ownership) in someone else's brand is outside the §4.1 rule. The answer stays `absent` / `own`, and test 4 records it.
   Whether such memberships should count is part of P-1.
 - Nothing about retention, deletion, receipts after a stop, locked / banned, or sign-out was decided (P-2 – P-5).
+
+## 7. G5-37: the rollback refuses while the predicate still has users (F-2 of G5-36)
+
+| Item | Detail |
+| --- | --- |
+| The finding | PR #506's rollback dropped the predicate without asking who uses it. A PL/pgSQL consumer then broke at its next call ("function … does not exist"). PL/pgSQL calls are not recorded as dependencies, so `DROP … RESTRICT` cannot see them. |
+| Reproduced first [D] | On PR #506's own rollback (`bbc52a6b`, `git show`): under a PL/pgSQL consumer it **runs and breaks the consumer**. Under a view (a recorded dependency), PostgreSQL's `DROP … RESTRICT` already stops it, and the whole transaction (R0's restore included) is undone. |
+| The fix (rollback only) | A check **after R0 is restored and before the drop**: R0's S2-3 body itself names the predicate, so the check cannot come earlier. Two codes: `S23_ROLLBACK_PRECONDITION_CALLERS` when another function's source text names it (compared in lower case, since an unquoted name may be written in any case); `S23_ROLLBACK_PRECONDITION_DEPENDENTS` when `pg_depend` records a dependent (a view, a SQL-standard `BEGIN ATOMIC` body, …), stated before `DROP … RESTRICT` would stop it anyway. A refusal undoes the whole rollback: R0 and the predicate stay byte for byte, with the same OID, ACL and attributes. The install, the predicate and R0's bodies are unchanged. |
+| Seen [D] | a PL/pgSQL function, the name in upper case, and a plain SQL function → `CALLERS`; a `BEGIN ATOMIC` body and a view → `DEPENDENTS`. Each leaves R0 and the predicate exactly as they were. |
+| **Not seen (a recorded limit)** | A name assembled at run time (dynamic SQL), shown in the suite: the rollback runs and that consumer breaks (it raises; it does not silently answer). Callers in another database or outside the database (Edge / app) are not seen either. This is a fence for the reachable cases, not a complete call graph. Consumers must be removed first, by procedure. |
+| Tests [D] | The S2-3 suite now has **9 tests ×3, all PASS** (G5-33's 7, the PR #506 reproduction, the fence). The R0 comparison is unchanged: 24 answers, 5 changed, 19 byte-identical. **Mutations 27 / 27**, all by a suite assertion (PR #515's fixed driver plus 3 fence mutants: callers ignored, case-sensitive comparison, dependents ignored). Dropping `p.oid <> v_fn` is equivalent (the predicate never names itself) and is not counted. The G5-36 integration (PR #518's 7 tests, only the S2-3 rollback substituted) passes **×3**; its ablation still fails as before for S2-1 / S2-2 / S2-3. |
+| Related, not changed | S2-2's rollback (PR #510) compares callers case-sensitively, so an upper-case caller would not be seen. This is read in source and NOT run here; it is a candidate for the same one-word fix in its own TASK. |
