@@ -1,0 +1,4 @@
+› 0 error(s), and 0 warning(s)
+› Installing on G2-A11Y-20261025
+› Opening on G2-A11Y-20261025 (com.anonymous.kabumori-social-mobile)
+exit=0
