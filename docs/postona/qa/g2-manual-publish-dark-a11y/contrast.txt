@@ -1,0 +1,10 @@
+WCAG contrast ratio from src/constants/theme.ts + src/components/ui.tsx at #497 446a9c39 (AA: 4.5 normal text, 3.0 large/bold>=18.66px; disabled controls are exempt)
+本文 ink: #17202A on #FFFFFF = 16.45
+説明 muted: #667085 on #FFFFFF = 4.97
+説明 muted（背景色の上）: #667085 on #F7F8FA = 4.68
+注意 warning: #B45309 on #FFFFFF = 5.02
+確認できました success: #15803D on #FFFFFF = 5.02
+ボタン 白/primary: #FFFFFF on #4F46E5 = 6.29
+ピル primary/primarySoft: #4F46E5 on #EEF2FF = 5.62
+ピル warning/warningSoft: #B45309 on #FEF3C7 = 4.51
+押せないボタン 白/border: #FFFFFF on #E5E7EB = 1.24
