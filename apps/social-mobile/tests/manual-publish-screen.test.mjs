@@ -719,7 +719,8 @@ test('unconfirmed (nothing known: transport / 503 / unreadable): retry with the 
   await ui.flush();
   const t = ui.text();
   assert.ok(t.includes('結果を確認できません'));
-  assert.ok(t.includes('同じ送信IDで行います（サーバーは2回送りません）'));
+  assert.ok(t.includes('同じ内容で確認し直すときは同じ送信IDを使います。送る前に、Xで投稿済みでないことを確認してください。'));
+  assert.ok(!t.includes('2回送'), 'no promise about what the server does with the same id (not verified)');
   assert.ok(!t.includes('投稿されませんでした'), 'unknown is not "not posted"');
   assertNoSentClaim(ui);
   assert.equal(ui.state().result.kind, 'unconfirmed');
@@ -1630,6 +1631,8 @@ test('N1: a FIRST send does not say "same content, same send id" -- only a real 
   await ui.press('同じ内容・同じ送信IDで確認し直す');
   assert.equal(ui.state().phase, 'confirming');
   assert.ok(ui.text().includes(SENTENCE), 'confirming a re-ask');
+  assert.ok(ui.text().includes('同じ送信IDを使うのは二重投稿を避けるためですが、送る前にXで投稿済みでないことを確認してください。'), 'it asks to check X first');
+  assert.ok(!ui.text().includes('2回送'), 'no promise about what the server does with the same id (not verified)');
   await ui.tick();
   await ui.press('Xに投稿する');
   assert.equal(ui.state().phase, 'sending');
