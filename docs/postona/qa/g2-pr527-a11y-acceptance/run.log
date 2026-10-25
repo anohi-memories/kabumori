@@ -1,0 +1,29 @@
+✔ A11Y-2 (#527): the result card is the first thing shown -- its own heading and warning lead the card, and once its position is known the page scrolls exactly to it (not before, not elsewhere) (63.041625ms)
+✔ A11Y-2 (#527): every result kind is wrapped the same way (heading first) -- pending, uncertain, simulated, posted (81.123666ms)
+✔ A11Y-2 (#527): a NEW result after a re-ask is scrolled to again (the measured position is per result) (22.607083ms)
+✔ A11Y-1 (#527) mechanism only: both text boxes (body, and the restart re-entry) are bounded and scroll inside (13.749333ms)
+✔ A11Y-3 (#527): a text-size change while the screen is open re-creates the scroll view (new key) -- the typed text, the account and a given consent stay (14.838708ms)
+✔ A11Y-3 (#527): the text-size listener is removed when the screen goes away (no listener left behind) (14.310542ms)
+⚠ GATE A11Y-1 (#527, SIMULATOR_FAIL P02/P03): while several lines are typed, the line being typed is visible above the keyboard (0.369458ms) # SIMULATOR FAIL on #527: the bounded box still sits under the keyboard; owner G1 (scroll the focused box above the keyboard)
+✔ mutant: the measured scroll removed -> A11Y-2 fails (no scroll to the card) (16.574666ms)
+✔ mutant: a constant scroll-view key -> A11Y-3 fails (no re-layout on a text-size change) (13.987292ms)
+✔ mutant: the listener does not store the new size -> A11Y-3 fails (15.787083ms)
+✔ mutant: the body box without its maximum height -> A11Y-1 fails (12.829125ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 1
+ℹ duration_ms 512.166
+⚠ GATE A11Y-1 (#527, SIMULATOR_FAIL P02/P03): while several lines are typed, the line being typed is visible above the keyboard (0.369458ms) # SIMULATOR FAIL on #527: the bounded box still sits under the keyboard; owner G1 (scroll the focused box above the keyboard)
+ℹ deny-net run: ℹ tests 11 ℹ pass 10 ℹ fail 0 ℹ todo 1
+ℹ full suite (node --test tests/*.test.mjs, G1 #527 9738f88e + this file):
+ℹ tests 630
+ℹ suites 0
+ℹ pass 628
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 1
