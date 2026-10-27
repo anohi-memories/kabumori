@@ -271,3 +271,31 @@ test("G3-36: the session ends between begin and the check (the gate refuses the 
   assert.deepEqual(g.calls.map((c) => c.fn), ["begin", "preflight", "readback"]);
   assert.equal(x.sent.length, 0);
 });
+
+test("G3-37 readiness: { readiness: { socialAccountId } } -> the same person checks, then ONE read-only database call; ready or begin's codes; never a begin, a token read or an X call", async () => {
+  const readiness = (socialAccountId: unknown) => JSON.stringify({ readiness: { socialAccountId } });
+  const ready = fakeDb({ readiness: scalar("READY") });
+  const x = fakeX(published("1"));
+  assert.deepEqual(await run({ db: ready.db, x }, { body: readiness("sa_x") }), { status: 200, body: { ok: true, ready: true } });
+  assert.deepEqual(ready.calls.map((c) => [c.fn, c.args]), [["readiness", ["sa_x"]]]);
+  for (const [code, status] of [["POSTONA_RESV_PUBLISH_DISABLED", 403], ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404], ["POSTONA_RESV_AUTH_REQUIRED", 401], ["POSTONA_RESV_SERVICE_BUSY", 503]] as const) {
+    const f = fakeDb({ readiness: () => Promise.resolve({ ok: false as const, code }) });
+    assert.deepEqual(await run({ db: f.db, x }, { body: readiness("sa_x") }), { status, body: { ok: false, code } }, code);
+  }
+  const thrown = fakeDb({ readiness: () => Promise.reject(new Error("socket")) });
+  assert.deepEqual(await run({ db: thrown.db, x }, { body: readiness("sa_x") }), { status: 503, body: { ok: false, code: "STORE_UNAVAILABLE" } });
+  const odd = fakeDb({ readiness: scalar("MAYBE") });
+  assert.deepEqual(await run({ db: odd.db, x }, { body: readiness("sa_x") }), { status: 500, body: { ok: false, code: "INTERNAL" } });
+  // malformed questions and unverified callers never reach the database
+  for (const body of [readiness("bad id!"), JSON.stringify({ readiness: { socialAccountId: "sa_x", extra: 1 } }), JSON.stringify({ readiness: "sa_x" }), JSON.stringify({ readiness: { socialAccountId: "sa_x" }, text: "x" })]) {
+    const f = fakeDb({ readiness: scalar("READY") });
+    assert.equal((await run({ db: f.db, x }, { body })).status, 400, body);
+    assert.equal(f.calls.length, 0);
+  }
+  for (const authorization of [null, `Bearer ${token({ sub: USER, session_id: SESSION })}`, `Bearer ${token({ sub: USER, session_id: SESSION, is_anonymous: true })}`]) {
+    const f = fakeDb({ readiness: scalar("READY") });
+    assert.equal((await run({ db: f.db, x }, { body: readiness("sa_x"), authorization })).status, 401, String(authorization));
+    assert.equal(f.calls.length, 0);
+  }
+  assert.equal(x.sent.length, 0, "readiness never sends");
+});

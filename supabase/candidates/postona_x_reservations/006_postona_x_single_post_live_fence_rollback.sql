@@ -93,6 +93,7 @@ end $$;
 drop function if exists postona_x_resv.post_now_preflight(uuid, uuid);
 drop function if exists postona_x_resv.post_now_record(uuid, uuid, text, text, text, text);
 drop function if exists postona_x_resv.post_now_readback(uuid);
+drop function if exists postona_x_resv.post_now_readiness(text);
 drop table if exists postona_x_resv.single_post_bindings;
 drop function if exists postona_x_resv.x_credential_generation(text);
 revoke all on function postona_x_resv.single_post_fence(uuid, text) from public, anon, authenticated, service_role, postona_resv_api, postona_resv_worker;

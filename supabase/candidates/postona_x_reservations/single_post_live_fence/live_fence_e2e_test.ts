@@ -248,3 +248,67 @@ Deno.test("E6 unknown X answer -> uncertain (never resent, X 1); double submit -
   assert.equal(xCalls.length, before + 2, "exactly one X call for the double submit");
   assert.ok([x.result.kind, y.result.kind].includes("sent"));
 });
+
+// G3-37: the app's OWN single-post port (G1's createSinglePostPort, read-only from PR #535's head by the runner) with a fetch-like
+// transport and a readiness check built from this server's contract, against the REAL handler / driver / SQL: what the screen's
+// send button would do once G1 connects it. MOCK_ONLY: Auth, G4's credential source and X (no real post).
+Deno.test("G3-37 app port E2E: readiness gates the send; the port sends once with the person's token; a retry of the same attempt never sends again; refusals reach the screen as typed outcomes", async () => {
+  const dir = Deno.env.get("RESV_SP_G1_DIR");
+  assert.ok(dir, "set by single_post_live_fence_run.sh");
+  const g1 = await import(`${dir}/single-post-port.ts`);
+  const { singlePostReadinessOf, singlePostReadinessRequest } = await import("../../../functions/_shared/postona_reservations/single_post_contract.ts");
+  await owner("update public.social_accounts set publish_enabled = true where id in ($1, $2)", [P(96).account, P(97).account]);
+  const h = handler();
+  const call = async (token: string, body: unknown) => {
+    const response = await h(new Request("http://localhost/functions/v1/postona-x-single-post", {
+      method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body),
+    }));
+    return { status: response.status, body: await response.json() };
+  };
+  const portFor = (token: string | null) => g1.createSinglePostPort({
+    // the one HTTP client G1 would add: POST {SUPABASE_URL}/functions/v1/<functionName> with the person's own token
+    transport: (c: { functionName: string; accessToken: string; body: unknown }) => {
+      assert.equal(c.functionName, "postona-x-single-post");
+      return call(c.accessToken, c.body);
+    },
+    getAccessToken: () => Promise.resolve(token),
+    checkReadiness: async (accountId: string) => {
+      if (token === null) return { kind: "unavailable", code: "LOCAL_AUTH_REQUIRED" };
+      const answer = await call(token, singlePostReadinessRequest(accountId));
+      return singlePostReadinessOf(answer.status, answer.body);
+    },
+  });
+  const a = await signIn(96);
+  const port = portFor(a.token);
+  const before = xCalls.length;
+  const rows0 = await singleRows();
+  // 1. readiness: ready for the person's own account; nothing is written or sent by asking
+  assert.deepEqual(await port.checkReadiness(P(96).account), { kind: "ready" });
+  assert.deepEqual([xCalls.length, await singleRows()], [before, rows0], "readiness writes and sends nothing");
+  // 2. another person's account and a switched-off account: unavailable with begin's own codes (the button stays disabled)
+  assert.deepEqual(await port.checkReadiness(P(97).account), { kind: "unavailable", code: "POSTONA_RESV_ACCOUNT_NOT_FOUND" });
+  await owner("update public.social_accounts set publish_enabled = false where id = $1", [P(96).account]);
+  assert.deepEqual(await port.checkReadiness(P(96).account), { kind: "unavailable", code: "POSTONA_RESV_PUBLISH_DISABLED" });
+  await owner("update public.social_accounts set publish_enabled = true where id = $1", [P(96).account]);
+  // 3. the send: one X call with the confirmed text; a retry of the same attempt id answers from the store, never a second send
+  const text = "アプリの送信口から";
+  const target = { targetId: crypto.randomUUID(), provider: "x", connectedAccountId: P(96).account, renderedText: text, media: [], consent: { confirmed: true, contentSha256: sha256(text) } };
+  const sent = await port.send(target);
+  assert.equal(sent.kind, "published", JSON.stringify(sent));
+  assert.equal(xCalls.length, before + 1);
+  assert.deepEqual(xCalls.at(-1)?.text, text);
+  const again = await port.send(target);
+  assert.deepEqual([again.kind, again.providerPostId], ["published", sent.providerPostId]);
+  assert.equal(xCalls.length, before + 1, "the same attempt is never sent twice");
+  // 4. a consent that does not match the text is refused LOCALLY (no request at all)
+  const mismatch = await port.send({ ...target, targetId: crypto.randomUUID(), renderedText: "別の文" });
+  assert.deepEqual([mismatch.kind, mismatch.code], ["refused", "LOCAL_CONSENT_MISMATCH"]);
+  // 5. signed out (no token): no request; a token whose session was revoked: 401 at the server, retryable, nothing sent
+  assert.deepEqual(await portFor(null).checkReadiness(P(96).account), { kind: "unavailable", code: "LOCAL_AUTH_REQUIRED" });
+  const gone = await signIn(96);
+  await owner("delete from auth.sessions where id = $1::uuid", [gone.session]);
+  assert.deepEqual(await portFor(gone.token).checkReadiness(P(96).account), { kind: "unavailable", code: "POSTONA_RESV_AUTH_REQUIRED" });
+  const refused = await portFor(gone.token).send({ ...target, targetId: crypto.randomUUID() });
+  assert.deepEqual([refused.kind, refused.code, refused.retryable], ["refused", "POSTONA_RESV_AUTH_REQUIRED", true]);
+  assert.equal(xCalls.length, before + 1, "nothing else was sent");
+});

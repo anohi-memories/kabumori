@@ -69,3 +69,14 @@ test("G3-34 F1: a subject without the token's explicit non-anonymous false never
   }
   assert.equal(connected, 0);
 });
+
+test("G3-37 readiness: one read-only function as the API role with the verified claims; its scalar answer comes back as one row", async () => {
+  const s = scripted(() => [[JSON.stringify([{ answer: "READY" }])]]);
+  const result = await createSinglePostDb(s.connect).call("readiness", ["sa_x"], SUBJECT);
+  assert.deepEqual(result, { ok: true, rows: [{ answer: "READY" }] });
+  assert.ok(s.log.some((q) => q.text.includes("postona_x_resv.post_now_readiness($1::text)")));
+  assert.deepEqual(JSON.parse(String(s.log[3].args?.[0])), { sub: SUBJECT.userId, role: "authenticated", session_id: SUBJECT.sessionId, is_anonymous: false });
+  const refused = scripted(() => pgError("POSTONA_RESV_PUBLISH_DISABLED"));
+  assert.deepEqual(await createSinglePostDb(refused.connect).call("readiness", ["sa_x"], SUBJECT), { ok: false, code: "POSTONA_RESV_PUBLISH_DISABLED" });
+  assert.deepEqual(await createSinglePostDb(s.connect).call("readiness", [], SUBJECT), { ok: false, code: "DB_REQUEST_INVALID" });
+});

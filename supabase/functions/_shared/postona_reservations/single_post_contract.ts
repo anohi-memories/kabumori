@@ -22,6 +22,13 @@
  *   afterFreeze   true when the server recorded the result while the workspace / service was no longer active (a post
  *                 already in flight when the person was frozen or the service ended): show it as posted, flagged
  * A mock / local answer is never evidence of a real X post.
+ *
+ * Readiness (G3-37), asked before the send button is enabled -- same function, same Authorization, nothing is reserved or sent:
+ *   body (exactly): singlePostReadinessRequest(socialAccountId) = { readiness: { socialAccountId } }
+ *   singlePostReadinessOf(status, body):
+ *     ready                 200 { ok: true, ready: true }: the same pre-send checks as a send pass right now (ask again before
+ *                           sending: the answer is only for this moment)
+ *     unavailable{code}     anything else: a 4xx refusal code (sign-in, service, account, switch, credential) or 503 / malformed
  */
 export const SINGLE_POST_FUNCTION = "postona-x-single-post";
 
@@ -56,4 +63,16 @@ export function singlePostResultOf(status: number, body: unknown): SinglePostRes
   }
   if (status >= 400 && status < 500 && data.ok === false && code) return { kind: "refused", code, retryable: RETRYABLE.has(code) };
   return { kind: "unavailable", code: data.ok === false ? code : null };
+}
+
+export type SinglePostReadinessRequest = { readiness: { socialAccountId: string } };
+export function singlePostReadinessRequest(socialAccountId: string): SinglePostReadinessRequest {
+  return { readiness: { socialAccountId } };
+}
+export type SinglePostReadiness = { kind: "ready" } | { kind: "unavailable"; code: string };
+export function singlePostReadinessOf(status: number, body: unknown): SinglePostReadiness {
+  const data = typeof body === "object" && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  if (status === 200 && data.ok === true && data.ready === true) return { kind: "ready" };
+  const code = typeof data.code === "string" && /^[A-Z][A-Z0-9_]{1,63}$/u.test(data.code) ? data.code : "UNAVAILABLE";
+  return { kind: "unavailable", code };
 }

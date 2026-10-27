@@ -13,7 +13,7 @@
  */
 import type { PgConnect } from "./postgres_db.ts";
 
-export type SinglePostFunction = "begin" | "preflight" | "record" | "readback";
+export type SinglePostFunction = "begin" | "preflight" | "record" | "readback" | "readiness";
 export type SinglePostDbResult = { ok: true; rows: Record<string, unknown>[] } | { ok: false; code: string };
 /** The verified caller and its token's explicit non-anonymous claim (only the literal false: anything else never reaches the database). */
 export type SinglePostSubject = { userId: string; sessionId: string; isAnonymous: false };
@@ -27,6 +27,8 @@ const CALLS: Record<SinglePostFunction, { sql: string; arity: number; scalar: bo
   preflight: { sql: "postona_x_resv.post_now_preflight($1::uuid, $2::uuid)", arity: 2, scalar: false },
   record: { sql: "postona_x_resv.post_now_record($1::uuid, $2::uuid, $3::text, $4::text, $5::text, $6::text)", arity: 6, scalar: true },
   readback: { sql: "postona_x_resv.post_now_readback($1::uuid)", arity: 1, scalar: false },
+  // G3-37: read only; "READY" or begin's own refusal code
+  readiness: { sql: "postona_x_resv.post_now_readiness($1::text)", arity: 1, scalar: true },
 };
 
 function serverError(error: unknown): { code: string; message: string } | null {
