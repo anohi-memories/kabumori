@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { singlePostRequest, singlePostResultOf } from "./single_post_contract.ts";
+import { singlePostReadinessOf, singlePostReadinessRequest, singlePostRequest, singlePostResultOf } from "./single_post_contract.ts";
 
 const RID = "33333333-3333-4333-8333-333333333333";
 
@@ -34,4 +34,14 @@ test("M1-F1 marks: a missing / non-false simulated mark is simulated; afterFreez
   assert.deepEqual(frozen, { kind: "sent", reservationId: RID, xPostId: "1790000000000000001", simulated: false, afterFreeze: true });
   const notTrue = singlePostResultOf(200, { ok: true, status: "uncertain", reservationId: RID, simulated: false, afterFreeze: "yes" });
   assert.equal(notTrue.kind === "uncertain" && notTrue.afterFreeze, false);
+});
+
+test("G3-37 readiness: the request is exactly { readiness: { socialAccountId } }; only 200 ok+ready is ready, anything else is unavailable with a code", () => {
+  assert.deepEqual(singlePostReadinessRequest("x_a"), { readiness: { socialAccountId: "x_a" } });
+  assert.deepEqual(singlePostReadinessOf(200, { ok: true, ready: true }), { kind: "ready" });
+  assert.deepEqual(singlePostReadinessOf(403, { ok: false, code: "POSTONA_RESV_PUBLISH_DISABLED" }), { kind: "unavailable", code: "POSTONA_RESV_PUBLISH_DISABLED" });
+  assert.deepEqual(singlePostReadinessOf(401, { ok: false, code: "AUTH_REQUIRED" }), { kind: "unavailable", code: "AUTH_REQUIRED" });
+  for (const [status, body] of [[200, { ok: true }], [200, { ok: true, ready: "true" }], [200, null], [503, { ok: false, code: "bad code" }], [500, "x"]] as const) {
+    assert.deepEqual(singlePostReadinessOf(status, body), { kind: "unavailable", code: "UNAVAILABLE" }, JSON.stringify([status, body]));
+  }
 });

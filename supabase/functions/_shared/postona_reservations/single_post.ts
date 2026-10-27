@@ -42,6 +42,7 @@ export type SinglePostResponse = {
   status: number;
   body:
     | { ok: true; status: SinglePostStatus; reservationId: string; xPostId?: string; code?: string; simulated: boolean; afterFreeze?: boolean }
+    | { ok: true; ready: true }
     | { ok: false; code: string };
 };
 
@@ -100,6 +101,22 @@ function parseBody(raw: string): Input | null {
   return { socialAccountId: v.socialAccountId, clientRequestId: v.clientRequestId, text: v.text, contentSha256: consent.contentSha256 };
 }
 
+/** G3-37: a readiness question is exactly { readiness: { socialAccountId } } (no text, no consent: nothing is reserved or sent). */
+function parseReadiness(raw: string): string | null {
+  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value) || Object.keys(value).join(",") !== "readiness") return null;
+  const r = (value as { readiness: unknown }).readiness;
+  if (typeof r !== "object" || r === null || Array.isArray(r) || Object.keys(r).join(",") !== "socialAccountId") return null;
+  const account = (r as { socialAccountId: unknown }).socialAccountId;
+  return typeof account === "string" && ACCOUNT_RE.test(account) ? account : null;
+}
+
 /**
  * The session id of an access token Supabase Auth has ALREADY verified (never used as proof on its own), returned only when the
  * SAME token names the same subject and states is_anonymous as the JSON boolean false (G3-34 F1: missing, null, another type or
@@ -140,8 +157,9 @@ export function createSinglePostHandler(deps: {
   return async (request: { method: string; authorization: string | null; body: string }): Promise<SinglePostResponse> => {
     if (deps.enabled !== true) return fail(503, "NOT_AVAILABLE");
     if (request.method !== "POST") return fail(405, "METHOD_NOT_ALLOWED");
-    const input = parseBody(request.body);
-    if (!input) return fail(400, "REQUEST_INVALID");
+    const readinessAccount = parseReadiness(request.body);
+    const input = readinessAccount === null ? parseBody(request.body) : null;
+    if (!input && readinessAccount === null) return fail(400, "REQUEST_INVALID");
     const match = /^Bearer ([A-Za-z0-9._~+/=-]{16,4096})$/u.exec(request.authorization ?? "");
     if (!match) return fail(401, "AUTH_REQUIRED");
     let subject: SinglePostSubject;
@@ -155,6 +173,22 @@ export function createSinglePostHandler(deps: {
       return fail(503, "AUTH_UNAVAILABLE");
     }
     if (deps.credentials?.available !== true || typeof deps.credentials.credentialFor !== "function") return fail(503, "X_NOT_AVAILABLE");
+
+    // G3-37 readiness: the same person checks and the same pre-send fence as begin, read only (no row, no binding, no X call).
+    if (readinessAccount !== null) {
+      let answer: SinglePostDbResult;
+      try {
+        answer = await deps.db.call("readiness", [readinessAccount], subject);
+      } catch {
+        return fail(503, "STORE_UNAVAILABLE");
+      }
+      if (!answer.ok) {
+        const status = STATUS_BY_CODE[answer.code];
+        return status === undefined ? fail(500, "INTERNAL") : fail(status, answer.code);
+      }
+      return first(answer)?.answer === "READY" ? { status: 200, body: { ok: true, ready: true } } : fail(500, "INTERNAL");
+    }
+    if (!input) return fail(400, "REQUEST_INVALID");
 
     // 3. begin
     let begun: SinglePostDbResult;

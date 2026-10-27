@@ -34,6 +34,27 @@ select pg_temp.expect(pg_temp.as_person(format('select verdict from postona_x_re
 select pg_temp.expect(pg_temp.api(pg_temp.preflight(gen_random_uuid()::text, gen_random_uuid()::text), pg_temp.person(83), :'s83') = 'LEASE_LOST/', 'L1 api reaches preflight');
 select 'L1_ACL_PASS' as result;
 
+-- RD (G3-37): readiness is read only and says nothing begin would not: READY for the person's own enabled account; begin's own
+-- refusal codes otherwise (switch OFF, another person's account); no reservation row, no binding; closed to every other role.
+select pg_temp.session(pg_temp.person(97)) as s97, pg_temp.session(pg_temp.person(98)) as s98 \gset
+select count(*) as rdrows, (select count(*) from postona_x_resv.single_post_bindings) as rdbind from postona_x_resv.reservations \gset
+select (select publish_enabled from public.social_accounts where id = pg_temp.account(97)) as rd97, (select publish_enabled from public.social_accounts where id = pg_temp.account(98)) as rd98 \gset
+update public.social_accounts set publish_enabled = true where id = pg_temp.account(98);
+update public.social_accounts set publish_enabled = false where id = pg_temp.account(97);
+select pg_temp.expect(pg_temp.api(format('select postona_x_resv.post_now_readiness(%L)', pg_temp.account(98)), pg_temp.person(98), :'s98') = 'READY', 'RD ready');
+select pg_temp.api(format('select postona_x_resv.post_now_readiness(%L)', pg_temp.account(97)), pg_temp.person(97), :'s97') as rdoff \gset
+select pg_temp.expect(:'rdoff' = 'ERR:POSTONA_RESV_PUBLISH_DISABLED', 'RD switch OFF: ' || :'rdoff');
+select pg_temp.expect(pg_temp.api(format('select postona_x_resv.post_now_readiness(%L)', pg_temp.account(98)), pg_temp.person(97), :'s97')
+  = pg_temp.api(format('select postona_x_resv.post_now_readiness(%L)', 'x_no_such_account'), pg_temp.person(97), :'s97'), 'RD another person''s account answers as an unknown one');
+select pg_temp.expect(pg_temp.api(format('select postona_x_resv.post_now_readiness(%L)', pg_temp.account(98)), pg_temp.person(97), :'s97') = 'ERR:POSTONA_RESV_ACCOUNT_NOT_FOUND', 'RD another person''s account');
+select pg_temp.expect(pg_temp.api('select postona_x_resv.post_now_readiness(''bad id!'')', pg_temp.person(98), :'s98') = 'ERR:POSTONA_RESV_REQUEST_INVALID', 'RD bad id');
+select pg_temp.expect(pg_temp.as_person(format('select postona_x_resv.post_now_readiness(%L)', pg_temp.account(98)), pg_temp.person(98), :'s98', r) like 'ERR:permission denied%', 'RD closed to ' || r)
+  from unnest(array['anon', 'authenticated', 'service_role', 'postona_resv_worker']) r;
+select pg_temp.expect((select count(*) from postona_x_resv.reservations) = :rdrows and (select count(*) from postona_x_resv.single_post_bindings) = :rdbind, 'RD nothing written');
+update public.social_accounts set publish_enabled = :'rd97'::boolean where id = pg_temp.account(97);
+update public.social_accounts set publish_enabled = :'rd98'::boolean where id = pg_temp.account(98);
+select 'RD_READINESS_READ_ONLY_PASS' as result;
+
 -- L2: begin refuses on the live fence (nothing recorded): publish switch OFF, a second workspace owner (F5: owner unknown),
 -- F5 brand state not active, refresh in progress (busy), credential degraded (uncertain / reauth_required).
 select count(*) as l2rows from postona_x_resv.reservations \gset

@@ -307,11 +307,29 @@ begin
 end $$;
 
 revoke all on function postona_x_resv.x_credential_generation(text) from public, anon, authenticated, service_role, postona_resv_api, postona_resv_worker;
+/**
+ * G3-37 readiness: "could this person send a single post from this account right now?", asked by the app before it enables the
+ * send button. The person first (caller(): G5's S2-2), then exactly the pre-send fence begin uses (T13, owner / G5 / G4,
+ * publish authority, switch, workspace state, sole owner, credential state). Read only: no reservation row, no binding, no
+ * provider call. Answers 'READY' or raises begin's own refusal codes -- nothing begin would not already say.
+ */
+create function postona_x_resv.post_now_readiness(p_social_account_id text) returns text
+language plpgsql volatile security definer set search_path = '' as $$
+declare v_user uuid := postona_x_resv.caller();
+begin
+  if p_social_account_id is null or p_social_account_id !~ '^[A-Za-z0-9_:-]{1,128}$' then
+    raise exception 'POSTONA_RESV_REQUEST_INVALID' using errcode = 'P0001';
+  end if;
+  perform postona_x_resv.single_post_fence(v_user, p_social_account_id);
+  return 'READY';
+end $$;
+
 revoke all on function postona_x_resv.single_post_fence(uuid, text) from public, anon, authenticated, service_role, postona_resv_api, postona_resv_worker;
 revoke all on function postona_x_resv.post_now_begin(text, uuid, text, text) from public, anon, authenticated, service_role, postona_resv_worker;
 revoke all on function postona_x_resv.post_now_preflight(uuid, uuid) from public, anon, authenticated, service_role, postona_resv_worker;
 revoke all on function postona_x_resv.post_now_record(uuid, uuid, text, text, text, text) from public, anon, authenticated, service_role, postona_resv_worker;
 revoke all on function postona_x_resv.post_now_readback(uuid) from public, anon, authenticated, service_role, postona_resv_worker;
+revoke all on function postona_x_resv.post_now_readiness(text) from public, anon, authenticated, service_role, postona_resv_worker;
 -- The 005 steps without the generation / after_freeze are no longer reachable by the API role.
 revoke execute on function postona_x_resv.post_now_check(uuid, uuid), postona_x_resv.post_now_finish(uuid, uuid, text, text, text),
   postona_x_resv.post_now_get(uuid) from postona_resv_api;
@@ -319,7 +337,8 @@ grant execute on function
   postona_x_resv.post_now_begin(text, uuid, text, text),
   postona_x_resv.post_now_preflight(uuid, uuid),
   postona_x_resv.post_now_record(uuid, uuid, text, text, text, text),
-  postona_x_resv.post_now_readback(uuid)
+  postona_x_resv.post_now_readback(uuid),
+  postona_x_resv.post_now_readiness(text)
 to postona_resv_api;
 
 do $$
@@ -330,7 +349,8 @@ begin
   if v_bad is distinct from 'postona_x_resv.cancel(uuid,integer),postona_x_resv.create_batch(text,uuid,integer,text,jsonb,jsonb),'
                             'postona_x_resv.get_reservation(uuid),postona_x_resv.list_reservations(text),'
                             'postona_x_resv.post_now_begin(text,uuid,text,text),postona_x_resv.post_now_preflight(uuid,uuid),'
-                            'postona_x_resv.post_now_readback(uuid),postona_x_resv.post_now_record(uuid,uuid,text,text,text,text),'
+                            'postona_x_resv.post_now_readback(uuid),postona_x_resv.post_now_readiness(text),'
+                            'postona_x_resv.post_now_record(uuid,uuid,text,text,text,text),'
                             'postona_x_resv.reconfirm(uuid,integer,text),postona_x_resv.reschedule(uuid,integer,timestamp with time zone)' then
     raise exception 'POSTONA_X_SINGLE_POST_FENCE_POSTCONDITION: postona_resv_api executes %', v_bad;
   end if;

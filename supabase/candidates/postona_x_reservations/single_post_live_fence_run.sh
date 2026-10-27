@@ -135,7 +135,7 @@ echo "S0_REFUSALS_ATOMIC_REAPPLY_PASS"
 
 # L: SQL behaviour.
 own "$db" -f "$lf/behavior.sql" >"$tmp/b" 2>&1 || { cat "$tmp/b"; fail "behaviour"; }
-for marker in L1_ACL_PASS L2_BEGIN_LIVE_FENCE_REFUSALS_PASS L3_BIND_PREFLIGHT_GENERATION_PASS L4_CHANGE_BETWEEN_BEGIN_AND_SEND_REFUSED_PASS \
+for marker in L1_ACL_PASS RD_READINESS_READ_ONLY_PASS L2_BEGIN_LIVE_FENCE_REFUSALS_PASS L3_BIND_PREFLIGHT_GENERATION_PASS L4_CHANGE_BETWEEN_BEGIN_AND_SEND_REFUSED_PASS \
               L5_REARM_REBINDS_PASS L6_RECORD_AFTER_FREEZE_SIMULATED_READBACK_PASS L7_WORKER_UNCHANGED_PASS L8_OWNER_CHECK_DEFENCE_IN_DEPTH_PASS \
               POSTONA_X_SINGLE_POST_LIVE_FENCE_BEHAVIOR_PASS; do
   grep -q "$marker" "$tmp/b" || { cat "$tmp/b"; fail "missing $marker"; }
@@ -180,9 +180,19 @@ echo "R1_FREEZE_COMMITTED_DURING_PREFLIGHT_REFUSED_PASS"
 [[ "$(race 92 rollback)" == "OK claimed/-" ]] || fail "R2 rolled-back freeze refused"
 echo "R2_FREEZE_ROLLED_BACK_PREFLIGHT_OK_PASS"
 
+# G3-37: the app's own single-post port (G1, read-only at PR #535's head 216fe795, blobs checked) for the E2E below.
+g1="$tmp/g1"; mkdir -p "$g1"
+g1commit=216fe795caebd7793a8aaf0ed3d75b5a2c5de28e
+git -C "$repo" cat-file -e "$g1commit^{commit}" 2>/dev/null || { echo "RUN_NOT_AVAILABLE: G1 PR #535 head $g1commit is missing (git fetch origin pull/535/head)" >&2; exit 3; }
+for pair in "single-post-port.ts 2fb7e1f596b07b821503e6eec51c4aeae4a52a23" "single-post-contract.ts 3bb33df7bea60a54a7af2ffc0d1d3e351524c5ea" \
+            "manual-publish-port.ts c45955f5ddd6bf0f60cdfee471c31cbb21ca8a7a" "manual-publish-hash.ts 8819729f555c418aaf526d84a5178c5cf3658eb6"; do
+  set -- $pair
+  [[ "$(git -C "$repo" rev-parse "$g1commit:apps/social-mobile/src/features/manual-publish/$1")" == "$2" ]] || fail "G1 blob differs: $1"
+  git -C "$repo" show "$g1commit:apps/social-mobile/src/features/manual-publish/$1" >"$g1/$1"
+done
 # E: the REAL single-post HTTP handler / driver / SQL with the generation-bound fake G4 and a fake X.
-if ! RESV_SP_API_URL="postgres://$apilogin@127.0.0.1:$port/$db" RESV_SP_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" DENO_NO_PACKAGE_JSON=1 \
-  deno test --no-config --allow-net=127.0.0.1:"$port" --allow-read --allow-env=RESV_SP_API_URL,RESV_SP_OWNER_URL \
+if ! RESV_SP_API_URL="postgres://$apilogin@127.0.0.1:$port/$db" RESV_SP_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" RESV_SP_G1_DIR="$g1" DENO_NO_PACKAGE_JSON=1 \
+  deno test --no-config --allow-net=127.0.0.1:"$port" --allow-read --allow-env=RESV_SP_API_URL,RESV_SP_OWNER_URL,RESV_SP_G1_DIR \
   "$lf/live_fence_e2e_test.ts" >"$tmp/e2e" 2>&1; then
   cat "$tmp/e2e"; fail "live-fence e2e"
 fi
