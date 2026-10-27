@@ -1,0 +1,2 @@
+# Metro rig log ([G2E2E]/[F2QA]); bundled only after the candidate build launched.
+iOS Bundled 6023ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1399 modules)

@@ -1,0 +1,7 @@
+standard prebuild (no fixture), G1 #535 216fe795, expo 57.0.23, react-native 0.86.3:
+- ios/SocialOperations/Info.plist: UIApplicationSceneManifest -> Does Not Exist
+- ios/SocialOperations/AppDelegate.swift: 'class AppDelegate: ExpoAppDelegate {' (line 6), 'var window: UIWindow?' (7), 'window = UIWindow(frame: UIScreen.main.bounds)' (24), 'factory.startReactNative(' (25)
+
+candidate (throwaway only): app.json plugins += ./with-ios27-scene.plugin.js (G2 #397 a0f66c77 sketch), prebuild --clean:
+- Info.plist UISceneDelegateClassName = $(PRODUCT_MODULE_NAME).SceneDelegate
+- AppDelegate.swift: 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {' and '@objc(SceneDelegate) class SceneDelegate: ExpoAppSceneDelegate {}'

@@ -1,0 +1,21 @@
+== SocialOperations-2026-10-28-083625.ips  app=SocialOperations 0.1.0 bundle=com.anonymous.kabumori-social-mobile exception=EXC_BREAKPOINT/SIGTRAP termination=Trace/BPT trap: 5
+    UIKitCore ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke
+    libdispatch.dylib _dispatch_client_callout
+    libdispatch.dylib _dispatch_once_callout
+    UIKitCore -[UIApplication workspace:didCreateScene:withTransitionContext:completion:]
+    UIKitCore -[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:]
+    FrontBoardServices __95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke
+== SocialOperations-2026-10-28-083656.ips  app=SocialOperations 0.1.0 bundle=com.anonymous.kabumori-social-mobile exception=EXC_BREAKPOINT/SIGTRAP termination=Trace/BPT trap: 5
+    UIKitCore ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke
+    libdispatch.dylib _dispatch_client_callout
+    libdispatch.dylib _dispatch_once_callout
+    UIKitCore -[UIApplication workspace:didCreateScene:withTransitionContext:completion:]
+    UIKitCore -[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:]
+    FrontBoardServices __95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke
+== SocialOperations-2026-10-28-083706.ips  app=SocialOperations 0.1.0 bundle=com.anonymous.kabumori-social-mobile exception=EXC_BREAKPOINT/SIGTRAP termination=Trace/BPT trap: 5
+    UIKitCore ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke
+    libdispatch.dylib _dispatch_client_callout
+    libdispatch.dylib _dispatch_once_callout
+    UIKitCore -[UIApplication workspace:didCreateScene:withTransitionContext:completion:]
+    UIKitCore -[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:]
+    FrontBoardServices __95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke
