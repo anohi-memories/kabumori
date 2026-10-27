@@ -36,7 +36,7 @@ from .fsutil import is_finite_number, loads_strict
 API_HOST = "api.github.com"
 ISSUE_URL = "https://%s/repos/%s/issues/%d" % (API_HOST, issue_mod.REPO, issue_mod.ISSUE_NUMBER)
 RATE_LIMIT_URL = "https://%s/rate_limit" % API_HOST
-UNKNOWN_EDITOR = "unknown: last editor is not available from the anonymous REST API"
+UNKNOWN_EDITOR = issue_mod.UNKNOWN_EDITOR  # 証拠の検査（issue.check_evidence）と同じ値
 MAX_CLOCK_SKEW = 300.0
 MAX_BODY_BYTES = 1024 * 1024
 USER_AGENT = "kabumori-g10-gate1-readonly-witness"

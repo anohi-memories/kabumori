@@ -53,7 +53,10 @@ VERSION = "wiring-v1"
 SIG_MODES = signing.SIG_MODES
 mode_transition_allowed = signing.mode_transition_allowed
 EXECUTION_SIDE_PRIVATE_ROLES = ("agent", "witness")
-SOURCE_KINDS = ("file", "graphql_fixture")
+SOURCE_KINDS = ("file", "graphql_fixture", "github_rest_anonymous")
+# 取得元ごとの回数の数え方（認証の主体と API）。認証なしの REST は IP ごとに 60回/時（TASK 17）
+SOURCE_BUDGET = {"file": ("token", "graphql"), "graphql_fixture": ("token", "graphql"),
+                 "github_rest_anonymous": ("anonymous", "rest")}
 FIXTURE_TOKEN = "ghp_" + "0" * 36  # fixture 専用の形だけの値（実在しない。FixtureOpener の外へは出ない）
 MAX_WIRING_BYTES = 65536
 _TOP_KEYS = {"version", "mode", "public_keys", "private_keys", "issue_source", "ledger"}
@@ -153,8 +156,8 @@ def validate(doc):
     src = doc["issue_source"]
     if not isinstance(src, dict) or src.get("kind") not in SOURCE_KINDS:
         raise WiringError("unknown issue source")
-    if src["kind"] == "file" and set(src) != {"kind"}:
-        raise WiringError("file issue source takes no options")
+    if src["kind"] in ("file", "github_rest_anonymous") and set(src) != {"kind"}:
+        raise WiringError("%s issue source takes no options" % src["kind"])
     if src["kind"] == "graphql_fixture" and (set(src) != {"kind", "fixture"} or not _abs(src["fixture"])):
         raise WiringError("graphql_fixture needs an absolute fixture path")
     led = doc["ledger"]
@@ -286,23 +289,28 @@ def agent_side(root):
 
 
 # --- 回数台帳 ---
-def ledger_allowance(policy, watchdog_interval, phase1_per_hour=None, safety=rb.DEFAULT_SAFETY):
+def ledger_allowance(policy, watchdog_interval, phase1_per_hour=None, safety=rb.DEFAULT_SAFETY, mode="token",
+                     api="graphql"):
     """同じ認証の主体（token のユーザー）の予算から、G10 の台帳に許す1時間あたりの GraphQL 取得回数。
 
     Phase 1 の監視と G10 の最悪の見積もりの合計が予算に収まらなければ WiringError（その設定では動かさない）。"""
-    p1 = rb.phase1_watch_per_hour() if phase1_per_hour is None else phase1_per_hour
-    worst = rb.worst_case(policy, "token", watchdog_interval, api="graphql")["consumed_per_hour"]
-    reason = rb.principal_check([("phase1 watch", p1), ("g10 worst case", worst)], "token", "graphql", safety)
+    if phase1_per_hour is None:  # Phase 1 の監視は gh の認証つき GraphQL: 認証なしの枠（IP ごと）は使わない
+        phase1_per_hour = rb.phase1_watch_per_hour() if mode == "token" else 0.0
+    p1 = phase1_per_hour
+    worst = rb.worst_case(policy, mode, watchdog_interval, api=api)["consumed_per_hour"]
+    reason = rb.principal_check([("phase1 watch", p1), ("g10 worst case", worst)], mode, api, safety)
     if reason:
         raise WiringError(reason)
-    return int((rb.LIMITS["token"] * safety - p1) // rb.GRAPHQL_POINTS_PER_QUERY)
+    cost = rb.GRAPHQL_POINTS_PER_QUERY if api == "graphql" else 1
+    return int((rb.LIMITS[mode] * safety - p1) // cost)
 
 
 def ledger(cfg, policy):
     led = cfg["ledger"]
     if led is None:
         return None
-    allowance = ledger_allowance(policy, led["watchdog_interval"])
+    mode, api = SOURCE_BUDGET[cfg["issue_source"]["kind"]]
+    allowance = ledger_allowance(policy, led["watchdog_interval"], mode=mode, api=api)
     if led["limit_per_hour"] > allowance:
         raise WiringError("ledger limit %d/h exceeds the shared principal allowance %d/h"
                           % (led["limit_per_hour"], allowance))
@@ -416,6 +424,10 @@ class GraphQLFixtureFile:
 def issue_source(root, cfg, policy):
     budget = ledger(cfg, policy)
     src = cfg["issue_source"]
+    if src["kind"] == "github_rest_anonymous":  # TASK 17: 公開リポジトリの Issue #323 を認証なしで読む（token なし）
+        if budget is None:
+            raise WiringError("the live anonymous source requires the shared ledger")
+        return gh.GitHubIssueSource(enabled=True, budget=budget)
     if src["kind"] == "file":
         base = issue_mod.FileIssueSource(issue_mod.mock_issue_path(root))
         return BudgetedSource(base, budget) if budget is not None else base
@@ -431,7 +443,13 @@ def witness(root, cfg, policy, now=time.time):
 
 
 def spawn_witness(root, policy):
-    """実行側（スタブ・S1・S2）が使う取得係。偽Claude のときだけ。wiring.json が無ければ従来の模擬と HMAC。"""
+    """実行側（スタブ・S1・S2）が使う取得係。偽Claude のときは wiring.json が無ければ従来の模擬と HMAC。
+    実 Claude CLI（"claude_cli"。TASK 17）のときは wiring.json が必須（従来の経路へは戻らない）。それ以外は None。"""
+    if policy.get("adapter") == "claude_cli":
+        cfg = load(root)
+        if cfg is None:
+            raise WiringError("the real Claude CLI requires an approved wiring config")
+        return witness(root, cfg, policy)
     if policy.get("adapter") != "fake":
         return None
     cfg = load(root)

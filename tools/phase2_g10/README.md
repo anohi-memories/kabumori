@@ -296,6 +296,37 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
   残る1件（null）は、assert より前の診断の表示の行で、求められている WiringError がそのまま出て ERROR になる。診断の表示だけを例外に
   耐えるようにしたコピーでは、assert を含めて PASS。
 
+### 9-3. TASK 17（実 Claude CLI の監督付き1回起動の接続。既定は無効。実 Claude はまだ起動していない）
+- `g10runner/real_claude.py`: 実 CLI のアダプタ。ポリシーが `adapter: "claude_cli"` で、かつ人の署名の `REAL_CLAUDE_GO`（制御ログ）が
+  その要求の approval_id・TASK のハッシュ・本文の SHA-256 に一致し期限内のときだけ使える（GO 1件で最大1回）。
+  - 起動の直前（共有ロックの中・SPAWNING の後）に `prelaunch_check`（起動待ちちょうど1件・CLI の実体と版が GO どおり・計画が
+    承認済みの値から作り直したものと完全一致・環境変数は PATH/LANG/HOME だけ・GO の期限）。プロンプトは標準入力から。
+  - 道具は Read/Glob/Grep だけ（`--allowedTools`／`--disallowedTools`・設定ファイルの deny）。`--setting-sources local`・
+    `--strict-mcp-config` で利用者の hooks・plugins・MCP を読み込まない。`--max-turns`・`--max-budget-usd` で上限。
+    フラグの文字列は版 2.1.305 の実行ファイルの中で存在を確認したが、受け付け・効き方は実機で未確認。
+  - 作業フォルダ: GO のローカルリポジトリからの共有クローンを base_sha で detached checkout（ネットワークなし・/usr/bin/git のみ）。
+- Issue #323 の取得: `wiring.json` の `github_rest_anonymous`（公開リポジトリを認証なしで読む。token 不要）。REST は最後の編集者を
+  返さないので、編集者が分からない本文は、人の GO がその本文の SHA-256 を承認しているときだけ受け付ける（別の人の編集と分かる
+  ものは GO があっても拒否）。回数は IP ごとの 60回/時×0.5 に収まる設定だけ（監督 300秒・見張り 600秒・1時間に1回の起動）。
+- 手順コマンド `bin/g10_first_run.py`（init → approve → run、緊急停止 halt）と、起動前の確認 `bin/g10_first_run_check.py`
+  （実 Claude を実行しない。Issue を1回だけ認証なしで読み、CLI を見るだけで調べ、予定の argv・費用の注意を表示）。
+- 実測（2026-10-26）: 確認コマンドで Issue #323 を認証なしで取得（OPEN・作成者は信頼済み・残り 59回）。今の本文は TASK 17 そのもので、
+  自動実行できる Phase 2 TASK の形ではない（automation_* 等が無い）→ 正しく「起動しない」。CLI は 2.1.305（実行していない）、
+  Claude Max（5x）にログイン済み、**追加使用量（extra usage）が有効**、`ANTHROPIC_BASE_URL` が環境にある（子には渡さない）、専用ユーザーなし。
+
+### 初回の監督付き1回起動の最小チェック表（上から順に。各行は人の明示の GO が必要）
+| # | 誰が | 何を | 安全の境界・制約 |
+|---|---|---|---|
+| 1 | 人 | 費用: 追加使用量が有効のまま 1回（`--max-budget-usd 0.50`・`--max-turns 10` が上限）で進めるか、先に Claude の設定で追加使用量を切るかを決める | Max の枠を超えた分が課金されうる。`--max-budget-usd` の効き方は実機で未確認 |
+| 2 | 人（GO 後に実行） | `bin/g10_first_run.py init --root "~/Library/Application Support/kabumori-agent-watch/phase2-run"` | 役割ごとの ECDSA 鍵をこのフォルダに生成（0600）。同じユーザーのまま（専用ユーザー・ACL・launchd は使わない） |
+| 3 | ちゃ | init が表示した `phase2_policy_sha256` を使い、自動実行できる Phase 2 の readonly_trial TASK（1回・短い時間・小さな予算・base_sha は main）を Issue #323 の本文に載せる | Issue の本文の編集は担当ちゃ／人だけ。G10 の私は編集しない |
+| 4 | 人（GO 後に実行） | `bin/g10_first_run.py approve --root … --cli ~/.local/share/claude/versions/2.1.305 --source-repo /Users/yuya/Developer/kabumori` | その本文だけ・1回・60分の期限の CONFIRM と REAL_CLAUDE_GO を人の鍵で記録 |
+| 5 | 人 | 別の端末で `bin/g10_watchdog.py --root … --interval 60`（S2 の見張り役）を動かす | launchd ではなく手動。止めるときは Ctrl-C |
+| 6 | 人（GO 後に実行・見ている） | `bin/g10_first_run.py run --root …` → 終わったら REPORT の下書きを確認して担当ちゃへ | 異常があれば `bin/g10_first_run.py halt --root …`（ハードHALT） |
+- 専用ユーザー（F0）を使わないので、実 Claude は主ユーザーの権限で動く。道具は読み取りだけだが、作業フォルダの外のファイルを
+  読めるかは Claude Code の権限の仕組みに依る（実機で未確認）。TASK 本文は信頼済みの作成者と人の GO（本文のハッシュ）に限ることで
+  緩和する。結果はローカルの REPORT の下書きだけ（GitHub へは自動で投稿しない）。
+
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。

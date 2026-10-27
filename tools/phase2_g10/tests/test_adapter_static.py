@@ -65,13 +65,17 @@ class TestAdapterFixed(unittest.TestCase):
             if path.endswith("test_adapter_static.py"):
                 continue
             for pattern in forbidden:
+                if path.endswith("g10_first_run_check.py") and pattern == r"\.local/bin/claude":
+                    # TASK 17: 初回起動前の確認ツールは CLI の場所を「見るだけ」（subprocess を使わないことは下の試験で保証）
+                    continue
                 with self.subTest(path=os.path.basename(path), pattern=pattern):
                     self.assertIsNone(re.search(pattern, text))
 
     def test_subprocess_use_is_limited(self):
         """subprocess を使うのは、ps（観測）・スタブ／S1の起動・偽Claudeの起動、および固定のシステムの道具
         （/usr/bin/openssl による署名・/usr/bin/plutil -lint による plist の検査。TASK 13）だけ。"""
-        allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py", "ecdsa_signing.py", "launchd_plan.py"}
+        allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py", "ecdsa_signing.py", "launchd_plan.py",
+                   "real_claude.py"}  # TASK 17: 作業フォルダの用意の /usr/bin/git だけ（下で固定を確認）
         for path, text in sources():
             if re.search(r"\bsubprocess\.(run|Popen|call|check_output)\b", text):
                 with self.subTest(path=os.path.basename(path)):
@@ -83,6 +87,9 @@ class TestAdapterFixed(unittest.TestCase):
         ecdsa = texts["ecdsa_signing.py"]
         self.assertIn('OPENSSL = "/usr/bin/openssl"', ecdsa)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", ecdsa), ["[OPENSSL] + args"])
+        real = texts["real_claude.py"]  # TASK 17: 起動するのは固定の /usr/bin/git だけ（Claude CLI は stub が起動）
+        self.assertIn('GIT = "/usr/bin/git"', real)
+        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", real), ["[GIT"])
         launchd = texts["launchd_plan.py"]
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", launchd),
                          ['["/usr/bin/plutil"'])

@@ -25,7 +25,7 @@ ENV_ALLOWLIST = ("PATH", "LANG", "HOME")
 FORBIDDEN_ENV = re.compile(r"ANTHROPIC|CLAUDE_CODE_USE_|AWS_|GOOGLE_|VERTEX|TOKEN|SECRET|PASSWORD|API_KEY", re.I)
 VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 SECRET_LIKE = re.compile(r"(ghp_|gho_|ghs_|ghu_|github_pat_|sk-ant-)[A-Za-z0-9_-]{8,}")
-SHARED_OPTIONS = ("--model", "--session-id", "--settings", "--output-format")
+SHARED_OPTIONS = ("--model", "--session-id", "--settings", "--output-format", "--max-budget-usd")
 
 
 def probe(path_env=None):
@@ -43,7 +43,7 @@ def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30):
     """起動するなら使う計画を返す（実行しない）。値が足りない・危険なら ValueError。"""
     if not (isinstance(binary, str) and os.path.isabs(binary)):
         raise ValueError("binary must be an absolute path")
-    for key in ("model_id", "session_id", "run_id"):
+    for key in ("model_id", "session_id", "run_id", "max_budget_usd"):
         if not isinstance(request.get(key), str) or not request[key]:
             raise ValueError("request field missing: " + key)
     for p in (prompt_path, settings_path, home):
@@ -51,8 +51,13 @@ def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30):
             raise ValueError("paths must be absolute")
     if not (isinstance(max_turns, int) and not isinstance(max_turns, bool) and 0 < max_turns <= 200):
         raise ValueError("max_turns out of range")
+    # TASK 17: 道具は読み取りだけ。利用者の設定（hooks・plugins）と MCP を読み込まない（フラグの文字列は版 2.1.305 の
+    # 実行ファイルの中で存在を確認。実際の受け付けは実機で未確認）
     argv = [binary, "-p", "--output-format", "json", "--model", request["model_id"],
-            "--session-id", request["session_id"], "--settings", settings_path, "--max-turns", str(max_turns)]
+            "--session-id", request["session_id"], "--settings", settings_path, "--setting-sources", "local",
+            "--strict-mcp-config", "--allowedTools", "Read,Glob,Grep",
+            "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task",
+            "--max-turns", str(max_turns), "--max-budget-usd", str(request["max_budget_usd"])]
     env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": home}
     return {"argv": argv, "env": env, "stdin_path": prompt_path, "dry_run": True}
 

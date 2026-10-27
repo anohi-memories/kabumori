@@ -146,7 +146,7 @@ MUTANTS = [
      'if ev["state"] != "OPEN":', "if False:",
      "test_issue_binding.AgentSide.test_evidence_for_closed_issue"),
     ("untrusted Issue editor accepted", "g10runner/issue.py",
-     'if ev["author"] != TRUSTED_LOGIN or ev["editor"] not in (None, TRUSTED_LOGIN):',
+     'if ev["author"] != TRUSTED_LOGIN or (ev["editor"] not in (None, TRUSTED_LOGIN) and not go_approved):',
      'if ev["author"] != TRUSTED_LOGIN:',
      "test_issue_binding.ControlSide.test_issue_conditions"),
     ("CLAIM does not bind the Issue evidence", "g10runner/binding.py",
@@ -279,8 +279,8 @@ MUTANTS = [
      '        return None, {"evidence": {"fetched_at": time.time()}}',
      "test_review_regressions_running_issue.RunningIssueChange.test_fetch_failure_is_not_no_change"),
     ("monitor ignores generation changes", "g10runner/issue.py",
-     'purpose="monitor", nonce=nonce)\n    if reason:\n        return reason\n    return _same_generation(doc, claim_doc)',
-     'purpose="monitor", nonce=nonce)\n    if reason:\n        return reason\n    return None',
+     'purpose="monitor", nonce=nonce, go_bodies=go_bodies)\n    if reason:\n        return reason\n    return _same_generation(doc, claim_doc)',
+     'purpose="monitor", nonce=nonce, go_bodies=go_bodies)\n    if reason:\n        return reason\n    return None',
      "test_review_regressions_running_issue.RunningIssueChange.test_generation_only"),
     ("no HALT recorded on a running Issue change", "g10runner/supervise.py",
      '    agent.halt_agent("issue_changed_while_running", {"run_id": entry["run_id"], "reason": problem, "by": by})',
@@ -596,6 +596,16 @@ MUTANTS = [
     ("monitor ignores a wiring change", "g10runner/supervise.py",
      '    if wreason:\n        return "wiring: " + wreason, None\n', "",
      "test_task16_wiring_p2.R2RunBinding.test_monitor_stops_a_run_whose_config_changes"),
+    # --- TASK 17（実 Claude CLI の監督付き1回起動の安全ゲート） ---
+    ("real CLI GO not bound to the body", "g10runner/real_claude.py",
+     '                and go["body_sha256"] == body_sha and now < go["expires_at"]:',
+     '                and now < go["expires_at"]:', "test_task17_real_adapter.RealAdapterPath.test_expired_or_mismatched_go_means_no_launch"),
+    ("prelaunch check result ignored", "g10runner/stub.py",
+     '        if reason:\n            return abort("prelaunch check failed: " + reason, True)\n', "",
+     "test_task17_real_adapter.RealAdapterPath.test_cli_replaced_after_go_is_not_launched"),
+    ("unknown editor accepted without a GO for this body", "g10runner/issue.py",
+     '    go_approved = ev["editor"] == UNKNOWN_EDITOR and ev["body_sha256"] in go_bodies',
+     '    go_approved = ev["editor"] == UNKNOWN_EDITOR', "test_task17_real_adapter.EditorBoundByGo.test_unknown_editor_only_with_a_go_for_this_body"),
 ]
 
 

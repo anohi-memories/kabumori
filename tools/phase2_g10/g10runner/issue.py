@@ -28,6 +28,8 @@ EVIDENCE_FIELDS = ("repo", "number", "state", "author", "editor", "updated_at", 
                    "task_sha256", "purpose", "nonce")
 # 証拠の用途（TASK 5）: claim＝CLAIM 前の取得、spawn＝ACCEPTED 後・起動直前の再取得、postflight＝finalize での再取得
 PURPOSES = ("claim", "spawn", "postflight", "monitor")  # monitor＝実行中の監督の再取得（TASK 7）
+# REST の取得元が返す「編集者を確定できない」の値（github_source.UNKNOWN_EDITOR と同じ文字列）
+UNKNOWN_EDITOR = "unknown: last editor is not available from the anonymous REST API"
 
 
 class IssueSourceError(RuntimeError):
@@ -136,10 +138,12 @@ def evidence_digest(doc):
     return sha256_hex(canonical(doc))
 
 
-def check_evidence(doc, verifier, body, now, max_age, purpose="claim", nonce=None):
+def check_evidence(doc, verifier, body, now, max_age, purpose="claim", nonce=None, go_bodies=()):
     """証拠と本文の結合を検証する。問題があれば理由（文字列）、なければ None。
 
     purpose・nonce は、その用途・その起動のための取得であること（別の用途・別の起動の証拠の使い回しを拒否）。
+    go_bodies（TASK 17）: 人の REAL_CLAUDE_GO が SHA-256 で承認した本文。編集者を確定できない取得元（認証なしの
+    REST。editor＝UNKNOWN）でも、本文がこのどれかと完全に同じなら、編集者の代わりに人の署名を根拠に受け付ける。
     """
     if not isinstance(doc, dict) or set(doc) != {"evidence", "sig"} or not isinstance(doc["evidence"], dict):
         return "issue evidence malformed"
@@ -158,7 +162,8 @@ def check_evidence(doc, verifier, body, now, max_age, purpose="claim", nonce=Non
         return "issue evidence is not for Issue #323"
     if ev["state"] != "OPEN":
         return "issue is not open"
-    if ev["author"] != TRUSTED_LOGIN or ev["editor"] not in (None, TRUSTED_LOGIN):
+    go_approved = ev["editor"] == UNKNOWN_EDITOR and ev["body_sha256"] in go_bodies
+    if ev["author"] != TRUSTED_LOGIN or (ev["editor"] not in (None, TRUSTED_LOGIN) and not go_approved):
         return "issue author/editor not trusted"
     # H3 C3 R2: 時刻・期間は有限の正の数だけ（NaN では比較がすべて偽になり、鮮度の検査をすり抜ける）
     if not (is_finite_number(ev["fetched_at"]) and is_finite_number(ev["updated_at"])
@@ -184,12 +189,12 @@ def check_evidence(doc, verifier, body, now, max_age, purpose="claim", nonce=Non
     return None
 
 
-def check_request_evidence(req, verifier, policy, now):
+def check_request_evidence(req, verifier, policy, now, go_bodies=()):
     """実行側の検証: 要求の prompt が、新しく取得された Issue #323 の本文と完全に同じであること。"""
     max_age = policy["timing"].get("issue_evidence_max_age")
     if not (is_finite_number(max_age) and max_age > 0):
         return "issue evidence max age not configured"
-    return check_evidence(req.get("issue_evidence"), verifier, req.get("prompt"), now, max_age)
+    return check_evidence(req.get("issue_evidence"), verifier, req.get("prompt"), now, max_age, go_bodies=go_bodies)
 
 
 # --- 起動直前・終了時の再取得（TASK 5: Issue の鮮度・取消） ---
@@ -218,10 +223,10 @@ def _same_generation(doc, claim_doc):
     return None
 
 
-def check_spawn_evidence(doc, claim_doc, verifier, prompt, now, max_age, nonce, accepted_ts):
+def check_spawn_evidence(doc, claim_doc, verifier, prompt, now, max_age, nonce, accepted_ts, go_bodies=()):
     """起動直前の再取得証拠: 署名・短い有効時間・OPEN・作成者/編集者・本文の完全一致・この起動の nonce・
     ACCEPTED より後の取得・CLAIM 時から世代が変わっていないこと。"""
-    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="spawn", nonce=nonce)
+    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="spawn", nonce=nonce, go_bodies=go_bodies)
     if reason:
         return reason
     if not (is_finite_number(accepted_ts) and doc["evidence"]["fetched_at"] >= accepted_ts):
@@ -229,17 +234,18 @@ def check_spawn_evidence(doc, claim_doc, verifier, prompt, now, max_age, nonce, 
     return _same_generation(doc, claim_doc)
 
 
-def check_postflight(doc, claim_doc, verifier, prompt, now, max_age, nonce):
+def check_postflight(doc, claim_doc, verifier, prompt, now, max_age, nonce, go_bodies=()):
     """finalize の再取得証拠: OPEN（CLOSED だけの変更も検出）・本文・世代が CLAIM 時と同じこと。"""
-    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="postflight", nonce=nonce)
+    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="postflight", nonce=nonce,
+                            go_bodies=go_bodies)
     if reason:
         return reason
     return _same_generation(doc, claim_doc)
 
 
-def check_monitor(doc, claim_doc, verifier, prompt, now, max_age, nonce):
+def check_monitor(doc, claim_doc, verifier, prompt, now, max_age, nonce, go_bodies=()):
     """実行中の監督の再取得証拠（TASK 7）: OPEN・本文・世代が CLAIM 時と同じこと（finalize の再照合と同じ条件）。"""
-    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="monitor", nonce=nonce)
+    reason = check_evidence(doc, verifier, prompt, now, max_age, purpose="monitor", nonce=nonce, go_bodies=go_bodies)
     if reason:
         return reason
     return _same_generation(doc, claim_doc)

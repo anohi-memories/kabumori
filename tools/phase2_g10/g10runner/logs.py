@@ -12,7 +12,8 @@ CONTROL_TYPES = {
     "CONFIRM": "human",
     "UNHALT": "human",
     "STOP_OFF": "human",
-    "WIRING_APPROVE": "human",  # 結線の設定（wiring.json）の承認（TASK 16 R2）。世代・mode・設定のハッシュ
+    "WIRING_APPROVE": "human",
+    "REAL_CLAUDE_GO": "human",  # 実 Claude の監督付き1回起動の承認（TASK 17）。approval・本文・CLI・期限に結び付く  # 結線の設定（wiring.json）の承認（TASK 16 R2）。世代・mode・設定のハッシュ
 }
 STOP_DIRECTION = {"HALT", "STOP", "ENVELOPE_REVOKE", "ENVELOPE_SUPERSEDE", "ISSUE_REVOKE"}
 

@@ -18,6 +18,17 @@ class AdapterError(ValueError):
 
 class FakeClaudeAdapter:
     name = "fake"
+    uses_stdin = False
+
+    def settings_doc(self, run_id, policy):
+        return {"g10_run": run_id, "tools": ["Read", "Glob", "Grep"], "policy_sha256": policy["_digest"]}
+
+    def source_preparer(self):
+        from .ifaces import FakeSourcePreparer
+        return FakeSourcePreparer()
+
+    def prelaunch(self, request, prompt_path, settings_path, used_states, now=None):
+        return None
 
     def command(self, request, prompt_path, settings_path):
         return [
@@ -38,7 +49,16 @@ class FakeClaudeAdapter:
         return env
 
 
-def get_adapter(policy):
+def get_adapter(policy, st=None, req=None, now=None):
+    """偽Claude（既定）。実 Claude CLI は、ポリシーが "claude_cli" で、かつ人の REAL_CLAUDE_GO がこの要求に
+    一致して期限内のときだけ（TASK 17。GO 1件につき1回）。それ以外はすべて拒否。"""
+    if policy.get("adapter") == "claude_cli":
+        import time
+        from . import real_claude
+        go = real_claude.find_go(st, req or {}, time.time() if now is None else now) if st is not None else None
+        if go is None:
+            raise AdapterError("real Claude CLI needs a matching, unexpired human REAL_CLAUDE_GO")
+        return real_claude.RealClaudeAdapter(go)
     if policy.get("adapter") != "fake":
         raise AdapterError("only the fake Claude adapter exists in this build")
     if not os.path.isfile(FAKE_CLAUDE):

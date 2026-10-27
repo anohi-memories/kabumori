@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from . import adapter as adapter_mod, binding, ifaces, issue as issue_mod, policy as policy_mod, procs, registry, state, supervise, wiring
+from . import adapter as adapter_mod, binding, issue as issue_mod, policy as policy_mod, procs, registry, state, supervise, wiring
 from .agent import Agent
 from .chainlog import ChainError
 from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
@@ -97,7 +97,7 @@ def final_check(agent, layout, req, policy):
     reason, _ = binding.check_request(req, policy)  # H3 R1: 承認済みTASK・ポリシーとの結合を再確認
     if reason:
         return reason
-    reason = issue_mod.check_request_evidence(req, agent.verifier, policy, time.time())  # H4 P1
+    reason = issue_mod.check_request_evidence(req, agent.verifier, policy, time.time(), agent.go_bodies())  # H4 P1
     if reason:
         return "issue binding: " + reason
     reason = _local_gate(agent, layout, req)
@@ -121,7 +121,7 @@ def final_check(agent, layout, req, policy):
         return "issue re-fetch failed at spawn: %s" % type(exc).__name__
     reason = issue_mod.check_spawn_evidence(doc, req["issue_evidence"], agent.verifier, req["prompt"], time.time(),
                                             policy_mod.timing(policy, "spawn_evidence_max_age"), nonce,
-                                            accepted[0]["ts"])
+                                            accepted[0]["ts"], agent.go_bodies())
     if reason:
         return "issue changed or unverifiable at spawn: " + reason
     # TASK 6（H4 C4 P2）: 再取得は最大で issue_fetch_timeout 秒かかる。その間に HALT／STOP のフラグが立つ・
@@ -148,7 +148,7 @@ def run(root, run_id):
         return 3
     reason, _ = binding.check_request(req, policy)
     if not reason:
-        reason = issue_mod.check_request_evidence(req, verifier, policy, time.time())
+        reason = issue_mod.check_request_evidence(req, verifier, policy, time.time(), agent.go_bodies())
     if reason:
         agent.mark("ABORTED", req, {"reason": "request binding invalid at stub: " + reason})
         return 3
@@ -168,8 +168,12 @@ def run(root, run_id):
     minutes = min(int(req["max_minutes"]), int(policy["timing"]["absolute_max_minutes"]))
     now = time.time()
     settings_path = os.path.join(run_dir, "settings.json")
-    atomic_write_json(settings_path, {"g10_run": run_id, "tools": ["Read", "Glob", "Grep"],
-                                      "policy_sha256": policy["_digest"]})
+    try:  # TASK 17: 実 Claude CLI は人の GO が一致するときだけ（それ以外は偽Claude か拒否）
+        adapter = adapter_mod.get_adapter(policy, agent.current_state(update_seen=False), req)
+    except Exception as exc:
+        agent.mark("ABORTED", req, {"reason": "adapter unavailable: %s" % exc})
+        return 4
+    atomic_write_json(settings_path, adapter.settings_doc(run_id, policy))
     registry.create(layout, {
         "run_id": run_id, "session_id": req["session_id"], "settings_path": settings_path,
         "hard_deadline": now + minutes * policy_mod.timing(policy, "minute_seconds"),
@@ -206,7 +210,10 @@ def run(root, run_id):
 
     # 作業フォルダ（臨界区間の外で準備し、読み取り専用にする）
     work_dir = layout.work_dir(run_id)
-    ifaces.FakeSourcePreparer().prepare(work_dir, req["base_ref"], req["base_sha"])
+    try:
+        adapter.source_preparer().prepare(work_dir, req["base_ref"], req["base_sha"])
+    except Exception as exc:
+        return abort("work dir preparation failed: %s" % type(exc).__name__, True)
     _readonly_tree(work_dir)
     atomic_write_json(os.path.join(run_dir, "work_digest.json"), {"digest": tree_digest(work_dir)})
     prompt_path = os.path.join(run_dir, "prompt.md")
@@ -218,7 +225,6 @@ def run(root, run_id):
         return abort("halted_early", True)
     _hook(hooks, "before_T6a", run_dir)
 
-    adapter = adapter_mod.get_adapter(policy)
     scenario_path = os.path.join(run_dir, "scenario.json")
     scenario_path = scenario_path if os.path.exists(scenario_path) else None
     # T6a〜T8: 共有ロックを保持したまま、最終検証から起動の確定まで
@@ -230,16 +236,23 @@ def run(root, run_id):
         if reason:
             return abort(reason, True, "aborted_by_halt" if reason == "halted" else "aborted_before_spawn")
         agent.mark("SPAWNING", req)
+        # TASK 17: 実 CLI は起動の直前に再検証（起動待ちちょうど1件・CLI の実体と版・計画・環境・GO の期限）
+        reason = adapter.prelaunch(req, prompt_path, settings_path, agent.used_state(run_id))
+        if reason:
+            return abort("prelaunch check failed: " + reason, True)
         _hook(hooks, "before_spawn", run_dir)
         out = open(os.path.join(run_dir, "claude.stdout"), "wb")
         err = open(os.path.join(run_dir, "claude.stderr"), "wb")
+        stdin = open(prompt_path, "rb") if adapter.uses_stdin else subprocess.DEVNULL
         try:
             child = subprocess.Popen(adapter.command(req, prompt_path, settings_path),
                                      env=adapter.environment(scenario_path), cwd=work_dir,
-                                     stdout=out, stderr=err, close_fds=True)
+                                     stdin=stdin, stdout=out, stderr=err, close_fds=True)
         finally:
             out.close()
             err.close()
+            if stdin is not subprocess.DEVNULL:
+                stdin.close()
         child_start = procs.start_time(child.pid)
         registry.update(layout, run_id, "running", child_pid=child.pid, child_start=child_start,
                         child_pgid=os.getpgid(0), spawned_at=time.time())

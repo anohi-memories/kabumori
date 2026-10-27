@@ -190,7 +190,7 @@ def _issue_monitor_check(layout, policy, agent, run_id):
     except Exception as exc:  # 取得の失敗・打ち切りを「変更なし」とみなさない
         return "issue fetch failed while running: %s" % type(exc).__name__, None
     reason = issue_mod.check_monitor(ev, req.get("issue_evidence"), agent.verifier, req.get("prompt"), time.time(),
-                                     policy_mod.timing(policy, "spawn_evidence_max_age"), nonce)
+                                     policy_mod.timing(policy, "spawn_evidence_max_age"), nonce, agent.go_bodies())
     return reason, ev
 
 

@@ -34,6 +34,13 @@ class Agent:
         self.used = logs.used_log(layout, verifier)
 
     # --- 実行側の HALT ---
+    def go_bodies(self):
+        """人の REAL_CLAUDE_GO が承認した本文の SHA-256（TASK 17）。ログを読めなければ空（＝緩めない）。"""
+        try:
+            return self.current_state(update_seen=False).go_bodies
+        except Exception:
+            return frozenset()
+
     def halt_agent(self, reason, details=None):
         touch(self.layout.agent_halt_flag)
         return self.agent_events.append("HALT_AGENT", {"reason": reason, "details": details or {}},
@@ -87,7 +94,7 @@ class Agent:
         if reason:
             return reason
         # H4 P1: runner の自己申告ではなく、取得係が署名した Issue #323 の本文と完全に一致すること
-        reason = issue_mod.check_request_evidence(req, self.verifier, self.policy, local_now)
+        reason = issue_mod.check_request_evidence(req, self.verifier, self.policy, local_now, self.go_bodies())
         if reason:
             return "issue binding: " + reason
         if not (req["issued_at"] - jstclock.CLOCK_TOLERANCE_SECONDS <= local_now < req["expires_at"]):

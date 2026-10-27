@@ -52,6 +52,21 @@ class Control:
                 raise TimeoutError("could not acquire halt.lock exclusively")
             return self.control.append(rtype, payload, self.signer, role, self.now())
 
+    def go_bodies(self):
+        """人の REAL_CLAUDE_GO が承認した本文の SHA-256（TASK 17）。ログを読めなければ空（＝緩めない）。"""
+        try:
+            return self.read_state().go_bodies
+        except Exception:
+            return frozenset()
+
+    def approve_real_claude_go(self, go):
+        """人の署名で、実 Claude の監督付き1回起動を承認する（TASK 17）。形は state.derive と同じ規則で検査する。"""
+        from . import real_claude
+        problem = real_claude.go_problem(go)
+        if problem:
+            raise ValueError(problem)
+        return self.append_control("REAL_CLAUDE_GO", dict(go), "human")
+
     def read_state(self):
         return state.derive(self.control.read_all(), self.agent_events.read_all())
 
@@ -249,7 +264,8 @@ class Control:
         except Exception as exc:  # 取得の失敗は種類を問わず起動しない
             return None, "issue fetch failed: %s" % type(exc).__name__
         problem = issue_mod.check_evidence(evidence, self.verifier, body, local_now,
-                                           policy_mod.timing(self.policy, "issue_evidence_max_age"))
+                                           policy_mod.timing(self.policy, "issue_evidence_max_age"),
+                                           go_bodies=self.go_bodies())
         if problem:
             return None, "issue binding: " + problem
         f = result.fields
@@ -403,7 +419,8 @@ class Control:
                                               timeout=policy_mod.timing(self.policy, "issue_fetch_timeout"))
                 pf_reason = issue_mod.check_postflight(
                     pf_doc, req.get("issue_evidence"), self.verifier, req.get("prompt"), self.now(),
-                    policy_mod.timing(self.policy, "spawn_evidence_max_age"), issue_mod.postflight_nonce(run_id))
+                    policy_mod.timing(self.policy, "spawn_evidence_max_age"), issue_mod.postflight_nonce(run_id),
+                    self.go_bodies())
             except Exception as exc:  # 取得できない・検証できないものを成功にしない
                 pf_reason = "issue fetch failed at finalize: %s" % type(exc).__name__
         checks["issue_state_unchanged"] = pf_reason is None

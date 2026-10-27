@@ -28,6 +28,12 @@ class ControlState:
         self.head = (0, None)
         self.wiring = None          # 最新の有効な WIRING_APPROVE（TASK 16 R2）。無ければ従来の経路だけ
         self.wiring_problem = None  # 不正な承認（段飛ばし・後退・形の違反）。一度立てば以後の承認では消えない
+        self.real_gos = []          # 有効な REAL_CLAUDE_GO（TASK 17。人の署名・形の検査済み。期限は使う側で判定）
+
+    @property
+    def go_bodies(self):
+        """人の GO が本文の SHA-256 を承認している本文（編集者が分からない取得元でも、この本文なら信頼できる）。"""
+        return frozenset(g["body_sha256"] for g in self.real_gos)
 
     @property
     def halted(self):
@@ -88,6 +94,13 @@ def derive(control_events, agent_events):
             st.confirms[p.get("approval_id")] = p
         elif t == "ISSUE_REVOKE":
             st.issue_revokes.append(p)
+        elif t == "REAL_CLAUDE_GO":
+            from . import real_claude
+            if rec.get("role") == "human" and real_claude.go_problem(p) is None \
+                    and all(g["go_id"] != p["go_id"] for g in st.real_gos):
+                st.real_gos.append(dict(p, event_id=eid))
+            else:
+                st.problems.append("REAL_CLAUDE_GO invalid")
         elif t == "WIRING_APPROVE":
             reason = wiring_step_problem(st.wiring, p, rec.get("role"))
             if reason or st.wiring_problem:

@@ -262,7 +262,7 @@ class ClaudeCliPlan(TmpDir):
 
     def test_plan_argv_env_and_prompt(self):
         req = {"model_id": "claude-sonnet-5-5", "session_id": "11111111-2222-3333-4444-555555555555",
-               "run_id": "run-0123456789abcdef", "prompt": "SECRET TASK BODY"}
+               "run_id": "run-0123456789abcdef", "prompt": "SECRET TASK BODY", "max_budget_usd": "0.50"}
         plan = ccp.build_plan("/opt/claude", req, "/r/prompt.md", "/r/settings.json", "/Users/_g10runner")
         self.assertEqual(plan["argv"][:4], ["/opt/claude", "-p", "--output-format", "json"])
         self.assertIn("claude-sonnet-5-5", plan["argv"])
@@ -278,7 +278,7 @@ class ClaudeCliPlan(TmpDir):
             with self.subTest(env=sorted(bad)):
                 with self.assertRaises(ValueError):
                     ccp.check_env(bad)
-        req = {"model_id": "m", "session_id": "s", "run_id": "r"}
+        req = {"model_id": "m", "session_id": "s", "run_id": "r", "max_budget_usd": "0.10"}
         for args in (("claude", req, "/p", "/s", "/h"), ("/c", dict(req, model_id=""), "/p", "/s", "/h"),
                      ("/c", req, "p", "/s", "/h")):
             with self.subTest(args=args[0]):
