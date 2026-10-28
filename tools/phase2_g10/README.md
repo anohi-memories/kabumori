@@ -326,6 +326,32 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 - 専用ユーザー（F0）を使わないので、実 Claude は主ユーザーの権限で動く。道具は読み取りだけだが、作業フォルダの外のファイルを
   読めるかは Claude Code の権限の仕組みに依る（実機で未確認）。TASK 本文は信頼済みの作成者と人の GO（本文のハッシュ）に限ることで
   緩和する。結果はローカルの REPORT の下書きだけ（GitHub へは自動で投稿しない）。
+- 3 の本文は、spec v5 の形（`meta.validate_task`）と `phase2_task_sha256`（NORM-1）が必要で、担当ちゃは計算できない。
+  G10 が `tests/helpers.TASK_TEMPLATE` と同じ形で全文を作って検査し、REPORT に載せる。ちゃはそれを一字一句そのまま貼る（TASK 18）。
+
+### 9-4. TASK 19（初回の実機起動の「Not logged in」への対処）
+- 事実（2026-10-28 10:54 JST、run-8f3f7a8ff2b24eb8）: 実 CLI 2.1.305 は子の環境（PATH・LANG・HOME だけ）で
+  「Not logged in · Please run /login」を返し、133ms で終了した（API 未到達・0 USD）。承認 g10-p2-20261028-0001 は消費済み。
+- 調べたこと（秘密の値は見ていない）:
+  - CLI はログイン情報を Keychain から `security find-generic-password -a "<名前>" -w -s "Claude Code-credentials"` で読む。
+    名前は `process.env.USER || os.userInfo().username` なので、USER を渡していないことは原因ではない（仮説は否定）。
+  - 項目の名前は CLAUDE_CONFIG_DIR／CLAUDE_SECURESTORAGE_CONFIG_DIR が無ければ既定のまま（子にも渡していない）。
+  - Keychain のその項目は、主ユーザーの名前で存在する（終了コードだけで確認。値は読んでいない）。
+  - ユーザー設定（~/.claude/settings.json）にログイン関係の設定や env はない。
+  - このデスクトップアプリの Claude Code はアプリ側の認証（ANTHROPIC_BASE_URL 等）で動いている。端末の CLI 自体が今
+    ログイン済みかどうかは未確認。
+  - 原因は未確定。残る候補: (a) Keychain の項目が古い／期限切れで、端末の CLI 自体も未ログイン。(b) 子の状況では
+    Keychain の値を読めない。どちらも、確かめるには CLI の実行か Keychain の値の読み取りが要る（人の GO が必要）。
+- 修正（原因を問わず、承認を無駄にしないための最小の修正）:
+  - `real_claude.auth_status`: GO で固定した CLI の `auth status --json`（モデルを呼ばない）を、子と同じ環境・cwd `/`・
+    stdin なしで1回実行。返すのは loggedIn・authMethod・apiProvider・subscriptionType と終了コード・環境変数の名前だけ
+    （メールアドレス・組織名を含む生の出力は返さず、保存もしない）。
+  - `bin/g10_first_run.py run`: CLAIM の前にこれを行い、ログインしていなければ止める（承認は消費しない。直してから同じ承認で起動できる）。
+  - `bin/g10_first_run.py auth-check --cli <CLI> [--with-env NAME]`: 診断用。--with-env は USER・LOGNAME・TMPDIR・SHELL・
+    __CF_USER_TEXT_ENCODING だけ（値は表示しない）。
+- 次の手順（各行に人の明示の GO）: ① auth-check（子の環境）→ ② 未ログインなら、端末で `claude auth status --text` を本人が
+  確認し、必要なら本人が `claude auth login`（Claude の操作は本人だけ。token の発行・取得はしない）→ ③ 必要なら --with-env で
+  絞り込み → ④ G10 が作った新しい承認番号の本文をちゃが貼る → approve → S2 → run。
 
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →

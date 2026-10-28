@@ -6,9 +6,13 @@
   approve   Issue #323 を認証なしで読み、その本文だけに結び付いた CONFIRM と REAL_CLAUDE_GO（1回・期限つき）を
             人の鍵で記録する。                                                       ← 実 Claude 起動の承認（要 GO）
   run       （別の端末で S2 の見張り役 `bin/g10_watchdog.py --root ROOT --interval 60` を動かしてから）
-            Issue #323 を取得して CLAIM し、受理してスタブを起動する（GO と一致すれば実 CLI を1回だけ起動）。
+            Issue #323 を取得し、その本文の GO の CLI で auth-check と同じ確認をして、ログインしていなければ
+            CLAIM の前に止める（承認は消費しない）。ログインしていれば CLAIM し、受理してスタブを起動する（GO と一致すれば実 CLI を1回だけ起動）。
             終了を待ち、finalize して REPORT の下書きの場所を表示する。              ← 実 Claude の起動（要 GO）
   halt      緊急停止（ハードHALT）。実行中のランを止め、以後の起動も止める。
+  auth-check  （TASK 19）子と同じ環境で `<CLI> auth status --json` を1回だけ実行し、ログインの有無を表示する。
+            モデルは呼ばない（課金なし）。メールアドレス等の生の出力は表示しない。--with-env NAME で、秘密を含まない
+            決まった名前の環境変数（USER・LOGNAME・TMPDIR・SHELL・__CF_USER_TEXT_ENCODING）を診断のために加えられる。
 
 - 秘密の値は表示しない。鍵はルートの keys/ に 0600。Issue への書き込み・GitHub の認証・launchd は使わない。
 - 試験では --issue-source file と --cli（代役）で、ネットワークと実 Claude を使わずに通す。
@@ -21,7 +25,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import ecdsa_signing as ec, meta, norm, policy as policy_mod, registry, signing, wiring  # noqa: E402
+from g10runner import ecdsa_signing as ec, meta, norm, policy as policy_mod, real_claude, registry, signing, wiring  # noqa: E402
 from g10runner.agent import Agent  # noqa: E402
 from g10runner.control import Control  # noqa: E402
 from g10runner.fsutil import sha256_hex  # noqa: E402
@@ -111,9 +115,28 @@ def cmd_approve(a):
     return 0
 
 
+def usable_go(control, body, now):
+    """この本文の SHA-256 に結び付いた、期限内の REAL_CLAUDE_GO（無ければ None）。"""
+    body_sha = sha256_hex(body.encode("utf-8"))
+    for go in reversed(control.read_state().real_gos):
+        if go["body_sha256"] == body_sha and now < go["expires_at"]:
+            return go
+    return None
+
+
 def cmd_run(a):
     control, policy = open_control(a.root)
     snap = fetch_body(control, policy)
+    go = usable_go(control, snap["body"], time.time())
+    if go is None:
+        raise SystemExit("no usable REAL_CLAUDE_GO for the current Issue body (nothing claimed)")
+    if os.path.realpath(go["cli_realpath"]) != go["cli_realpath"]:
+        raise SystemExit("CLI path changed after the GO (nothing claimed)")
+    auth = real_claude.auth_status(go["cli_realpath"], go["home"])
+    print(json.dumps({"auth_preflight": auth}, ensure_ascii=False))
+    if auth["logged_in"] is not True:
+        raise SystemExit("auth preflight failed: the CLI is not logged in in the child environment "
+                         "(nothing claimed; the approval is still unused)")
     meta_ = {"state": snap["state"], "number": snap["number"], "author": snap["author"], "editor": None}
     run_id, reason = control.try_claim(snap["body"], meta_, time.time())
     if run_id is None:
@@ -146,6 +169,17 @@ def cmd_halt(a):
     return 0 if result["resolved"] else 1
 
 
+def cmd_auth_check(a):
+    missing = [n for n in a.with_env if n not in os.environ]
+    if missing:
+        raise SystemExit("not set in this environment: %s" % ", ".join(missing))
+    extra = {n: os.environ[n] for n in a.with_env}
+    result = real_claude.auth_status(os.path.realpath(a.cli), os.path.expanduser("~"), extra_env=extra)
+    print(json.dumps({"cli": os.path.basename(os.path.realpath(a.cli)), "auth": result},
+                     ensure_ascii=False))
+    return 0 if result["logged_in"] is True else 1
+
+
 def main(argv=None):
     p = argparse.ArgumentParser()
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -163,8 +197,12 @@ def main(argv=None):
     h = sub.add_parser("halt")
     h.add_argument("--root", required=True)
     h.add_argument("--reason", default="human emergency stop")
+    c = sub.add_parser("auth-check")
+    c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
+    c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
     a = p.parse_args(argv)
-    return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt}[a.cmd](a)
+    return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt,
+            "auth-check": cmd_auth_check}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -87,9 +87,12 @@ class TestAdapterFixed(unittest.TestCase):
         ecdsa = texts["ecdsa_signing.py"]
         self.assertIn('OPENSSL = "/usr/bin/openssl"', ecdsa)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", ecdsa), ["[OPENSSL] + args"])
-        real = texts["real_claude.py"]  # TASK 17: 起動するのは固定の /usr/bin/git だけ（Claude CLI は stub が起動）
+        real = texts["real_claude.py"]  # TASK 17: 固定の /usr/bin/git（Claude CLI の本番の起動は stub が行う）
         self.assertIn('GIT = "/usr/bin/git"', real)
-        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", real), ["[GIT"])
+        # TASK 19: GO で固定した CLI の `auth status --json`（モデルを呼ばない）だけを追加で起動する
+        self.assertIn('AUTH_ARGS = ("auth", "status", "--json")', real)
+        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", real),
+                         ["[cli_realpath] + list(AUTH_ARGS)", "[GIT"])
         launchd = texts["launchd_plan.py"]
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", launchd),
                          ['["/usr/bin/plutil"'])

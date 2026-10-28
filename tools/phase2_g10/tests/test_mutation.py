@@ -606,6 +606,15 @@ MUTANTS = [
     ("unknown editor accepted without a GO for this body", "g10runner/issue.py",
      '    go_approved = ev["editor"] == UNKNOWN_EDITOR and ev["body_sha256"] in go_bodies',
      '    go_approved = ev["editor"] == UNKNOWN_EDITOR', "test_task17_real_adapter.EditorBoundByGo.test_unknown_editor_only_with_a_go_for_this_body"),
+    # TASK 19: ログインの確認
+    ("auth preflight result ignored before CLAIM", "bin/g10_first_run.py",
+     '    if auth["logged_in"] is not True:\n', '    if False:\n',
+     "test_task17_real_adapter.FirstRunCommands.test_not_logged_in_stops_before_claim_and_keeps_the_approval"),
+    ("auth status raw output returned", "g10runner/real_claude.py",
+     '               api_provider=_word(doc.get("apiProvider")), subscription_type=_word(doc.get("subscriptionType")))\n',
+     '               api_provider=_word(doc.get("apiProvider")), subscription_type=_word(doc.get("subscriptionType")),\n'
+     '               raw=doc)\n',
+     "test_task17_real_adapter.AuthStatusCheck.test_returns_only_safe_fields_in_the_child_environment"),
 ]
 
 

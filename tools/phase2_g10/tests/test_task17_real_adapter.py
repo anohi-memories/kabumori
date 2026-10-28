@@ -19,6 +19,14 @@ STAND_IN = r'''#!/usr/bin/python3 -I
 """代役の CLI（試験専用）。実 Claude ではない。受け取ったものを検査して記録し、Claude と同じ形の JSON を返す。"""
 import json, os, sys
 argv = sys.argv[1:]
+here = os.path.dirname(os.path.abspath(__file__))
+if argv[:2] == ["auth", "status"]:  # TASK 19: ログインの確認（NOT_LOGGED_IN があれば未ログイン。メール等も返す）
+    with open(os.path.join(here, "auth_calls.jsonl"), "a") as f:
+        f.write(json.dumps({"argv": argv, "env_keys": sorted(os.environ), "cwd": os.getcwd()}) + "\n")
+    ok = not os.path.exists(os.path.join(here, "NOT_LOGGED_IN"))
+    print(json.dumps({"loggedIn": ok, "authMethod": "claude.ai" if ok else "none", "apiProvider": "firstParty",
+                      "email": "secret-person@example.invalid", "orgName": "Secret Org", "subscriptionType": "max"}))
+    sys.exit(0 if ok else 1)
 prompt = sys.stdin.read()
 def opt(name):
     return argv[argv.index(name) + 1] if name in argv else None
@@ -213,18 +221,23 @@ class EditorBoundByGo(RealAdapterBase):
                                                               go_bodies=approved))
 
 
+def load_first_run():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("g10_first_run", os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "g10_first_run.py"))
+    fr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fr)
+    return fr
+
+
 class FirstRunCommands(RealAdapterBase):
     """初回起動の手順コマンド（init → approve → run）を、模擬 Issue（ファイル）と代役の CLI で通す。"""
 
-    def test_init_approve_run(self):
-        import importlib.util
+    def approved_root(self):
         import shutil
         from g10runner import supervise
         from g10runner.layout import Layout
-        spec = importlib.util.spec_from_file_location("g10_first_run", os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "g10_first_run.py"))
-        fr = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(fr)
+        fr = load_first_run()
         root = os.path.join(self.env.real, "first-run-root")
         self.addCleanup(shutil.rmtree, root, True)
         self.assertEqual(fr.main(["init", "--root", root, "--issue-source", "file"]), 0)
@@ -235,11 +248,89 @@ class FirstRunCommands(RealAdapterBase):
         issue_mod.FileIssueSource(issue_mod.mock_issue_path(root)).publish(body)
         self.assertEqual(fr.main(["approve", "--root", root, "--cli", self.cli, "--source-repo", self.repo]), 0)
         supervise.write_s2_heartbeat(Layout(root))
+        return fr, root
+
+    def auth_calls(self):
+        path = os.path.join(self.cli_dir, "auth_calls.jsonl")
+        return [json.loads(x) for x in open(path)] if os.path.exists(path) else []
+
+    def test_init_approve_run(self):
+        fr, root = self.approved_root()
         self.assertEqual(fr.main(["run", "--root", root]), 0)
         self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(len(self.auth_calls()), 1)  # TASK 19: CLAIM の前にログインを1回確認
         with self.assertRaises(SystemExit):  # 同じ承認では二度目を起動しない
             fr.main(["run", "--root", root])
         self.assertEqual(len(self.calls()), 1)
+
+    def test_not_logged_in_stops_before_claim_and_keeps_the_approval(self):
+        """TASK 19: 子の環境でログインしていなければ、CLAIM の前に止まり、承認は消費されない（直してから使える）。"""
+        fr, root = self.approved_root()
+        marker = os.path.join(self.cli_dir, "NOT_LOGGED_IN")
+        open(marker, "w").close()
+        with self.assertRaises(SystemExit) as cm:
+            fr.main(["run", "--root", root])
+        self.assertIn("auth preflight failed", str(cm.exception))
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(len(self.auth_calls()), 1)
+        os.remove(marker)
+        self.assertEqual(fr.main(["run", "--root", root]), 0)  # 同じ承認がまだ使える
+        self.assertEqual(len(self.calls()), 1)
+
+
+class AuthStatusCheck(RealAdapterBase):
+    """TASK 19: `<CLI> auth status --json` の確認は、子と同じ環境で、安全な項目だけを返す。"""
+
+    def auth_calls(self):
+        path = os.path.join(self.cli_dir, "auth_calls.jsonl")
+        return [json.loads(x) for x in open(path)] if os.path.exists(path) else []
+
+    def test_returns_only_safe_fields_in_the_child_environment(self):
+        r = real_claude.auth_status(self.cli, self.home)
+        self.assertIs(r["logged_in"], True)
+        self.assertEqual((r["exit_code"], r["auth_method"], r["subscription_type"]), (0, "claude.ai", "max"))
+        self.assertEqual(r["env_names"], ["HOME", "LANG", "PATH"])
+        self.assertNotIn("secret-person", json.dumps(r))
+        self.assertNotIn("Secret Org", json.dumps(r))
+        call = self.auth_calls()[0]
+        self.assertEqual(call["argv"], ["auth", "status", "--json"])
+        self.assertEqual(call["cwd"], "/")
+        for name in ("USER", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_SESSION_ID"):
+            self.assertNotIn(name, call["env_keys"])
+
+    def test_not_logged_in_and_unparseable_output(self):
+        open(os.path.join(self.cli_dir, "NOT_LOGGED_IN"), "w").close()
+        r = real_claude.auth_status(self.cli, self.home)
+        self.assertIs(r["logged_in"], False)
+        self.assertEqual(r["exit_code"], 1)
+        bad = os.path.join(self.cli_dir, "1.0.0")
+        with open(bad, "w") as f:
+            f.write("#!/bin/sh\necho not-json\n")
+        os.chmod(bad, 0o755)
+        r = real_claude.auth_status(bad, self.home)
+        self.assertIsNone(r["logged_in"])
+        self.assertEqual(r["problem"], "unparseable auth status output")
+
+    def test_extra_environment_names_are_allowlisted(self):
+        with self.assertRaises(real_claude.RealClaudeError):
+            real_claude.auth_status(self.cli, self.home, extra_env={"ANTHROPIC_API_KEY": "x"})
+        self.assertEqual(self.auth_calls(), [])
+        r = real_claude.auth_status(self.cli, self.home, extra_env={"USER": "someone"})
+        self.assertEqual(r["env_names"], ["HOME", "LANG", "PATH", "USER"])
+        self.assertIn("USER", self.auth_calls()[0]["env_keys"])
+
+    def test_auth_check_command_prints_no_email(self):
+        import contextlib
+        import io
+        fr = load_first_run()
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(fr.main(["auth-check", "--cli", self.cli]), 0)
+        self.assertNotIn("secret-person", buf.getvalue())
+        self.assertIn('"logged_in": true', buf.getvalue())
+        with self.assertRaises(SystemExit):  # 決まった名前以外は受け付けない
+            with contextlib.redirect_stderr(io.StringIO()):
+                fr.main(["auth-check", "--cli", self.cli, "--with-env", "ANTHROPIC_BASE_URL"])
 
 
 if __name__ == "__main__":

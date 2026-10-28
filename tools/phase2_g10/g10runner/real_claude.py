@@ -15,7 +15,10 @@ GO には、人が確認して固定した CLI の実体（絶対パス）と版
 - 停止・期限・HALT は偽Claude と同じスタブと S1/S2 の仕組みで行う（実 CLI の子プロセスの停止の実機確認は未了）。
 - このモジュールは、上の条件を満たさない限り何も実行しない。実 CLI のフラグの受け付け・課金・modelUsage の形は
   実機で未確認（NOT_VERIFIED）。
+- TASK 19: 初回の実機起動が「Not logged in」で終わったので、CLAIM（承認の消費）の前に、子と同じ環境で
+  `<CLI> auth status --json`（モデルを呼ばない・課金なし）を1回実行し、ログインしていなければ起動しない（auth_status）。
 """
+import json
 import os
 import re
 import subprocess
@@ -31,10 +34,58 @@ READ_TOOLS = ("Read", "Glob", "Grep")
 DENIED_TOOLS = ("Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task")
 _SHA = re.compile(r"[0-9a-f]{64}")
 _VERSION = re.compile(r"\d+\.\d+\.\d+")
+AUTH_ARGS = ("auth", "status", "--json")
+AUTH_TIMEOUT = 30
+# 診断のときだけ、人が名前を指定して加えられる環境変数（秘密を含まない名前に限る。値は表示しない）
+DIAG_ENV_NAMES = ("USER", "LOGNAME", "TMPDIR", "SHELL", "__CF_USER_TEXT_ENCODING")
+_WORD = re.compile(r"[A-Za-z0-9._-]{1,40}")
 
 
 class RealClaudeError(ValueError):
     pass
+
+
+def child_environment(home):
+    """実 CLI の子に渡す環境（PATH・LANG・HOME だけ。API キー・BASE_URL 等は渡さない）。"""
+    return {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": home}
+
+
+def _word(value):
+    return value if isinstance(value, str) and _WORD.fullmatch(value) else None
+
+
+def auth_status(cli_realpath, home, extra_env=None, timeout=AUTH_TIMEOUT):
+    """`<CLI> auth status --json` を子と同じ環境で1回実行し、ログインの有無だけを返す（TASK 19）。
+
+    モデルは呼ばない（課金なし）。出力にはメールアドレス・組織名が含まれるので、生の出力は返さず保存もしない。
+    返すのは loggedIn・authMethod・apiProvider・subscriptionType（短い語のときだけ）と終了コード・環境変数の名前。"""
+    env = child_environment(home)
+    for name, value in (extra_env or {}).items():
+        if name not in DIAG_ENV_NAMES or not isinstance(value, str):
+            raise RealClaudeError("environment name not allowed for the auth check: %s" % name)
+        env[name] = value
+    out = {"logged_in": None, "exit_code": None, "auth_method": None, "api_provider": None,
+           "subscription_type": None, "problem": None, "env_names": sorted(env)}
+    try:
+        r = subprocess.run([cli_realpath] + list(AUTH_ARGS), env=env, cwd="/", stdin=subprocess.DEVNULL,
+                           capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        out["problem"] = "timeout"
+        return out
+    except OSError as exc:
+        out["problem"] = type(exc).__name__
+        return out
+    out["exit_code"] = r.returncode
+    try:
+        doc = json.loads(r.stdout.decode("utf-8", "replace"))
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict) or not isinstance(doc.get("loggedIn"), bool):
+        out["problem"] = "unparseable auth status output"
+        return out
+    out.update(logged_in=doc["loggedIn"], auth_method=_word(doc.get("authMethod")),
+               api_provider=_word(doc.get("apiProvider")), subscription_type=_word(doc.get("subscriptionType")))
+    return out
 
 
 def go_problem(payload):
@@ -124,7 +175,7 @@ class RealClaudeAdapter:
         return self.plan(request, prompt_path, settings_path)["argv"]
 
     def environment(self, scenario_path):
-        return {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": self.go["home"]}
+        return child_environment(self.go["home"])
 
     def source_preparer(self):
         return GitSourcePreparer(self.go["source_repo"])
