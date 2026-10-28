@@ -212,7 +212,8 @@ const OWN_WINDOW_LEFT = /still creates its own window/u;
 const OWN_START_LEFT = /still starts React Native itself/u;
 const NOT_THIS_SCENE_DELEGATE = /SceneDelegate is not exactly the one this plugin adds/u;
 const NOT_ADOPTED = /or not adopted completely \(declaration\)/u;
-const NO_PROPERTY = /does not hold the React Native factory the scene delegate needs/u;
+const NO_PROPERTY = NOT_KEPT; // the property is part of the SDK 57 head that is matched line by line
+const SECOND_TIME = /a second time/u;
 
 /** The three inputs H1 reproduced (the real prebuild accepted 2 and 3 with exit 0). */
 const H1_NEGATIVES = [
@@ -254,8 +255,9 @@ test('F1: an already-applied file is checked as a whole, not by the template blo
     ['a SceneDelegate of another kind', ADOPTED_APP_DELEGATE.replace('class SceneDelegate: ExpoAppSceneDelegate {}', 'class SceneDelegate: UIResponder, UIWindowSceneDelegate {}'), NOT_THIS_SCENE_DELEGATE],
     ['a second SceneDelegate', ADOPTED_APP_DELEGATE.replace('class ReactNativeDelegate:', 'class SceneDelegate: UIResponder {}\n\nclass ReactNativeDelegate:'), NOT_THIS_SCENE_DELEGATE],
     ['the SceneDelegate but not the provider conformance', SDK57_APP_DELEGATE.replace(/#if os\(iOS\) \|\| os\(tvOS\)\n[\s\S]*?#endif\n/u, '') + SCENE_BLOCK, /\(window start\)/u],
-    ['a second didFinishLaunching under #if', ADOPTED_APP_DELEGATE.replace('  // Linking API\n', `#if os(tvOS)\n${DID_FINISH_LAUNCHING_FN}#endif\n\n  // Linking API\n`), NOT_KEPT],
+    ['a second didFinishLaunching under #if', ADOPTED_APP_DELEGATE.replace('  // Linking API\n', `#if os(tvOS)\n${DID_FINISH_LAUNCHING_FN}#endif\n\n  // Linking API\n`), SECOND_TIME],
     ['the provider conformance on a second AppDelegate', ADOPTED_APP_DELEGATE + '\nclass AppDelegate: ExpoAppDelegate {}\n', NOT_ADOPTED],
+    ['the provider conformance written another way', ADOPTED_APP_DELEGATE.replace('class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {', 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider, AnotherProtocol {'), NOT_ADOPTED],
   ];
   for (const [label, source, reason] of cases) {
     assert.ok(source !== ADOPTED_APP_DELEGATE, `${label}: the input really differs`);
@@ -274,6 +276,61 @@ test('F1: on the first run the whole result is checked -- a second own start the
   for (const [label, source, reason] of cases) {
     assert.throws(() => plugin.adoptSceneLifecycle(source), reason, label);
   }
+});
+
+// G1 TASK 25 (H1 re-review of PR #546): a factory line the compiler never runs -- in a comment, a string, a branch, a closure or
+// conditional compilation -- must not count as keeping the factory. ExpoAppSceneDelegate would still find it nil.
+const HIDDEN = /has a block comment or a multi-line string/u;
+const BLOCK_COMMENT_KEPT = '    /*\n    reactNativeFactory = factory\n    */\n';
+const STRING_KEPT = '    let unusedText = """\n    reactNativeFactory = factory\n    """\n';
+
+test('F1 (TASK 25): H1 N4 (the kept factory in a block comment) and the multi-line string make prebuild FAIL -- helper and mod, first run and applied', async () => {
+  const config = plugin({ name: 'social-mobile', slug: 'social-mobile' });
+  const cases = [
+    ['N4: applied, the kept factory in a block comment', ADOPTED_APP_DELEGATE.replace(KEPT, BLOCK_COMMENT_KEPT)],
+    ['applied, the kept factory in a multi-line string', ADOPTED_APP_DELEGATE.replace(KEPT, STRING_KEPT)],
+    ['first run, the kept factory in a block comment', SDK57_APP_DELEGATE.replace(KEPT, BLOCK_COMMENT_KEPT)],
+    ['first run, the kept factory in a multi-line string', SDK57_APP_DELEGATE.replace(KEPT, STRING_KEPT)],
+  ];
+  for (const [label, source] of cases) {
+    assert.ok(source.includes('\n    reactNativeFactory = factory\n'), `${label}: the line itself is still there, as H1 wrote it`);
+    assert.throws(() => plugin.adoptSceneLifecycle(source), HIDDEN, label);
+    await assert.rejects(
+      Promise.resolve().then(() => config.mods.ios.appDelegate({ modResults: { language: 'swift', contents: source }, modRequest: { platform: 'ios', introspect: false }, modRawConfig: {} })),
+      HIDDEN,
+      `${label} (mod)`,
+    );
+  }
+});
+
+test('F1 (TASK 25): a factory line that is not a plain top-level statement of didFinishLaunching is refused', () => {
+  const kept = (replacement) => ADOPTED_APP_DELEGATE.replace(KEPT, replacement);
+  const cases = [
+    ['a one-line block comment', kept('    /* reactNativeFactory = factory */\n'), HIDDEN],
+    ['a block comment around the whole method', ADOPTED_APP_DELEGATE.replace('  public override func application(\n    _ application: UIApplication,\n    didFinishLaunching', '  /*\n  public override func application(\n    _ application: UIApplication,\n    didFinishLaunching').replace('  }\n\n  // Linking API', '  */\n  }\n\n  // Linking API'), HIDDEN],
+    ['a one-line string', kept('    let unusedText = "reactNativeFactory = factory"\n'), NOT_KEPT],
+    ['a raw string', kept('    let unusedText = #"reactNativeFactory = factory"#\n'), NOT_KEPT],
+    ['#if false around it', kept('#if false\n    reactNativeFactory = factory\n#endif\n'), NOT_KEPT],
+    ['#if false around the whole head', ADOPTED_APP_DELEGATE.replace('@main\n', '#if false\n@main\n').replace('  }\n\n  // Linking API', '  }\n#endif\n\n  // Linking API'), NOT_KEPT],
+    ['a branch never taken', kept('    if false {\n      reactNativeFactory = factory\n    }\n'), NOT_KEPT],
+    ['a closure never called', kept('    let keep = {\n      reactNativeFactory = factory\n    }\n'), NOT_KEPT],
+    ['a return before it', kept(`    return super.application(application, didFinishLaunchingWithOptions: launchOptions)\n${KEPT}`), NOT_KEPT],
+    ['set back to nil elsewhere', ADOPTED_APP_DELEGATE.replace('    return super.application(app, open: url, options: options)', '    reactNativeFactory = nil\n    return super.application(app, open: url, options: options)'), SECOND_TIME],
+    ['set back to nil through self', ADOPTED_APP_DELEGATE.replace('    return super.application(app, open: url, options: options)', '    self.reactNativeFactory = nil\n    return super.application(app, open: url, options: options)'), SECOND_TIME],
+    ['a block comment around the whole head (every head line intact)', ADOPTED_APP_DELEGATE.replace('@main\n', '/*\n@main\n').replace('  }\n\n  // Linking API', '  }\n*/\n\n  // Linking API'), HIDDEN],
+    ['a multi-line string around the whole head', ADOPTED_APP_DELEGATE.replace('@main\n', 'let unusedText = """\n@main\n').replace('  }\n\n  // Linking API', '  }\n"""\n\n  // Linking API'), HIDDEN],
+    ['even a harmless line in the head (an unknown structure is refused, not guessed)', kept(`${KEPT}    // kept for the scene delegate\n`), NOT_KEPT],
+    ['a line of the head with trailing spaces', kept('    reactNativeFactory = factory  \n'), NOT_KEPT],
+    ['a line of only spaces in the head', kept(`${KEPT}    \n`), NOT_KEPT],
+  ];
+  for (const [label, source, reason] of cases) {
+    assert.ok(source !== ADOPTED_APP_DELEGATE, `${label}: the input really differs`);
+    assert.throws(() => plugin.adoptSceneLifecycle(source), reason, label);
+  }
+  assert.equal(plugin.adoptSceneLifecycle(ADOPTED_APP_DELEGATE), ADOPTED_APP_DELEGATE, 'the real adopted file is still accepted as it is');
+  assert.equal(plugin.adoptSceneLifecycle(SDK57_APP_DELEGATE), ADOPTED_APP_DELEGATE, 'and the real template is still adopted exactly');
+  const closedConditional = ADOPTED_APP_DELEGATE.replace('@main\n', '#if DEBUG\nimport os\n#endif\n\n@main\n');
+  assert.equal(plugin.adoptSceneLifecycle(closedConditional), closedConditional, 'a #if block closed before the class does not put the head inside a conditional');
 });
 
 test('F1: the AppDelegate and Info.plist name the same SceneDelegate; quick actions / URLs / activities stay with ExpoAppDelegate', () => {
