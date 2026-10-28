@@ -113,3 +113,36 @@ test("startConnection: only the registered redirect URI begins (no RPC call othe
     assert.equal(calls, 0, redirectUri);
   }
 });
+
+// G4-46: G5's T13 codes (005 calls T13 first in begin / consume / complete) reach the app with statuses it can act on
+test("T13 refusals: sign in again (401), cannot connect yet (409), transient (503), anything else 400", () => {
+  assert.equal(rpcRefusalStatus("ACCOUNT_LIFECYCLE_AUTH_REQUIRED", 400), 401);
+  for (const code of ["ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND", "SERVICE_NOT_REGISTERED", "SERVICE_NOT_ACTIVE",
+    "SERVICE_DELETION_IN_PROGRESS", "ACCOUNT_DELETION_IN_PROGRESS", "ACCOUNT_LOCKED"]) {
+    assert.equal(rpcRefusalStatus(code, 400), 409, code);
+  }
+  assert.equal(rpcRefusalStatus("ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE", 400), 503);
+  assert.equal(rpcRefusalStatus("ACCOUNT_LIFECYCLE_SERVICE_INVALID", 400), 400);
+});
+
+test("T13 refusals are fixed codes (passed through), every one of the guard's run-time codes", () => {
+  // the run-time codes of T13 (main supabase/migrations/20261010051938_common_account_service_write_guard.sql, read at 21a5cad4;
+  // that migration is not in this branch's base). supabase/tests/postona_g4_x_oauth_t13_run.sh shows the real ones come back.
+  for (const code of ["ACCOUNT_LIFECYCLE_AUTH_REQUIRED", "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND", "ACCOUNT_LIFECYCLE_SERVICE_INVALID",
+    "ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE", "ACCOUNT_DELETION_IN_PROGRESS", "ACCOUNT_LOCKED", "SERVICE_NOT_REGISTERED",
+    "SERVICE_NOT_ACTIVE", "SERVICE_DELETION_IN_PROGRESS"]) {
+    assert.equal(rpcRefusalCode(code), code, code);
+  }
+});
+
+test("startConnection: a person without POSTONA (T13) answers 409, a writer fence outage 503", async () => {
+  await assert.rejects(
+    () => startWithRefusal("ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND"),
+    (error: unknown) => error instanceof OAuthConnectUserError && error.message === "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND" && error.status === 409,
+  );
+  await assert.rejects(
+    () => startWithRefusal("ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE"),
+    (error: unknown) =>
+      error instanceof OAuthConnectUserError && error.message === "ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE" && error.status === 503,
+  );
+});
