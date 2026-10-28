@@ -589,6 +589,7 @@ end $$;
  */
 create function postona_x_resv.g5_r1_bound(p_brand_id text, out owner_epoch bigint, out lifecycle_version bigint)
 language plpgsql volatile security definer set search_path = '' as $$
+-- G3_G5_PROFILE_FULL (g5oe / W1)
 declare v_verdict jsonb;
 begin
   if pg_catalog.to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is null then
@@ -608,15 +609,18 @@ end $$;
 /**
  * G3-38: G5's W1 for a row's bound numbers: 'active' only when the workspace's owner epoch and the owner's lifecycle version are still
  * the ones the row was made under (A -> B -> A is a NEW epoch). An unbound row, a missing W1 or no answer is never 'active'. Internal.
+ * G3-39: takes the row (the personal-MVP profile, 008, replaces this body with G5's MV, which needs the row's user).
  */
-create function postona_x_resv.g5_bound_state(p_brand_id text, p_owner_epoch bigint, p_lifecycle_version bigint) returns text
+create function postona_x_resv.g5_bound_state(p_row postona_x_resv.reservations) returns text
 language plpgsql stable security definer set search_path = '' as $$
+-- G3_G5_PROFILE_FULL (g5oe / W1)
 begin
-  if p_owner_epoch is null or p_lifecycle_version is null then return 'OWNER_EPOCH_UNBOUND'; end if;
+  if p_row.bound_owner_epoch is null or p_row.bound_lifecycle_version is null then return 'OWNER_EPOCH_UNBOUND'; end if;
   if pg_catalog.to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)') is null then
     return 'SERVICE_STATE_UNKNOWN';
   end if;
-  return coalesce(private.account_lifecycle_worker_brand_verdict(p_brand_id, 'x_autopost', p_owner_epoch, p_lifecycle_version), 'SERVICE_STATE_UNKNOWN');
+  return coalesce(private.account_lifecycle_worker_brand_verdict(p_row.brand_id, 'x_autopost', p_row.bound_owner_epoch, p_row.bound_lifecycle_version),
+                  'SERVICE_STATE_UNKNOWN');
 end $$;
 
 /** Is this planned/claimed row still publishable right now (consent intact, owner + G5 + G4 live)? */
@@ -639,7 +643,7 @@ begin
     return false;
   end if;
   -- G3-38: still the owner epoch / lifecycle version the row was made under (G5 W1); unbound or changed -> not publishable.
-  if postona_x_resv.g5_bound_state(p_row.brand_id, p_row.bound_owner_epoch, p_row.bound_lifecycle_version) is distinct from 'active' then
+  if postona_x_resv.g5_bound_state(p_row) is distinct from 'active' then
     return false;
   end if;
   return postona_x_resv.g5_x_autopost_allowed(p_row.user_id) is true
