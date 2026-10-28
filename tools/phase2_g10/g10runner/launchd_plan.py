@@ -121,3 +121,87 @@ def stop_commands(label=LABEL_PREFIX + ".watchdog"):
     """人が実行する停止の手順（文字列）。ここでは実行しない。"""
     return ["sudo launchctl bootout system/%s" % label,
             "sudo launchctl print system/%s   # 止まったこと（見つからないこと）を確認" % label]
+
+
+# --- TASK 21: 主ユーザーの LaunchAgent（gui ドメイン）の計画（作って検査するだけ。登録しない） ---
+# Claude Max のログインは主ユーザーの Keychain にあるので、実 Claude を起動する検知役（autorun）は主ユーザーで動かす
+# 必要がある（専用ユーザー _g10* では Max のログインを使えない）。そのため LaunchAgent（UserName なし）を計画する。
+AGENT_KEYS = ALLOWED_KEYS - {"UserName"}
+AGENT_SCRIPTS = {"watchdog": "g10_watchdog.py", "autorun": "g10_autorun.py"}
+AGENT_MIN_LIVE_INTERVAL = 300.0
+
+
+def user_agent_plan(kind, python, root, interval, live=False, package_root=PACKAGE_ROOT):
+    if kind not in AGENT_SCRIPTS:
+        raise PlanError("unknown agent kind")
+    script = os.path.join(package_root, "bin", AGENT_SCRIPTS[kind])
+    logs = os.path.join(root, "logs")
+    args = [python, "-I", script, "--root", root, "--interval", str(float(interval))]
+    if live:
+        args.append("--live")
+    return {
+        "Label": "%s.agent.%s" % (LABEL_PREFIX, kind),
+        "ProgramArguments": args,
+        "KeepAlive": True,
+        "RunAtLoad": True,
+        "ProcessType": "Background",
+        "Umask": 0o077,
+        "EnvironmentVariables": {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+        "StandardOutPath": os.path.join(logs, kind + ".out"),
+        "StandardErrorPath": os.path.join(logs, kind + ".err"),
+    }
+
+
+def validate_agent_plan(plan, package_root=PACKAGE_ROOT):
+    """LaunchAgent の計画の検査。規則に合わなければ PlanError。"""
+    if not isinstance(plan, dict) or set(plan) != AGENT_KEYS:
+        raise PlanError("agent plist keys must be exactly %s" % sorted(AGENT_KEYS))
+    kind = next((k for k in AGENT_SCRIPTS if plan.get("Label") == "%s.agent.%s" % (LABEL_PREFIX, k)), None)
+    if kind is None:
+        raise PlanError("unexpected label")
+    args = plan.get("ProgramArguments")
+    live = isinstance(args, list) and len(args) == 8 and args[-1] == "--live"
+    if not (isinstance(args, list) and all(isinstance(a, str) for a in args) and (len(args) == 7 or live)):
+        raise PlanError("ProgramArguments must be [python, -I, script, --root, ROOT, --interval, SECONDS(, --live)]")
+    if live and kind != "autorun":
+        raise PlanError("only the autorun agent may be live")
+    if args[0] not in ALLOWED_PYTHONS or args[1] != "-I" or args[3] != "--root" or args[5] != "--interval":
+        raise PlanError("ProgramArguments must be [python, -I, script, --root, ROOT, --interval, SECONDS(, --live)]")
+    if os.path.realpath(args[2]) != os.path.realpath(os.path.join(package_root, "bin", AGENT_SCRIPTS[kind])):
+        raise PlanError("only the bundled %s may be run" % AGENT_SCRIPTS[kind])
+    try:
+        interval = float(args[6])
+    except ValueError:
+        raise PlanError("--interval must be a number")
+    if not (math.isfinite(interval) and interval > 0):
+        raise PlanError("--interval must be a finite positive number")
+    if live and interval < AGENT_MIN_LIVE_INTERVAL:
+        raise PlanError("a live autorun needs --interval >= %d" % AGENT_MIN_LIVE_INTERVAL)
+    if not os.path.isabs(args[4]):
+        raise PlanError("--root must be an absolute path")
+    env = plan.get("EnvironmentVariables", {})
+    if set(env) - {"PATH", "LANG"} or any(FORBIDDEN_ENV.search(k) for k in env):
+        raise PlanError("only PATH and LANG may be set in the environment")
+    if plan.get("KeepAlive") is not True or plan.get("RunAtLoad") is not True:
+        raise PlanError("KeepAlive and RunAtLoad must be true")
+    if plan.get("Umask") != 0o077 or plan.get("ProcessType") != "Background":
+        raise PlanError("Umask must be 077 and ProcessType Background")
+    for key in ("StandardOutPath", "StandardErrorPath"):
+        if not os.path.isabs(str(plan.get(key, ""))):
+            raise PlanError("log paths must be absolute")
+    return True
+
+
+def render_validated_agent(plan):
+    validate_agent_plan(plan)
+    data = render(plan)
+    if plistlib.loads(data) != plan:
+        raise PlanError("rendered plist differs from the validated plan")
+    return data
+
+
+def agent_commands(label, path):
+    """人が実行する登録・確認・停止の手順（文字列）。ここでは実行しない。sudo は要らない（主ユーザーの gui ドメイン）。"""
+    return {"install": "launchctl bootstrap gui/$(id -u) '%s'" % path,
+            "check": "launchctl print gui/$(id -u)/%s" % label,
+            "stop": "launchctl bootout gui/$(id -u)/%s" % label}

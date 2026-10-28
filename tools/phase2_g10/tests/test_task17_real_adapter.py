@@ -230,8 +230,8 @@ def load_first_run():
     return fr
 
 
-class FirstRunCommands(RealAdapterBase):
-    """初回起動の手順コマンド（init → approve → run）を、模擬 Issue（ファイル）と代役の CLI で通す。"""
+class FirstRunBase(RealAdapterBase):
+    """init → approve を済ませたルートを作る部品（TASK 21 の試験も使う）。"""
 
     def approved_root(self):
         import shutil
@@ -253,6 +253,10 @@ class FirstRunCommands(RealAdapterBase):
     def auth_calls(self):
         path = os.path.join(self.cli_dir, "auth_calls.jsonl")
         return [json.loads(x) for x in open(path)] if os.path.exists(path) else []
+
+
+class FirstRunCommands(FirstRunBase):
+    """初回起動の手順コマンド（init → approve → run）を、模擬 Issue（ファイル）と代役の CLI で通す。"""
 
     def test_init_approve_run(self):
         fr, root = self.approved_root()

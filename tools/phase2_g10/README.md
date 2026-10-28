@@ -355,6 +355,41 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 - 次の手順（各行に人の明示の GO）: G10 が作った新しい承認番号の本文をちゃが貼る → approve → S2 → run
   （run は CLAIM の前にもう一度ログインを確かめる）。
 
+### 9-5. TASK 21（無人の検知と監督付き1回起動。既定は dry-run・常駐は未登録）
+- 事実: 2026-10-28 17:30 JST、人の各 GO のもとで実 Claude（claude-sonnet-5-5・Claude Max）を1回起動し、
+  ended_checks_passed（15/15）。この手動の流れを、検知役が周期的に行えるようにした。
+- `g10runner/autorun.py` と `bin/g10_autorun.py --root ROOT [--interval 300] [--once] [--live]`:
+  - 周期ごとに Issue #323 をログインなしで読み、次がすべてそろったときだけ起動する（--live のときだけ。既定は判定と記録だけ）。
+    1. HALT・STOP がない
+    2. 自動実行できる Phase 2 TASK である
+    3. その承認がまだ CLAIM されていない
+    4. **その本文に人の REAL_CLAUDE_GO がある（期限内）**
+    5. S2 が生きている
+    6. CLI が GO どおりで、子の環境でログイン済み
+  - 起動は手動の `run` と同じ関数（autorun.launch）。1つの承認で起動は1回（CLAIM）。
+  - 記録は `control/priv/autorun.log`。本文・秘密・メールアドレスは書かない。
+  - 同じルートで2つ同時には動かない（排他ロック）。--live の繰り返しは 300秒以上の間隔だけ。
+  - つまり「無人」とは、人が本文ごとに approve（署名）しておけば、検知役が見つけて起動・監督・報告まで行うこと。
+    人の承認なしに起動することはない。
+- `bin/g10_first_run.py unhalt --root ROOT --reason "..."`: 人の署名で HALT を解除する。実行中のラン・記録の食い違いがあれば解除しない。
+  TASK 20 では Control.unhalt を直接呼んだが、今後はこれを使う。
+- `bin/g10_first_run.py plists --root ROOT [--interval 300] [--live]`: S2 と検知役の LaunchAgent（主ユーザーの gui ドメイン）の
+  plist を作って検査し、登録・確認・停止のコマンドを表示するだけ（実行しない）。
+  - 専用ユーザー（_g10*）の LaunchDaemon にしない理由: Claude Max のログインは主ユーザーの Keychain にあり、
+    専用ユーザーでは使えないため（使うには専用ユーザーでの別のログインが要り、token の発行に当たる）。
+- 作業フォルダを読み取り専用にするとき、実行ビットを保つようにした。シンボリックリンクは辿らない（作業フォルダの外の権限を変えない）。
+
+#### 実際の無人の初回起動までの最小の承認点（上から順に。各行は人の明示の GO）
+| # | 誰が | 何を | 備考 |
+|---|---|---|---|
+| 1 | 人 | 方式の決定: 主ユーザーの LaunchAgent で常駐させてよいか（F0 専用ユーザーは使わない） | 実 Claude は主ユーザーの権限で動く（道具は読み取りだけ・子の環境は PATH・LANG・HOME・USER） |
+| 2 | 人（GO 後に G10） | `bin/g10_first_run.py plists --root "<ROOT>" --live` で plist を作る（作るだけ） | `--live` なしなら dry-run の常駐 |
+| 3 | 人 | 表示された `launchctl bootstrap gui/$(id -u) '<plist>'` を、S2 → 検知役の順に実行（常駐の開始） | sudo は不要。止めるのは `launchctl bootout gui/$(id -u)/<label>` |
+| 4 | ちゃ | G10 が作った新しい承認番号の本文を Issue #323 に貼る | 本文は G10 が作って検査（ちゃは計算できない） |
+| 5 | 人（GO 後に G10） | `bin/g10_first_run.py approve --root "<ROOT>" --cli <CLI> --source-repo <REPO> [--valid-minutes N]` | これが起動の承認。以後は検知役が見つけて1回起動する |
+| 6 | 人 | 結果の確認（ローカル REPORT・autorun.log）。異常時は `halt` | 費用: まず Max の枠。追加使用量が有効なら、枠を超えた分は課金されうる |
+- 1〜3 は一度だけ、4〜6 は起動のたびに行う。取得係の別プロセス化は未了（TASK 17 のとおり。人の GO が本文のハッシュを固定するので、別の本文は走らない）。
+
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。

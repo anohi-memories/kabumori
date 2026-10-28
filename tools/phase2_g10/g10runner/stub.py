@@ -43,9 +43,17 @@ def _hook(hooks, name, run_dir):
 
 
 def _readonly_tree(path):
+    """作業フォルダを読み取り専用にする。TASK 21: 実行ビットは保つ（落とすと git には変更に見え、Claude が「変更あり」と
+    申告した）。シンボリックリンクは辿らない（リンク先の作業フォルダの外のファイルの権限を変えない）。"""
     for dirpath, dirnames, filenames in os.walk(path):
         for name in filenames:
-            os.chmod(os.path.join(dirpath, name), stat.S_IRUSR | stat.S_IRGRP)
+            p = os.path.join(dirpath, name)
+            if os.path.islink(p):
+                continue
+            mode = stat.S_IRUSR | stat.S_IRGRP
+            if os.stat(p).st_mode & stat.S_IXUSR:
+                mode |= stat.S_IXUSR | stat.S_IXGRP
+            os.chmod(p, mode)
     for dirpath, dirnames, filenames in os.walk(path, topdown=False):
         os.chmod(dirpath, stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP)
 

@@ -10,6 +10,8 @@
             CLAIM の前に止める（承認は消費しない）。ログインしていれば CLAIM し、受理してスタブを起動する（GO と一致すれば実 CLI を1回だけ起動）。
             終了を待ち、finalize して REPORT の下書きの場所を表示する。              ← 実 Claude の起動（要 GO）
   halt      緊急停止（ハードHALT）。実行中のランを止め、以後の起動も止める。
+  plists    （TASK 21）S2 と検知役の LaunchAgent の plist を作って検査するだけ（登録しない。登録・停止の手順を表示）。
+  unhalt    （TASK 21）人の署名で HALT を解除する（--reason 必須）。実行中のラン・記録の食い違いがあれば解除しない。
   auth-check  （TASK 19）子と同じ環境で `<CLI> auth status --json` を1回だけ実行し、ログインの有無を表示する。
             モデルは呼ばない（課金なし）。メールアドレス等の生の出力は表示しない。--with-env NAME で、秘密を含まない
             決まった名前の環境変数（USER・LOGNAME・TMPDIR・SHELL・__CF_USER_TEXT_ENCODING）を診断のために加えられる。
@@ -25,8 +27,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import ecdsa_signing as ec, meta, norm, policy as policy_mod, real_claude, registry, signing, wiring  # noqa: E402
-from g10runner.agent import Agent  # noqa: E402
+from g10runner import autorun, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, signing, wiring  # noqa: E402
 from g10runner.control import Control  # noqa: E402
 from g10runner.fsutil import sha256_hex  # noqa: E402
 from g10runner.layout import Layout  # noqa: E402
@@ -45,17 +46,8 @@ def first_run_policy():
     return p
 
 
-def control_side(root):
-    keys = os.path.join(root, "keys")
-    cfg = wiring.load(root)
-    signer = ec.EcdsaSigner({"runner": os.path.join(keys, "runner.key"), "human": os.path.join(keys, "human.key")})
-    return Layout(root), signer, wiring.verifier(root, cfg), cfg
-
-
 def open_control(root):
-    layout, signer, verifier, cfg = control_side(root)
-    policy = policy_mod.load(layout.policy_pub)
-    return Control(layout, signer, verifier, policy, witness=wiring.witness(root, cfg, policy)), policy
+    return autorun.open_control(root)
 
 
 def cmd_init(a):
@@ -115,19 +107,10 @@ def cmd_approve(a):
     return 0
 
 
-def usable_go(control, body, now):
-    """この本文の SHA-256 に結び付いた、期限内の REAL_CLAUDE_GO（無ければ None）。"""
-    body_sha = sha256_hex(body.encode("utf-8"))
-    for go in reversed(control.read_state().real_gos):
-        if go["body_sha256"] == body_sha and now < go["expires_at"]:
-            return go
-    return None
-
-
 def cmd_run(a):
     control, policy = open_control(a.root)
     snap = fetch_body(control, policy)
-    go = usable_go(control, snap["body"], time.time())
+    go = autorun.usable_go(control, snap["body"], time.time())
     if go is None:
         raise SystemExit("no usable REAL_CLAUDE_GO for the current Issue body (nothing claimed)")
     if os.path.realpath(go["cli_realpath"]) != go["cli_realpath"]:
@@ -137,27 +120,11 @@ def cmd_run(a):
     if auth["logged_in"] is not True:
         raise SystemExit("auth preflight failed: the CLI is not logged in in the child environment "
                          "(nothing claimed; the approval is still unused)")
-    meta_ = {"state": snap["state"], "number": snap["number"], "author": snap["author"], "editor": None}
-    run_id, reason = control.try_claim(snap["body"], meta_, time.time())
-    if run_id is None:
-        raise SystemExit("not claimed: %s" % reason)
-    signer, verifier = wiring.agent_side(control.layout.root)
-    agent = Agent(control.layout, signer, verifier, policy)
-    stub, reason = agent.handle_request_file(control.layout.request_file(run_id))
-    if stub is None:
-        raise SystemExit("not accepted: %s" % reason)
-    print(json.dumps({"run_id": run_id, "stub_pid": stub.pid, "note": "waiting for the run to end"}))
-    stub.wait()
-    deadline = time.time() + 600
-    while time.time() < deadline:
-        e = registry.load(control.layout, run_id)
-        if e and e["state"] not in registry.NON_TERMINAL:
-            break
-        time.sleep(1)
-    status, end = control.finalize(run_id, current_body=snap["body"])
-    print(json.dumps({"run_id": run_id, "status": status, "used_states": agent.used_state(run_id),
-                      "report": os.path.join(control.layout.reports, run_id + ".md")}, ensure_ascii=False))
-    return 0 if status == "ended_checks_passed" else 1
+    result = autorun.launch(control, policy, snap)
+    if result["status"] in ("not_claimed", "not_accepted"):
+        raise SystemExit("%s: %s" % (result["status"].replace("_", " "), result["reason"]))
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["status"] == "ended_checks_passed" else 1
 
 
 def cmd_halt(a):
@@ -167,6 +134,33 @@ def cmd_halt(a):
     print(json.dumps({"halted": True, "resolved": result["resolved"], "problems": result["problems"]},
                      ensure_ascii=False))
     return 0 if result["resolved"] else 1
+
+
+def cmd_unhalt(a):
+    """人の署名で HALT を解除する（TASK 21）。実行中のラン・記録の食い違いがあれば解除しない。"""
+    control, _ = open_control(a.root)
+    rec, problems = control.unhalt(a.reason)
+    print(json.dumps({"unhalted": rec is not None, "event_id": rec and rec["event_id"], "problems": problems},
+                     ensure_ascii=False))
+    return 0 if rec is not None else 1
+
+
+def cmd_plists(a):
+    """（TASK 21）S2 見張り役と検知役（autorun）の LaunchAgent の plist を作って検査する。登録はしない（人が GO の後に行う）。"""
+    root = os.path.realpath(a.root)
+    out_dir = os.path.realpath(a.out or os.path.join(root, "launchd-plans"))
+    os.makedirs(out_dir, 0o700, exist_ok=True)
+    os.makedirs(os.path.join(root, "logs"), 0o700, exist_ok=True)
+    shown = []
+    for kind, interval, live in (("watchdog", 60.0, False), ("autorun", a.interval, a.live)):
+        plan = launchd_plan.user_agent_plan(kind, "/usr/bin/python3", root, interval, live=live)
+        path = os.path.join(out_dir, plan["Label"] + ".plist")
+        with open(path, "wb") as f:
+            f.write(launchd_plan.render_validated_agent(plan))
+        shown.append({"kind": kind, "path": path, "live": live, "lint_ok": launchd_plan.lint(path),
+                      "commands_not_run": launchd_plan.agent_commands(plan["Label"], path)})
+    print(json.dumps({"plists": shown, "registered": False}, ensure_ascii=False, indent=1))
+    return 0 if all(x["lint_ok"] for x in shown) else 1
 
 
 def cmd_auth_check(a):
@@ -197,12 +191,20 @@ def main(argv=None):
     h = sub.add_parser("halt")
     h.add_argument("--root", required=True)
     h.add_argument("--reason", default="human emergency stop")
+    u = sub.add_parser("unhalt")
+    u.add_argument("--root", required=True)
+    u.add_argument("--reason", required=True, help="解除の理由（人の署名とともに記録される）")
+    pl = sub.add_parser("plists")
+    pl.add_argument("--root", required=True)
+    pl.add_argument("--out")
+    pl.add_argument("--interval", type=float, default=300.0)
+    pl.add_argument("--live", action="store_true", help="検知役の plist に --live を付ける（登録後、条件がそろえば起動する）")
     c = sub.add_parser("auth-check")
     c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
     a = p.parse_args(argv)
-    return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt,
-            "auth-check": cmd_auth_check}[a.cmd](a)
+    return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt, "unhalt": cmd_unhalt,
+            "plists": cmd_plists, "auth-check": cmd_auth_check}[a.cmd](a)
 
 
 if __name__ == "__main__":

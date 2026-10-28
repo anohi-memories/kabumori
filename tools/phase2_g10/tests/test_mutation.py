@@ -618,6 +618,17 @@ MUTANTS = [
     ("USER not passed to the real CLI child", "g10runner/claude_cli_plan.py",
      '"HOME": home, "USER": pwd.getpwuid(os.getuid()).pw_name}', '"HOME": home}',
      "test_task17_real_adapter.RealAdapterPath.test_one_supervised_launch_through_the_real_adapter_path"),
+    # TASK 21: 無人の検知
+    ("autorun launches without a human GO for this body", "g10runner/autorun.py",
+     '    if go is None:\n        return dict(out, decision="wait", reason="waiting for a human REAL_CLAUDE_GO for this body")\n',
+     '    if go is None:\n        go = control.read_state().real_gos[-1]\n',
+     "test_task21_autorun.AutorunE2E.test_no_launch_without_go_or_s2_or_login_or_with_a_changed_body"),
+    ("autorun ignores the S2 heartbeat", "g10runner/autorun.py",
+     '    if not supervise.s2_fresh(layout, policy, now):\n', '    if False:\n',
+     "test_task21_autorun.AutorunE2E.test_no_launch_without_go_or_s2_or_login_or_with_a_changed_body"),
+    ("autorun dry run starts the run", "g10runner/autorun.py",
+     '    if not live:\n        return record', '    if False:\n        return record',
+     "test_task21_autorun.AutorunE2E.test_detects_and_launches_once_then_stays_idle"),
 ]
 
 
