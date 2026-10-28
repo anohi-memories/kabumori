@@ -102,6 +102,10 @@ create table postona_x_resv.reservations (
   claimed_by text,
   provider_post_id text check (provider_post_id ~ '^[0-9]{1,30}$'),
   outcome_code text check (outcome_code ~ '^[A-Z][A-Z0-9_]{1,63}$'),
+  -- G3-38: G5's owner epoch / lifecycle version from the R1 allow token read when the row was made (create / single-post begin).
+  -- NULL = written before this rule: never claimed, never sent (failed at claim, refused at the pre-send check).
+  bound_owner_epoch bigint check (bound_owner_epoch is null or bound_owner_epoch >= 1),
+  bound_lifecycle_version bigint check (bound_lifecycle_version is null or bound_lifecycle_version >= 1),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (batch_id, position),
@@ -111,7 +115,8 @@ create table postona_x_resv.reservations (
   check (origin = 'user_authored' or consent_state = 'ai_owner_opt_in'),
   check (origin = 'ai_generated' or consent_state in ('confirmed', 'needs_reconfirm')),
   check (status <> 'claimed' or (lease_token is not null and lease_expires_at is not null)),
-  check (status <> 'published' or provider_post_id is not null)
+  check (status <> 'published' or provider_post_id is not null),
+  check ((bound_owner_epoch is null) = (bound_lifecycle_version is null))
 );
 create index reservations_due on postona_x_resv.reservations (scheduled_at) where status = 'planned';
 create index reservations_account on postona_x_resv.reservations (social_account_id, scheduled_at);
@@ -359,6 +364,7 @@ declare v_user uuid := postona_x_resv.caller();
         v_item jsonb; v_idx integer := 0; v_at timestamptz; v_body text; v_sha text;
         v_times timestamptz[] := '{}';
         v_approval text;
+        v_epoch bigint; v_lifecycle bigint;
 begin
   if p_mode is null or p_mode not in ('manual_exact', 'manual_random_batch', 'manual_interval', 'ai_flexible')
      or p_client_batch_id is null or p_revision is null or p_revision < 1
@@ -367,6 +373,8 @@ begin
     raise exception 'POSTONA_RESV_REQUEST_INVALID' using errcode = 'P0001';
   end if;
   v_brand := postona_x_resv.assert_account_access(v_user, p_social_account_id);
+  -- G3-38: G5 R1 for this workspace, read now; only an allow with a well-formed owner-epoch token is bound to the rows.
+  select b.owner_epoch, b.lifecycle_version into v_epoch, v_lifecycle from postona_x_resv.g5_r1_bound(v_brand) b;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:' || p_social_account_id, 0));
 
   v_hash := postona_x_resv.sha256_hex(pg_catalog.jsonb_build_object('mode', p_mode, 'band', p_band, 'items', p_items)::text);
@@ -432,7 +440,8 @@ begin
     v_body := case when v_origin = 'user_authored' then pg_catalog.btrim(v_item ->> 'body') end;
     insert into postona_x_resv.reservations
       (batch_id, user_id, brand_id, social_account_id, draft_id, position, origin, mode, body, content_sha256, scheduled_at,
-       fixed, consent_state, consent_sha256, consent_scheduled_at, consent_revision, consent_at, expires_at)
+       fixed, consent_state, consent_sha256, consent_scheduled_at, consent_revision, consent_at, expires_at,
+       bound_owner_epoch, bound_lifecycle_version)
     values (v_batch.id, v_user, v_brand, p_social_account_id, v_item ->> 'draft_id', v_idx, v_origin, p_mode, v_body,
             case when v_body is not null then postona_x_resv.sha256_hex(v_body) end, v_at,
             p_mode in ('manual_exact', 'manual_interval'),
@@ -441,7 +450,8 @@ begin
             case when v_origin = 'user_authored' then v_at end,
             case when v_origin = 'user_authored' then 1 end,
             case when v_origin = 'user_authored' then pg_catalog.now() end,
-            v_at + interval '6 hours');
+            v_at + interval '6 hours',
+            v_epoch, v_lifecycle);
     v_idx := v_idx + 1;
   end loop;
   insert into postona_x_resv.audit (user_id, batch_id, action, detail)
@@ -553,6 +563,62 @@ end $$;
 -- Worker actions (future service worker; no EXECUTE for any role in this candidate)
 -- ---------------------------------------------------------------------------------------------------
 
+/**
+ * G3-38: G5's R1 owner-epoch token g5oe:<epoch>:<lifecycle_version> -> the two numbers, or NULLs for anything else (empty, malformed,
+ * leading zero, zero, more than bigint). As 007's parser. Internal.
+ */
+create function postona_x_resv.parse_owner_epoch_token(p_token text, out owner_epoch bigint, out lifecycle_version bigint)
+language plpgsql immutable set search_path = '' as $$
+declare v text[];
+begin
+  if p_token is null or pg_catalog.length(p_token) > 64 then return; end if;
+  v := pg_catalog.regexp_match(p_token, '^g5oe:([1-9][0-9]{0,18}):([1-9][0-9]{0,18})$');
+  if v is null then return; end if;
+  begin
+    owner_epoch := v[1]::bigint;
+    lifecycle_version := v[2]::bigint;
+  exception when numeric_value_out_of_range then
+    owner_epoch := null;
+    lifecycle_version := null;
+  end;
+end $$;
+
+/**
+ * G3-38: the caller's G5 R1 verdict for this workspace (feature x_publish), read now. Only 'allow' with a well-formed token returns the
+ * two numbers to bind; a deny, a malformed token or a missing R1 refuses (SERVICE_NOT_ACTIVE, nothing written). Internal.
+ */
+create function postona_x_resv.g5_r1_bound(p_brand_id text, out owner_epoch bigint, out lifecycle_version bigint)
+language plpgsql volatile security definer set search_path = '' as $$
+declare v_verdict jsonb;
+begin
+  if pg_catalog.to_regprocedure('public.common_account_authorization_verdict(text,text,text)') is null then
+    raise exception 'POSTONA_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
+  end if;
+  v_verdict := public.common_account_authorization_verdict('postona', 'x_publish', p_brand_id);
+  if v_verdict ->> 'decision' is distinct from 'allow' then
+    raise exception 'POSTONA_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
+  end if;
+  select t.owner_epoch, t.lifecycle_version into owner_epoch, lifecycle_version
+    from postona_x_resv.parse_owner_epoch_token(v_verdict ->> 'owner_epoch') t;
+  if owner_epoch is null or lifecycle_version is null then
+    raise exception 'POSTONA_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
+  end if;
+end $$;
+
+/**
+ * G3-38: G5's W1 for a row's bound numbers: 'active' only when the workspace's owner epoch and the owner's lifecycle version are still
+ * the ones the row was made under (A -> B -> A is a NEW epoch). An unbound row, a missing W1 or no answer is never 'active'. Internal.
+ */
+create function postona_x_resv.g5_bound_state(p_brand_id text, p_owner_epoch bigint, p_lifecycle_version bigint) returns text
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if p_owner_epoch is null or p_lifecycle_version is null then return 'OWNER_EPOCH_UNBOUND'; end if;
+  if pg_catalog.to_regprocedure('private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)') is null then
+    return 'SERVICE_STATE_UNKNOWN';
+  end if;
+  return coalesce(private.account_lifecycle_worker_brand_verdict(p_brand_id, 'x_autopost', p_owner_epoch, p_lifecycle_version), 'SERVICE_STATE_UNKNOWN');
+end $$;
+
 /** Is this planned/claimed row still publishable right now (consent intact, owner + G5 + G4 live)? */
 create function postona_x_resv.row_publishable(p_row postona_x_resv.reservations) returns boolean
 language plpgsql stable security definer set search_path = '' as $$
@@ -570,6 +636,10 @@ begin
     return false;
   end if;
   if not exists (select 1 from public.social_accounts sa where sa.id = p_row.social_account_id and sa.brand_id = p_row.brand_id and sa.platform = 'x') then
+    return false;
+  end if;
+  -- G3-38: still the owner epoch / lifecycle version the row was made under (G5 W1); unbound or changed -> not publishable.
+  if postona_x_resv.g5_bound_state(p_row.brand_id, p_row.bound_owner_epoch, p_row.bound_lifecycle_version) is distinct from 'active' then
     return false;
   end if;
   return postona_x_resv.g5_x_autopost_allowed(p_row.user_id) is true

@@ -74,6 +74,9 @@ echo "G5_BASELINE_READY"
 s22_pinned "$tmp/s22.sql"
 own "$db" -f "$tmp/s22.sql" >/dev/null
 echo "G5_S2_2_PINNED_INSTALLED"
+# G3-38: G5's R1 / W1 (create binds the owner epoch, claim / send re-check it) -- G3's TEST DOUBLE (g5_r1_w1_test_double.sql)
+own "$db" -f "$here/g5_r1_w1_test_double.sql" >/dev/null
+echo "G5_R1_W1_TEST_DOUBLE_INSTALLED"
 
 # The reservation candidate on top: 001 (+ its DENY stubs) and 002 (API role).
 own "$db" -f "$here/001_postona_x_reservations.sql" >/dev/null

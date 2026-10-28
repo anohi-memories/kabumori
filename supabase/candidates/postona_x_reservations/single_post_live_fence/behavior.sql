@@ -182,6 +182,25 @@ select pg_temp.expect((select status from postona_x_resv.reservations where id =
 select pg_temp.expect(pg_temp.api(pg_temp.readback(:'x5id'), pg_temp.person(90), :'s90') = 'ERR:POSTONA_RESV_NOT_FOUND', 'X5 another person still cannot read');
 select 'L6_RECORD_AFTER_FREEZE_SIMULATED_READBACK_PASS' as result;
 
+-- EP (G3-38): a single post begun by A, then A -> B -> A on the workspace before the pre-send check: refused (failed, never sent);
+-- a new single post after the change goes through to OK. People 99 (A) and 93 (B).
+select pg_temp.session(pg_temp.person(99)) as s99 \gset
+select (select publish_enabled from public.social_accounts where id = pg_temp.account(99)) as ep99 \gset
+update public.social_accounts set publish_enabled = true where id = pg_temp.account(99);
+select pg_temp.api(pg_temp.begin_sp(pg_temp.account(99), gen_random_uuid(), 'EP before'), pg_temp.person(99), :'s99') as bep \gset
+select pg_temp.expect(:'bep' like 'claimed/%', 'EP begin ' || :'bep');
+delete from public.brand_memberships where brand_id = pg_temp.brand(99) and role = 'owner';
+insert into public.brand_memberships (brand_id, user_id, role) values (pg_temp.brand(99), pg_temp.person(93), 'owner');
+delete from public.brand_memberships where brand_id = pg_temp.brand(99) and role = 'owner';
+insert into public.brand_memberships (brand_id, user_id, role) values (pg_temp.brand(99), pg_temp.person(99), 'owner');
+select pg_temp.expect(pg_temp.api(pg_temp.preflight(split_part(:'bep', '/', 3), split_part(:'bep', '/', 2)), pg_temp.person(99), :'s99') = 'NOT_PUBLISHABLE/', 'EP A -> B -> A refused at the check');
+select pg_temp.expect((select status || '/' || outcome_code from postona_x_resv.reservations where id = split_part(:'bep', '/', 3)::uuid) = 'failed/NOT_PUBLISHABLE_AT_SEND', 'EP failed, never sent');
+select pg_temp.api(pg_temp.begin_sp(pg_temp.account(99), gen_random_uuid(), 'EP after'), pg_temp.person(99), :'s99') as aep \gset
+select pg_temp.expect(pg_temp.api(pg_temp.preflight(split_part(:'aep', '/', 3), split_part(:'aep', '/', 2)), pg_temp.person(99), :'s99') like 'OK/%', 'EP a post begun after the change passes the check');
+update postona_x_resv.reservations set status = 'cancelled', lease_token = null, lease_expires_at = null where id = split_part(:'aep', '/', 3)::uuid;
+update public.social_accounts set publish_enabled = :'ep99'::boolean where id = pg_temp.account(99);
+select 'EP_SINGLE_POST_OWNER_EPOCH_PASS' as result;
+
 -- L7: the delivery worker still never claims a single post and its four functions are unchanged.
 begin;
 set local role postona_resv_worker;

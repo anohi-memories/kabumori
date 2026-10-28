@@ -83,6 +83,9 @@ echo "BASELINE_G5_RESERVATIONS_001_002_READY"
 s22_pinned "$tmp/s22.sql"
 own "$db" -f "$tmp/s22.sql" >/dev/null
 echo "G5_S2_2_PINNED_INSTALLED"
+# G3-38: G5's R1 / W1 (create binds the owner epoch, claim / send re-check it) -- G3's TEST DOUBLE (g5_r1_w1_test_double.sql)
+own "$db" -f "$here/g5_r1_w1_test_double.sql" >/dev/null
+echo "G5_R1_W1_TEST_DOUBLE_INSTALLED"
 
 # D0: 004 needs 003 (the real G5 binding); a failed apply leaves nothing; a re-apply is refused.
 own "$plain" -f "$here/test_fixture.sql" >/dev/null
@@ -114,7 +117,7 @@ echo "D0_REFUSALS_ATOMIC_REAPPLY_PASS"
 
 # D1: SQL behaviour.
 own "$db" -f "$here/dispatch/dispatch_behavior.sql" >"$tmp/d1" 2>&1 || { cat "$tmp/d1"; fail "behaviour"; }
-for marker in W1_WORKER_ROLE_BOUNDARY_PASS W2_W3_RELEASE_UNSENT_PASS W4_W5_W6_LIVE_PERMISSIONS_AT_CLAIM_AND_SEND_PASS \
+for marker in W1_WORKER_ROLE_BOUNDARY_PASS W2_W3_RELEASE_UNSENT_PASS W4_W5_W6_LIVE_PERMISSIONS_AT_CLAIM_AND_SEND_PASS W7_OWNER_EPOCH_ABA_NEVER_SENT_PASS \
               POSTONA_RESV_DISPATCH_BEHAVIOR_PASS; do
   grep -q "$marker" "$tmp/d1" || { cat "$tmp/d1"; fail "missing $marker"; }
   echo "$marker"

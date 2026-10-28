@@ -91,6 +91,9 @@ echo "BASELINE_G5_STAGE3B_ONBOARDING_GUARD_RESERVATIONS_001_004_READY"
 s22_pinned "$tmp/s22.sql"
 own "$db" -f "$tmp/s22.sql" >/dev/null
 echo "G5_S2_2_PINNED_INSTALLED"
+# G3-38: G5's R1 / W1 (create binds the owner epoch, claim / send re-check it) -- G3's TEST DOUBLE (g5_r1_w1_test_double.sql)
+own "$db" -f "$here/g5_r1_w1_test_double.sql" >/dev/null
+echo "G5_R1_W1_TEST_DOUBLE_INSTALLED"
 
 # S0: 005 needs 001-004 and T13; a failed apply leaves nothing; a re-apply is refused.
 own "$plain" -f "$here/test_fixture.sql" >/dev/null

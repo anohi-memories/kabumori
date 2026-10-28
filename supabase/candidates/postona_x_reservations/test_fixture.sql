@@ -72,3 +72,6 @@ begin perform set_config('request.jwt.claim.sub', coalesce(p::text, ''), false);
 create schema if not exists private;
 create function private.postona_personal_session() returns text language sql stable
 as $$ select case when auth.uid() is null then 'AUTH_REQUIRED' else 'active' end $$;
+
+-- TEST DOUBLES (G3-38) of G5's R1 / W1 for this minimal world: see the file.
+\ir g5_r1_w1_test_double.sql

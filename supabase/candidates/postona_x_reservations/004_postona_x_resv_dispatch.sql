@@ -141,7 +141,7 @@ end $$;
 create or replace function postona_x_resv.claim_due(p_worker text, p_lease_seconds integer, p_limit integer)
 returns table (reservation_id uuid, lease_token uuid, social_account_id text, body text, scheduled_at timestamptz)
 language plpgsql volatile security definer set search_path = '' as $$
-declare v_user uuid; v_allowed uuid[] := '{}'; v_row postona_x_resv.reservations%rowtype; v_token uuid; v_count integer := 0;
+declare v_user uuid; v_allowed uuid[] := '{}'; v_row postona_x_resv.reservations%rowtype; v_token uuid; v_count integer := 0; v_bound text;
 begin
   if p_worker is null or p_worker !~ '^[a-z0-9_-]{1,40}$' or p_lease_seconds not between 30 and 900 or p_limit not between 1 and 50 then
     raise exception 'POSTONA_RESV_REQUEST_INVALID' using errcode = 'P0001';
@@ -175,6 +175,18 @@ begin
     for update skip locked
   loop
     exit when v_count >= p_limit;
+    -- G3-38: a row made under another owner epoch / lifecycle version (A -> B -> A, a restarted service) or before binding existed is
+    -- never sent: it is closed as failed with G5 W1's answer and an audit row (no text), not left to be claimed later.
+    v_bound := postona_x_resv.g5_bound_state(v_row.brand_id, v_row.bound_owner_epoch, v_row.bound_lifecycle_version);
+    if v_bound is distinct from 'active' then
+      update postona_x_resv.reservations r
+      set status = 'failed', outcome_code = case when v_bound ~ '^[A-Z][A-Z0-9_]{1,63}$' then v_bound else 'SERVICE_STATE_UNKNOWN' end,
+          updated_at = pg_catalog.now()
+      where r.id = v_row.id;
+      insert into postona_x_resv.audit (user_id, reservation_id, action, detail)
+      values (v_row.user_id, v_row.id, 'claim_refused', pg_catalog.jsonb_build_object('g5_bound_state', v_bound));
+      continue;
+    end if;
     continue when not postona_x_resv.row_publishable(v_row);
     v_token := gen_random_uuid();
     update postona_x_resv.reservations r

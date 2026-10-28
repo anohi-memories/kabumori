@@ -157,6 +157,33 @@ select pg_temp.expect(pg_temp.status(:'w5b') = 'planned', 'W6 stays planned');
 update postona_x_resv.reservations set status = 'cancelled' where id in (:'w5', :'w5b');
 select 'W4_W5_W6_LIVE_PERMISSIONS_AT_CLAIM_AND_SEND_PASS' as result;
 
+-- W7 (G3-38): the owner epoch the row was made under. A -> B -> A after a reservation was made: the worker never sends it (failed with
+-- W1's code + an audit row, no text); a reservation made after the change is claimed normally; a row with no binding (made before
+-- this rule) is closed too. People 48 (A) and 49 (B).
+select pg_temp.person(48) is not null as w7a, pg_temp.person(49) is not null as w7b \gset
+select public.social_mobile_account_deletion_workspace(pg_temp.uid(48)) as w7brand \gset
+select pg_temp.reserve(pg_temp.uid(48), 'w7old', 3) as w7old \gset
+select pg_temp.reserve(pg_temp.uid(48), 'w7null', 4) as w7null \gset
+update postona_x_resv.reservations set bound_owner_epoch = null, bound_lifecycle_version = null where id = :'w7null';  -- TEST ONLY: a pre-binding row
+delete from public.brand_memberships where brand_id = :'w7brand' and role = 'owner';
+insert into public.brand_memberships (brand_id, user_id, role) values (:'w7brand', pg_temp.uid(49), 'owner');
+delete from public.brand_memberships where brand_id = :'w7brand' and role = 'owner';
+insert into public.brand_memberships (brand_id, user_id, role) values (:'w7brand', pg_temp.uid(48), 'owner');
+select pg_temp.make_due(:'w7old');
+select pg_temp.make_due(:'w7null');
+select pg_temp.claim() as w7claims \gset
+select pg_temp.expect(:'w7claims' not like '%' || :'w7old' || '%' and :'w7claims' not like '%' || :'w7null' || '%', 'W7 neither stale row is claimed');
+select pg_temp.expect((select status || '/' || outcome_code from postona_x_resv.reservations where id = :'w7old') = 'failed/OWNER_EPOCH_CHANGED', 'W7 A -> B -> A: failed, never sent');
+select pg_temp.expect((select status || '/' || outcome_code from postona_x_resv.reservations where id = :'w7null') = 'failed/OWNER_EPOCH_UNBOUND', 'W7 unbound: failed, never sent');
+select pg_temp.expect((select count(*) from postona_x_resv.audit where reservation_id in (:'w7old', :'w7null') and action = 'claim_refused') = 2, 'W7 audit');
+select pg_temp.expect(pg_temp.claim() not like '%' || :'w7old' || '%', 'W7 a failed row is never claimed later');
+select pg_temp.reserve(pg_temp.uid(48), 'w7new', 5) as w7new \gset
+select pg_temp.make_due(:'w7new');
+select pg_temp.expect(pg_temp.claim() like '%' || :'w7new' || '%', 'W7 made after the change: claimed normally');
+select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.release_unsent(%L, %L)', :'w7new', pg_temp.lease_of(:'w7new'))) = 'released', 'W7 handed back (keeps the later cases clean)');
+update postona_x_resv.reservations set status = 'cancelled' where id = :'w7new';
+select 'W7_OWNER_EPOCH_ABA_NEVER_SENT_PASS' as result;
+
 -- Setup for the two-session cases in dispatch_run.sh (L1 lock order, busy fence): people 44..47, one reservation each.
 select pg_temp.person(n) is not null from generate_series(44, 47) n;
 insert into t_ids.ids select 'r' || n, pg_temp.reserve(pg_temp.uid(n), 'l' || n, 5) from generate_series(44, 47) n;
