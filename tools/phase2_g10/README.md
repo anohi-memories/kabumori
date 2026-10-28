@@ -390,6 +390,43 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 | 6 | 人 | 結果の確認（ローカル REPORT・autorun.log）。異常時は `halt` | 費用: まず Max の枠。追加使用量が有効なら、枠を超えた分は課金されうる |
 - 1〜3 は一度だけ、4〜6 は起動のたびに行う。取得係の別プロセス化は未了（TASK 17 のとおり。人の GO が本文のハッシュを固定するので、別の本文は走らない）。
 
+### 9-6. TASK 22（固定版。常駐は開発 worktree ではなく、検証済みの不変のコピーを使う）
+- `g10runner/release.py` と `bin/g10_first_run.py install [--dest <親>]`（既定の親: `~/Library/Application Support/kabumori-agent-watch/phase2-release`）:
+  - 開発 worktree の g10runner・bin・fake_claude の *.py を `<親>/<版16桁>/` に写す。
+  - 写す前に、元に未コミットの変更がないことを確かめる（あれば作らない）。
+  - manifest.json には、各ファイルの SHA-256 と git のコミットを書く。版はそのハッシュの先頭16桁。ファイルは 0444、フォルダは 0555。
+  - 同じ版がすでにあれば、検証して再利用する（上書きしない）。
+- 検証（`release.verify`）: マニフェストのハッシュ、フォルダ名、ファイルの集合・中身を確かめる。シンボリックリンクや書き込み可の権限があれば不合格。
+- 固定版から動くとき:
+  - `bin/g10_autorun.py`・`bin/g10_watchdog.py` は `--release-digest` が必須で、開始時に検証する（合わなければ開始しない）。
+  - 検知役は、起動の直前ごとにもう一度検証する。合わなければハードHALT にして起動しない（解除は人の unhalt）。
+  - 開発 worktree からの `--live` は、試験用の `--dev` を付けたときだけ動く。
+- `plists` は固定版の中の `g10_first_run.py` からだけ作れる。plist は、その固定版のスクリプトと版のハッシュを指す（規則で検査）。
+
+#### 運用の手順（ROOT = `~/Library/Application Support/kabumori-agent-watch/phase2-run`、REL = install が表示した版のフォルダ）
+- 固定版を作る: `/usr/bin/python3 -I tools/phase2_g10/bin/g10_first_run.py install` → release_dir と release_digest が表示される。
+- plist を作る: `/usr/bin/python3 -I "$REL/bin/g10_first_run.py" plists --root "$ROOT" --live`。`$ROOT/launchd-plans/` に2つでき、登録のコマンドが表示される。
+- 常駐の開始（人）: `launchctl bootstrap gui/$(id -u) "$ROOT/launchd-plans/com.kabumori.g10.phase2.agent.watchdog.plist"` → 同じく `...agent.autorun.plist`。
+- 確認: `launchctl print gui/$(id -u)/com.kabumori.g10.phase2.agent.autorun`、ログ `$ROOT/logs/*.out|*.err`、判定の記録 `$ROOT/control/priv/autorun.log`。
+- 起動の承認（人の GO の後）: ちゃが貼った本文に対して、`... approve --root "$ROOT" --cli <CLI> --source-repo /Users/yuya/Developer/kabumori --valid-minutes 120`。検知役は 300秒ごとに見て、1回だけ起動する。
+- 報告の回収: `$ROOT/control/priv/reports/<run_id>.md`（ローカル REPORT）と autorun.log の launched の行。G10 が読んで #323 に投稿する。
+- 緊急停止: `... halt --root "$ROOT" --reason "..."`（実行中のランも止める）。常駐ごと止めるなら、autorun → watchdog の順に `launchctl bootout gui/$(id -u)/<label>`。
+- 再開: 原因を確かめてから `... unhalt --root "$ROOT" --reason "..."`。
+- 更新（新しいコードにする）: 新しく install して新しい版を作る → plists を作り直す → `bootout`（旧）→ `bootstrap`（新）。古い版のフォルダは残る（不変）。
+
+#### 初回の無人起動に要る GO と実行順（この1か所にまとめる）
+| # | 誰が | 何を | 種類 |
+|---|---|---|---|
+| 1 | 人 | 方式の承認: 主ユーザーの LaunchAgent で常駐（F0 なし）。実 Claude は主ユーザーの権限で、読み取りの道具だけで動く | 方式の GO |
+| 2 | 人の GO の後に G10 | `install`（固定の場所に固定版を作る）→ 固定版から `plists --live` | ファイルの作成だけ |
+| 3 | 人 | `launchctl bootstrap` を2つ（S2 → 検知役） | **常駐の開始（OS）** |
+| 4 | ちゃ | G10 が作った新しい承認番号の本文を #323 に一字一句そのまま貼る | Issue 本文 |
+| 5 | 人の GO の後に G10 | `approve --valid-minutes 120` | **実 Claude の起動の承認・費用の許可** |
+| 6 | 検知役（無人） | 5分以内に見つけて1回起動 → 監督 → 終了判定 → ローカル REPORT | 無人 |
+| 7 | G10 | 結果を読んで #323 に REPORT。必要なら halt／bootout | 回収 |
+- 費用: まず Max（5x）の枠が使われる。追加使用量が有効なので、枠を超えた分は課金されうる（TASK 20 の1回は CLI 表示で 0.095 USD）。
+- 主ユーザーの権限で動くことの危険: 道具は Read/Glob/Grep だけだが、作業フォルダの外のファイルを読めるかは Claude Code の権限の仕組みに依る（実機で未確認）。結果はローカルの REPORT だけで、外への送信はしない。本文ごとに人の承認が要る。
+
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。
