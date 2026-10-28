@@ -1,0 +1,4 @@
+standard prebuild (no hand edits) on G1 #551 c94c0268, app.json plugins include ./plugins/with-ios27-scene.plugin.js:
+- Info.plist UISceneDelegateClassName = $(PRODUCT_MODULE_NAME).SceneDelegate
+- AppDelegate.swift:6:class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
+- AppDelegate.swift:67:class SceneDelegate: ExpoAppSceneDelegate {}

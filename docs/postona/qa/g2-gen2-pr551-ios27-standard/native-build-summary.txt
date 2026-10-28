@@ -1,0 +1,4 @@
+› 0 error(s), and 0 warning(s)
+› Installing on G2-PR551-20261028
+› Opening on G2-PR551-20261028 (com.anonymous.kabumori-social-mobile)
+exit=0
