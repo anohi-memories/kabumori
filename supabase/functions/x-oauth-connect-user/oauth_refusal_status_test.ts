@@ -23,9 +23,10 @@ test("rpcRefusalStatus: session refusals are 401, workspace refusals 409, the re
   ]) {
     assert.equal(rpcRefusalStatus(code, 400), 400, code);
   }
-  // PostgREST's own 401 / 403 are kept whatever the code says
-  assert.equal(rpcRefusalStatus("OWN_WORKSPACE_CONFLICT", 403), 403);
+  // PostgREST's own 401 / 403 (a message that is no known code: JWT, ACL) are kept; a known code is classified first (G4-47)
+  assert.equal(rpcRefusalStatus("SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED", 403), 403);
   assert.equal(rpcRefusalStatus("anything", 401), 401);
+  assert.equal(rpcRefusalStatus("OWN_WORKSPACE_CONFLICT", 403), 409);
 });
 
 async function startWithRefusal(message: string, status = 400) {
