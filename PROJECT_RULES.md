@@ -1,5 +1,17 @@
 # Kabumori Project Rules
 
+## 2026-10-28 POSTONA完成優先・レビュー最小化（ユーザー確定指令）
+
+全15枠の実運用ゲートは [Issue #299 コメント6464422660](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6464422660) とする。この節は旧い「変更のたびに自動でHレビュー」「小修正後に機械的に再レビュー」運用より優先。ただしproduction変更や安全ゲートを緩めるものではない。
+
+- **ゴール**：TASK数・レビュー数ではなく、POSTONAの実際に使える機能と安全な完成を優先する。K/CのたびにレビューTASKを作成しない。次TASKは実製品への効果と未解消リスクを説明できること。
+- **軽微な差分**：文言・小UI・既レビュー済みの限定的なエラー分類や固定契約の小修正は、修正前FAIL→修正後PASS・関係回帰・lint/typecheck・担当ちゃのPR/HEAD確認・REPORT/HISTORY/ACCEPTで原則完結し、H再レビューをデフォルトで追加しない。
+- **高リスクは一括・必要最小限**：DB schema/migration、Auth/RLS、RPC/SECURITY DEFINER、OAuth/token/Vault/Edgeの新しい権限境界、外部実write、SNS実投稿、並行性・冪等性、重大障害、本番前は独立レビューを優先。ただし機能単位でまとめ、既にレビュー済みの範囲は再レビューしない。レビューを登録する場合は「**新規リスク／テストで足りない理由／まとめる機能単位**」をTASKに記す。根拠のない小レビューTASKは登録禁止。
+- **修正ループの停止**：CHANGES_REQUIRED後でも、同一契約の局所的な修正はリスクを再評価し、回帰テストと担当ちゃ確認で受入可能か判断する。元の未受入・差戻し証跡は保護し、未修正のP0/P1や新しい認可境界は省略不可。レビュー終了後は重複mockや小修正を増やさず、製品導線の実結線・統合QA・実機検証へ。
+- **既存作業と本番の保護**：H1〜H5の現役ready/in_progress/review_requiredを勝手に取消・PASS/完了扱いしない。既存のTASK/REPORT/HISTORY/ACCEPT、担当worktree、競合、50件世代管理は従来どおり保護する。production DB/Auth/RLS/Edge/Vault、OAuth/SNS実write、merge/deploy/本番承認は別の明示的な安全ゲートが必要。
+- **適用例**：G4 PR #547の3ファイル・HTTP403分類小修正はREPORTで修正前3件FAIL→修正後4件PASS、Edge43件PASS。今後同類の細かな再レビューを自動発行しない。ただし既にH2 #329に登録済みのTASKは最新開始証拠を確認せず上書き・取消しない。
+
+
 ## 2026-10-20 安全性チェック拒否時の正規再試行（最新ユーザー指示）
 
 全担当ちゃへの共通指令：[Issue #299 コメント6279552877](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6279552877)。**安全性チェックで一度拒否されたことを理由に、後日の通常の正規再試行まで一律禁止しない。** この節は下の「安全拒否ならSTOP／別経路禁止」を、以下の手順として具体化し最優先する。
