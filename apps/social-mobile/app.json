@@ -9,7 +9,8 @@
     "plugins": [
       "expo-router",
       "expo-web-browser",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "./plugins/with-ios27-scene.plugin.js"
     ],
     "experiments": {
       "typedRoutes": true
