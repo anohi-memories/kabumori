@@ -199,6 +199,96 @@ test('AppDelegate: any other template makes prebuild FAIL instead of being patch
   }
 });
 
+// G1 TASK 24 (H1 review of PR #544, P2 F1): an incomplete AppDelegate must never be taken as adopted -- neither on the first run nor
+// when the file already looks applied. ExpoAppSceneDelegate stops the app (fatalError) when `reactNativeFactory` is nil, and an
+// own window / start left in any #if spelling would start React Native a second time next to the scene.
+const KEPT = '    reactNativeFactory = factory\n';
+const SCENE_BLOCK = ADOPTED_APP_DELEGATE.slice(ADOPTED_APP_DELEGATE.indexOf('\n// The window and React Native are started by the scene'));
+const DID_FINISH_LAUNCHING_FN = ADOPTED_APP_DELEGATE.match(/  public override func application\(\n    _ application: UIApplication,\n    didFinishLaunchingWithOptions[\s\S]*?\n  \}\n/u)[0];
+const OWN_START_IOS_ONLY = '#if os(iOS)\n    window = UIWindow(frame: UIScreen.main.bounds)\n    factory.startReactNative(\n      withModuleName: "main",\n      in: window,\n      launchOptions: launchOptions)\n#endif\n';
+
+const NOT_KEPT = /create and keep the React Native factory in didFinishLaunching/u;
+const OWN_WINDOW_LEFT = /still creates its own window/u;
+const OWN_START_LEFT = /still starts React Native itself/u;
+const NOT_THIS_SCENE_DELEGATE = /SceneDelegate is not exactly the one this plugin adds/u;
+const NOT_ADOPTED = /or not adopted completely \(declaration\)/u;
+const NO_PROPERTY = /does not hold the React Native factory the scene delegate needs/u;
+
+/** The three inputs H1 reproduced (the real prebuild accepted 2 and 3 with exit 0). */
+const H1_NEGATIVES = [
+  ['first run: the template does not keep the factory (reactNativeFactory = factory removed)', SDK57_APP_DELEGATE.replace(KEPT, ''), NOT_KEPT],
+  ['already applied: the factory is no longer kept', ADOPTED_APP_DELEGATE.replace(KEPT, ''), NOT_KEPT],
+  [
+    'half applied: provider + SceneDelegate, but its own window / start is still there under #if os(iOS)',
+    SDK57_APP_DELEGATE.replace('class AppDelegate: ExpoAppDelegate {', 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {')
+      .replace('#if os(iOS) || os(tvOS)\n', '#if os(iOS)\n') + SCENE_BLOCK,
+    OWN_WINDOW_LEFT,
+  ],
+];
+
+test('F1: the three H1 reproductions make prebuild FAIL -- through the helper and through the registered AppDelegate mod', async () => {
+  const config = plugin({ name: 'social-mobile', slug: 'social-mobile' });
+  for (const [label, source, reason] of H1_NEGATIVES) {
+    assert.ok(source !== SDK57_APP_DELEGATE && source !== ADOPTED_APP_DELEGATE, `${label}: the input really differs`);
+    assert.throws(() => plugin.adoptSceneLifecycle(source), reason, label);
+    await assert.rejects(
+      Promise.resolve().then(() => config.mods.ios.appDelegate({ modResults: { language: 'swift', contents: source }, modRequest: { platform: 'ios', introspect: false }, modRawConfig: {} })),
+      reason,
+      `${label} (mod)`,
+    );
+  }
+});
+
+test('F1: an already-applied file is checked as a whole, not by the template block or the class names alone', () => {
+  const adoptedDeclaration = (source) => source.replace('class AppDelegate: ExpoAppDelegate {', 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {');
+  const cases = [
+    ['the kept factory only in a comment', ADOPTED_APP_DELEGATE.replace(KEPT, '    // reactNativeFactory = factory\n'), NOT_KEPT],
+    ['the factory kept somewhere other than didFinishLaunching', ADOPTED_APP_DELEGATE.replace(KEPT, '').replace('  // Linking API\n', '  func keep(_ factory: RCTReactNativeFactory) {\n    reactNativeFactory = factory\n  }\n\n  // Linking API\n'), NOT_KEPT],
+    ['the factory not created', ADOPTED_APP_DELEGATE.replace('    let factory = ExpoReactNativeFactory(delegate: delegate)\n', '    let factory = makeFactory()\n'), NOT_KEPT],
+    ['the factory kept twice', ADOPTED_APP_DELEGATE.replace(KEPT, KEPT + KEPT), NOT_KEPT],
+    ['no factory property', ADOPTED_APP_DELEGATE.replace('  var reactNativeFactory: RCTReactNativeFactory?\n', ''), NO_PROPERTY],
+    ['the template block still there', adoptedDeclaration(SDK57_APP_DELEGATE) + SCENE_BLOCK, OWN_WINDOW_LEFT],
+    ['a window without #if', ADOPTED_APP_DELEGATE.replace(KEPT, `${KEPT}    window = UIWindow(windowScene: scene)\n`), OWN_WINDOW_LEFT],
+    ['a start without a window', ADOPTED_APP_DELEGATE.replace(KEPT, `${KEPT}#if os(tvOS)\n    factory.startReactNative(withModuleName: "main", in: window, launchOptions: launchOptions)\n#endif\n`), OWN_START_LEFT],
+    ['provider conformance but no SceneDelegate', ADOPTED_APP_DELEGATE.replace(SCENE_BLOCK, ''), NOT_THIS_SCENE_DELEGATE],
+    ['a SceneDelegate of another kind', ADOPTED_APP_DELEGATE.replace('class SceneDelegate: ExpoAppSceneDelegate {}', 'class SceneDelegate: UIResponder, UIWindowSceneDelegate {}'), NOT_THIS_SCENE_DELEGATE],
+    ['a second SceneDelegate', ADOPTED_APP_DELEGATE.replace('class ReactNativeDelegate:', 'class SceneDelegate: UIResponder {}\n\nclass ReactNativeDelegate:'), NOT_THIS_SCENE_DELEGATE],
+    ['the SceneDelegate but not the provider conformance', SDK57_APP_DELEGATE.replace(/#if os\(iOS\) \|\| os\(tvOS\)\n[\s\S]*?#endif\n/u, '') + SCENE_BLOCK, /\(window start\)/u],
+    ['a second didFinishLaunching under #if', ADOPTED_APP_DELEGATE.replace('  // Linking API\n', `#if os(tvOS)\n${DID_FINISH_LAUNCHING_FN}#endif\n\n  // Linking API\n`), NOT_KEPT],
+    ['the provider conformance on a second AppDelegate', ADOPTED_APP_DELEGATE + '\nclass AppDelegate: ExpoAppDelegate {}\n', NOT_ADOPTED],
+  ];
+  for (const [label, source, reason] of cases) {
+    assert.ok(source !== ADOPTED_APP_DELEGATE, `${label}: the input really differs`);
+    assert.throws(() => plugin.adoptSceneLifecycle(source), reason, label);
+  }
+});
+
+test('F1: on the first run the whole result is checked -- a second own start the template block does not cover is refused', () => {
+  const cases = [
+    ['a second window / start under #if os(iOS)', SDK57_APP_DELEGATE.replace('#endif\n\n    return super', `#endif\n${OWN_START_IOS_ONLY}\n    return super`), OWN_WINDOW_LEFT],
+    ['the template block twice', SDK57_APP_DELEGATE.replace(/(#if os\(iOS\) \|\| os\(tvOS\)\n[\s\S]*?#endif\n)/u, '$1$1'), /\(window start\)/u],
+    ['two AppDelegate classes', SDK57_APP_DELEGATE + '\nclass AppDelegate: ExpoAppDelegate {}\n', NOT_ADOPTED],
+    ['the template with a SceneDelegate of its own', SDK57_APP_DELEGATE + SCENE_BLOCK, NOT_THIS_SCENE_DELEGATE],
+    ['the factory property twice', SDK57_APP_DELEGATE.replace('  var reactNativeFactory: RCTReactNativeFactory?\n', '  var reactNativeFactory: RCTReactNativeFactory?\n  var reactNativeFactory: RCTReactNativeFactory?\n'), NO_PROPERTY],
+  ];
+  for (const [label, source, reason] of cases) {
+    assert.throws(() => plugin.adoptSceneLifecycle(source), reason, label);
+  }
+});
+
+test('F1: the AppDelegate and Info.plist name the same SceneDelegate; quick actions / URLs / activities stay with ExpoAppDelegate', () => {
+  const out = plugin.adoptSceneLifecycle(SDK57_APP_DELEGATE);
+  const objcName = out.match(/@objc\((\w+)\)\nclass (\w+): ExpoAppSceneDelegate \{\}/u);
+  assert.ok(objcName, 'one Expo scene delegate');
+  assert.equal(objcName[1], objcName[2]);
+  const [scene] = plugin.SCENE_MANIFEST.UISceneConfigurations.UIWindowSceneSessionRoleApplication;
+  assert.equal(scene.UISceneDelegateClassName, `$(PRODUCT_MODULE_NAME).${objcName[2]}`);
+  for (const kept of ['open url: URL', 'continue userActivity: NSUserActivity', 'class AppDelegate: ExpoAppDelegate,']) {
+    assert.ok(out.includes(kept), `${kept} is kept`);
+  }
+  assert.ok(!/performActionFor|shortcutItem/u.test(out), 'quick actions: no override of its own -- ExpoAppDelegate and the scene forwarder handle them');
+});
+
 test('Info.plist: one window scene whose delegate is the app\'s SceneDelegate; other keys untouched; idempotent; never overwrites another manifest', () => {
   const plist = { CFBundleName: 'SocialOperations', UILaunchStoryboardName: 'SplashScreen', CFBundleURLTypes: [{ CFBundleURLSchemes: ['socialmobile'] }] };
   const out = plugin.applySceneManifest(plist);
