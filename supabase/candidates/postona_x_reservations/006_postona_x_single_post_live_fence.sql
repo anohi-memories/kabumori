@@ -154,6 +154,7 @@ returns table (reservation_id uuid, lease_token uuid, state text, provider_post_
 language plpgsql volatile security definer set search_path = '' as $$
 -- SINGLE_POST_LIVE_FENCE_V1 (F3 2026-10-18): 005's begin + the credential generation bound for this attempt.
 declare v_user uuid := postona_x_resv.caller(); v_brand text; v_sha text; v_batch postona_x_resv.batches%rowtype;
+        v_epoch bigint; v_lifecycle bigint;
         v_row postona_x_resv.reservations%rowtype; v_token uuid := gen_random_uuid(); v_batch_id uuid := gen_random_uuid();
         v_now timestamptz := pg_catalog.now();
 begin
@@ -169,6 +170,8 @@ begin
     raise exception 'POSTONA_RESV_CONSENT_REQUIRED' using errcode = 'P0001';
   end if;
   v_brand := postona_x_resv.single_post_fence(v_user, p_social_account_id);
+  -- G3-38: G5 R1 read now; only an allow with a well-formed owner-epoch token is bound (the pre-send check re-checks it with W1).
+  select b.owner_epoch, b.lifecycle_version into v_epoch, v_lifecycle from postona_x_resv.g5_r1_bound(v_brand) b;
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:' || p_social_account_id, 0));
   select b.* into v_batch from postona_x_resv.batches b
    where b.user_id = v_user and b.social_account_id = p_social_account_id and b.client_batch_id = p_client_request_id and b.revision = 1;
@@ -207,10 +210,10 @@ begin
   values (v_batch_id, v_user, v_brand, p_social_account_id, p_client_request_id, 1, 'manual_exact', 'user_authored', 'Asia/Tokyo', null, v_sha);
   insert into postona_x_resv.reservations (batch_id, user_id, brand_id, social_account_id, draft_id, position, origin, mode, body, content_sha256,
     scheduled_at, fixed, status, revision, consent_state, consent_sha256, consent_scheduled_at, consent_revision, consent_at, expires_at,
-    lease_token, lease_expires_at, claimed_by)
+    lease_token, lease_expires_at, claimed_by, bound_owner_epoch, bound_lifecycle_version)
   values (v_batch_id, v_user, v_brand, p_social_account_id, 'single:' || pg_catalog.replace(p_client_request_id::text, '-', ''), 0, 'user_authored',
     'manual_exact', p_text, v_sha, v_now, true, 'claimed', 1, 'confirmed', v_sha, v_now, 1, v_now, v_now,
-    v_token, pg_catalog.clock_timestamp() + interval '60 seconds', 'single_post')
+    v_token, pg_catalog.clock_timestamp() + interval '60 seconds', 'single_post', v_epoch, v_lifecycle)
   returning * into v_row;
   insert into postona_x_resv.single_post_bindings (reservation_id, owner_user_id, brand_id, credential_generation)
   values (v_row.id, v_user, v_brand, postona_x_resv.x_credential_generation(p_social_account_id));

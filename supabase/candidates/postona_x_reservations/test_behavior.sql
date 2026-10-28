@@ -307,6 +307,13 @@ select 'W2_LIVE_AUTHORITY_RECHECK_PASS' as result;
 update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute',
   expires_at = now() + interval '6 hours'
 where draft_id in ('m1_5', 'm1_6', 'm1_7', 'ascii280');
+-- G3-38: W2 took A's owner row away and back, so A's workspace has a NEW owner epoch: rows made before it are never claimed (G5 W1).
+select pg_temp.check((select count(*) from postona_x_resv.claim_due('worker-1', 120, 50)) = 0, 'rows made before the owner churn are not claimed');
+select pg_temp.check((select count(*) = 4 from postona_x_resv.reservations where draft_id in ('m1_5', 'm1_6', 'm1_7', 'ascii280') and status = 'planned'),
+  'still planned (001 alone skips them; 004 closes them as failed)');
+-- TEST ONLY: bind these four to the current epoch (as if made after W2) so W3 can exercise the lease deadline on its own.
+update postona_x_resv.reservations r set bound_owner_epoch = (select e.v from t_g5x.owner_epoch e where e.brand_id = r.brand_id), bound_lifecycle_version = 1
+where draft_id in ('m1_5', 'm1_6', 'm1_7', 'ascii280');
 create temp table w3 as select r.*, x.draft_id from postona_x_resv.claim_due('worker-1', 120, 50) r
   join postona_x_resv.reservations x on x.id = r.reservation_id;
 select pg_temp.check((select array_agg(draft_id order by draft_id) from w3) = array['ascii280', 'm1_5', 'm1_6', 'm1_7'], 'four claimed');

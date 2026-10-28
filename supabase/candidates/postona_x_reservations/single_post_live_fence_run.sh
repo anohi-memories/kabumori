@@ -100,6 +100,9 @@ echo "BASELINE_005_READY"
 s22_pinned "$tmp/s22.sql"
 own "$db" -f "$tmp/s22.sql" >/dev/null
 echo "G5_S2_2_PINNED_INSTALLED"
+# G3-38: G5's R1 / W1 (create binds the owner epoch, claim / send re-check it) -- G3's TEST DOUBLE (g5_r1_w1_test_double.sql)
+own "$db" -f "$here/g5_r1_w1_test_double.sql" >/dev/null
+echo "G5_R1_W1_TEST_DOUBLE_INSTALLED"
 
 own "$db" -f "$lf/people.sql" >"$tmp/people" 2>&1 || { cat "$tmp/people"; fail "people"; }
 grep -q LIVE_FENCE_PEOPLE_READY "$tmp/people" || { cat "$tmp/people"; fail "people not ready"; }
@@ -135,7 +138,7 @@ echo "S0_REFUSALS_ATOMIC_REAPPLY_PASS"
 
 # L: SQL behaviour.
 own "$db" -f "$lf/behavior.sql" >"$tmp/b" 2>&1 || { cat "$tmp/b"; fail "behaviour"; }
-for marker in L1_ACL_PASS RD_READINESS_READ_ONLY_PASS L2_BEGIN_LIVE_FENCE_REFUSALS_PASS L3_BIND_PREFLIGHT_GENERATION_PASS L4_CHANGE_BETWEEN_BEGIN_AND_SEND_REFUSED_PASS \
+for marker in L1_ACL_PASS RD_READINESS_READ_ONLY_PASS EP_SINGLE_POST_OWNER_EPOCH_PASS L2_BEGIN_LIVE_FENCE_REFUSALS_PASS L3_BIND_PREFLIGHT_GENERATION_PASS L4_CHANGE_BETWEEN_BEGIN_AND_SEND_REFUSED_PASS \
               L5_REARM_REBINDS_PASS L6_RECORD_AFTER_FREEZE_SIMULATED_READBACK_PASS L7_WORKER_UNCHANGED_PASS L8_OWNER_CHECK_DEFENCE_IN_DEPTH_PASS \
               POSTONA_X_SINGLE_POST_LIVE_FENCE_BEHAVIOR_PASS; do
   grep -q "$marker" "$tmp/b" || { cat "$tmp/b"; fail "missing $marker"; }
