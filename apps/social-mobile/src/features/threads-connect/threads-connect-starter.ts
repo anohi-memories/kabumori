@@ -7,6 +7,7 @@ import {
   type ThreadsConnectStart,
   type ThreadsConnectStarter,
 } from '@/domain/threads-connect';
+import { sessionIdOf } from '@/domain/recovery-binding';
 
 /** Everything the flow touches outside itself, injected (production: threads-connect-runtime.ts). */
 export type ThreadsConnectStarterDeps = {
@@ -89,9 +90,14 @@ async function run(deps: ThreadsConnectStarterDeps): Promise<ThreadsConnectStart
   if (first === 'canceled') return { kind: 'canceled' };
   deps.dismissAuthSession();
 
-  // Still the same person, still in time.
+  // Still the same person AND the same Supabase session (G4-49, as X's connect: A -> B -> A is a NEW session of A, and
+  // the server would refuse it only after spending the code), still in time.
   const current = deps.session();
   if (!current || current.userId !== starter.userId) return { kind: 'failed', code: 'SESSION_CHANGED', reconcile: false };
+  const startedIn = sessionIdOf({ access_token: starter.token, user: { id: starter.userId } });
+  if (!startedIn || sessionIdOf({ access_token: current.token, user: { id: current.userId } }) !== startedIn) {
+    return { kind: 'failed', code: 'SESSION_CHANGED', reconcile: false };
+  }
   if (deps.now() > start.expiresAt) return { kind: 'expired' };
   const forward = threadsCallbackForward(first, registered);
   if (!forward) return { kind: 'failed', code: 'CALLBACK_INVALID', reconcile: false };
