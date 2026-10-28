@@ -28,9 +28,13 @@ function fail(code: string, status: number): never {
 // G4-41: RPC refusals the app must tell apart. A dead or anonymous session means "sign in again" (401, like the
 // missing-token answer of index.ts); the person's workspace failing the one personal-workspace rule (G5's verdict, see
 // supabase/candidates/postona_g4_x_oauth_personal_epoch) means "a retry will not help" (409). Everything else stays 400.
+// G4-46: G5's service-write guard (T13, called first by 005) answers with its own codes -- a dead / anonymous session is the same
+// "sign in again"; no POSTONA service yet, a service or account being ended, a locked account are "a retry will not help" (409);
+// its writer fence being unavailable is transient (503: the app's retry rule).
 const SESSION_REFUSALS = new Set([
   "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED",
   "SOCIAL_MOBILE_OAUTH_SESSION_NOT_ACTIVE",
+  "ACCOUNT_LIFECYCLE_AUTH_REQUIRED",
 ]);
 const WORKSPACE_REFUSALS = new Set([
   "OWN_WORKSPACE_CONFLICT",
@@ -38,12 +42,20 @@ const WORKSPACE_REFUSALS = new Set([
   "WORKSPACE_VERDICT_UNKNOWN",
   "OWNER_EPOCH_UNAVAILABLE",
   "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED",
+  "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
+  "SERVICE_NOT_REGISTERED",
+  "SERVICE_NOT_ACTIVE",
+  "SERVICE_DELETION_IN_PROGRESS",
+  "ACCOUNT_DELETION_IN_PROGRESS",
+  "ACCOUNT_LOCKED",
 ]);
+const TRANSIENT_REFUSALS = new Set(["ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE"]);
 
 export function rpcRefusalStatus(code: string, httpStatus: number): number {
   if (httpStatus === 401 || httpStatus === 403) return httpStatus;
   if (SESSION_REFUSALS.has(code)) return 401;
   if (WORKSPACE_REFUSALS.has(code)) return 409;
+  if (TRANSIENT_REFUSALS.has(code)) return 503;
   return 400;
 }
 
@@ -70,6 +82,16 @@ export const X_CONNECT_RPC_ERROR_CODES: ReadonlySet<string> = new Set([
   "OAUTH_STATE_SUPERSEDED",
   "OAUTH_STATE_NOT_BOUND",
   "X_CONNECTION_CHANGED",
+  // G5's T13 (main 20261010051938), called first by 005 (G4-46)
+  "ACCOUNT_LIFECYCLE_AUTH_REQUIRED",
+  "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
+  "ACCOUNT_LIFECYCLE_SERVICE_INVALID",
+  "ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE",
+  "ACCOUNT_DELETION_IN_PROGRESS",
+  "ACCOUNT_LOCKED",
+  "SERVICE_NOT_REGISTERED",
+  "SERVICE_NOT_ACTIVE",
+  "SERVICE_DELETION_IN_PROGRESS",
 ]);
 
 export function rpcRefusalCode(message: unknown): string {
