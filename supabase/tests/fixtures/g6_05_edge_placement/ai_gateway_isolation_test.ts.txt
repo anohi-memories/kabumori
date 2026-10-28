@@ -17,6 +17,7 @@ const FILES = [
   "policy_registry.ts",
   "postona_consult_adapter.ts",
   "postona_post_assist.ts",
+  "postona_post_assist_mvp.ts",
   "recovery.ts",
   "runtime.ts",
 ];
