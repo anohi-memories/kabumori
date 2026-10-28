@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as domain from '../src/domain/threads-connect.ts';
+import * as recoveryBinding from '../src/domain/recovery-binding.ts';
 
 const root = resolve(import.meta.dirname, '..');
 const transpile = (source) => ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -25,6 +26,10 @@ const AUTH_URL = `https://threads.com/oauth/authorize?client_id=990602627938098&
 const RETURN = `${CALLBACK}?code=${CODE}&state=${STATE}#_`;
 const ACCOUNT = 'sa_0123456789abcdef01234567';
 const NOW = Date.parse('2026-10-12T03:00:00Z');
+// G4-49: JWT-shaped bearers (the starter compares the session_id claim; unsigned, never verified here)
+const jwtOf = (sub, sid) => ['e30', Buffer.from(JSON.stringify({ sub, session_id: sid })).toString('base64url'), 'x'].join('.');
+const JWT1 = jwtOf('user-1', 'sess-1');
+const JWT2 = jwtOf('user-2', 'sess-2');
 const startOk = (over = {}) => ({ ok: true, payload: { ok: true, provider: 'threads', authorization_url: AUTH_URL, expires_at: new Date(NOW + 9 * 60_000).toISOString(), ...over } });
 const receipt = (over = {}) => ({ ok: true, payload: { ok: true, status: 'connected', provider: 'threads', social_account_id: ACCOUNT, publish_enabled: false, token_expires_at: new Date(NOW + 59 * 86400_000).toISOString(), ...over } });
 
@@ -82,7 +87,7 @@ async function flow(over = {}) {
   let browserResolve;
   const browser = new Promise((r) => { browserResolve = r; });
   let waitResolve;
-  const state = { now: NOW, session: { userId: 'user-1', token: 'jwt-1' } };
+  const state = { now: NOW, session: { userId: 'user-1', token: JWT1 } };
   const deps = {
     registeredCallback: CALLBACK,
     session: () => state.session,
@@ -94,7 +99,7 @@ async function flow(over = {}) {
     now: () => state.now,
     ...over.deps,
   };
-  const starter = await load('src/features/threads-connect/threads-connect-starter.ts', { '@/domain/threads-connect': domain });
+  const starter = await load('src/features/threads-connect/threads-connect-starter.ts', { '@/domain/threads-connect': domain, '@/domain/recovery-binding': recoveryBinding });
   const real = starter.createThreadsConnectStarter(deps);
   // Results are created inside the vm realm; compare them as plain data.
   return {
@@ -110,11 +115,11 @@ test('golden path through the auth browser: start with the bearer, open the exac
   const f = await flow();
   const pending = f.starter.start();
   await tick();
-  assert.deepEqual(f.calls.invoke[0], { body: { action: 'start' }, token: 'jwt-1' });
+  assert.deepEqual(f.calls.invoke[0], { body: { action: 'start' }, token: JWT1 });
   assert.deepEqual(f.calls.open, [{ url: AUTH_URL, redirect: CALLBACK }]);
   f.browserReturns({ type: 'success', url: RETURN });
   assert.deepEqual(await pending, { kind: 'connected', socialAccountId: ACCOUNT });
-  assert.deepEqual(f.calls.invoke[1], { body: { action: 'callback', callback_url: RETURN }, token: 'jwt-1' });
+  assert.deepEqual(f.calls.invoke[1], { body: { action: 'callback', callback_url: RETURN }, token: JWT1 });
   assert.equal(f.calls.invoke.length, 2);
 });
 
@@ -148,7 +153,7 @@ test('cancel, decline on Threads and the deadline end the attempt without forwar
 });
 
 test('another person signed in (or signed out) by the time Threads returns: nothing is forwarded', async () => {
-  for (const next of [{ userId: 'user-2', token: 'jwt-2' }, null]) {
+  for (const next of [{ userId: 'user-2', token: JWT2 }, null]) {
     const f = await flow();
     const pending = f.starter.start();
     await tick();
@@ -157,6 +162,28 @@ test('another person signed in (or signed out) by the time Threads returns: noth
     assert.deepEqual(await pending, { kind: 'failed', code: 'SESSION_CHANGED', reconcile: false });
     assert.equal(f.calls.invoke.length, 1, 'only the start');
   }
+});
+
+// G4-49: the same person in a NEW Supabase session (A -> B -> A) is not the session that started: caught here, before the
+// server spends the code (the server refuses it only after the exchange, as an uncertain outcome)
+test('the same person signed in again (a new session) by the time Threads returns: nothing is forwarded', async () => {
+  const f = await flow();
+  const pending = f.starter.start();
+  await tick();
+  f.state.session = { userId: 'user-1', token: jwtOf('user-1', 'sess-1-new') };
+  f.browserReturns({ type: 'success', url: RETURN });
+  assert.deepEqual(await pending, { kind: 'failed', code: 'SESSION_CHANGED', reconcile: false });
+  assert.equal(f.calls.invoke.length, 1, 'only the start');
+});
+
+test('a refreshed token of the SAME session still completes', async () => {
+  const f = await flow();
+  const pending = f.starter.start();
+  await tick();
+  f.state.session = { userId: 'user-1', token: `${JWT1.slice(0, -1)}y` };
+  f.browserReturns({ type: 'success', url: RETURN });
+  assert.deepEqual(await pending, { kind: 'connected', socialAccountId: ACCOUNT });
+  assert.equal(f.calls.invoke.length, 2);
 });
 
 test('a return after the attempt expired, or a malformed return, is not forwarded', async () => {
@@ -232,7 +259,7 @@ test('nothing is logged and no result carries the code, state or token', async (
   try {
     const result = await f.starter.start();
     const text = JSON.stringify(result);
-    for (const secret of [CODE, STATE, 'jwt-1']) assert.ok(!text.includes(secret), secret);
+    for (const secret of [CODE, STATE, JWT1]) assert.ok(!text.includes(secret), secret);
   } finally {
     globalThis.console = original;
   }
@@ -256,7 +283,8 @@ async function cardHarness(props) {
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', styles: { muted: {} } },
     '@/constants/theme': { colors: { ink: 'i' } },
     '@/domain/threads-connect': domain,
-    '@/providers/auth-provider': { useAuth: () => ({ session: { access_token: 'jwt-1', user: { id: 'user-1' } } }) },
+    '@/domain/recovery-binding': recoveryBinding,
+    '@/providers/auth-provider': { useAuth: () => ({ session: { access_token: JWT1, user: { id: 'user-1' } } }) },
     '@/features/threads-connect/threads-connect-runtime': { productionThreadsConnectDeps: () => { throw new Error('the production flow must not be built in tests'); } },
     '@/features/threads-connect/threads-connect-starter': { createThreadsConnectStarter: () => { throw new Error('unused'); } },
   };

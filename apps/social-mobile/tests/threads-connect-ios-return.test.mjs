@@ -9,13 +9,14 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as domain from '../src/domain/threads-connect.ts';
+import * as recoveryBinding from '../src/domain/recovery-binding.ts';
 import { xConnectAuthSessionOptions } from '../src/features/x-connect/auth-session-options.ts';
 
 // The starter imports through the app's `@/` alias: load the real file with a module map (as the other harnesses do).
 const starterSource = await readFile(new URL('../src/features/threads-connect/threads-connect-starter.ts', import.meta.url), 'utf8');
 const starterModule = { exports: {} };
 vm.runInNewContext(ts.transpileModule(starterSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText,
-  { module: starterModule, exports: starterModule.exports, URL, require: (name) => { assert.equal(name, '@/domain/threads-connect'); return domain; } });
+  { module: starterModule, exports: starterModule.exports, URL, require: (name) => { assert.ok(name === '@/domain/threads-connect' || name === '@/domain/recovery-binding', name); return name === '@/domain/threads-connect' ? domain : recoveryBinding; } });
 const { createThreadsConnectStarter } = starterModule.exports;
 
 const CALLBACK = 'https://links.postona.example/threads/callback';
@@ -80,6 +81,7 @@ async function runtimeWith({ os, version, extra, ios, android }) {
     'expo-web-browser': { openAuthSessionAsync: async (...args) => { opened.push(args); return { type: 'cancel' }; }, dismissAuthSession() {} },
     'react-native': { Platform: { OS: os, Version: version } },
     '@/domain/threads-connect': domain,
+    '@/domain/recovery-binding': recoveryBinding,
     '@/lib/supabase': { supabase: null },
   };
   const source = await readFile(new URL('../src/features/threads-connect/threads-connect-runtime.ts', import.meta.url), 'utf8');
