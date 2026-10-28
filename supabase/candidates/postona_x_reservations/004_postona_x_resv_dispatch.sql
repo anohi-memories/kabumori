@@ -177,7 +177,7 @@ begin
     exit when v_count >= p_limit;
     -- G3-38: a row made under another owner epoch / lifecycle version (A -> B -> A, a restarted service) or before binding existed is
     -- never sent: it is closed as failed with G5 W1's answer and an audit row (no text), not left to be claimed later.
-    v_bound := postona_x_resv.g5_bound_state(v_row.brand_id, v_row.bound_owner_epoch, v_row.bound_lifecycle_version);
+    v_bound := postona_x_resv.g5_bound_state(v_row);
     if v_bound is distinct from 'active' then
       update postona_x_resv.reservations r
       set status = 'failed', outcome_code = case when v_bound ~ '^[A-Z][A-Z0-9_]{1,63}$' then v_bound else 'SERVICE_STATE_UNKNOWN' end,
