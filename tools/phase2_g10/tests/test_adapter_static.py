@@ -75,7 +75,8 @@ class TestAdapterFixed(unittest.TestCase):
         """subprocess を使うのは、ps（観測）・スタブ／S1の起動・偽Claudeの起動、および固定のシステムの道具
         （/usr/bin/openssl による署名・/usr/bin/plutil -lint による plist の検査。TASK 13）だけ。"""
         allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py", "ecdsa_signing.py", "launchd_plan.py",
-                   "real_claude.py"}  # TASK 17: 作業フォルダの用意の /usr/bin/git だけ（下で固定を確認）
+                   "real_claude.py",  # TASK 17: 作業フォルダの用意の /usr/bin/git だけ（下で固定を確認）
+                   "release.py"}  # TASK 22: 固定版の元の確認の /usr/bin/git だけ（下で固定を確認）
         for path, text in sources():
             if re.search(r"\bsubprocess\.(run|Popen|call|check_output)\b", text):
                 with self.subTest(path=os.path.basename(path)):
@@ -93,6 +94,9 @@ class TestAdapterFixed(unittest.TestCase):
         self.assertIn('AUTH_ARGS = ("auth", "status", "--json")', real)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", real),
                          ["[cli_realpath] + list(AUTH_ARGS)", "[GIT"])
+        rel = texts["release.py"]  # TASK 22: 起動するのは固定の /usr/bin/git だけ
+        self.assertIn('GIT = "/usr/bin/git"', rel)
+        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", rel), ["[GIT] + args"])
         launchd = texts["launchd_plan.py"]
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", launchd),
                          ['["/usr/bin/plutil"'])

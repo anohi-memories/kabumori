@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import policy as policy_mod, supervise, wiring  # noqa: E402
+from g10runner import policy as policy_mod, release, supervise, wiring  # noqa: E402
 from g10runner.agent import Agent  # noqa: E402
 from g10runner.layout import Layout  # noqa: E402
 
@@ -16,7 +16,15 @@ def main():
     p.add_argument("--root", required=True)
     p.add_argument("--interval", type=float, default=30.0)
     p.add_argument("--once", action="store_true")
+    p.add_argument("--release-digest", help="固定版のマニフェストのハッシュ（固定版から動くときは必須。TASK 22）")
     a = p.parse_args()
+    package = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if release.package_manifest(package) is not None:
+        problems = release.verify(package, a.release_digest or "")
+        if problems:
+            raise SystemExit("release verification failed: %s" % "; ".join(problems[:3]))
+    elif a.release_digest:
+        raise SystemExit("--release-digest is only for an installed release")
     layout = Layout(a.root)
     policy = policy_mod.load(layout.policy_pub)
     signer, verifier = wiring.agent_side(a.root)

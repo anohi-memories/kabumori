@@ -629,6 +629,16 @@ MUTANTS = [
     ("autorun dry run starts the run", "g10runner/autorun.py",
      '    if not live:\n        return record', '    if False:\n        return record',
      "test_task21_autorun.AutorunE2E.test_detects_and_launches_once_then_stays_idle"),
+    # TASK 22: 固定版
+    ("release verify ignores file contents", "g10runner/release.py",
+     '        if rel in actual and _file_sha(p) != sha:\n', '        if False:\n',
+     "test_task22_release.ReleaseInstall.test_verify_rejects_changes"),
+    ("autorun skips the release check before launch", "g10runner/autorun.py",
+     '    problems = release_check() if release_check is not None else []\n', '    problems = []\n',
+     "test_task22_release.ReleaseAutorun.test_failed_check_before_launch_hard_halts"),
+    ("agent plist release digest not verified", "g10runner/launchd_plan.py",
+     '    problems = release.verify(package_root, args[8])\n', '    problems = []\n',
+     "test_task22_release.ReleaseAutorun.test_release_plists_and_rules"),
 ]
 
 

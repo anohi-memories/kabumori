@@ -131,12 +131,13 @@ AGENT_SCRIPTS = {"watchdog": "g10_watchdog.py", "autorun": "g10_autorun.py"}
 AGENT_MIN_LIVE_INTERVAL = 300.0
 
 
-def user_agent_plan(kind, python, root, interval, live=False, package_root=PACKAGE_ROOT):
+def user_agent_plan(kind, python, root, interval, release_digest, live=False, package_root=PACKAGE_ROOT):
+    """TASK 22: 固定版（package_root）のスクリプトを、そのマニフェストのハッシュ付きで動かす計画。"""
     if kind not in AGENT_SCRIPTS:
         raise PlanError("unknown agent kind")
     script = os.path.join(package_root, "bin", AGENT_SCRIPTS[kind])
     logs = os.path.join(root, "logs")
-    args = [python, "-I", script, "--root", root, "--interval", str(float(interval))]
+    args = [python, "-I", script, "--root", root, "--interval", str(float(interval)), "--release-digest", release_digest]
     if live:
         args.append("--live")
     return {
@@ -152,23 +153,35 @@ def user_agent_plan(kind, python, root, interval, live=False, package_root=PACKA
     }
 
 
+_SHAPE = "[python, -I, script, --root, ROOT, --interval, SECONDS, --release-digest, DIGEST(, --live)]"
+
+
 def validate_agent_plan(plan, package_root=PACKAGE_ROOT):
-    """LaunchAgent の計画の検査。規則に合わなければ PlanError。"""
+    """LaunchAgent の計画の検査。規則に合わなければ PlanError。
+
+    TASK 22: スクリプトは検証に合格した固定版（package_root）の中のものだけで、--release-digest がその版と一致すること。"""
+    from . import release
     if not isinstance(plan, dict) or set(plan) != AGENT_KEYS:
         raise PlanError("agent plist keys must be exactly %s" % sorted(AGENT_KEYS))
     kind = next((k for k in AGENT_SCRIPTS if plan.get("Label") == "%s.agent.%s" % (LABEL_PREFIX, k)), None)
     if kind is None:
         raise PlanError("unexpected label")
     args = plan.get("ProgramArguments")
-    live = isinstance(args, list) and len(args) == 8 and args[-1] == "--live"
-    if not (isinstance(args, list) and all(isinstance(a, str) for a in args) and (len(args) == 7 or live)):
-        raise PlanError("ProgramArguments must be [python, -I, script, --root, ROOT, --interval, SECONDS(, --live)]")
+    live = isinstance(args, list) and len(args) == 10 and args[-1] == "--live"
+    if not (isinstance(args, list) and all(isinstance(a, str) for a in args) and (len(args) == 9 or live)):
+        raise PlanError("ProgramArguments must be " + _SHAPE)
     if live and kind != "autorun":
         raise PlanError("only the autorun agent may be live")
-    if args[0] not in ALLOWED_PYTHONS or args[1] != "-I" or args[3] != "--root" or args[5] != "--interval":
-        raise PlanError("ProgramArguments must be [python, -I, script, --root, ROOT, --interval, SECONDS(, --live)]")
+    if args[0] not in ALLOWED_PYTHONS or args[1] != "-I" or args[3] != "--root" or args[5] != "--interval" \
+            or args[7] != "--release-digest":
+        raise PlanError("ProgramArguments must be " + _SHAPE)
     if os.path.realpath(args[2]) != os.path.realpath(os.path.join(package_root, "bin", AGENT_SCRIPTS[kind])):
         raise PlanError("only the bundled %s may be run" % AGENT_SCRIPTS[kind])
+    if release.package_manifest(package_root) is None:
+        raise PlanError("plists must point at an installed release, not a development tree")
+    problems = release.verify(package_root, args[8])
+    if problems:
+        raise PlanError("release does not verify: %s" % "; ".join(problems[:3]))
     try:
         interval = float(args[6])
     except ValueError:
@@ -192,8 +205,8 @@ def validate_agent_plan(plan, package_root=PACKAGE_ROOT):
     return True
 
 
-def render_validated_agent(plan):
-    validate_agent_plan(plan)
+def render_validated_agent(plan, package_root=PACKAGE_ROOT):
+    validate_agent_plan(plan, package_root)
     data = render(plan)
     if plistlib.loads(data) != plan:
         raise PlanError("rendered plist differs from the validated plan")

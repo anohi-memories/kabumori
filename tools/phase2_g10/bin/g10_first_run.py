@@ -10,7 +10,8 @@
             CLAIM の前に止める（承認は消費しない）。ログインしていれば CLAIM し、受理してスタブを起動する（GO と一致すれば実 CLI を1回だけ起動）。
             終了を待ち、finalize して REPORT の下書きの場所を表示する。              ← 実 Claude の起動（要 GO）
   halt      緊急停止（ハードHALT）。実行中のランを止め、以後の起動も止める。
-  plists    （TASK 21）S2 と検知役の LaunchAgent の plist を作って検査するだけ（登録しない。登録・停止の手順を表示）。
+  install   （TASK 22）この開発 worktree から、固定の場所に不変の固定版（マニフェストのハッシュつき）を作る。
+  plists    （TASK 21/22 固定版の中から実行）S2 と検知役の LaunchAgent の plist を作って検査するだけ（登録しない。登録・停止の手順を表示）。
   unhalt    （TASK 21）人の署名で HALT を解除する（--reason 必須）。実行中のラン・記録の食い違いがあれば解除しない。
   auth-check  （TASK 19）子と同じ環境で `<CLI> auth status --json` を1回だけ実行し、ログインの有無を表示する。
             モデルは呼ばない（課金なし）。メールアドレス等の生の出力は表示しない。--with-env NAME で、秘密を含まない
@@ -27,7 +28,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import autorun, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, signing, wiring  # noqa: E402
+from g10runner import autorun, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, release, signing, wiring  # noqa: E402
 from g10runner.control import Control  # noqa: E402
 from g10runner.fsutil import sha256_hex  # noqa: E402
 from g10runner.layout import Layout  # noqa: E402
@@ -145,21 +146,43 @@ def cmd_unhalt(a):
     return 0 if rec is not None else 1
 
 
+DEFAULT_RELEASE_PARENT = os.path.expanduser("~/Library/Application Support/kabumori-agent-watch/phase2-release")
+PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def cmd_install(a):
+    """（TASK 22）この開発 worktree から固定版を作る（元に未コミットの変更があれば作らない）。登録はしない。"""
+    dest, digest = release.install(PACKAGE, os.path.realpath(a.dest))
+    print(json.dumps({"release_dir": dest, "release_digest": digest,
+                      "next_not_run": "/usr/bin/python3 -I '%s' plists --root <ROOT> [--live]"
+                                      % os.path.join(dest, "bin", "g10_first_run.py")}, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_plists(a):
-    """（TASK 21）S2 見張り役と検知役（autorun）の LaunchAgent の plist を作って検査する。登録はしない（人が GO の後に行う）。"""
+    """（TASK 21/22）固定版の S2 と検知役の LaunchAgent の plist を作って検査する。登録はしない（人が GO の後に行う）。
+    固定版の中の g10_first_run.py から実行したときだけ作る（開発 worktree からは作らない）。"""
+    manifest = release.package_manifest(PACKAGE)
+    if manifest is None:
+        raise SystemExit("run plists from an installed release (bin/g10_first_run.py install first)")
+    digest = manifest.get("digest", "")
+    problems = release.verify(PACKAGE, digest)
+    if problems:
+        raise SystemExit("release verification failed: %s" % "; ".join(problems[:3]))
     root = os.path.realpath(a.root)
     out_dir = os.path.realpath(a.out or os.path.join(root, "launchd-plans"))
     os.makedirs(out_dir, 0o700, exist_ok=True)
     os.makedirs(os.path.join(root, "logs"), 0o700, exist_ok=True)
     shown = []
     for kind, interval, live in (("watchdog", 60.0, False), ("autorun", a.interval, a.live)):
-        plan = launchd_plan.user_agent_plan(kind, "/usr/bin/python3", root, interval, live=live)
+        plan = launchd_plan.user_agent_plan(kind, "/usr/bin/python3", root, interval, digest, live=live,
+                                            package_root=PACKAGE)
         path = os.path.join(out_dir, plan["Label"] + ".plist")
         with open(path, "wb") as f:
-            f.write(launchd_plan.render_validated_agent(plan))
+            f.write(launchd_plan.render_validated_agent(plan, PACKAGE))
         shown.append({"kind": kind, "path": path, "live": live, "lint_ok": launchd_plan.lint(path),
                       "commands_not_run": launchd_plan.agent_commands(plan["Label"], path)})
-    print(json.dumps({"plists": shown, "registered": False}, ensure_ascii=False, indent=1))
+    print(json.dumps({"release_digest": digest, "plists": shown, "registered": False}, ensure_ascii=False, indent=1))
     return 0 if all(x["lint_ok"] for x in shown) else 1
 
 
@@ -194,6 +217,8 @@ def main(argv=None):
     u = sub.add_parser("unhalt")
     u.add_argument("--root", required=True)
     u.add_argument("--reason", required=True, help="解除の理由（人の署名とともに記録される）")
+    ins = sub.add_parser("install")
+    ins.add_argument("--dest", default=DEFAULT_RELEASE_PARENT, help="固定版を置く親フォルダ")
     pl = sub.add_parser("plists")
     pl.add_argument("--root", required=True)
     pl.add_argument("--out")
@@ -204,7 +229,7 @@ def main(argv=None):
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
     a = p.parse_args(argv)
     return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt, "unhalt": cmd_unhalt,
-            "plists": cmd_plists, "auth-check": cmd_auth_check}[a.cmd](a)
+            "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check}[a.cmd](a)
 
 
 if __name__ == "__main__":

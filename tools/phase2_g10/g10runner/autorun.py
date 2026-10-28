@@ -12,6 +12,7 @@ Issue #323 をログインなしで周期的に読み、次の条件がすべて
 - 判定（evaluate）は起動しない。起動（launch）は CLAIM → 受理 → スタブ → 終了待ち → finalize で、手動の run と共通。
 - 判定・起動の記録は control/priv/autorun.log（1行1件の JSON）。本文・秘密・メールアドレスは書かない。
 - 常駐（launchd への登録）はここでは行わない。登録は人の明示の GO の後に、人が行う。
+- TASK 22: 固定版（g10runner/release.py）から動くときは、起動の直前ごとに固定版を検証し、合わなければハードHALT。
 """
 import json
 import os
@@ -128,8 +129,10 @@ def record(layout, entry):
     return keep
 
 
-def cycle(control, policy, live, auth_fn=real_claude.auth_status, out=print):
-    """1回分の検知。live のときだけ起動する。記録した内容を返す。取得の失敗などは起動せずに記録する。"""
+def cycle(control, policy, live, auth_fn=real_claude.auth_status, out=print, release_check=None):
+    """1回分の検知。live のときだけ起動する。記録した内容を返す。取得の失敗などは起動せずに記録する。
+
+    release_check（TASK 22）: 起動の直前に呼ぶ固定版の検証（問題の一覧を返す）。問題があればハードHALT にして起動しない。"""
     try:
         d = evaluate(control, policy, auth_fn=auth_fn)
     except Exception as exc:  # ネットワーク・ログの読み取りの失敗は「起動しない」
@@ -138,6 +141,11 @@ def cycle(control, policy, live, auth_fn=real_claude.auth_status, out=print):
         return record(control.layout, d)
     if not live:
         return record(control.layout, dict(d, decision="dry_run", reason="would launch (dry run: not started)"))
+    problems = release_check() if release_check is not None else []
+    if problems:
+        control.halt("hard", "release integrity: " + "; ".join(problems[:3]), wait_sync=0)
+        return record(control.layout, dict(d, decision="halted", reason="release verification failed",
+                                           problems=problems[:3]))
     result = launch(control, policy, d["snap"], out=out)
     return record(control.layout, dict(d, decision="launched", reason=result.get("reason", "launched"),
                                        run_id=result["run_id"], status=result["status"]))

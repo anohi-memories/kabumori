@@ -9,11 +9,10 @@ import importlib.util
 import io
 import json
 import os
-import plistlib
 import stat
 import subprocess
 
-from g10runner import autorun, issue as issue_mod, launchd_plan
+from g10runner import autorun, issue as issue_mod
 from g10runner.layout import Layout
 from helpers import make_body
 from test_task17_real_adapter import FirstRunBase, git
@@ -45,7 +44,7 @@ class AutorunE2E(FirstRunBase):
     def once(self, root, live=False):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            code = self.ar.main(["--root", root, "--once"] + (["--live"] if live else []))
+            code = self.ar.main(["--root", root, "--once"] + (["--live", "--dev"] if live else []))
         last = json.loads(buf.getvalue().strip().splitlines()[-1])
         return code, last
 
@@ -110,45 +109,13 @@ class AutorunE2E(FirstRunBase):
         with FileLock(lock_path, "ex", timeout=1) as held:
             self.assertTrue(held.acquired)
             with self.assertRaises(SystemExit):
-                self.ar.main(["--root", root, "--once", "--live"])
+                self.ar.main(["--root", root, "--once", "--live", "--dev"])
         self.assertEqual(self.calls(), [])
         with self.assertRaises(SystemExit):  # 繰り返しの live は 300秒以上の間隔だけ
-            self.ar.main(["--root", root, "--live", "--interval", "60"])
-
-
-class AgentPlists(FirstRunBase):
-    """LaunchAgent の plist は作って検査するだけ（登録しない）。"""
-
-    def test_plists_are_written_validated_and_not_registered(self):
-        fr, root = self.approved_root()
-        out = os.path.join(self.env.real, "plans")
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            self.assertEqual(fr.main(["plists", "--root", root, "--out", out]), 0)
-        doc = json.loads(buf.getvalue())
-        self.assertIs(doc["registered"], False)
-        self.assertEqual([p["kind"] for p in doc["plists"]], ["watchdog", "autorun"])
-        for p in doc["plists"]:
-            self.assertTrue(p["lint_ok"])
-            self.assertIs(p["live"], False)
-            self.assertIn("launchctl bootstrap gui/", p["commands_not_run"]["install"])
-            plan = plistlib.loads(open(p["path"], "rb").read())
-            self.assertNotIn("UserName", plan)
-            self.assertNotIn("--live", plan["ProgramArguments"])
-
-    def test_agent_plan_rules(self):
-        root = "/tmp/g10-root"
-        ok = launchd_plan.user_agent_plan("autorun", "/usr/bin/python3", root, 300, live=True)
-        self.assertTrue(launchd_plan.validate_agent_plan(ok))
-        bad = [dict(ok, Program="/bin/sh"),
-               launchd_plan.user_agent_plan("autorun", "/usr/bin/python3", root, 60, live=True),
-               launchd_plan.user_agent_plan("watchdog", "/usr/bin/python3", root, 60, live=True),
-               dict(ok, EnvironmentVariables={"PATH": "/usr/bin", "ANTHROPIC_API_KEY": "x"}),
-               dict(ok, ProgramArguments=["/usr/bin/python3", "-I", "/tmp/other.py", "--root", root, "--interval",
-                                          "300"])]
-        for plan in bad:
-            with self.assertRaises(launchd_plan.PlanError):
-                launchd_plan.validate_agent_plan(plan)
+            self.ar.main(["--root", root, "--live", "--dev", "--interval", "60"])
+        with self.assertRaises(SystemExit):  # TASK 22: 開発 worktree からの live は --dev のときだけ
+            self.ar.main(["--root", root, "--once", "--live"])
+        self.assertEqual(self.calls(), [])
 
 
 if __name__ == "__main__":
