@@ -203,6 +203,7 @@ function world(options: { respond?: Responder; authority?: Authority; policies?:
       sleep: () => Promise.resolve(),
       random: () => 0,
     },
+    legacyBusyHeldCheck: true, // G6-20: pins the legacy busy re-claim check (the owner-held path has its own suites)
     budget: new SupabaseLedgerBudgetGuard({ supabaseUrl: "http://127.0.0.1:9", serviceKey: key.value, fetch: ledgerFetch }),
     store,
   };

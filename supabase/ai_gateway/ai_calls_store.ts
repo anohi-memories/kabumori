@@ -95,21 +95,7 @@ export class SupabaseAiCallsStore implements CallStore {
   }
 
   async claim(identity: CallIdentity, context: ClaimContext): Promise<CallClaim> {
-    const s = context.subject;
-    const p: Record<string, unknown> = {
-      call_key: identity.key,
-      tenant_tag: identity.tenantTag,
-      fingerprint: identity.fingerprint,
-      application: context.app,
-      feature: context.storeFeature,
-      subject_kind: s.kind,
-    };
-    if (s.kind === "user") {
-      p.user_id = s.userId;
-      // The brand slug is kept for audit display only (ai_calls.brand_ref); it is never an identity.
-      if (s.brand) p.brand_ref = s.brand.slug;
-    }
-    const c = await this.#rpc("ai_calls_claim", p);
+    const c = await this.#rpc("ai_calls_claim", claimIdentityPayload(identity, context));
     if (c.kind === "acquired" && keysAre(c, "kind,owner") && typeof c.owner === "string" && OWNER.test(c.owner)) return { kind: "acquired", owner: c.owner };
     if ((c.kind === "busy" || c.kind === "conflict") && keysAre(c, "kind")) return { kind: c.kind };
     if (c.kind === "complete" && keysAre(c, "fingerprint,kind,result") && typeof c.fingerprint === "string" && FINGERPRINT.test(c.fingerprint) && isRecord(c.result)) {
@@ -129,4 +115,28 @@ export class SupabaseAiCallsStore implements CallStore {
     });
     if (r.state !== "complete" || typeof r.duplicate !== "boolean" || !keysAre(r, "duplicate,state")) throw new AiCallsRpcError("ai_calls_complete", 200, "BAD_BODY");
   }
+}
+
+/** The call identity as ai_calls_claim (and ai_calls_claim_held) read it. */
+export function claimIdentityPayload(identity: CallIdentity, context: ClaimContext): Record<string, unknown> {
+  const s = context.subject;
+  const p: Record<string, unknown> = {
+    call_key: identity.key,
+    tenant_tag: identity.tenantTag,
+    fingerprint: identity.fingerprint,
+    application: context.app,
+    feature: context.storeFeature,
+    subject_kind: s.kind,
+  };
+  if (s.kind === "user") {
+    p.user_id = s.userId;
+    // The brand slug is kept for audit display only (ai_calls.brand_ref); it is never an identity.
+    if (s.brand) p.brand_ref = s.brand.slug;
+  }
+  return p;
+}
+
+/** G6-20: the owner-held identity (ai_calls_claim_held's input): the claim identity plus the ORIGINAL claim token. */
+export function heldPayload(identity: CallIdentity, context: ClaimContext, owner: string): Readonly<Record<string, unknown>> {
+  return Object.freeze({ ...claimIdentityPayload(identity, context), owner });
 }

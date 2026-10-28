@@ -165,6 +165,8 @@ function world(options: { respond?: (call: RecordedCall, i: number) => Response 
   const authority = new Authority();
   const fetch: FetchLike = (input, init) => String(input).startsWith(SUPABASE) ? supabase.fetch(input, init) : provider.fetch(input, init);
   const gateway = createAiGateway({
+    // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+    ledgerMode: "legacy_busy_check_unsafe",
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => {
@@ -411,7 +413,8 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
   // G6-03 adds the POSTONA consult adapter, the only file that may import the (unchanged) consult handler module.
   // G6-04 adds the transport for G5's proposed verdict RPC (not connected anywhere).
   // G6-06 adds the UNKNOWN recovery coordinator (no provider import; only the three recovery RPCs through its port).
-  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "recovery.ts", "runtime.ts"]);
+  // G6-20 adds the POSTONA post text / hashtag candidates (no provider import; siblings only).
+  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "postona_post_assist.ts", "recovery.ts", "runtime.ts"]);
   for (const name of files) {
     const text = await Deno.readTextFile(new URL(name, dir));
     assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\(/u, name);

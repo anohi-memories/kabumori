@@ -35,7 +35,7 @@ TEST="${1:-common_ai_gateway_restart_race_pg_test.ts}"
 SOURCE="${2:-fixture}"
 case "$SOURCE" in fixture|migration) ;; *) echo "refusing source '$SOURCE'" >&2; exit 2 ;; esac
 case "$TEST" in
-  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts|common_ai_gateway_lost_reserve_pg_test.ts|common_ai_gateway_owner_held_contract_pg_test.ts|common_ai_gateway_owner_held_isolation_baseline_pg_test.ts|common_ai_gateway_owner_held_isolation_guard_pg_test.ts|common_ai_gateway_owner_held_isolation_fence_pg_test.ts|common_ai_gateway_owner_held_rc_guard_migration_pg_test.ts) ;;
+  common_ai_gateway_restart_race_pg_test.ts|common_ai_gateway_fence_review_pg_test.ts|common_ai_gateway_r1_r2_corrective_pg_test.ts|common_ai_gateway_lost_reserve_pg_test.ts|common_ai_gateway_owner_held_contract_pg_test.ts|common_ai_gateway_owner_held_isolation_baseline_pg_test.ts|common_ai_gateway_owner_held_isolation_guard_pg_test.ts|common_ai_gateway_owner_held_isolation_fence_pg_test.ts|common_ai_gateway_owner_held_rc_guard_migration_pg_test.ts|common_ai_gateway_owner_held_ledger_pg_test.ts) ;;
   *) echo "refusing test file '$TEST'" >&2; exit 2 ;;
 esac
 LEDGER="$HERE/../migrations/20261010050613_ai_provider_budget_ledger.sql"
@@ -94,7 +94,7 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u ANTHRO
   deno test --cached-only --frozen --config "$CONFIG" \
     --deny-net --deny-write --allow-run=psql,deno \
     --allow-env=GRR_PGHOST,GRR_PGPORT,GRR_PGSUPER,GRR_DB,GRR_DENO_CONFIG,GRR_OWNER_HELD_SOURCE \
-    --allow-read="$HERE/../migrations/20261020154536_ai_calls_owner_held_rc_guard.sql" \
+    --allow-read="$HERE/../migrations/20261020154536_ai_calls_owner_held_rc_guard.sql,$HERE/../candidates/common_ai_g6/001_ai_calls_owner_held_ledger.sql" \
     "$HERE/$TEST" >"$WORK/test.log" 2>&1 \
   || { cat "$WORK/test.log" >&2; fail "gateway restart / concurrent recovery ($TEST)"; }
 if grep -q "[1-9][0-9]* ignored" "$WORK/test.log"; then cat "$WORK/test.log" >&2; fail "tests were ignored (environment not passed)"; fi

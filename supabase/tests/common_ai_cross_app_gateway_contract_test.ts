@@ -178,6 +178,7 @@ function world(options: { respond?: Responder; maxCalls?: number; policies?: Map
       random: () => 0,
     },
     budget: ledger,
+    legacyBusyHeldCheck: true, // G6-20: pins the legacy busy re-claim check (the owner-held path has its own suites)
     store,
   };
   const run = (credential: string, request: Record<string, unknown>) => gatewayExecute(deps, credential, request);

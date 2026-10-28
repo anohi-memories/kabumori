@@ -108,6 +108,8 @@ function world(options: { respond?: () => Response | Promise<Response>; g5?: G5 
   const openai = recordingFetch(() => (options.respond ?? (() => jsonResponse(200, openAiBody(answer, { model: "gpt-6-luna" }))))());
   const fetch: FetchLike = (input, init) => (String(input).startsWith(SUPABASE) ? supabaseFetch(input, init) : openai.fetch(input, init));
   const gateway = createAiGateway({
+    // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+    ledgerMode: "legacy_busy_check_unsafe",
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : undefined),

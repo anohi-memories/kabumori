@@ -60,6 +60,8 @@ export type GatewayJob = Readonly<{
    * instead of calling ai_calls_claim again. gateway.ts is unchanged; nothing here exists in any migration.
    */
   ownerHeld?: boolean;
+  /** G6-20: the runtime's ledger mode (default here: the legacy check the older suites pin). */
+  ledgerMode?: "owner_held" | "legacy_busy_check_unsafe";
 }>;
 export type RecoverJob = Readonly<{ role: "recover"; name: string; revision: string; apps: "all" | "postona"; mode: "advise" | "apply"; abandonAfterSeconds: number }>;
 
@@ -215,6 +217,8 @@ async function runGateway(job: GatewayJob): Promise<unknown> {
   };
   const transport = job.app === "kabumori" ? JOB_TRANSPORT : createG5RpcTransport({ supabaseUrl: SUPABASE, publishableKey: PUBLISHABLE_KEY, fetch: route });
   const gateway = createAiGateway({
+    // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+    ledgerMode: job.ledgerMode ?? "legacy_busy_check_unsafe",
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),
@@ -243,6 +247,7 @@ async function runGateway(job: GatewayJob): Promise<unknown> {
       sleep: () => Promise.resolve(),
       random: () => 0,
     },
+    legacyBusyHeldCheck: true, // G6-20: pins the legacy busy re-claim check (the owner-held path has its own suites)
     budget: new SupabaseLedgerBudgetGuard({ supabaseUrl: SUPABASE, serviceKey, fetch: route, holdSeconds: 30, rpcTimeoutMs: job.rpcTimeoutMs }),
     store: new OwnerHeldStore(new SupabaseAiCallsStore({ supabaseUrl: SUPABASE, serviceKey, fetch: route, rpcTimeoutMs: job.rpcTimeoutMs }), route, job.rpcTimeoutMs ?? 10_000),
   }, job.credential, request);
