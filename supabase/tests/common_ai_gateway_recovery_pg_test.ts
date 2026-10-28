@@ -89,6 +89,8 @@ const reply = (_call: RecordedCall) => jsonResponse(200, openAiBody({ reply: "ok
 function gateway(respond: (call: RecordedCall) => Response = reply) {
   const provider = recordingFetch((call) => respond(call));
   const g = createAiGateway({
+    // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+    ledgerMode: "legacy_busy_check_unsafe",
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : undefined),

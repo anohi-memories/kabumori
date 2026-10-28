@@ -33,7 +33,7 @@ export {
   type BudgetSettlement,
   InMemoryBudgetGuard,
 } from "./budget.ts";
-export { LedgerRpcError, type LedgerGuardOptions, SupabaseLedgerBudgetGuard } from "./ledger_guard.ts";
+export { LedgerOwnerNotHeldError, LedgerRpcError, type LedgerGuardOptions, SupabaseLedgerBudgetGuard } from "./ledger_guard.ts";
 export {
   AI_PROVIDER_CATALOG_VERSION,
   findModelSpec,

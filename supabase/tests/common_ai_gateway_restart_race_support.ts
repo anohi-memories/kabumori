@@ -51,6 +51,8 @@ export type Gw = {
   rpcTimeoutMs?: number;
   trace?: boolean;
   ownerHeld?: boolean;
+  /** G6-20: the runtime ledger mode (unset: the legacy check the older suites pin). */
+  ledgerMode?: "owner_held" | "legacy_busy_check_unsafe";
 };
 export let seq = 0;
 /** One separate process. `done` resolves with its RESULT line, or with the signal that killed it. */
@@ -74,7 +76,7 @@ export function gateway(operationId: string, g: Gw = {}) {
   return spawn({
     role: "gateway", revision: g.revision ?? "r1", credential: g.credential ?? JWT_A1, app, feature: g.feature ?? (app === "postona" ? "consult" : "market_report"),
     operationId, brand: g.brand === undefined ? (app === "postona" ? "brand_x" : null) : g.brand, pauseAt: g.pauseAt ?? null,
-    faults: g.faults, providerReplies: g.providerReplies, rpcTimeoutMs: g.rpcTimeoutMs, trace: g.trace, ownerHeld: g.ownerHeld,
+    faults: g.faults, providerReplies: g.providerReplies, rpcTimeoutMs: g.rpcTimeoutMs, trace: g.trace, ownerHeld: g.ownerHeld, ledgerMode: g.ledgerMode,
   });
 }
 export async function answer(p: ReturnType<typeof spawn>): Promise<Result> {

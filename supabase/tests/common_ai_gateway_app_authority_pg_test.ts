@@ -91,6 +91,8 @@ function world(options: { respond?: (call: RecordedCall) => Response | Promise<R
   const provider = recordingFetch((call) => (options.respond ?? reply)(call));
   const g5 = options.g5 ?? new G5();
   const gateway = createAiGateway({
+    // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+    ledgerMode: "legacy_busy_check_unsafe",
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),

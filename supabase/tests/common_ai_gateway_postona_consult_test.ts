@@ -159,6 +159,8 @@ function world(options: { respond?: (call: RecordedCall) => Response | Promise<R
   const fetch: FetchLike = (input, init) => (String(input).startsWith(SUPABASE) ? supabase.fetch(input, init) : openai.fetch(input, init));
   const set = buildAppPolicySet({ "postona:consult": options.config ?? CONFIG }, { "postona:consult": POSTONA_CONSULT_CONTENT });
   const gateway = options.gateway === "off" ? null : createAiGateway({
+    // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+    ledgerMode: "legacy_busy_check_unsafe",
     supabaseUrl: SUPABASE,
     serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
     readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : undefined),

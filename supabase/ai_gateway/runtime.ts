@@ -2,7 +2,8 @@
 // server can call. It wires, with nothing else:
 //   - the shared provider (executeAiRequest through the real OpenAI / Anthropic adapters), reading ONLY the provider
 //     key environment names;
-//   - the ledger (the real SupabaseLedgerBudgetGuard): the source of truth for usage and cost;
+//   - the ledger (the real SupabaseLedgerBudgetGuard): the source of truth for usage and cost; since G6-20 bound to
+//     each call's claim (owner-held: reserve / mark sent / release check ownership in the same transaction);
 //   - the call store (SupabaseAiCallsStore over the ai_calls RPCs): idempotency per operation;
 //   - the authority (G5's verdict / recheck): an injected port; nothing here derives identity or ownership;
 //   - the apps' feature policies (a registry checked at startup).
@@ -12,8 +13,8 @@
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { type EnvReader, PROVIDER_API_KEY_ENV, type RetryTiming, SupabaseLedgerBudgetGuard } from "../functions/_shared/ai_provider/mod.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
-import { SupabaseAiCallsStore, supabaseUrlAllowed } from "./ai_calls_store.ts";
-import { type AuthorityPort, gatewayExecute, type GatewayResult, type PolicyRegistry } from "./gateway.ts";
+import { heldPayload, SupabaseAiCallsStore, supabaseUrlAllowed } from "./ai_calls_store.ts";
+import { type AuthorityPort, gatewayExecute, type GatewayDeps, type GatewayResult, type HeldBinding, type PolicyRegistry } from "./gateway.ts";
 import { isDefinedRegistry } from "./policy_registry.ts";
 
 export type AiGatewayOptions = Readonly<{
@@ -37,6 +38,13 @@ export type AiGatewayOptions = Readonly<{
   retryTiming?: RetryTiming;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
+  /**
+   * G6-20: "owner_held" (the default) binds the ledger to each call's claim through public.ai_calls_*_held
+   * (supabase/candidates/common_ai_g6/001_ai_calls_owner_held_ledger.sql; without it every send fails closed).
+   * "legacy_busy_check_unsafe" is the old busy re-claim check, kept ONLY for the older test suites: a stalled process
+   * can send for a row it no longer owns (G6-18). Anything else is a configuration error.
+   */
+  ledgerMode?: "owner_held" | "legacy_busy_check_unsafe";
 }>;
 
 export type AiGateway = Readonly<{ execute(credential: unknown, request: unknown): Promise<GatewayResult> }>;
@@ -67,17 +75,22 @@ export function createAiGateway(options: AiGatewayOptions): AiGateway {
     throw new AiGatewayConfigError("authority");
   }
   if (!isDefinedRegistry(options.policies)) throw new AiGatewayConfigError("policies");
+  const ledgerMode = options.ledgerMode ?? "owner_held";
+  if (ledgerMode !== "owner_held" && ledgerMode !== "legacy_busy_check_unsafe") throw new AiGatewayConfigError("ledger_mode");
 
   const outerReadEnv = options.readEnv;
   // Least privilege: the provider layer may read the provider keys and nothing else.
   const readEnv: EnvReader = (name) => (PROVIDER_KEY_NAMES.includes(name) ? outerReadEnv(name) : undefined);
-  const budget = new SupabaseLedgerBudgetGuard({
+  const ledgerOptions = {
     supabaseUrl: options.supabaseUrl,
     serviceKey: options.serviceKey,
     fetch: options.fetch,
     holdSeconds: options.holdSeconds,
     rpcTimeoutMs: options.rpcTimeoutMs,
-  });
+  };
+  const ledger: Pick<GatewayDeps, "heldBudget" | "budget" | "legacyBusyHeldCheck"> = ledgerMode === "owner_held"
+    ? { heldBudget: (b: HeldBinding) => new SupabaseLedgerBudgetGuard({ ...ledgerOptions, held: heldPayload(b.identity, b.context, b.owner) }) }
+    : { budget: new SupabaseLedgerBudgetGuard(ledgerOptions), legacyBusyHeldCheck: true };
   const store = new SupabaseAiCallsStore({
     supabaseUrl: options.supabaseUrl,
     serviceKey: options.serviceKey,
@@ -94,7 +107,7 @@ export function createAiGateway(options: AiGatewayOptions): AiGateway {
       sleep: options.sleep,
       random: options.random,
     },
-    budget,
+    ...ledger,
     store,
     nowMs: options.nowMs,
   });

@@ -177,6 +177,8 @@ function world(mode: Mode, respond?: () => Response, ownerBound = false) {
   for (const proc of ["A", "B", "C"] as Proc[]) {
     const provider = recordingFetch(() => respond?.() ?? jsonResponse(200, openAiBody({ reply: `from ${proc}` }, { model: "gpt-6-luna" })));
     const gateway = createAiGateway({
+      // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
+      ledgerMode: "legacy_busy_check_unsafe",
       supabaseUrl: SUPABASE,
       serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
       readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),

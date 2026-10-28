@@ -229,10 +229,11 @@ if (!only || only === "minimality") {
     } else caught++;
     await Deno.remove(root, { recursive: true });
   }
-  // 7 file references + 9 reachers (G6-06 adds recovery.ts) + 26 provider names (counted from the patch).
-  if (variants.length !== 42) {
+  // 7 file references + 10 reachers (G6-06 adds recovery.ts, G6-20 postona_post_assist.ts) + 27 provider names (G6-20 adds
+  // LedgerOwnerNotHeldError for gateway.ts), counted from the patch.
+  if (variants.length !== 44) {
     failures++;
-    console.log(`BAD  minimality: expected 42 single grants in the proposal, parsed ${variants.length}`);
+    console.log(`BAD  minimality: expected 44 single grants in the proposal, parsed ${variants.length}`);
   }
   console.log(`${caught === variants.length ? "OK  " : "BAD "} minimality: ${caught}/${variants.length} single-grant removals each make the placed tree fail`);
 }

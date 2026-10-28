@@ -147,6 +147,7 @@ function deps(net: FetchLike, budget: BudgetGuard, authority: AuthorityPort, sto
       random: () => 0,
     },
     budget,
+    legacyBusyHeldCheck: true, // G6-20: pins the legacy busy re-claim check (the owner-held path has its own suites)
     store,
   };
 }

@@ -29,7 +29,24 @@ export type LedgerGuardOptions = {
   readonly holdSeconds?: number;
   /** Per RPC call (default 10 s). */
   readonly rpcTimeoutMs?: number;
+  /**
+   * G6-20: the common AI gateway's owner-held identity of ONE call (ai_calls_claim_held's input: the claim identity and
+   * the ORIGINAL claim token). With it, reserve / markSent / release go through public.ai_calls_{reserve,mark_sent,
+   * release}_held, which check that this claim still owns the call in the same transaction as the ledger step
+   * (candidate supabase/candidates/common_ai_g6/001_ai_calls_owner_held_ledger.sql); settle is unchanged. A refusal
+   * because the claim no longer owns the call throws LedgerOwnerNotHeldError. Without it the guard is exactly as before.
+   */
+  readonly held?: Readonly<Record<string, unknown>>;
 };
+
+/** G6-20: the claim no longer owns the call (or the attempt is another claim's): nothing may be reserved or sent. */
+export class LedgerOwnerNotHeldError extends Error {
+  readonly reason: string;
+  constructor(rpc: string, reason: string | null) {
+    super(`AI_LEDGER_OWNER_NOT_HELD:${rpc}:${reason ?? "unknown"}`);
+    this.reason = reason ?? "unknown";
+  }
+}
 
 export class LedgerRpcError extends Error {
   readonly rpc: string;
@@ -81,6 +98,7 @@ export class SupabaseLedgerBudgetGuard implements BudgetGuard {
   readonly #fetch: FetchLike;
   readonly #holdSeconds: number;
   readonly #timeoutMs: number;
+  readonly #held: Readonly<Record<string, unknown>> | null;
 
   constructor(options: LedgerGuardOptions) {
     const url = new URL(options.supabaseUrl);
@@ -93,6 +111,10 @@ export class SupabaseLedgerBudgetGuard implements BudgetGuard {
     if (!Number.isInteger(hold) || hold < 30 || hold > 3600) throw new Error("AI_LEDGER_HOLD_SECONDS_INVALID");
     this.#holdSeconds = hold;
     this.#timeoutMs = options.rpcTimeoutMs ?? 10_000;
+    if (options.held !== undefined && (!isRecord(options.held) || typeof options.held.call_key !== "string" || typeof options.held.owner !== "string")) {
+      throw new Error("AI_LEDGER_HELD_IDENTITY_INVALID");
+    }
+    this.#held = options.held ?? null;
   }
 
   async #rpc(name: string, p: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -143,7 +165,14 @@ export class SupabaseLedgerBudgetGuard implements BudgetGuard {
       p.user_id = subject.userId;
       if (subject.brandId) p.brand_id = subject.brandId;
     }
-    const result = await this.#rpc("ai_ledger_reserve", p);
+    let result: Record<string, unknown>;
+    if (this.#held) {
+      result = await this.#rpc("ai_calls_reserve_held", { held: this.#held, ledger: p });
+      if (result.held !== true) throw new LedgerOwnerNotHeldError("ai_calls_reserve_held", safeToken(result.reason));
+      if (result.allowed !== true && result.reason === "ATTEMPT_OWNER_MISMATCH") throw new LedgerOwnerNotHeldError("ai_calls_reserve_held", "ATTEMPT_OWNER_MISMATCH");
+    } else {
+      result = await this.#rpc("ai_ledger_reserve", p);
+    }
     if (result.allowed === true && typeof result.reservation_id === "string") {
       return { allowed: true, reservation: { id: result.reservation_id, limitIds: [], reservedUsd: ceilUsd(upperBoundUsd) } };
     }
@@ -151,11 +180,24 @@ export class SupabaseLedgerBudgetGuard implements BudgetGuard {
   }
 
   async markSent(reservation: BudgetReservation): Promise<void> {
+    if (this.#held) {
+      const held = await this.#rpc("ai_calls_mark_sent_held", { held: this.#held, reservation_id: reservation.id });
+      if (held.held !== true || held.reason === "ATTEMPT_OWNER_MISMATCH") {
+        throw new LedgerOwnerNotHeldError("ai_calls_mark_sent_held", safeToken(held.reason));
+      }
+      if (held.may_send !== true) throw new Error(`AI_LEDGER_SEND_NOT_ALLOWED:${safeToken(held.status) ?? "unknown"}`);
+      return;
+    }
     const result = await this.#rpc("ai_ledger_mark_sent", { reservation_id: reservation.id });
     if (result.may_send !== true) throw new Error(`AI_LEDGER_SEND_NOT_ALLOWED:${safeToken(result.status) ?? "unknown"}`);
   }
 
   async release(reservation: BudgetReservation): Promise<void> {
+    if (this.#held) {
+      // Only a reservation this claim made is released; another claim's is never touched.
+      await this.#rpc("ai_calls_release_held", { held: this.#held, reservation_id: reservation.id });
+      return;
+    }
     await this.#rpc("ai_ledger_release", { reservation_id: reservation.id });
   }
 

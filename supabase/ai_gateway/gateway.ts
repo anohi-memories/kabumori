@@ -8,11 +8,23 @@
 //   request shape -> authority verdict (G5's, an INPUT here) -> app feature policy -> cost bound -> call key and
 //   claim (idempotency) -> [per attempt] ledger reserve -> claim still held -> authority RECHECK -> ledger mark sent ->
 //   ONE provider request -> ledger settle | unknown -> app output check -> record the outcome -> answer.
+// G6-20 (owner-held ledger, the runtime default): "ledger reserve" and "ledger mark sent" each check, in the same
+// database transaction, that this claim still owns the call, so the separate "claim still held" step is gone.
 //
 // 2026-10-19 (PR289 GAP-1..3): a revocation before ANY attempt is AUTH_REVOKED_BEFORE_SEND (not a quota); a ledger
 // that is unreachable or does not confirm the send is LEDGER_UNAVAILABLE (not a quota); the stored outcome uses the
 // call store's audit (ai_calls / H5 bridge Audit, nine keys), mapped here and checked again on replay.
-import { type AiRequest, type AiSubject, type BudgetGuard, executeAiRequest, type ExecuteDeps, findModelSpec, type JsonSchema, upperBoundAttemptCostUsd } from "../functions/_shared/ai_provider/mod.ts";
+import {
+  type AiRequest,
+  type AiSubject,
+  type BudgetGuard,
+  executeAiRequest,
+  type ExecuteDeps,
+  findModelSpec,
+  type JsonSchema,
+  LedgerOwnerNotHeldError,
+  upperBoundAttemptCostUsd,
+} from "../functions/_shared/ai_provider/mod.ts";
 
 export type AppId = "kabumori" | "postona" | "miseiro";
 const APPS: readonly AppId[] = ["kabumori", "postona", "miseiro"];
@@ -147,11 +159,27 @@ export type GatewayDeps = Readonly<{
   policies: PolicyRegistry;
   /** Shared provider: readEnv (provider keys), fetch, retry timing. */
   provider: Omit<ExecuteDeps, "budget">;
-  /** The ledger: the source of truth for usage and cost (reserve -> mark sent -> settle | unknown). */
-  budget: BudgetGuard;
+  /**
+   * G6-20: the OWNER-HELD ledger (the default of createAiGateway): a ledger guard bound to this call's claim, whose
+   * reserve / mark sent / release check, in the same database transaction, that the claim still owns the call
+   * (candidate supabase/candidates/common_ai_g6/001_ai_calls_owner_held_ledger.sql). It replaces the busy re-claim as
+   * the pre-send check (G6-17 / G6-18 KNOWN GAP 2 and 3, closed together: C1 + C3).
+   */
+  heldBudget?: (binding: HeldBinding) => BudgetGuard;
+  /** The ledger without the owner check: used ONLY with legacyBusyHeldCheck (UNSAFE, kept for the older suites). */
+  budget?: BudgetGuard;
+  /**
+   * UNSAFE legacy pre-send check (busy from a second ai_calls_claim), with the plain `budget`: a stalled process can
+   * send for a row it no longer owns and re-create a forgotten row (G6-18 S2 / S3 / S5 / S8b). Never set by
+   * createAiGateway's default; without heldBudget and without this flag the gateway refuses before anything is asked.
+   */
+  legacyBusyHeldCheck?: boolean;
   store: CallStore;
   nowMs?: () => number;
 }>;
+
+/** What the owner-held ledger needs to know about the claim that is about to spend. */
+export type HeldBinding = Readonly<{ identity: CallIdentity; context: ClaimContext; owner: string }>;
 
 const OPERATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$/;
 const FEATURE = /^[a-z][a-z0-9_.]{1,63}$/;
@@ -241,6 +269,9 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
     return fail("REQUEST_INVALID");
   }
   const req = { app: app as AppId, feature, operationId, input, brand: brand as BrandRef | null };
+  // G6-20: the owner-held ledger, or explicitly the unsafe legacy check; anything else refuses before G5 is asked.
+  const ownerHeld = typeof deps.heldBudget === "function";
+  if (!ownerHeld && !(deps.legacyBusyHeldCheck === true && deps.budget)) return fail("LEDGER_UNAVAILABLE");
 
   // 2. The authority's verdict (an input: the gateway never decides identity, ownership or service state).
   let verdict: AuthVerdict;
@@ -314,47 +345,76 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   }
   if (claim.kind !== "acquired") return fail("UNKNOWN");
 
-  // 7. Before EACH attempt: the ledger reserves; then the claim must still be held (G6-07): recovery may have closed
-  //    the row while this process was stalled. It closes a row only when the ledger has no open attempt, and this
-  //    attempt's reservation is open from reserve on, so asking AFTER reserve leaves no gap; a closed or unreadable
-  //    claim sends nothing more. "busy" is not proof that THIS process owns the row (a deleted and re-created row is
-  //    busy too; G6-08 R1): the ledger's (call key, attempt) key still allows each attempt number one send only.
-  //    Then the authority is asked again, LAST before mark_sent (G6-09 R2: no other await between the recheck and
-  //    mark_sent); a changed answer stops the send (the reservation is released, nothing leaves). A change after the
-  //    recheck is not seen, and after mark_sent a call in flight cannot be stopped.
+  // 7. Before EACH attempt, the authority is asked again LAST before the send permit (G6-09 R2: no other await between
+  //    the recheck and mark_sent); a changed answer stops the send (the reservation is released, nothing leaves). A
+  //    change after the recheck is not seen, and after mark_sent a call in flight cannot be stopped.
+  //    Owner-held ledger (G6-20, the default): reserve and mark_sent each check, in the SAME database transaction, that
+  //    this claim (its original token, the full identity, still acquired) owns the call; a process that lost the row
+  //    never reaches the ledger, never takes or releases another claim's attempt, and gets no send permit (C1 + C3).
+  //    Legacy (UNSAFE, explicit flag only): after reserve, a second ai_calls_claim answering "busy" counts as held
+  //    (G6-07); "busy" is not proof of ownership (G6-08 R1, G6-18 S2 / S3 / S5 / S8b).
   let revoked = false;
   let fenced = false;
-  const budget: BudgetGuard = {
-    reserve: (c, cost) => deps.budget.reserve(c, cost),
-    markSent: async (r) => {
-      // The row stays "acquired" (busy for a second claim) until this call completes it or recovery closes it.
-      let held: CallClaim;
-      try {
-        held = await deps.store.claim(identity, claimContext);
-      } catch {
-        held = { kind: "conflict" };
-      }
-      if (held.kind !== "busy") {
-        fenced = true;
-        throw new Error("CLAIM_NOT_HELD");
-      }
-      let again: AuthVerdict;
-      try {
-        again = await deps.authority.recheck(verdict);
-      } catch {
-        revoked = true;
-        throw new Error("RECHECK_UNAVAILABLE");
-      }
-      if (verdictProblem(again, req.app, now()) !== null || again.generation !== verdict.generation ||
-        JSON.stringify(again.subject) !== JSON.stringify(verdict.subject)) {
-        revoked = true;
-        throw new Error("REVOKED");
-      }
-      await deps.budget.markSent?.(r);
-    },
-    settle: (r, c, s) => deps.budget.settle(r, c, s),
-    release: (r) => deps.budget.release?.(r) ?? Promise.resolve(),
+  const recheck = async () => {
+    let again: AuthVerdict;
+    try {
+      again = await deps.authority.recheck(verdict);
+    } catch {
+      revoked = true;
+      throw new Error("RECHECK_UNAVAILABLE");
+    }
+    if (verdictProblem(again, req.app, now()) !== null || again.generation !== verdict.generation ||
+      JSON.stringify(again.subject) !== JSON.stringify(verdict.subject)) {
+      revoked = true;
+      throw new Error("REVOKED");
+    }
   };
+  const fenceIfNotHeld = (e: unknown) => {
+    if (e instanceof LedgerOwnerNotHeldError) fenced = true;
+    throw e;
+  };
+  let budget: BudgetGuard;
+  if (ownerHeld) {
+    let bound: BudgetGuard;
+    try {
+      bound = deps.heldBudget!({ identity, context: claimContext, owner: claim.owner });
+    } catch {
+      return fail("UNKNOWN"); // nothing reserved; the row stays acquired for recovery
+    }
+    // Without its own mark_sent / release the owner check would be skipped: refuse such a ledger.
+    if (typeof bound.markSent !== "function" || typeof bound.release !== "function") return fail("UNKNOWN");
+    budget = {
+      reserve: (c, cost) => bound.reserve(c, cost).catch(fenceIfNotHeld),
+      markSent: async (r) => {
+        await recheck();
+        await bound.markSent!(r).catch(fenceIfNotHeld);
+      },
+      settle: (r, c, s) => bound.settle(r, c, s),
+      release: (r) => bound.release!(r),
+    };
+  } else {
+    const legacy = deps.budget!;
+    budget = {
+      reserve: (c, cost) => legacy.reserve(c, cost),
+      markSent: async (r) => {
+        // The row stays "acquired" (busy for a second claim) until this call completes it or recovery closes it.
+        let held: CallClaim;
+        try {
+          held = await deps.store.claim(identity, claimContext);
+        } catch {
+          held = { kind: "conflict" };
+        }
+        if (held.kind !== "busy") {
+          fenced = true;
+          throw new Error("CLAIM_NOT_HELD");
+        }
+        await recheck();
+        await legacy.markSent?.(r);
+      },
+      settle: (r, c, s) => legacy.settle(r, c, s),
+      release: (r) => legacy.release?.(r) ?? Promise.resolve(),
+    };
+  }
   let result;
   try {
     result = await executeAiRequest(aiRequest, { ...deps.provider, budget, nowMs: now });
