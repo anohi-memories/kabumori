@@ -3,7 +3,7 @@
 - probe(): Claude CLI の場所・実体・版を、ファイルを見るだけで調べる（CLI を実行しない）。
 - build_plan(): 承認済みの起動要求から、起動するなら使う argv・環境変数・標準入力を組み立てて返すだけ。
   実際の起動は adapter.get_adapter が偽Claude以外を拒否しているので、どこからも行われない。
-- 環境変数は許可リスト（PATH・LANG・HOME）だけ。ANTHROPIC_API_KEY 等の API 課金・別の認証に切り替わる変数は
+- 環境変数は許可リスト（PATH・LANG・HOME・USER。USER は TASK 19）だけ。ANTHROPIC_API_KEY 等の API 課金・別の認証に切り替わる変数は
   渡さない（Max の範囲で動かすため。課金が Max に収まることは実機で未検証）。
 - プロンプト（TASK 本文）は argv に入れず、標準入力から渡す（ps で他のユーザーから見えないように）。
 - フラグ名（-p・--output-format・--model・--session-id・--settings・--max-turns 等）は公開の資料に基づく想定で、
@@ -18,10 +18,11 @@
     timeout の効き方は未検証（NOT_VERIFIED）。偽Claude の停止・timeout・HALT はスタブと S1/S2 が試験済み。
 """
 import os
+import pwd
 import re
 import shutil
 
-ENV_ALLOWLIST = ("PATH", "LANG", "HOME")
+ENV_ALLOWLIST = ("PATH", "LANG", "HOME", "USER")
 FORBIDDEN_ENV = re.compile(r"ANTHROPIC|CLAUDE_CODE_USE_|AWS_|GOOGLE_|VERTEX|TOKEN|SECRET|PASSWORD|API_KEY", re.I)
 VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 SECRET_LIKE = re.compile(r"(ghp_|gho_|ghs_|ghu_|github_pat_|sk-ant-)[A-Za-z0-9_-]{8,}")
@@ -58,8 +59,15 @@ def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30):
             "--strict-mcp-config", "--allowedTools", "Read,Glob,Grep",
             "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task",
             "--max-turns", str(max_turns), "--max-budget-usd", str(request["max_budget_usd"])]
-    env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": home}
-    return {"argv": argv, "env": env, "stdin_path": prompt_path, "dry_run": True}
+    return {"argv": argv, "env": child_env(home), "stdin_path": prompt_path, "dry_run": True}
+
+
+def child_env(home):
+    """実 CLI の子に渡す環境（許可リストだけ。API キー・BASE_URL 等は渡さない）。
+
+    USER は、CLI が Keychain のログイン情報を探す名前に使う。TASK 19 の実測（auth status・モデルなし）で、USER が無いと
+    「Not logged in」、加えるとログイン済みになった。値はこのプロセスの uid の名前（秘密ではない）。"""
+    return {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": home, "USER": pwd.getpwuid(os.getuid()).pw_name}
 
 
 def check_env(env):
@@ -103,7 +111,8 @@ def describe(plan):
         if SECRET_LIKE.search(value):
             raise ValueError("plan contains a secret-like value")
         return value.replace(home, "<HOME>") if home else value
-    return {"argv": [red(a) for a in plan["argv"]], "env": {k: red(v) for k, v in sorted(plan["env"].items())},
+    return {"argv": [red(a) for a in plan["argv"]],
+            "env": {k: "<USER>" if k == "USER" else red(v) for k, v in sorted(plan["env"].items())},
             "stdin_path": red(plan["stdin_path"]), "dry_run": True}
 
 

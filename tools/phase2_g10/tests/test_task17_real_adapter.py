@@ -118,7 +118,7 @@ class RealAdapterPath(RealAdapterBase):
         self.assertFalse(any("readonly_trial" in a for a in c["argv"]))
         # /usr/bin/python3（Xcode の中継）が代役の起動時に自分で足す変数を除けば、渡すのは PATH・LANG・HOME だけ
         shim = {"CPATH", "LIBRARY_PATH", "MANPATH", "SDKROOT", "__CF_USER_TEXT_ENCODING", "PWD"}
-        self.assertEqual(set(c["env_keys"]) - shim, {"PATH", "LANG", "HOME"}, c["env_keys"])
+        self.assertEqual(set(c["env_keys"]) - shim, {"PATH", "LANG", "HOME", "USER"}, c["env_keys"])  # USER: TASK 19
         self.assertFalse([k for k in c["env_keys"] if k.startswith(("ANTHROPIC", "CLAUDE", "GH_", "GITHUB"))])
         self.assertTrue(c["cwd_has_marker"])  # 作業フォルダは base_sha の checkout
         for flag in ("--allowedTools", "--disallowedTools", "--strict-mcp-config", "--setting-sources",
@@ -289,13 +289,14 @@ class AuthStatusCheck(RealAdapterBase):
         r = real_claude.auth_status(self.cli, self.home)
         self.assertIs(r["logged_in"], True)
         self.assertEqual((r["exit_code"], r["auth_method"], r["subscription_type"]), (0, "claude.ai", "max"))
-        self.assertEqual(r["env_names"], ["HOME", "LANG", "PATH"])
+        self.assertEqual(r["env_names"], ["HOME", "LANG", "PATH", "USER"])
         self.assertNotIn("secret-person", json.dumps(r))
         self.assertNotIn("Secret Org", json.dumps(r))
         call = self.auth_calls()[0]
         self.assertEqual(call["argv"], ["auth", "status", "--json"])
         self.assertEqual(call["cwd"], "/")
-        for name in ("USER", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_SESSION_ID"):
+        self.assertIn("USER", call["env_keys"])  # TASK 19: 無いと CLI が Keychain のログイン情報を見つけない
+        for name in ("LOGNAME", "TMPDIR", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_SESSION_ID"):
             self.assertNotIn(name, call["env_keys"])
 
     def test_not_logged_in_and_unparseable_output(self):
@@ -315,9 +316,20 @@ class AuthStatusCheck(RealAdapterBase):
         with self.assertRaises(real_claude.RealClaudeError):
             real_claude.auth_status(self.cli, self.home, extra_env={"ANTHROPIC_API_KEY": "x"})
         self.assertEqual(self.auth_calls(), [])
-        r = real_claude.auth_status(self.cli, self.home, extra_env={"USER": "someone"})
-        self.assertEqual(r["env_names"], ["HOME", "LANG", "PATH", "USER"])
-        self.assertIn("USER", self.auth_calls()[0]["env_keys"])
+        r = real_claude.auth_status(self.cli, self.home, extra_env={"TMPDIR": "/tmp"})
+        self.assertEqual(r["env_names"], ["HOME", "LANG", "PATH", "TMPDIR", "USER"])
+        self.assertIn("TMPDIR", self.auth_calls()[0]["env_keys"])
+
+    def test_child_user_is_the_uid_name_and_is_masked_in_displays(self):
+        import pwd
+        from g10runner import claude_cli_plan as ccp
+        env = real_claude.child_environment(self.home)
+        self.assertEqual(env["USER"], pwd.getpwuid(os.getuid()).pw_name)
+        plan = ccp.build_plan(self.cli, {"model_id": "m", "session_id": "s", "run_id": "r", "max_budget_usd": "0.10"},
+                              "/r/prompt.md", "/r/settings.json", self.home)
+        self.assertEqual(plan["env"], env)
+        self.assertTrue(ccp.check_env(plan["env"]))
+        self.assertEqual(ccp.describe(plan)["env"]["USER"], "<USER>")
 
     def test_auth_check_command_prints_no_email(self):
         import contextlib

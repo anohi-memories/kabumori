@@ -8,15 +8,17 @@ GO には、人が確認して固定した CLI の実体（絶対パス）と版
 
 - 起動の直前（共有ロックの中・SPAWNING の後）に claude_cli_plan.prelaunch_check で、起動待ちがちょうど1件・
   CLI の実体と版が GO どおり・計画が承認済みの値から作り直したものと完全に同じ・環境変数が許可リストだけ、を確かめる。
-- プロンプトは標準入力から渡す（argv に入れない）。環境変数は PATH・LANG・HOME だけ（API キー・BASE_URL 等は渡さない）。
+- プロンプトは標準入力から渡す（argv に入れない）。環境変数は PATH・LANG・HOME・USER だけ（API キー・BASE_URL 等は
+  渡さない。USER は TASK 19 で、CLI が Keychain のログイン情報を見つけるのに要ると実測）。
 - 道具は読み取りだけ（Read・Glob・Grep）。設定ファイルで書き込み・コマンド・Web を拒否し、MCP は読み込まない。
 - 作業フォルダは、GO のローカルリポジトリからの共有クローン（ネットワークに触れない）を base_sha で detached に
   checkout し、読み取り専用にする。
 - 停止・期限・HALT は偽Claude と同じスタブと S1/S2 の仕組みで行う（実 CLI の子プロセスの停止の実機確認は未了）。
 - このモジュールは、上の条件を満たさない限り何も実行しない。実 CLI のフラグの受け付け・課金・modelUsage の形は
   実機で未確認（NOT_VERIFIED）。
-- TASK 19: 初回の実機起動が「Not logged in」で終わったので、CLAIM（承認の消費）の前に、子と同じ環境で
-  `<CLI> auth status --json`（モデルを呼ばない・課金なし）を1回実行し、ログインしていなければ起動しない（auth_status）。
+- TASK 19: 初回の実機起動が「Not logged in」で終わった。原因は子に USER を渡していなかったこと（auth status で実測）。
+  加えて、CLAIM（承認の消費）の前に、子と同じ環境で `<CLI> auth status --json`（モデルを呼ばない・課金なし）を1回
+  実行し、ログインしていなければ起動しない（auth_status）。
 """
 import json
 import os
@@ -46,8 +48,8 @@ class RealClaudeError(ValueError):
 
 
 def child_environment(home):
-    """実 CLI の子に渡す環境（PATH・LANG・HOME だけ。API キー・BASE_URL 等は渡さない）。"""
-    return {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8", "HOME": home}
+    """実 CLI の子に渡す環境（claude_cli_plan.child_env と同じ: PATH・LANG・HOME・USER）。"""
+    return ccp.child_env(home)
 
 
 def _word(value):

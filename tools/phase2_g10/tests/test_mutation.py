@@ -615,6 +615,9 @@ MUTANTS = [
      '               api_provider=_word(doc.get("apiProvider")), subscription_type=_word(doc.get("subscriptionType")),\n'
      '               raw=doc)\n',
      "test_task17_real_adapter.AuthStatusCheck.test_returns_only_safe_fields_in_the_child_environment"),
+    ("USER not passed to the real CLI child", "g10runner/claude_cli_plan.py",
+     '"HOME": home, "USER": pwd.getpwuid(os.getuid()).pw_name}', '"HOME": home}',
+     "test_task17_real_adapter.RealAdapterPath.test_one_supervised_launch_through_the_real_adapter_path"),
 ]
 
 

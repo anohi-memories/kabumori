@@ -300,7 +300,7 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 - `g10runner/real_claude.py`: 実 CLI のアダプタ。ポリシーが `adapter: "claude_cli"` で、かつ人の署名の `REAL_CLAUDE_GO`（制御ログ）が
   その要求の approval_id・TASK のハッシュ・本文の SHA-256 に一致し期限内のときだけ使える（GO 1件で最大1回）。
   - 起動の直前（共有ロックの中・SPAWNING の後）に `prelaunch_check`（起動待ちちょうど1件・CLI の実体と版が GO どおり・計画が
-    承認済みの値から作り直したものと完全一致・環境変数は PATH/LANG/HOME だけ・GO の期限）。プロンプトは標準入力から。
+    承認済みの値から作り直したものと完全一致・環境変数は PATH/LANG/HOME（TASK 19 から USER も）だけ・GO の期限）。プロンプトは標準入力から。
   - 道具は Read/Glob/Grep だけ（`--allowedTools`／`--disallowedTools`・設定ファイルの deny）。`--setting-sources local`・
     `--strict-mcp-config` で利用者の hooks・plugins・MCP を読み込まない。`--max-turns`・`--max-budget-usd` で上限。
     フラグの文字列は版 2.1.305 の実行ファイルの中で存在を確認したが、受け付け・効き方は実機で未確認。
@@ -334,24 +334,26 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
   「Not logged in · Please run /login」を返し、133ms で終了した（API 未到達・0 USD）。承認 g10-p2-20261028-0001 は消費済み。
 - 調べたこと（秘密の値は見ていない）:
   - CLI はログイン情報を Keychain から `security find-generic-password -a "<名前>" -w -s "Claude Code-credentials"` で読む。
-    名前は `process.env.USER || os.userInfo().username` なので、USER を渡していないことは原因ではない（仮説は否定）。
+    コード上の名前は `process.env.USER || <別の取得>` で、USER が無くても動くように読めたが、**実測では USER が必要**だった（下）。
   - 項目の名前は CLAUDE_CONFIG_DIR／CLAUDE_SECURESTORAGE_CONFIG_DIR が無ければ既定のまま（子にも渡していない）。
   - Keychain のその項目は、主ユーザーの名前で存在する（終了コードだけで確認。値は読んでいない）。
   - ユーザー設定（~/.claude/settings.json）にログイン関係の設定や env はない。
   - このデスクトップアプリの Claude Code はアプリ側の認証（ANTHROPIC_BASE_URL 等）で動いている。端末の CLI 自体が今
     ログイン済みかどうかは未確認。
-  - 原因は未確定。残る候補: (a) Keychain の項目が古い／期限切れで、端末の CLI 自体も未ログイン。(b) 子の状況では
-    Keychain の値を読めない。どちらも、確かめるには CLI の実行か Keychain の値の読み取りが要る（人の GO が必要）。
-- 修正（原因を問わず、承認を無駄にしないための最小の修正）:
-  - `real_claude.auth_status`: GO で固定した CLI の `auth status --json`（モデルを呼ばない）を、子と同じ環境・cwd `/`・
+  - **原因の確定（2026-10-28 13:17〜13:22 JST、ユーザー GO で auth-check を計6回・モデルなし・0円）**: 本人の端末の
+    `claude auth status` はログイン済み（Claude Max）。子の環境（PATH・LANG・HOME）では未ログイン、5つの候補を加えると
+    ログイン済み、USER だけを加えてもログイン済み、USER を外すと再び未ログイン。→ 原因は子に USER を渡していなかったこと。
+- 修正:
+  - 子の環境に USER を加えた（`claude_cli_plan.child_env`。値はこのプロセスの uid の名前・秘密ではない。表示では `<USER>`）。
+    修正後のコードで auth-check（追加の指定なし）がログイン済みになることを実機で確認。
+  - `real_claude.auth_status`（承認を無駄にしないための確認）: GO で固定した CLI の `auth status --json`（モデルを呼ばない）を、子と同じ環境・cwd `/`・
     stdin なしで1回実行。返すのは loggedIn・authMethod・apiProvider・subscriptionType と終了コード・環境変数の名前だけ
     （メールアドレス・組織名を含む生の出力は返さず、保存もしない）。
   - `bin/g10_first_run.py run`: CLAIM の前にこれを行い、ログインしていなければ止める（承認は消費しない。直してから同じ承認で起動できる）。
   - `bin/g10_first_run.py auth-check --cli <CLI> [--with-env NAME]`: 診断用。--with-env は USER・LOGNAME・TMPDIR・SHELL・
     __CF_USER_TEXT_ENCODING だけ（値は表示しない）。
-- 次の手順（各行に人の明示の GO）: ① auth-check（子の環境）→ ② 未ログインなら、端末で `claude auth status --text` を本人が
-  確認し、必要なら本人が `claude auth login`（Claude の操作は本人だけ。token の発行・取得はしない）→ ③ 必要なら --with-env で
-  絞り込み → ④ G10 が作った新しい承認番号の本文をちゃが貼る → approve → S2 → run。
+- 次の手順（各行に人の明示の GO）: G10 が作った新しい承認番号の本文をちゃが貼る → approve → S2 → run
+  （run は CLAIM の前にもう一度ログインを確かめる）。
 
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
