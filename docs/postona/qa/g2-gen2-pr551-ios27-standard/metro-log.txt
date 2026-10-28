@@ -1,0 +1,4 @@
+# plain Metro (no rig, EXPO_PUBLIC_DATA_SOURCE=mock):
+iOS Bundled 5220ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1406 modules)
+# rig Metro (G2 JS rig: fake session / local data as ready / scripted port):
+iOS Bundled 3714ms ../../../kabumori-g2-ios27-diag/apps/social-mobile/node_modules/expo-router/entry.js (1399 modules)
