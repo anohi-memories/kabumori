@@ -1,6 +1,6 @@
 --- a/supabase/functions/_shared/ai_provider/isolation_test.ts
 +++ b/supabase/functions/_shared/ai_provider/isolation_test.ts
-@@ -96,12 +96,30 @@
+@@ -96,12 +96,31 @@
    "_shared/ai_consumer_bridge/bridge_test.ts": ["../ai_provider/test_support.ts"],
    "_shared/ai_consumer_bridge/isolation_test.ts": ["../ai_provider/mod.ts"],
    "_shared/ai_consumer_bridge/offline_samples_test.ts": ["../ai_provider/mod.ts", "../ai_provider/test_support.ts"],
@@ -26,12 +26,13 @@
 +  "_shared/ai_gateway/policy_registry.ts",
 +  "_shared/ai_gateway/postona_consult_adapter.ts",
 +  "_shared/ai_gateway/postona_post_assist.ts",
++  "_shared/ai_gateway/postona_post_assist_mvp.ts",
 +  "_shared/ai_gateway/recovery.ts",
 +  "_shared/ai_gateway/runtime.ts",
    "market-report-analysis/handler.ts",
    "market-report-analysis/index.ts",
  ];
-@@ -138,6 +156,32 @@
+@@ -138,6 +157,32 @@
    "_shared/ai_consumer_bridge/types.ts": {
      "_shared/ai_provider/mod.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
    },
