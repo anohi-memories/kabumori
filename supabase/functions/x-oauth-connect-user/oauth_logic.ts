@@ -51,11 +51,14 @@ const WORKSPACE_REFUSALS = new Set([
 ]);
 const TRANSIENT_REFUSALS = new Set(["ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE"]);
 
+// G4-47 (H1 #306 25th, P2 F1): the known codes are classified FIRST. T13 raises its refusals with SQLSTATE 42501, which PostgREST
+// answers with HTTP 403 for an authenticated caller; keeping 401 / 403 first turned every T13 refusal into a bare 403. A 401 / 403
+// whose message is not a known code (PostgREST's own JWT / ACL errors) is still kept as it is.
 export function rpcRefusalStatus(code: string, httpStatus: number): number {
-  if (httpStatus === 401 || httpStatus === 403) return httpStatus;
   if (SESSION_REFUSALS.has(code)) return 401;
   if (WORKSPACE_REFUSALS.has(code)) return 409;
   if (TRANSIENT_REFUSALS.has(code)) return 503;
+  if (httpStatus === 401 || httpStatus === 403) return httpStatus;
   return 400;
 }
 
