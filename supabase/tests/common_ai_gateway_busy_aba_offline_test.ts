@@ -22,7 +22,7 @@ import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
 import { buildAppPolicySet, type FeatureContent } from "../ai_gateway/app_policies.ts";
 import type { AuthorityPort, AuthVerdict } from "../ai_gateway/gateway.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { AiGatewayConfigError, createAiGateway } from "../ai_gateway/runtime.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";
 const SERVICE_KEY = "local-g6-18-service-NOT-A-SECRET";
@@ -171,7 +171,7 @@ class Model {
   }
 }
 
-function world(mode: Mode, respond?: () => Response, ownerBound = false) {
+function world(mode: Mode, respond?: () => Response, ownerBound = false, base = SUPABASE, serviceKey = SERVICE_KEY) {
   const model = new Model(mode, ownerBound);
   const procs = {} as Record<Proc, { run: () => Promise<{ ok: boolean; code?: string }>; sends: () => number }>;
   for (const proc of ["A", "B", "C"] as Proc[]) {
@@ -179,12 +179,12 @@ function world(mode: Mode, respond?: () => Response, ownerBound = false) {
     const gateway = createAiGateway({
       // G6-20: this suite pins the legacy busy re-claim check; the owner-held default has its own suites.
       ledgerMode: "legacy_busy_check_unsafe",
-      supabaseUrl: SUPABASE,
-      serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", SERVICE_KEY),
+      supabaseUrl: base,
+      serviceKey: new SecretValue("AI_GATEWAY_SERVICE_KEY", serviceKey),
       readEnv: (name) => (name === "OPENAI_API_KEY" ? FAKE_OPENAI_KEY : name === "ANTHROPIC_API_KEY" ? FAKE_ANTHROPIC_KEY : undefined),
       authority: ALLOW,
       policies: SET.registry,
-      fetch: (input, init) => (String(input).startsWith(SUPABASE) ? model.fetchFor(proc)(input, init) : provider.fetch(input, init)),
+      fetch: (input, init) => (String(input).startsWith(base) ? model.fetchFor(proc)(input, init) : provider.fetch(input, init)),
       retryTiming: { baseDelayMs: 1, maxDelayMs: 1, maxRetryAfterMs: 10, minAttemptMs: 1 },
       sleep: () => Promise.resolve(),
       random: () => 0,
@@ -311,6 +311,31 @@ Deno.test("KNOWN GAP S2 (current): stale A resumes after B reserved but before B
   assert.ok(cur.log.some((l) => l.startsWith("A reserve ->") && l.includes('"reused":true')), "A reused B's reservation");
   const cand = await run("candidate");
   assert.deepEqual([cand.ra, cand.rb, cand.sends, cand.statuses], ["UNKNOWN", "UNKNOWN", { A: 0, B: 0, C: 0 }, ["released"]], "KNOWN GAP (candidate): the stale release blocks the owner");
+});
+
+Deno.test("FENCED (G6-22, H2 #329 P2 F1 negative 2): the same S2 A -> B -> A with a production-shaped (non-loopback) Supabase URL and secret-shaped key: the legacy mode is refused when the gateways are built, so the stale claimant A sends 0 and B sends 0 (nothing reaches the ledger)", async () => {
+  const prodUrl = "https://abcdefghijklmnopqrst.supabase.co";
+  const prodKey = "sb_secret_" + "FAKE_0000000000";
+  let w: ReturnType<typeof world> | undefined;
+  let refused = "";
+  try {
+    w = world("current", undefined, false, prodUrl, prodKey);
+  } catch (e) {
+    assert.ok(e instanceof AiGatewayConfigError, String(e));
+    refused = e.message;
+  }
+  if (w) {
+    // Before G6-22 the gateways were built: run the exact S2 interleaving and report what the stale claimant did.
+    const { a, gate } = await staleA(w);
+    const gb = w.model.pause("B", "ai_ledger_mark_sent");
+    const b = w.B.run();
+    await gb.arrived;
+    gate.release();
+    await a;
+    gb.release();
+    await b;
+  }
+  assert.deepEqual([refused, w?.sends() ?? { A: 0, B: 0, C: 0 }, w?.model.log.length ?? 0], ["AI_GATEWAY_CONFIG_INVALID:ledger_mode_nonloopback", { A: 0, B: 0, C: 0 }, 0], "stale claimant provider 0");
 });
 
 Deno.test("KNOWN GAP S3 (current): stale A resumes before B reserves: A's new reservation passes the busy check and A SENDS; B meets an attempt in flight (UNKNOWN). The candidate model fences A, but A's released attempt is FINALIZED for B too (nobody sends, B UNKNOWN)", async () => {
