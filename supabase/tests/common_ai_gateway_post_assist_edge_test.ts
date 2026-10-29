@@ -124,6 +124,8 @@ Deno.test("refused before anything is asked (no G5 call, no ledger, no send): no
     ["no Authorization", { headers: { Authorization: "" } }, 401, "POST_ASSIST_AUTH_REQUIRED"],
     ["Basic auth", { headers: { Authorization: "Basic dXNlcjpwYXNz" } }, 401, "POST_ASSIST_AUTH_REQUIRED"],
     ["Bearer without a token", { headers: { Authorization: "Bearer " } }, 401, "POST_ASSIST_AUTH_REQUIRED"],
+    ["a Bearer that is not a JWT (an sb_secret_ key)", { headers: { Authorization: `Bearer ${SERVICE_KEY}` } }, 401, "POST_ASSIST_AUTH_REQUIRED"],
+    ["a Bearer that is not a JWT (two parts)", { headers: { Authorization: "Bearer abc.def" } }, 401, "POST_ASSIST_AUTH_REQUIRED"],
     ["GET", { method: "GET", body: null }, 405, "POST_ASSIST_REQUEST_INVALID"],
     ["PUT", { method: "PUT" }, 405, "POST_ASSIST_REQUEST_INVALID"],
     ["text/plain", { headers: { "Content-Type": "text/plain" } }, 415, "POST_ASSIST_REQUEST_INVALID"],

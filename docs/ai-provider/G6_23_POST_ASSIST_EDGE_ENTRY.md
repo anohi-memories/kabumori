@@ -10,7 +10,7 @@
 
 | ヘッダー | 値 |
 |---|---|
-| `Authorization` | `Bearer <本人のアクセストークン>`（必須。無い・Bearer でない → 401 `POST_ASSIST_AUTH_REQUIRED`。G5 には何も尋ねない） |
+| `Authorization` | `Bearer <本人のアクセストークン>`（必須。無い・Bearer でない・JWT の形（点で区切った 3 つの部分）でない → 401 `POST_ASSIST_AUTH_REQUIRED`。G5 には何も尋ねない。G6-25 で JWT の形の確認を足した） |
 | `Content-Type` | `application/json`（それ以外 → 415） |
 | `Idempotency-Key` | 操作ごとに新しい UUID（8〜128 文字。先頭は英数字、その後は `[A-Za-z0-9_.:-]`）。同じ操作の再試行だけ同じ値 |
 | `apikey` | プロジェクトの publishable key（Supabase の Functions の入口が求める場合） |
@@ -72,6 +72,6 @@
 
 ## 4. まだ使えない理由（blocker）
 
-- **G5（BLOCKED_G5_AUTH_EXECUTE）**: R1-MVP の RPC を本人（authenticated）が EXECUTE できる許可が未決（G5-48 が作業中）。今は 403 → `POST_ASSIST_NOT_ENTITLED`、何も送らない。
+- **G5（BLOCKED_G5_AUTH_EXECUTE）**: R1-MVP の RPC を本人（authenticated）が EXECUTE できる許可が未適用。G5-48 の候補（PR #563 の `MVP_R1_EXECUTE_GRANT.sql`。source のみ受入、セキュリティレビュー前）とこの入口を、G6-25 で使い捨ての PG17 上でつないで確かめた（`G6_25_POST_ASSIST_G5_48_INTEGRATION.md`）。許可が無い間は 403 → `POST_ASSIST_NOT_ENTITLED`、何も送らない。
 - 共有 provider の isolation の変更と新しい Edge の入口は、Codex Sol（高）の 1 回のレビューの後。deploy・secret の設定は、さらにユーザーの承認の後。SQL（台帳 → ai_calls → owner-held の 001 → G5 の MVP）の適用も同じ。
 - H2 #329 第 20 TASK（PR #553）の受入と、PR #558 の再確認が未完了。

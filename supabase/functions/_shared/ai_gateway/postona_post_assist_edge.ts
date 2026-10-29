@@ -33,7 +33,9 @@ export type PostAssistEdgeOptions = Readonly<{
 
 const FEATURE_KEYS = "enabled,entitlements,maxAttempts,maxCostUsdPerOperation,maxInputBytes,maxOutputTokens,model,provider,reasoningEffort,revision,timeoutMs";
 const ORIGIN = /^(?:https:\/\/[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?|http:\/\/(?:localhost|127\.0\.0\.1)(?::[0-9]{1,5})?)$/u;
-const BEARER = /^Bearer\s+(\S+)$/u;
+// The person's access token is a JWT (three base64url parts). Anything else (an sb_secret_ / sb_publishable_ key, a random string) is
+// refused here as 401 before anything is asked: G5's transport would refuse it too, but as "unavailable, retry".
+const BEARER = /^Bearer\s+[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/u;
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** The operator's feature JSON with exactly FeatureConfig's keys and types (the policy catalog checks the values). */
