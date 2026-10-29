@@ -87,6 +87,7 @@ async function flow(over = {}) {
   let browserResolve;
   const browser = new Promise((r) => { browserResolve = r; });
   let waitResolve;
+  let waitCancelled = null;
   const state = { now: NOW, session: { userId: 'user-1', token: JWT1 } };
   const deps = {
     registeredCallback: CALLBACK,
@@ -95,7 +96,7 @@ async function flow(over = {}) {
     openAuthSession: (url, redirect) => { calls.open.push({ url, redirect }); return over.browser ? Promise.resolve(over.browser) : browser; },
     dismissAuthSession: () => { calls.dismiss += 1; },
     onAppLink: (listener) => { linkListener = listener; return () => { linkListener = null; }; },
-    wait: () => new Promise((r) => { waitResolve = r; }),
+    wait: (_ms, cancelled) => { waitCancelled = cancelled; return new Promise((r) => { waitResolve = r; }); },
     now: () => state.now,
     ...over.deps,
   };
@@ -107,6 +108,14 @@ async function flow(over = {}) {
     browserReturns: (result) => browserResolve(result),
     link: (url) => { calls.links.push(url); linkListener?.(url); },
     deadline: () => waitResolve?.(),
+    /** whether the flow released its deadline timer (the promise it handed to wait settled) */
+    released: async () => {
+      if (!waitCancelled) return false;
+      let settled = false;
+      void waitCancelled.then(() => { settled = true; });
+      await new Promise((r) => setImmediate(r));
+      return settled;
+    },
   };
 }
 const tick = () => new Promise((r) => setImmediate(r));
@@ -149,6 +158,21 @@ test('cancel, decline on Threads and the deadline end the attempt without forwar
     act(f);
     assert.deepEqual(await pending, expected, label);
     assert.equal(f.calls.invoke.filter((c) => c.body.action === 'callback').length, 0, label);
+  }
+});
+
+test('the deadline timer is released as soon as the return, a cancel or the deadline decides the attempt', async () => {
+  for (const end of ['browser', 'link', 'cancel', 'deadline']) {
+    const f = await flow();
+    const pending = f.starter.start();
+    await tick();
+    assert.equal(await f.released(), false, `${end}: still waiting`);
+    if (end === 'browser') f.browserReturns({ type: 'success', url: RETURN });
+    if (end === 'link') f.link(RETURN);
+    if (end === 'cancel') f.browserReturns({ type: 'cancel' });
+    if (end === 'deadline') f.deadline();
+    await pending;
+    assert.equal(await f.released(), true, `${end}: released`);
   }
 });
 

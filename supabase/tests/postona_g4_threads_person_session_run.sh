@@ -130,6 +130,28 @@ as_owner "$pre" -f "$m/20260918120000_social_mobile_brand_memberships.sql" > /de
 # REFERENCES on public.brand_memberships to API roles, which PR #303 refuses; the real revoke is F3 / G3's dependency. This
 # TEST-WORLD revoke stands in for it.
 q "$pre" -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" > /dev/null
+# G4-02 #2: the G5 PERSONAL MVP world (G5-46/47, g5pv, no owner epoch) for the app flow: this world BEFORE PR #303, then
+# G5's MVP_INSTALL (PR #563 head; the blob is unchanged since PR #550). Only built for G4T_APP_FLOW.
+G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982
+mvp_pre=""
+if [ -n "${G4T_APP_FLOW:-}" ]; then
+  git -C "$repo" cat-file -e "${G5MVP}^{commit}" 2>/dev/null || fail "missing git objects for $G5MVP (fetch G5 PR #563)"
+  [ "$(git -C "$repo" rev-parse "${G5MVP}:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] \
+    || fail "G5 MVP_INSTALL blob moved (pin)"
+  git -C "$repo" show "${G5MVP}:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql" > "$tree/g5_mvp_install.sql"
+  echo "$G5MVP eebaabf2629575901947c0664d6f0002526d3273 G5 MVP_INSTALL (personal MVP, g5pv)" >> "$tree/TB_MANIFEST.txt"
+  # MVP prerequisite P1: the rest of G5's lifecycle chain, from the G5 Draft chain G5's own MVP runner pins (21a5cad4)
+  G5CHAIN=21a5cad4b71de63265db8517da93c6efc60cdde8
+  git -C "$repo" cat-file -e "${G5CHAIN}^{commit}" 2>/dev/null || fail "missing git objects for $G5CHAIN (fetch the G5 chain)"
+  g5chain=()
+  for f in 20261013140000_common_account_service_reconciliation_facts 20261015090000_common_account_enrollment_session_fence \
+           20261015120000_common_account_x_unconfirmed_snapshot_record; do
+    git -C "$repo" show "${G5CHAIN}:supabase/migrations/$f.sql" > "$tree/g5chain_$f.sql"
+    echo "$G5CHAIN $(git -C "$repo" rev-parse "${G5CHAIN}:supabase/migrations/$f.sql") $f (G5 chain, MVP P1)" >> "$tree/TB_MANIFEST.txt"
+    g5chain+=("$tree/g5chain_$f.sql")
+  done
+  mvp_pre="$(copy mvppre "$pre")"
+fi
 need "$pre" "$c/common_account_brand_owner_epoch/001_brand_owner_epoch.sql"
 need "$pre" "$c/postona_threads_oauth_workspace_candidate.sql"
 need "$pre" "$c/postona_threads_publish/threads_credential_custody_candidate.sql"
@@ -194,30 +216,92 @@ fi
 if [ -n "${G4T_APP_FLOW:-}" ]; then
   # G4-02 #1: the app product flow (real hooks -> SDK -> Edge entry -> G4 composition -> H5 runtime -> G4 bridge -> SQL, and the
   # disconnect Edge -> its RPC) on the connect world + PR #124's custody/publish stack + the disconnect candidate.
+  # G4-02 #2: once per G5 profile -- "full" (PR #303 owner epoch + G4 001/002) and "personal" (G5's MVP, g5pv + G4's
+  # postona_g4_threads_personal_mvp/001) -- then the g5pv candidate's install / rollback checks and one mutant.
   app="$repo/apps/social-mobile"
   [ -d "$app/node_modules/@supabase/supabase-js" ] && [ -d "$app/node_modules/typescript" ] \
     || fail "run 'npm ci --ignore-scripts' in apps/social-mobile first (the real SDK and TypeScript are needed)"
   pub="$c/postona_threads_publish"
-  app_db="$(copy app "$world")"
-  for f in "$g443" "$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/threads_manual_publish_candidate.sql" \
-    "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql" \
-    "$c/postona_threads_disconnect/threads_disconnect_candidate.sql"; do
-    need "$app_db" "$f"
-  done
-  echo "== G4-02 #1 app product flow (db $app_db)"
+  g5pv="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv.sql"
+  g5pv_rb="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv_rollback.sql"
+  stack=("$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/threads_manual_publish_candidate.sql"
+    "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql"
+    "$c/postona_threads_disconnect/threads_disconnect_candidate.sql")
+  # The personal MVP world up to (not including) G4's binding: G5's chain + MVP_INSTALL, PR #124, custody.
+  mvp_world() {
+    local db; db="$(copy "$1" "$mvp_pre")"
+    # TEST-WORLD stand-in for G3's L-1 revoke (G5 MVP prerequisite P3: no person can change memberships), as G5's own runner
+    q "$db" -c "revoke insert, update, delete, truncate, references, trigger on public.brand_memberships from anon, authenticated" > /dev/null
+    for f in "${g5chain[@]}" "$tree/g5_mvp_install.sql" "$c/postona_threads_oauth_workspace_candidate.sql" \
+      "$pub/threads_credential_custody_candidate.sql"; do
+      need "$db" "$f"
+    done
+    echo "$db"
+  }
   edge_cmd="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' deno run --cached-only --no-lock \
     --config "$repo/supabase/candidates/postona_threads_auth_runtime/wiring/deno.json" \
-    --allow-env=FLOW_PGHOST,FLOW_PGPORT,FLOW_PGUSER,FLOW_DB,FLOW_JWK --allow-read="$repo,$host" \
+    --allow-env=FLOW_PGHOST,FLOW_PGPORT,FLOW_PGUSER,FLOW_DB,FLOW_JWK,FLOW_PROFILE --allow-read="$repo,$host" \
     --allow-write="$host/.s.PGSQL.$port" --allow-net="127.0.0.1,unix:$host/.s.PGSQL.$port" \
     "$repo/supabase/tests/postona_g4_threads_app_flow_edge.ts")"
-  if out="$(cd "$app" && env FLOW_DEBUG="${FLOW_DEBUG:-}" FLOW_PGHOST="$host" FLOW_PGPORT="$port" FLOW_PGUSER="$owner" FLOW_DB="$app_db" \
-      FLOW_EDGE_CMD="$edge_cmd" node --experimental-transform-types --test --test-reporter=tap tests/threads-connect-product-flow.e2e.mjs 2>&1)"; then
-    grep -E '^(ok|not ok|# (pass|fail|tests|after))' <<<"$out"
-    echo "G4T_APP_FLOW_ALL_PASS"
-    exit 0
-  fi
-  echo "$out"
-  fail "app product flow"
+  # One run of the e2e; no timeout and no kill: the node process must end by itself (G4-02 #2: a leaked deadline timer
+  # kept it alive ~10 min). Sets $out; returns node's status.
+  flow_run() {
+    local status=0
+    out="$(cd "$app" && env FLOW_DEBUG="${FLOW_DEBUG:-}" FLOW_PROFILE="$1" FLOW_PGHOST="$host" FLOW_PGPORT="$port" FLOW_PGUSER="$owner" \
+      FLOW_DB="$2" FLOW_EDGE_CMD="$edge_cmd" node --experimental-transform-types --test --test-reporter=tap \
+      tests/threads-connect-product-flow.e2e.mjs 2>&1)" || status=$?
+    return $status
+  }
+  for profile in ${G4T_PROFILES:-full personal}; do
+    if [ "$profile" = full ]; then
+      app_db="$(copy app "$world")"
+      for f in "$g443" "${stack[@]}"; do need "$app_db" "$f"; done
+    elif [ "$profile" = personal ]; then
+      app_db="$(mvp_world appmvp)"
+      for f in "$g5pv" "${stack[@]}"; do need "$app_db" "$f"; done
+    else
+      fail "G4T_PROFILES: full | personal"
+    fi
+    echo "== G4-02 app product flow, G5 profile $profile (db $app_db)"
+    t0=$SECONDS
+    flow_run "$profile" "$app_db" || { echo "$out"; fail "app product flow ($profile)"; }
+    grep -E '^(ok|not ok|# (pass|fail|tests|measured))' <<<"$out"
+    echo "node exited by itself with status 0 after $((SECONDS - t0)) s"
+  done
+
+  echo "== G4-02 #2 the g5pv candidate: install / rollback / mutant"
+  # (a) on the FULL profile (F5's owner epoch present) it refuses before anything else
+  r="$(apply "$(copy g5pvfull "$pre")" "$g5pv")"
+  [ "$r" = THREADS_BINDING_G5PV_PRECONDITION_FULL_PROFILE ] || fail "g5pv on the full profile: $r"
+  echo "ok refused on the full profile ($r)"
+  # (b) its rollback refuses the FULL profile's binding (owner_epoch column)
+  r="$(apply "$(copy g5pvfullrb "$world")" "$g5pv_rb")"
+  [ "$r" = THREADS_BINDING_G5PV_ROLLBACK_NOT_PERSONAL_PROFILE ] || fail "g5pv rollback on the full binding: $r"
+  echo "ok its rollback refuses the full binding ($r)"
+  # (c) install -> custody 002 -> rollback (002 first) -> install again; a dependent outside the schema blocks the rollback
+  rb_db="$(mvp_world g5pvrb)"
+  need "$rb_db" "$g5pv"
+  need "$rb_db" "$cand2"
+  r="$(apply "$rb_db" "$g5pv")"; [ "$r" = THREADS_BINDING_ALREADY_APPLIED ] || fail "g5pv twice: $r"
+  need "$rb_db" "$rollback2"
+  q "$rb_db" -c "create view public.g4t_dependent as select social_account_id from postona_threads_binding.bindings" > /dev/null
+  r="$(apply "$rb_db" "$g5pv_rb")"; [ "$r" = THREADS_BINDING_G5PV_ROLLBACK_DEPENDENTS ] || fail "g5pv rollback with a dependent: $r"
+  q "$rb_db" -c "drop view public.g4t_dependent" > /dev/null
+  need "$rb_db" "$g5pv_rb"
+  [ -z "$(q "$rb_db" -c "select to_regnamespace('postona_threads_binding')")" ] || fail "g5pv rollback left the schema"
+  need "$rb_db" "$g5pv"
+  echo "ok install, ALREADY_APPLIED, rollback (002 first; refused while a view depends on it), install again"
+  # (d) mutant: the entry's MV check at completion replaced by a constant -> the personal e2e must fail (ABA scenario 8)
+  sed "s/  v_verdict := private.postona_personal_worker_verdict(v_actor, v_gen.brand_id, 'x_autopost', v_gen.lifecycle_version);/  v_verdict := 'active'; -- MUTANT/" \
+    "$g5pv" > "$tree/g5pv_mutant.sql"
+  [ "$(grep -c "MUTANT" "$tree/g5pv_mutant.sql")" = 1 ] || fail "mutant not made"
+  mut_db="$(mvp_world appmut)"
+  for f in "$tree/g5pv_mutant.sql" "${stack[@]}"; do need "$mut_db" "$f"; done
+  if flow_run personal "$mut_db"; then fail "the e2e passed without the completion's MV check"; fi
+  grep -E '^not ok 8 ' <<<"$out" > /dev/null || { echo "$out"; fail "the mutant did not fail scenario 8"; }
+  echo "MUTANT_CAUGHT completion_mv_removed by: $(grep -E '^not ok' <<<"$out" | cut -c1-90 | paste -sd ';' -)"
+  echo "G4T_APP_FLOW_ALL_PASS"
+  exit 0
 fi
 
 echo "== G4-43 1. behavior"

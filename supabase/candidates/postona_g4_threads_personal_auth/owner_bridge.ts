@@ -28,7 +28,17 @@ export function verifiedActorClaims(actor: VerifiedActor, now = Date.now()): str
   return JSON.stringify({ sub: actor.userId, session_id: actor.sessionId, role: "authenticated", is_anonymous: false });
 }
 
-export function createG4ThreadsOwnerBridge(connect: () => Promise<OwnerSqlClient>, now = Date.now) {
+/**
+ * Which G5 authorization profile the database runs (G4-02 #2), pinned by configuration, never detected:
+ *   "full"     F5's brand owner epoch (PR #303 / #457): ../postona_threads_binding_epoch/001 + this directory's 001 / 002
+ *   "personal" G5's personal MVP (PR #548 / #550, g5pv = lifecycle_version only): ../postona_g4_threads_personal_mvp/001
+ * A bridge pinned to one profile calls only that profile's SQL, so against the other one every begin is refused.
+ */
+export type G4AuthProfile = "full" | "personal";
+export const G4_AUTH_PROFILES: readonly G4AuthProfile[] = Object.freeze(["full", "personal"]);
+
+export function createG4ThreadsOwnerBridge(connect: () => Promise<OwnerSqlClient>, now = Date.now, profile: G4AuthProfile = "full") {
+  if (!G4_AUTH_PROFILES.includes(profile)) throw new RuntimeRefusal("OWNER_TRANSPORT_UNAVAILABLE");
   async function tx<T>(actor: VerifiedActor, operation: (client: OwnerSqlClient) => Promise<T>): Promise<T> {
     const claims = verifiedActorClaims(actor, now());
     const c = await connect();
@@ -91,6 +101,24 @@ export function createG4ThreadsOwnerBridge(connect: () => Promise<OwnerSqlClient
           actor.sessionId,
           redirect,
         ]);
+        if (profile === "personal") {
+          // g5pv: the person's lifecycle_version, read in this transaction (after PR #124's T13 check) and recorded
+          // against its state; G5's MV checks it at record and again at completion (service ended and restarted: ABA).
+          const g = await c.queryObject<{ oauth_state_id: string; lifecycle_version: string | null }>(
+            `select a.oauth_state_id::text,
+               (select ca.lifecycle_version from public.common_accounts ca where ca.user_id=a.user_id)::text as lifecycle_version
+             from postona_threads_runtime.attempts a where a.state_hash=$1 and a.user_id=$2::uuid and a.session_id=$3::uuid`,
+            [hash, actor.userId, actor.sessionId],
+          );
+          const gen = g.rows.length === 1 ? g.rows[0] : null;
+          if (!gen || !/^[1-9][0-9]{0,18}$/.test(gen.lifecycle_version ?? "")) throw new RuntimeRefusal("DB_OPERATION_REFUSED");
+          await c.queryObject("select postona_threads_binding.record_state_generation($1::uuid,$2::uuid,$3::bigint)", [
+            actor.userId,
+            gen.oauth_state_id,
+            gen.lifecycle_version,
+          ]);
+          return row.rows[0];
+        }
         // The numbers this attempt begins under, read in this transaction and recorded against its state; the
         // completion refuses if either has moved (owner change, service ended and restarted: ABA).
         const g = await c.queryObject<{ oauth_state_id: string; owner_epoch: string | null; lifecycle_version: string | null }>(

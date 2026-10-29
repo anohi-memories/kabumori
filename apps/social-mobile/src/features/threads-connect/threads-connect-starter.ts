@@ -25,8 +25,8 @@ export type ThreadsConnectStarterDeps = {
   dismissAuthSession(): void;
   /** App-link arrivals while the flow waits; returns an unsubscribe. */
   onAppLink(listener: (url: string) => void): () => void;
-  /** Resolves after ms (the flow's deadline). */
-  wait(ms: number): Promise<void>;
+  /** Resolves after ms (the flow's deadline). Once `cancelled` settles the timer must be released (never fire). */
+  wait(ms: number, cancelled: Promise<void>): Promise<void>;
   now(): number;
 };
 
@@ -73,14 +73,18 @@ async function run(deps: ThreadsConnectStarterDeps): Promise<ThreadsConnectStart
   const unsubscribe = deps.onAppLink((url) => {
     if (isOurCallbackReturn(url, registered)) settle(url);
   });
+  // Released as soon as the race is decided: the deadline timer must not outlive the flow (up to the state's lifetime).
+  let release: () => void = () => {};
+  const raceOver = new Promise<void>((resolve) => { release = resolve; });
   let first: string;
   try {
     const fromBrowser = deps.openAuthSession(start.authorizationUrl, registered)
       .then((result) => (result.type === 'success' && typeof result.url === 'string' ? result.url : 'canceled'))
       .catch(() => 'canceled');
-    const deadline = deps.wait(Math.max(0, start.expiresAt - deps.now())).then(() => 'timeout');
+    const deadline = deps.wait(Math.max(0, start.expiresAt - deps.now()), raceOver).then(() => 'timeout');
     first = await Promise.race([fromLink, fromBrowser, deadline]);
   } finally {
+    release();
     unsubscribe();
   }
   if (first === 'timeout') {

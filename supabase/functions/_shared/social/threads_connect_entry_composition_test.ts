@@ -25,6 +25,7 @@ const canonical: Record<string, string> = {
   POSTONA_THREADS_APP_SECRET: fakeConfig.appSecret,
   POSTONA_THREADS_CALLBACK: fakeConfig.callback,
   POSTONA_THREADS_ATTESTATION_KEY: fakeConfig.attestationKey,
+  POSTONA_THREADS_G4_AUTH_PROFILE: "personal", // G4-02 #2: G5's personal MVP (g5pv)
 };
 const SECRETS = [fakeConfig.password, fakeConfig.appSecret, fakeConfig.attestationKey, fakeConfig.publishableKey];
 const request = (body: unknown, auth: string | null = "Bearer caller-jwt-fixture") =>
@@ -48,6 +49,18 @@ test("real composition through the adapter: refusals decided before any network/
     assert.deepEqual(await answer(entry, request({ action: "callback", callback_url: "https://evil.example/?code=x&state=y" })), { status: 400, body: { ok: false, error: "CALLBACK_INVALID" } });
     assert.deepEqual(await answer(entry, request({ action: "callback", callback_url: `${fakeConfig.callback}?code=x&code=y&state=z` })), { status: 400, body: { ok: false, error: "CALLBACK_INVALID" } }, "a duplicated code (replay shape) is refused");
     assert.deepEqual(await answer(entry, request({ action: "callback", callback_url: `${fakeConfig.callback}?code=x&state=z`, social_account_id: "sa_" + "b".repeat(24) })), { status: 400, body: { ok: false, error: "REQUEST_INVALID" } }, "no account id can be smuggled in");
+  }
+});
+
+test("G4-02 #2 real composition: no (or an unknown) G5 profile -> unavailable, nothing else decided", async () => {
+  for (const profile of [undefined, "", "g5oe"]) {
+    const values: Record<string, string | undefined> = { ...canonical, POSTONA_THREADS_G4_AUTH_PROFILE: profile };
+    const entry = createThreadsConnectEntry({ read: (name) => values[name], gates: OPEN });
+    assert.deepEqual(await answer(entry, request({ action: "start" }, null)), { status: 503, body: { ok: false, error: "THREADS_CONNECT_RUNTIME_UNAVAILABLE" } }, String(profile));
+  }
+  for (const profile of ["full", "personal"]) {
+    const entry = createThreadsConnectEntry({ read: (name) => ({ ...canonical, POSTONA_THREADS_G4_AUTH_PROFILE: profile })[name], gates: OPEN });
+    assert.deepEqual(await answer(entry, request({ action: "start" }, null)), { status: 401, body: { ok: false, error: "AUTH_REQUIRED" } }, profile);
   }
 });
 
@@ -76,4 +89,18 @@ test("G4-02 #1: past the gates the entry loads G4's composition (G4's owner brid
   const code = source.split("\n").filter((line) => !/^\s*(\/\/|\/\*\*|\*)/.test(line)).join("\n");
   assert.match(code, /bridge: createG4ThreadsOwnerBridge\(/, "the runtime's bridge is G4's");
   assert.doesNotMatch(code, /createOwnerTransport|Deno\.(env|serve)/, "no H5 transport, no env read, no serve");
+});
+
+test("G4-02 #2: the composition is built only with a pinned G5 profile (full | personal)", async () => {
+  const g4 = await import("../../../candidates/postona_g4_threads_personal_auth/composition.ts");
+  assert.equal(g4.G4_AUTH_PROFILE_ENV, "POSTONA_THREADS_G4_AUTH_PROFILE");
+  assert.equal(g4.g4AuthProfile("full"), "full");
+  assert.equal(g4.g4AuthProfile("personal"), "personal");
+  for (const value of [undefined, "", "FULL", "g5pv", "personal "]) {
+    assert.throws(() => g4.g4AuthProfile(value), String(value));
+  }
+  // the entry's own seam reads the profile through the same reader as H5's config (the POSTONA_THREADS_ prefix passes it)
+  const src = (await Deno.readTextFile(new URL("../../../candidates/postona_g4_threads_personal_auth/composition.ts", import.meta.url)))
+    .split("\n").filter((line) => !line.trimStart().startsWith("//")).join("\n");
+  assert.match(src, /g4AuthProfile\(read\(G4_AUTH_PROFILE_ENV\)\)/);
 });

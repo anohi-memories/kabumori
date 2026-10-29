@@ -5,12 +5,17 @@
 //                    the real supabase-js Auth SDK, H5's config check, actor verifier and runtime, G4's owner bridge, G4's handler)
 //                    -> the real SQL in the runner's local PostgreSQL 17
 //   POST /closed/... the REAL entry exactly as in source (static gate closed: H5's disabled handler)
+//   POST /mismatch/... /unpinned/...  the open entry with the bridge pinned to the other G5 profile / with none (G4-02 #2)
 //   GET  /stats      how many Threads calls were made (so a test can prove none was) and the last SQL refusal
 // Only the two ports a test may set are faked: ownerConnect (the local socket instead of H5's TLS connector) and fetch
 // (GoTrue: JWKS + /auth/v1/user; Threads: code / long-lived / profile). Dummy configuration (H5's offline fixture). No network.
 import { Client } from "@db/postgres";
 import { createThreadsConnectEntry, THREADS_CONNECT_ENABLE_ENV } from "../functions/_shared/social/threads_connect_entry.ts";
-import { createG4ThreadsSourceServer } from "../candidates/postona_g4_threads_personal_auth/composition.ts";
+import {
+  createG4ThreadsSourceServer,
+  G4_AUTH_PROFILE_ENV,
+  g4AuthProfile,
+} from "../candidates/postona_g4_threads_personal_auth/composition.ts";
 import { readConfig } from "../candidates/postona_threads_auth_runtime/wiring/config.ts";
 import { fakeConfig } from "../candidates/postona_threads_auth_runtime/wiring/offline.fixture.ts";
 import type { OwnerSqlClient } from "../candidates/postona_threads_auth_runtime/owner_transport.ts";
@@ -21,13 +26,16 @@ const env = (k: string) => {
   return v;
 };
 const host = env("FLOW_PGHOST"), port = Number(env("FLOW_PGPORT")), user = env("FLOW_PGUSER"), database = env("FLOW_DB");
-if (!/^\/(private\/)?tmp\//.test(host) || !/^kb_tb_owner_\d+$/.test(user) || !/^kabumori_tb_\d+_app$/.test(database)) {
+if (!/^\/(private\/)?tmp\//.test(host) || !/^kb_tb_owner_\d+$/.test(user) || !/^kabumori_tb_\d+_app(mvp|mut)?$/.test(database)) {
   throw new Error("LOCAL_FIXTURE_REQUIRED");
 }
 const jwk = JSON.parse(env("FLOW_JWK")) as JsonWebKey & { kid: string };
+// G4-02 #2: the G5 profile the test database runs ("full": PR #303 owner epoch; "personal": G5's MVP, g5pv)
+const profile = env("FLOW_PROFILE");
 
 const config: Record<string, string> = {
   [THREADS_CONNECT_ENABLE_ENV]: "true",
+  [G4_AUTH_PROFILE_ENV]: profile,
   POSTONA_THREADS_PROJECT_URL: fakeConfig.projectUrl,
   POSTONA_THREADS_PROJECT_REF: fakeConfig.projectRef,
   POSTONA_THREADS_PUBLISHABLE_KEY: fakeConfig.publishableKey,
@@ -109,16 +117,21 @@ const fakeFetch: typeof fetch = (input, init) => {
 };
 
 // ---- the two entries ------------------------------------------------------------------------------------------------
-const open = createThreadsConnectEntry({
-  gates: { wired: true },
-  read: (name) => config[name],
-  // The entry's own composition call, with only the two test ports set (as H5's createSourceServer ports).
-  loadComposition: () =>
-    Promise.resolve({
-      buildForApprovedSourceIntegration: (handlerFactory, read) =>
-        createG4ThreadsSourceServer(readConfig(read), { handlerFactory, ownerConnect, fetch: fakeFetch }),
-    }),
-});
+// The entry past its gates with this configuration; the composition call is G4's own, with only the two test ports set.
+const entry = (settings: Record<string, string | undefined>) =>
+  createThreadsConnectEntry({
+    gates: { wired: true },
+    read: (name) => settings[name],
+    loadComposition: () =>
+      Promise.resolve({
+        buildForApprovedSourceIntegration: (handlerFactory, read) =>
+          createG4ThreadsSourceServer(readConfig(read), { handlerFactory, ownerConnect, fetch: fakeFetch }, g4AuthProfile(read(G4_AUTH_PROFILE_ENV))),
+      }),
+  });
+const open = entry(config);
+// G4-02 #2: the bridge pinned to the OTHER G5 profile than the database runs, and no profile configured at all.
+const mismatch = entry({ ...config, [G4_AUTH_PROFILE_ENV]: profile === "personal" ? "full" : "personal" });
+const unpinned = entry({ ...config, [G4_AUTH_PROFILE_ENV]: undefined });
 const closed = createThreadsConnectEntry();
 
 // Never outlive the test process: it holds this child's stdin, which closes (EOF) when it exits for any reason.
@@ -136,5 +149,7 @@ Deno.serve({
   if (request.method === "GET" && path === "/stats") return Response.json({ threads: threadsCalls, lastSqlError });
   if (path.startsWith("/open/")) return open(request);
   if (path.startsWith("/closed/")) return closed(request);
+  if (path.startsWith("/mismatch/")) return mismatch(request);
+  if (path.startsWith("/unpinned/")) return unpinned(request);
   return new Response("not found", { status: 404 });
 });
