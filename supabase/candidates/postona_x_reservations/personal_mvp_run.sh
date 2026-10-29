@@ -19,6 +19,9 @@
 #   EC  (G3-43) the person's own cancel without the service gate, the lease-expired audit (personal_mvp/owner_cancel.sql);
 #   RD  (G3-44) after the service ended the person reads their own rows, recovers a stale revision and cancels; another person, no
 #       session, anonymous / unknown anonymity refused (personal_mvp/owner_read.sql);
+#   HE  (G3-45) app-near HTTP e2e (personal_mvp_http/): the app's store -> the real Edge handler (gate forced on in the test only) -> api.ts
+#       -> the real driver as a TEST-WORLD login member of postona_resv_api over 127.0.0.1 -> SQL with G5's S2-2; fake GoTrue; the
+#       production permission default (deny). Needs the cluster to listen on 127.0.0.1 (trust).
 #   OR  (G3-43) 010's rollback: refusals (superuser, other owners, half applied, a widened ACL), 001's cancel back byte for byte (the ended
 #       person cannot cancel again), rows and audit rows untouched; twice refused; re-apply, the ended person cancels.
 # No network, no credential, no managed project; no OAuth, token, Vault, SNS or paid call. Roles are cluster-wide: run alone. Usage:
@@ -47,8 +50,9 @@ owner="kb_postona_mvp_owner"
 db="kabumori_postona_mvp_$$"
 S=(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 work="$(mktemp -d /private/tmp/kabumori-postona-mvp.XXXXXX)"
+login="kb_postona_http_login"
 drop_roles() {
-  "${S[@]}" -d postgres -c "drop role if exists postona_resv_api" -c "drop role if exists postona_resv_worker" >/dev/null 2>&1 || true
+  "${S[@]}" -d postgres -c "drop role if exists $login" -c "drop role if exists postona_resv_api" -c "drop role if exists postona_resv_worker" >/dev/null 2>&1 || true
 }
 cleanup() {
   rm -rf "$work"
@@ -343,6 +347,22 @@ echo "OK EC: own planned row cancelled with the X account unverified / the servi
 out="$(own -A -t -f "$pm/owner_read.sql")" || fail "owner read: $out"
 printf '%s\n' "$out" | grep -qx G3_OWNER_READ_BEHAVIOR_PASS || fail "owner read: no PASS line"
 echo "OK RD: after the service ended the person lists / gets their own rows (state + revision), recovers a stale revision and cancels; uncertain reads as uncertain (final, never claimed); another person (row NOT_FOUND, account lists nothing), no subject, ended session, anonymous / unknown / string anonymity refused; old-generation row read and cancelled"
+
+# --- HE (G3-45) ----------------------------------------------------------------------------------------------------------------
+out="$(own -A -t -f "$here/personal_mvp_http/people.sql")" || fail "http people: $out"
+printf '%s\n' "$out" | grep -qx G3_HTTP_E2E_SETUP_PASS || fail "http people: no PASS line"
+# Rollout simulation (TEST WORLD only): the server-side login role is a member of postona_resv_api, nothing else
+"${S[@]}" -d "$db" -c "create role $login login noinherit" -c "grant postona_resv_api to $login" >/dev/null
+he_out="$work/http_e2e.out"
+if ! RESV_LIVE_DB_URL="postgres://$login@127.0.0.1:$port/$db" RESV_LIVE_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" \
+  DENO_NO_PACKAGE_JSON=1 deno test --no-config --no-check --allow-net=127.0.0.1:"$port" --allow-read \
+  --allow-env=RESV_LIVE_DB_URL,RESV_LIVE_OWNER_URL "$here/personal_mvp_http/http_e2e_test.ts" >"$he_out" 2>&1; then
+  sed 's/\x1b\[[0-9;]*m//g' "$he_out" | grep -E 'FAILED|AssertionError|error:|=> ' | head -20 >&2
+  fail "HE http e2e"
+fi
+he_res="$(sed 's/\x1b\[[0-9;]*m//g' "$he_out" | grep -E '^ok \|' | tail -1)"
+"${S[@]}" -d "$db" -c "drop owned by $login" -c "drop role $login" >/dev/null
+echo "OK HE: app store -> Edge handler -> api.ts -> real driver -> SQL ($he_res): list / get after the end, 409 STALE_REVISION -> re-read -> cancel, uncertain / double cancel 409, another person 404 / empty list, anonymous / unknown / no or foreign session / other subject 401, create / reschedule / reconfirm 403 before the database, gate OFF 503, X sends 0"
 
 # --- OR (G3-43) ----------------------------------------------------------------------------------------------------------------
 c9="$(sval -c "select i.id || '/' || r.revision || '/' || r.user_id from t43.ids i join postona_x_resv.reservations r on r.id = i.id where i.name = 'c9'")"
