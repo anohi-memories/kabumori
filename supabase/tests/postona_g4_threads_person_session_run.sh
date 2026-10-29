@@ -191,6 +191,35 @@ if [ -n "${G4T_BRIDGE_FLOW:-}" ]; then
   exit 0
 fi
 
+if [ -n "${G4T_APP_FLOW:-}" ]; then
+  # G4-02 #1: the app product flow (real hooks -> SDK -> Edge entry -> G4 composition -> H5 runtime -> G4 bridge -> SQL, and the
+  # disconnect Edge -> its RPC) on the connect world + PR #124's custody/publish stack + the disconnect candidate.
+  app="$repo/apps/social-mobile"
+  [ -d "$app/node_modules/@supabase/supabase-js" ] && [ -d "$app/node_modules/typescript" ] \
+    || fail "run 'npm ci --ignore-scripts' in apps/social-mobile first (the real SDK and TypeScript are needed)"
+  pub="$c/postona_threads_publish"
+  app_db="$(copy app "$world")"
+  for f in "$g443" "$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/threads_manual_publish_candidate.sql" \
+    "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql" \
+    "$c/postona_threads_disconnect/threads_disconnect_candidate.sql"; do
+    need "$app_db" "$f"
+  done
+  echo "== G4-02 #1 app product flow (db $app_db)"
+  edge_cmd="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' deno run --cached-only --no-lock \
+    --config "$repo/supabase/candidates/postona_threads_auth_runtime/wiring/deno.json" \
+    --allow-env=FLOW_PGHOST,FLOW_PGPORT,FLOW_PGUSER,FLOW_DB,FLOW_JWK --allow-read="$repo,$host" \
+    --allow-write="$host/.s.PGSQL.$port" --allow-net="127.0.0.1,unix:$host/.s.PGSQL.$port" \
+    "$repo/supabase/tests/postona_g4_threads_app_flow_edge.ts")"
+  if out="$(cd "$app" && env FLOW_DEBUG="${FLOW_DEBUG:-}" FLOW_PGHOST="$host" FLOW_PGPORT="$port" FLOW_PGUSER="$owner" FLOW_DB="$app_db" \
+      FLOW_EDGE_CMD="$edge_cmd" node --experimental-transform-types --test --test-reporter=tap tests/threads-connect-product-flow.e2e.mjs 2>&1)"; then
+    grep -E '^(ok|not ok|# (pass|fail|tests|after))' <<<"$out"
+    echo "G4T_APP_FLOW_ALL_PASS"
+    exit 0
+  fi
+  echo "$out"
+  fail "app product flow"
+fi
+
 echo "== G4-43 1. behavior"
 d442="$(copy g442 "$world")"
 out="$(run_mine "$d442" g442)" || fail "mode=g442: $(grep -m1 -E 'FAIL|ERROR' <<<"$out")"
