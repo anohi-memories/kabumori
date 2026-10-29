@@ -1,0 +1,6 @@
+// PROPOSED (G6-23, not placed): supabase/functions/postona-post-assist/index.ts. POSTONA's AI post assist: the person's
+// editable post text / hashtag candidates (never a post). Everything is in ../_shared/ai_gateway/postona_post_assist_edge.ts;
+// this file only hands it the Edge environment. Placing it needs the G6-05 placement and entry_point_allowlist.patch.
+import { createPostonaPostAssistEdgeHandler } from "../_shared/ai_gateway/postona_post_assist_edge.ts";
+
+Deno.serve(createPostonaPostAssistEdgeHandler({ readEnv: (name) => Deno.env.get(name) }));

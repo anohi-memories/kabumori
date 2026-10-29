@@ -83,6 +83,16 @@ async function editNth(root: URL, path: string, from: string, to: string, nth: n
   await Deno.writeTextFile(file, head + to + parts.slice(nth + 1).join(from));
 }
 
+/** G6-23: put the proposed Edge entry file in the copy, with (or without) its entry-point grant. */
+const ENTRY_FIXTURES = new URL("./fixtures/g6_23_post_assist_edge/", import.meta.url);
+async function placeEntry(root: URL, approved: boolean): Promise<void> {
+  await Deno.mkdir(new URL("supabase/functions/postona-post-assist/", root), { recursive: true });
+  await Deno.copyFile(new URL("index.ts.txt", ENTRY_FIXTURES), new URL("supabase/functions/postona-post-assist/index.ts", root));
+  if (!approved) return;
+  const p = await run("patch", ["-p1", "--forward", "--no-backup-if-mismatch", "-i", new URL("entry_point_allowlist.patch", ENTRY_FIXTURES).pathname], root);
+  if (!p.ok) throw new Error(`entry patch did not apply:\n${p.out}`);
+}
+
 type Case = Readonly<{ name: string; place: boolean; proposal: boolean; expect: "pass" | "fail"; mutate?: (root: URL) => Promise<void>; why: string }>;
 const G = "supabase/functions/_shared/ai_gateway/";
 const CASES: readonly Case[] = [
@@ -108,6 +118,35 @@ const CASES: readonly Case[] = [
   {
     name: "edge-entry-imports-gateway", place: true, proposal: true, expect: "fail", why: "no Edge entry point may reach the provider through the gateway before its own approval",
     mutate: (r) => edit(r, "supabase/functions/social-mobile-consult/index.ts", "import { handleSocialMobileConsult } from \"./logic.ts\";", "import { handleSocialMobileConsult } from \"./logic.ts\";\nimport { handleConsultViaGateway } from \"../_shared/ai_gateway/postona_consult_adapter.ts\";\nvoid handleConsultViaGateway;"),
+  },
+  {
+    name: "post-assist-entry-without-approval", place: true, proposal: true, expect: "fail", why: "G6-23's exact Edge entry (postona-post-assist/index.ts) is refused without its own entry-point grant",
+    mutate: (r) => placeEntry(r, false),
+  },
+  {
+    name: "post-assist-entry-with-approval", place: true, proposal: true, expect: "pass", why: "G6-23's exact Edge entry plus entry_point_allowlist.patch is exactly enough (and type-checks in place)",
+    mutate: (r) => placeEntry(r, true),
+  },
+  {
+    name: "post-assist-entry-no-entry-point-grant", place: true, proposal: true, expect: "fail", why: "the entry patch minus its AUTHORIZED_ENTRY_POINTS grant",
+    mutate: async (r) => {
+      await placeEntry(r, true);
+      await edit(r, "supabase/functions/_shared/ai_provider/isolation_test.ts", ", \"postona-post-assist/index.ts\"];", "];");
+    },
+  },
+  {
+    name: "post-assist-entry-no-reacher-grant", place: true, proposal: true, expect: "fail", why: "the entry patch minus its AUTHORIZED_REACHERS grant",
+    mutate: async (r) => {
+      await placeEntry(r, true);
+      await edit(r, "supabase/functions/_shared/ai_provider/isolation_test.ts", "  \"postona-post-assist/index.ts\",\n];", "];");
+    },
+  },
+  {
+    name: "post-assist-entry-imports-more", place: true, proposal: true, expect: "fail", why: "the approved entry may import only postona_post_assist_edge.ts",
+    mutate: async (r) => {
+      await placeEntry(r, true);
+      await edit(r, "supabase/functions/postona-post-assist/index.ts", "\nDeno.serve(", "import { createAiGateway } from \"../_shared/ai_gateway/runtime.ts\";\nvoid createAiGateway;\n\nDeno.serve(");
+    },
   },
   {
     name: "other-function-imports-gateway", place: true, proposal: true, expect: "fail", why: "another deployable file may not import the gateway (it would reach the provider)",
@@ -169,6 +208,11 @@ try {
     }
     if (c.mutate) await c.mutate(root);
     let r = await isolation(root, c.proposal);
+    if (c.name === "post-assist-entry-with-approval" && r.ok) {
+      const t = await run("deno", ["check", "--cached-only", "--config", "supabase/functions/_shared/ai_consumer_bridge/deno.json", "supabase/functions/postona-post-assist/index.ts"], root);
+      console.log(`       deno check of the placed Edge entry: ${t.ok ? "OK" : "FAILED"}`);
+      if (!t.ok) r = { ok: false, out: r.out + t.out };
+    }
     if (c.name === "placed-with-proposal" && r.ok) {
       // The placed files also type-check where they would live (the same config the provider tests use).
       const t = await run("deno", ["check", "--cached-only", "--config", "supabase/functions/_shared/ai_consumer_bridge/deno.json",
@@ -229,11 +273,12 @@ if (!only || only === "minimality") {
     } else caught++;
     await Deno.remove(root, { recursive: true });
   }
-  // 7 file references + 11 reachers (G6-06 adds recovery.ts, G6-20 postona_post_assist.ts, G6-21 postona_post_assist_mvp.ts)
-  // + 27 provider names (G6-20 adds LedgerOwnerNotHeldError for gateway.ts), counted from the patch.
-  if (variants.length !== 45) {
+  // 8 file references (G6-23 adds postona_post_assist_edge.ts) + 12 reachers (G6-06 adds recovery.ts, G6-20
+  // postona_post_assist.ts, G6-21 postona_post_assist_mvp.ts, G6-23 postona_post_assist_edge.ts) + 28 provider names
+  // (G6-20 adds LedgerOwnerNotHeldError for gateway.ts, G6-23 SecretValue for the Edge entry), counted from the patch.
+  if (variants.length !== 48) {
     failures++;
-    console.log(`BAD  minimality: expected 45 single grants in the proposal, parsed ${variants.length}`);
+    console.log(`BAD  minimality: expected 48 single grants in the proposal, parsed ${variants.length}`);
   }
   console.log(`${caught === variants.length ? "OK  " : "BAD "} minimality: ${caught}/${variants.length} single-grant removals each make the placed tree fail`);
 }

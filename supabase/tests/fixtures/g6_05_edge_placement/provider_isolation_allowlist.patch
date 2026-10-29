@@ -1,6 +1,6 @@
 --- a/supabase/functions/_shared/ai_provider/isolation_test.ts
 +++ b/supabase/functions/_shared/ai_provider/isolation_test.ts
-@@ -96,12 +96,31 @@
+@@ -96,12 +96,33 @@
    "_shared/ai_consumer_bridge/bridge_test.ts": ["../ai_provider/test_support.ts"],
    "_shared/ai_consumer_bridge/isolation_test.ts": ["../ai_provider/mod.ts"],
    "_shared/ai_consumer_bridge/offline_samples_test.ts": ["../ai_provider/mod.ts", "../ai_provider/test_support.ts"],
@@ -11,6 +11,7 @@
 +  "_shared/ai_gateway/gateway.ts": ["../ai_provider/mod.ts"],
 +  "_shared/ai_gateway/isolation_test.ts": ["../ai_provider/adapter.ts", "../ai_provider/mod.ts", "../ai_provider/redact.ts", "../ai_provider/secrets.ts"],
 +  "_shared/ai_gateway/policy_registry.ts": ["../ai_provider/mod.ts"],
++  "_shared/ai_gateway/postona_post_assist_edge.ts": ["../ai_provider/secrets.ts"],
 +  "_shared/ai_gateway/runtime.ts": ["../ai_provider/adapter.ts", "../ai_provider/mod.ts", "../ai_provider/secrets.ts"],
  };
 
@@ -26,19 +27,21 @@
 +  "_shared/ai_gateway/policy_registry.ts",
 +  "_shared/ai_gateway/postona_consult_adapter.ts",
 +  "_shared/ai_gateway/postona_post_assist.ts",
++  "_shared/ai_gateway/postona_post_assist_edge.ts",
 +  "_shared/ai_gateway/postona_post_assist_mvp.ts",
 +  "_shared/ai_gateway/recovery.ts",
 +  "_shared/ai_gateway/runtime.ts",
    "market-report-analysis/handler.ts",
    "market-report-analysis/index.ts",
  ];
-@@ -138,6 +157,32 @@
+@@ -138,6 +159,36 @@
    "_shared/ai_consumer_bridge/types.ts": {
      "_shared/ai_provider/mod.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
    },
 +  // G6 gateway (PROPOSED, G6-05). runtime.ts is the one place that constructs the ledger guard (SupabaseLedgerBudgetGuard)
 +  // and takes a SecretValue; executeAiRequest is called only by gateway.ts, behind the feature policy, the authority
-+  // verdict / recheck and the call store. Nothing here reads the environment or a secret by name.
++  // verdict / recheck and the call store. Only postona_post_assist_edge.ts names its settings, through the readEnv its
++  // Edge entry passes in (G6-23); it hands the service key to runtime.ts as a SecretValue.
 +  "_shared/ai_gateway/ai_calls_store.ts": {
 +    "_shared/ai_provider/adapter.ts": ["FetchLike"],
 +    "_shared/ai_provider/redact.ts": ["safeToken"],
@@ -56,6 +59,9 @@
 +  },
 +  "_shared/ai_gateway/policy_registry.ts": {
 +    "_shared/ai_provider/mod.ts": ["AiRequest", "assertSchemaSupported", "findModelSpec", "upperBoundAttemptCostUsd"],
++  },
++  "_shared/ai_gateway/postona_post_assist_edge.ts": {
++    "_shared/ai_provider/secrets.ts": ["SecretValue"],
 +  },
 +  "_shared/ai_gateway/runtime.ts": {
 +    "_shared/ai_provider/adapter.ts": ["FetchLike"],
