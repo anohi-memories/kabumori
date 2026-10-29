@@ -8,7 +8,7 @@
 //   - every gateway answer becomes a ConsultError the handler already knows how to return; the handler then runs
 //     its per-request sanitizeConsultModelOutput on the answer, as today.
 // The direct OpenAI path is never used (no fallback): without a gateway, or with G5 not connected, nothing is sent.
-// NOT deployed (outside supabase/functions), not wired into index.ts. See docs/ai-provider/G6_POSTONA_CONSULT_GATEWAY_ADAPTER.md.
+// NOT deployed, not wired into index.ts. See docs/ai-provider/G6_POSTONA_CONSULT_GATEWAY_ADAPTER.md.
 import {
   CONSULT_LIMITS,
   CONSULT_OUTPUT_SCHEMA,
@@ -19,8 +19,8 @@ import {
   handleSocialMobileConsult,
   parseConsultRequest,
   sanitizeConsultModelOutput,
-} from "../functions/social-mobile-consult/logic.ts";
-import { SOCIAL_MOBILE_USER_DEFAULTS } from "../functions/_shared/brand/social_mobile_content_settings.ts";
+} from "../../social-mobile-consult/logic.ts";
+import { SOCIAL_MOBILE_USER_DEFAULTS } from "../brand/social_mobile_content_settings.ts";
 import type { FeatureContent } from "./app_policies.ts";
 import type { G5Transport } from "./authority_port.ts";
 import type { GatewayCode, GatewayResult } from "./gateway.ts";

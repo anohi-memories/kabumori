@@ -10,11 +10,11 @@ import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { anthropicBody, FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, type RecordedCall, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { AppPolicyConfigError, buildAppPolicySet, type FeatureConfig, type FeatureContent } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../ai_gateway/authority_port.ts";
-import type { AuthVerdict } from "../ai_gateway/gateway.ts";
-import { PolicyRegistryError } from "../ai_gateway/policy_registry.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { AppPolicyConfigError, buildAppPolicySet, type FeatureConfig, type FeatureContent } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../functions/_shared/ai_gateway/authority_port.ts";
+import type { AuthVerdict } from "../functions/_shared/ai_gateway/gateway.ts";
+import { PolicyRegistryError } from "../functions/_shared/ai_gateway/policy_registry.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";
 const SERVICE_KEY = "local-g6-02-key-NOT-A-SECRET";

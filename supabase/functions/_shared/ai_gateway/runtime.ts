@@ -7,12 +7,12 @@
 //   - the call store (SupabaseAiCallsStore over the ai_calls RPCs): idempotency per operation;
 //   - the authority (G5's verdict / recheck): an injected port; nothing here derives identity or ownership;
 //   - the apps' feature policies (a registry checked at startup).
-// NOT deployed and not wired into any app: supabase/ai_gateway/ is outside supabase/functions. Deploying it needs the
-// provider module's import allowlist widened (a shared security boundary): see
-// docs/ai-provider/G6_AI_GATEWAY_RUNTIME_SOURCE.md. It uses no runtime-specific API, writes no logs and reads no environment of its own.
-import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
-import { type EnvReader, PROVIDER_API_KEY_ENV, type RetryTiming, SupabaseLedgerBudgetGuard } from "../functions/_shared/ai_provider/mod.ts";
-import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
+// NOT deployed and not wired into any app. Since G6-24 it lives in supabase/functions/_shared/ai_gateway/ and the provider
+// module's import allowlist names it (a shared security boundary); its one Edge entry is postona-post-assist (see
+// docs/ai-provider/G6_AI_GATEWAY_RUNTIME_SOURCE.md, docs/ai-provider/G6_23_POST_ASSIST_EDGE_ENTRY.md). It uses no runtime-specific API, writes no logs and reads no environment of its own.
+import type { FetchLike } from "../ai_provider/adapter.ts";
+import { type EnvReader, PROVIDER_API_KEY_ENV, type RetryTiming, SupabaseLedgerBudgetGuard } from "../ai_provider/mod.ts";
+import { SecretValue } from "../ai_provider/secrets.ts";
 import { heldPayload, SupabaseAiCallsStore, supabaseUrlAllowed } from "./ai_calls_store.ts";
 import { type AuthorityPort, gatewayExecute, type GatewayDeps, type GatewayResult, type HeldBinding, type PolicyRegistry } from "./gateway.ts";
 import { isDefinedRegistry } from "./policy_registry.ts";

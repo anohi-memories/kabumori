@@ -9,11 +9,11 @@ import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_OPENAI_KEY, jsonResponse, openAiBody, type RecordedCall, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
 import type { ConsultDependencies } from "../functions/social-mobile-consult/logic.ts";
-import { buildAppPolicySet } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort, G5_ALLOW_TTL_MS, type G5Transport, type VerdictScope } from "../ai_gateway/authority_port.ts";
-import { createG5RpcTransport, G5_VERDICT_RPC } from "../ai_gateway/g5_rpc_transport.ts";
-import { handleConsultViaGateway, POSTONA_CONSULT_CONTENT } from "../ai_gateway/postona_consult_adapter.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort, G5_ALLOW_TTL_MS, type G5Transport, type VerdictScope } from "../functions/_shared/ai_gateway/authority_port.ts";
+import { createG5RpcTransport, G5_VERDICT_RPC } from "../functions/_shared/ai_gateway/g5_rpc_transport.ts";
+import { handleConsultViaGateway, POSTONA_CONSULT_CONTENT } from "../functions/_shared/ai_gateway/postona_consult_adapter.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 type Sample = { name: string; scope: { app: string; feature: string; brand_slug: string | null }; g5_decision: string; g5_reason: string | null; rpc_wire: Record<string, unknown> };
 const FIXTURE = JSON.parse(await Deno.readTextFile(new URL("./fixtures/g5_verdict_v1_rpc_samples.json", import.meta.url))) as { provenance: Record<string, string>; samples: Sample[] };

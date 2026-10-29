@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Disposable-PostgreSQL run of the G6-06 UNKNOWN recovery coordinator (supabase/ai_gateway/recovery.ts) against the real ledger
+# Disposable-PostgreSQL run of the G6-06 UNKNOWN recovery coordinator (supabase/functions/_shared/ai_gateway/recovery.ts) against the real ledger
 # (20261010050613), call store (20261017120000) and maintenance (20261017150000) migrations. Never touches Supabase, never uses the network.
 #
 #   GWV_PGHOST=/private/tmp/<socket dir> GWV_PGPORT=54931 GWV_PGSUPER=<superuser> bash supabase/tests/common_ai_gateway_recovery_pg_run.sh

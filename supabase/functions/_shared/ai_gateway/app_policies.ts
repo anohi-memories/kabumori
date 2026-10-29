@@ -7,9 +7,9 @@
 //      or a production amount: a feature without explicit config stays disabled.
 //   3. The app (content): the instructions, the output schema and the mandatory output check.
 // The result is a registry built by definePolicyRegistry (startup checks, frozen) plus the plan allowlist the
-// authority port enforces. NOT deployed (outside supabase/functions); not wired into any app.
-import { findModelSpec } from "../functions/_shared/ai_provider/mod.ts";
-import type { AiReasoningEffort, JsonSchema } from "../functions/_shared/ai_provider/mod.ts";
+// authority port enforces. NOT deployed; not wired into any app.
+import { findModelSpec } from "../ai_provider/mod.ts";
+import type { AiReasoningEffort, JsonSchema } from "../ai_provider/mod.ts";
 import { type AppId, type FeaturePolicy, policyKey, type PolicyRegistry } from "./gateway.ts";
 import { definePolicyRegistry, MAX_COST_USD_PER_OPERATION } from "./policy_registry.ts";
 

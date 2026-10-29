@@ -11,14 +11,14 @@
 import assert from "node:assert/strict";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import type { FeatureConfig } from "../ai_gateway/app_policies.ts";
-import { G5_VERDICT_RPC } from "../ai_gateway/g5_rpc_transport.ts";
+import type { FeatureConfig } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { G5_VERDICT_RPC } from "../functions/_shared/ai_gateway/g5_rpc_transport.ts";
 import {
   createPostonaPostAssistMvp,
   G5_R1_PERSONAL_MVP_PROFILE,
   pinPersonalMvpWire,
   PostonaPostAssistMvpConfigError,
-} from "../ai_gateway/postona_post_assist_mvp.ts";
+} from "../functions/_shared/ai_gateway/postona_post_assist_mvp.ts";
 import { OwnerHeldModel } from "./common_ai_gateway_owner_held_fake.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";

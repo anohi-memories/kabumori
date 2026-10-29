@@ -1,10 +1,10 @@
-// OFFLINE tests of the G6 runtime candidate (supabase/ai_gateway/): createAiGateway wires the PR302 gateway core to
+// OFFLINE tests of the G6 runtime candidate (supabase/functions/_shared/ai_gateway/): createAiGateway wires the PR302 gateway core to
 // the REAL shared provider (OpenAI / Anthropic adapters), the REAL SupabaseLedgerBudgetGuard and the new
 // SupabaseAiCallsStore. Everything outside the process is a fake fetch: the providers and an in-memory "Supabase"
 // that answers the ledger and ai_calls RPCs (the real SQL is exercised by common_ai_gateway_runtime_pg_test.ts).
 // No network, fake keys. Every PASS is a mock PASS.
 //   deno test --cached-only --frozen --config supabase/functions/_shared/ai_consumer_bridge/deno.json --deny-net \
-//     --deny-write --allow-env=ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY --allow-read=supabase/ai_gateway \
+//     --deny-write --allow-env=ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY --allow-read=supabase/functions/_shared/ai_gateway \
 //     supabase/tests/common_ai_gateway_runtime_test.ts
 import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
@@ -19,9 +19,9 @@ import {
   type RecordedCall,
   recordingFetch,
 } from "../functions/_shared/ai_provider/test_support.ts";
-import { type AuthorityPort, type AuthVerdict, type FeaturePolicy, type GatewaySubject, policyKey } from "../ai_gateway/gateway.ts";
-import { definePolicyRegistry, PolicyRegistryError } from "../ai_gateway/policy_registry.ts";
-import { AiGatewayConfigError, createAiGateway } from "../ai_gateway/runtime.ts";
+import { type AuthorityPort, type AuthVerdict, type FeaturePolicy, type GatewaySubject, policyKey } from "../functions/_shared/ai_gateway/gateway.ts";
+import { definePolicyRegistry, PolicyRegistryError } from "../functions/_shared/ai_gateway/policy_registry.ts";
+import { AiGatewayConfigError, createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";
 const SERVICE_KEY = "local-gateway-runtime-key-NOT-A-SECRET";
@@ -397,10 +397,10 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
     "./gateway.ts",
     "./ai_calls_store.ts",
     "./policy_registry.ts",
-    "../functions/_shared/ai_provider/mod.ts",
-    "../functions/_shared/ai_provider/adapter.ts",
-    "../functions/_shared/ai_provider/redact.ts",
-    "../functions/_shared/ai_provider/secrets.ts",
+    "../ai_provider/mod.ts",
+    "../ai_provider/adapter.ts",
+    "../ai_provider/redact.ts",
+    "../ai_provider/secrets.ts",
     "./app_policies.ts",
     "./authority_port.ts",
     "./runtime.ts",
@@ -410,8 +410,8 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
     // G6-23: the Edge entry (postona_post_assist_edge.ts) serves the personal-MVP composition.
     "./postona_post_assist_mvp.ts",
   ]);
-  const consultOnly = new Set(["../functions/social-mobile-consult/logic.ts", "../functions/_shared/brand/social_mobile_content_settings.ts"]);
-  const dir = new URL("../ai_gateway/", import.meta.url);
+  const consultOnly = new Set(["../../social-mobile-consult/logic.ts", "../brand/social_mobile_content_settings.ts"]);
+  const dir = new URL("../functions/_shared/ai_gateway/", import.meta.url);
   const files: string[] = [];
   for await (const e of Deno.readDir(dir)) files.push(e.name);
   // G6-02 adds the app policy catalog and the G5 authority port (same rules: no runtime API, named imports only).
@@ -420,9 +420,10 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
   // G6-06 adds the UNKNOWN recovery coordinator (no provider import; only the three recovery RPCs through its port).
   // G6-20 adds the POSTONA post text / hashtag candidates (no provider import; siblings only).
   // G6-21 adds their composition on G5-47's personal-MVP verdict (siblings only); G6-23 its HTTP entry (no Deno API: the
-  // Edge environment is passed in as readEnv).
-  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "postona_post_assist.ts", "postona_post_assist_edge.ts", "postona_post_assist_mvp.ts", "recovery.ts", "runtime.ts"]);
-  for (const name of files) {
+  // Edge environment is passed in as readEnv). G6-24 moves them to functions/_shared/ai_gateway/ next to their own isolation
+  // test (a test file: it alone may read files and import node:assert).
+  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "isolation_test.ts", "policy_registry.ts", "postona_consult_adapter.ts", "postona_post_assist.ts", "postona_post_assist_edge.ts", "postona_post_assist_mvp.ts", "recovery.ts", "runtime.ts"]);
+  for (const name of files.filter((n) => n !== "isolation_test.ts")) {
     const text = await Deno.readTextFile(new URL(name, dir));
     assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\(/u, name);
     assert.doesNotMatch(text, /sk-ant-|sk-proj-|sb_secret_[A-Za-z0-9]{8}/u, `${name}: no key-shaped literal`);

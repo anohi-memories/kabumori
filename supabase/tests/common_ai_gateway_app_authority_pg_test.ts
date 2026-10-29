@@ -5,9 +5,9 @@ import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { anthropicBody, FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, type RecordedCall, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { buildAppPolicySet, type FeatureConfig, type FeatureContent } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../ai_gateway/authority_port.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet, type FeatureConfig, type FeatureContent } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../functions/_shared/ai_gateway/authority_port.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const HOST = Deno.env.get("GWA_PGHOST");
 const PORT = Deno.env.get("GWA_PGPORT");

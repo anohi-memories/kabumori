@@ -16,10 +16,10 @@ import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { buildAppPolicySet, type FeatureContent } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort } from "../ai_gateway/authority_port.ts";
-import { createG5RpcTransport } from "../ai_gateway/g5_rpc_transport.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet, type FeatureContent } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort } from "../functions/_shared/ai_gateway/authority_port.ts";
+import { createG5RpcTransport } from "../functions/_shared/ai_gateway/g5_rpc_transport.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 type Sample = { name: string; scope: { brand_slug: string | null }; rpc_wire: Record<string, unknown> };
 const SAMPLES = (JSON.parse(await Deno.readTextFile(new URL("./fixtures/g5_verdict_v1_rpc_samples.json", import.meta.url))) as { samples: Sample[] }).samples;
