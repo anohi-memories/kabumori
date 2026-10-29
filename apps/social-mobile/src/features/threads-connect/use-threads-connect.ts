@@ -14,7 +14,8 @@ export type ThreadsConnectUiState =
 /**
  * The connect / reconnect action for the accounts screens. Nothing starts while the release flag is OFF.
  * A verified server receipt is only "verifying": the shared account data is reloaded, and the screen says
- * connected only once the reloaded data shows that Threads account as connected.
+ * connected only once the reloaded data shows that Threads account as connected. An answer that needs reconciliation
+ * (EXCHANGE_OUTCOME_UNCERTAIN / COMPLETE_OUTCOME_UNKNOWN) reloads too; any other failure does not.
  */
 export function useThreadsConnect({ accounts, reload, releaseEnabled, starter }: {
   accounts: readonly Pick<SocialAccount, 'id' | 'platform' | 'connectionStatus'>[];
@@ -47,6 +48,9 @@ export function useThreadsConnect({ accounts, reload, releaseEnabled, starter }:
         reload();
       } else {
         setState({ kind: 'done', result });
+        // G4-02 #3: the server could not tell whether the connect landed (the code was spent): re-read the shared
+        // account data, as the disconnect flow does for an uncertain answer, and never claim either outcome.
+        if (result.kind === 'failed' && result.reconcile) reload();
       }
     } finally {
       running.current = false;

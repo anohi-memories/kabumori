@@ -344,6 +344,24 @@ test('card, flag ON: a receipt is only "confirming" until the reloaded accounts 
   assert.ok(texts(h.render()).some((t) => typeof t === 'string' && t.startsWith('Threadsアカウントを接続しました')));
 });
 
+test('card, flag ON: an outcome that needs reconciliation re-reads the accounts; a plain refusal does not', async () => {
+  for (const [result, expected] of [
+    [{ kind: 'failed', code: 'EXCHANGE_OUTCOME_UNCERTAIN', reconcile: true }, 1],
+    [{ kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true }, 1],
+    [{ kind: 'failed', code: 'START_REFUSED', reconcile: false }, 0],
+    [{ kind: 'failed', code: 'SESSION_CHANGED', reconcile: false }, 0],
+    [{ kind: 'canceled' }, 0],
+    [{ kind: 'unavailable', code: 'CALLBACK_NOT_CONFIGURED' }, 0],
+  ]) {
+    let reloads = 0;
+    const h = await cardHarness({ threadsAccount: null, accounts: [], reload: () => { reloads += 1; }, preview: false, releaseEnabled: true,
+      starter: { start: async () => result } });
+    find(h.render(), 'ActionButton')[0].onPress();
+    await tick();
+    assert.equal(reloads, expected, JSON.stringify(result));
+  }
+});
+
 test('card, flag ON: failures show safe copy', async () => {
   const h = await cardHarness({ threadsAccount: { connectionStatus: 'needs_attention' }, accounts: [], reload: () => {}, preview: false, releaseEnabled: true,
     starter: { start: async () => ({ kind: 'failed', code: 'EXCHANGE_OUTCOME_UNCERTAIN', reconcile: true }) } });

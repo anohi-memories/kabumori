@@ -354,6 +354,7 @@ test('8. ABA: D\'s service ends and restarts while D is at Threads (SYNTHETIC li
     return '17841400000004704';
   });
   assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true });
+  assert.equal(app.reloads(), 1, 'reconcile: the accounts are re-read (G4-02 #3)');
   assert.equal(binding(D), 'none');
   assert.equal(custody(D), 0);
   assert.equal((await stats()).lastSqlError, 'THREADS_BINDING_SERVICE_GENERATION_CHANGED', 'refused by the G4 entry generation check');
@@ -365,6 +366,7 @@ test('9. Threads refuses the code: a fixed failure, nothing bound', { timeout: 6
   assert.equal(state.kind, 'done');
   // the code was sent to Threads before it refused, so the runtime cannot rule out a grant: reconcile
   assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'EXCHANGE_OUTCOME_UNCERTAIN', reconcile: true });
+  assert.equal(app.reloads(), 1, 'reconcile: the accounts are re-read (G4-02 #3)');
   assert.equal(binding(E), 'none');
 });
 
@@ -499,6 +501,7 @@ test('18. E comes to own another brand while at Threads: refused at the callback
     // PR #124's complete does not see it; G4's entry does: personal = G5's MV (S2-3 inside), full = G4-42's S2-3 recheck
     assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true });
     assert.equal((await stats()).lastSqlError, 'OWN_WORKSPACE_CONFLICT');
+    assert.equal(app.reloads(), 1, 'reconcile: the accounts are re-read (G4-02 #3)');
     assert.equal(binding(E), 'none');
     assert.equal(custody(E), 0);
   } finally {
