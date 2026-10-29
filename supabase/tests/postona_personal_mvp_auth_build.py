@@ -17,6 +17,7 @@ Every source is checked by git blob id first. Nothing else ships here but parts/
 Usage: python3 supabase/tests/postona_personal_mvp_auth_build.py <repository root> [--check]"""
 import hashlib
 import os
+import re
 import subprocess
 import sys
 
@@ -198,8 +199,14 @@ grant = read(os.path.join(OUT, 'MVP_R1_EXECUTE_GRANT.sql'))
 pinned = grant.count(f"pg_catalog.md5(p.prosrc) = '{body_md5}'") == 1
 print(f'{"PASS" if pinned else "FAIL"}  MVP_R1_EXECUTE_GRANT.sql pins the M20 body (md5 {body_md5})', flush=True)
 bad += 0 if pinned else 1
+# G5-50: the read-only release preflight recognises an installed R1-MVP by the same pin
+preflight = read(os.path.join(OUT, 'MVP_RELEASE_PREFLIGHT.sql'))
+pre_pinned = preflight.count(f"pg_catalog.md5(p.prosrc) = '{body_md5}'") == 1 and len(set(re.findall(r"md5\(p\.prosrc\) = '([0-9a-f]{32})'", preflight))) == 1
+print(f'{"PASS" if pre_pinned else "FAIL"}  MVP_RELEASE_PREFLIGHT.sql pins the same M20 body', flush=True)
+bad += 0 if pre_pinned else 1
 if check:
-    extra = sorted(set(os.listdir(OUT)) - {'MVP_INSTALL.sql', 'MVP_ROLLBACK.sql', 'MVP_R1_EXECUTE_GRANT.sql', 'MVP_R1_EXECUTE_REVOKE.sql', 'README.md', 'parts'})
-    print(f'{"PASS" if not extra else "FAIL"}  only the four entrypoints, parts/ and README.md{": " + ", ".join(extra) if extra else ""}', flush=True)
+    extra = sorted(set(os.listdir(OUT)) - {'MVP_INSTALL.sql', 'MVP_ROLLBACK.sql', 'MVP_R1_EXECUTE_GRANT.sql', 'MVP_R1_EXECUTE_REVOKE.sql', 'MVP_RELEASE_PREFLIGHT.sql',
+                                           'README.md', 'parts'})
+    print(f'{"PASS" if not extra else "FAIL"}  only the five entrypoints, parts/ and README.md{": " + ", ".join(extra) if extra else ""}', flush=True)
     bad += 1 if extra else 0
 sys.exit(1 if bad else 0)
