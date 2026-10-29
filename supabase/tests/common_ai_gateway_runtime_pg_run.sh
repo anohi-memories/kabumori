@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Disposable-PostgreSQL run of the G6 AI gateway runtime candidate (supabase/ai_gateway) against the real ledger
+# Disposable-PostgreSQL run of the G6 AI gateway runtime candidate (supabase/functions/_shared/ai_gateway) against the real ledger
 # (20261010050613) and call store (20261017120000) migrations. Never touches Supabase, never uses the network.
 #
 #   GWR_PGHOST=/private/tmp/<socket dir> GWR_PGPORT=54931 GWR_PGSUPER=<superuser> bash supabase/tests/common_ai_gateway_runtime_pg_run.sh

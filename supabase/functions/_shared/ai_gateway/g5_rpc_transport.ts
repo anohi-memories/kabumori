@@ -10,8 +10,8 @@
 //   anything else (404 = RPC not deployed, 5xx, network, a body that is not the expected shape) -> throws, which the port
 //   turns into AUTH_UNAVAILABLE (nothing claimed, nothing sent).
 // The JWT goes into the Authorization header only: never into the body, a log, an error or the generation.
-import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
-import { safeToken } from "../functions/_shared/ai_provider/redact.ts";
+import type { FetchLike } from "../ai_provider/adapter.ts";
+import { safeToken } from "../ai_provider/redact.ts";
 import { G5_ALLOW_TTL_MS, type G5Transport, type VerdictScope } from "./authority_port.ts";
 import { supabaseUrlAllowed } from "./ai_calls_store.ts";
 

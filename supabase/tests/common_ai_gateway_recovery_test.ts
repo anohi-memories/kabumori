@@ -1,12 +1,12 @@
-// OFFLINE tests of the G6-06 UNKNOWN recovery coordinator (supabase/ai_gateway/recovery.ts) with a fake RPC port: which
+// OFFLINE tests of the G6-06 UNKNOWN recovery coordinator (supabase/functions/_shared/ai_gateway/recovery.ts) with a fake RPC port: which
 // RPCs it may call, how it classifies each candidate, what audit it would close with, and how it treats every answer.
 // The real SQL (ledger + ai_calls) is exercised by common_ai_gateway_recovery_pg_test.ts. No network.
 //   deno test --cached-only --frozen --config supabase/functions/_shared/ai_consumer_bridge/deno.json --deny-net --deny-write \
 //     supabase/tests/common_ai_gateway_recovery_test.ts
 import assert from "node:assert/strict";
-import { type FeaturePolicy, policyKey } from "../ai_gateway/gateway.ts";
-import { definePolicyRegistry } from "../ai_gateway/policy_registry.ts";
-import { longestRunMs, reconcileUnknownCalls, type RecoveryRpc } from "../ai_gateway/recovery.ts";
+import { type FeaturePolicy, policyKey } from "../functions/_shared/ai_gateway/gateway.ts";
+import { definePolicyRegistry } from "../functions/_shared/ai_gateway/policy_registry.ts";
+import { longestRunMs, reconcileUnknownCalls, type RecoveryRpc } from "../functions/_shared/ai_gateway/recovery.ts";
 
 const SCHEMA = { name: "reply", schema: { type: "object", additionalProperties: false, required: ["reply"], properties: { reply: { type: "string" } } } };
 const policy = (app: FeaturePolicy["app"], feature: string, over: Partial<FeaturePolicy> = {}): FeaturePolicy => ({
@@ -154,7 +154,7 @@ Deno.test("the port: only the three recovery RPCs can be called; a bad ledger or
     await assert.rejects(reconcileUnknownCalls(fake([]).rpc, REGISTRY, bad as never));
   }
   // The module text names no other RPC, no provider, no gateway call and no environment.
-  const text = await Deno.readTextFile(new URL("../ai_gateway/recovery.ts", import.meta.url));
+  const text = await Deno.readTextFile(new URL("../functions/_shared/ai_gateway/recovery.ts", import.meta.url));
   const rpcNames = new Set([...text.matchAll(/"(ai_[a-z_]+)"/gu)].map((m) => m[1]));
   assert.deepEqual([...rpcNames].sort(), ["ai_calls_abandon", "ai_calls_recovery_candidates", "ai_ledger_recover_stale"]);
   assert.doesNotMatch(text, /executeAiRequest|gatewayExecute|createAiGateway|\.execute\(|fetch\(|Deno\.|ai_provider/u);

@@ -7,10 +7,10 @@ import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
 import type { ConsultDependencies } from "../functions/social-mobile-consult/logic.ts";
-import { buildAppPolicySet } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../ai_gateway/authority_port.ts";
-import { handleConsultViaGateway, POSTONA_CONSULT_CONTENT } from "../ai_gateway/postona_consult_adapter.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../functions/_shared/ai_gateway/authority_port.ts";
+import { handleConsultViaGateway, POSTONA_CONSULT_CONTENT } from "../functions/_shared/ai_gateway/postona_consult_adapter.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const HOST = Deno.env.get("GWP_PGHOST");
 const PORT = Deno.env.get("GWP_PGPORT");

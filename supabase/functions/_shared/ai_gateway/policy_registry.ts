@@ -1,8 +1,8 @@
 // G6 runtime candidate (2026-10-19, G6-01): the feature policy registry the runtime accepts. Each app defines its
 // policies; this checks them ONCE, at startup, so a misconfigured policy fails before any request instead of after a
 // paid send (for example a cost bound the call store cannot record). The gateway still re-checks every call.
-import { assertSchemaSupported, findModelSpec, upperBoundAttemptCostUsd } from "../functions/_shared/ai_provider/mod.ts";
-import type { AiRequest } from "../functions/_shared/ai_provider/mod.ts";
+import { assertSchemaSupported, findModelSpec, upperBoundAttemptCostUsd } from "../ai_provider/mod.ts";
+import type { AiRequest } from "../ai_provider/mod.ts";
 import { type AppId, type FeaturePolicy, policyKey, type PolicyRegistry } from "./gateway.ts";
 
 const APPS: readonly AppId[] = ["kabumori", "postona", "miseiro"];

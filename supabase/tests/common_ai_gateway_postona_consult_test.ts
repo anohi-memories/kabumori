@@ -11,11 +11,11 @@ import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_OPENAI_KEY, jsonResponse, openAiBody, type RecordedCall, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
 import { CONSULT_SYSTEM_PROMPT, type ConsultDependencies } from "../functions/social-mobile-consult/logic.ts";
 import { SOCIAL_MOBILE_USER_DEFAULTS } from "../functions/_shared/brand/social_mobile_content_settings.ts";
-import { buildAppPolicySet, type FeatureConfig } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../ai_gateway/authority_port.ts";
-import type { GatewayCode } from "../ai_gateway/gateway.ts";
-import { consultErrorFor, consultGatewayInput, consultModelCallViaGateway, G5_NOT_CONNECTED, handleConsultViaGateway, POSTONA_CONSULT_CONTENT } from "../ai_gateway/postona_consult_adapter.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet, type FeatureConfig } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort, type G5Transport, type VerdictScope } from "../functions/_shared/ai_gateway/authority_port.ts";
+import type { GatewayCode } from "../functions/_shared/ai_gateway/gateway.ts";
+import { consultErrorFor, consultGatewayInput, consultModelCallViaGateway, G5_NOT_CONNECTED, handleConsultViaGateway, POSTONA_CONSULT_CONTENT } from "../functions/_shared/ai_gateway/postona_consult_adapter.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";
 const SERVICE_KEY = "local-g6-03-service-key-NOT-A-SECRET";

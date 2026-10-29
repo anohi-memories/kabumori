@@ -8,9 +8,9 @@
 import assert from "node:assert/strict";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { buildAppPolicySet, type FeatureContent } from "../ai_gateway/app_policies.ts";
-import { type AuthorityPort, type AuthVerdict, gatewayExecute } from "../ai_gateway/gateway.ts";
-import { AiGatewayConfigError, createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet, type FeatureContent } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { type AuthorityPort, type AuthVerdict, gatewayExecute } from "../functions/_shared/ai_gateway/gateway.ts";
+import { AiGatewayConfigError, createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 import { OwnerHeldModel } from "./common_ai_gateway_owner_held_fake.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";

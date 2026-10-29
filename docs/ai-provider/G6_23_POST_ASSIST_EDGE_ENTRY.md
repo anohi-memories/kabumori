@@ -1,7 +1,7 @@
 # G6-23 POSTONA の AI 投稿補助の HTTP 入口（Edge）
 
 - task_id: `common-ai-g6-postona-post-assist-edge-entry-product-wiring-20261029`（Issue #321、G6-23）
-- 作成: 2026-10-29。製品のソース: `supabase/ai_gateway/postona_post_assist_edge.ts`。**置いていない・deploy していない**（本番は NO_GO）。
+- 作成: 2026-10-29。製品のソース: `supabase/functions/_shared/ai_gateway/postona_post_assist_edge.ts` と入口 `supabase/functions/postona-post-assist/index.ts`（G6-24 で置いた）。**deploy していない**（本番は NO_GO）。
 - 元にしたもの: G6-21 の個人 MVP の adapter（PR #556）と、G6-22 の legacy の fence（PR #558）。
 
 ## 1. アプリ（G1）が呼ぶ形
@@ -55,16 +55,23 @@
 
 どれかが無い・不正なら 503 `POST_ASSIST_UNAVAILABLE`（中身は出さない）。G5・台帳・AI には何も送らない。
 
-## 3. 置くための正確な差分（未適用。承認が要る）
+## 3. 置き場所（G6-24 で source に置いた。deploy はしていない）
 
-1. G6-05 の配置: `supabase/ai_gateway/` を `supabase/functions/_shared/ai_gateway/` に置き、`supabase/tests/fixtures/g6_05_edge_placement/provider_isolation_allowlist.patch`（今回 `postona_post_assist_edge.ts` の 3 つの許可を足した）と G6 の isolation test を当てる。
-2. Edge の入口: `supabase/functions/postona-post-assist/index.ts` = `supabase/tests/fixtures/g6_23_post_assist_edge/index.ts.txt`（handler を `Deno.serve` に渡すだけ）。
-3. 入口の許可: `supabase/tests/fixtures/g6_23_post_assist_edge/entry_point_allowlist.patch`（共有 provider の `AUTHORIZED_REACHERS` と `AUTHORIZED_ENTRY_POINTS` に 1 つずつ、G6 の isolation test は「この入口だけが、この 1 ファイルだけを import する」）。
+1. G6 の共通 AI の部品: `supabase/functions/_shared/ai_gateway/`（G6-24 で `supabase/ai_gateway/` から移した。中身は import の行先とコメントだけが変わった）。その隣に G6 の isolation test。
+2. Edge の入口: `supabase/functions/postona-post-assist/index.ts`（handler を `Deno.serve` に渡すだけ）。
+3. 共有 provider の isolation test（`supabase/functions/_shared/ai_provider/isolation_test.ts`）の許可: G6-05 の提案と G6-23 の入口の許可を、そのまま当てた。差分の記録は `supabase/tests/fixtures/g6_24_provider_isolation/provider_isolation_g6.patch`（足した行 59、消した行 5 = 古い範囲を説明するコメント 4 と `AUTHORIZED_ENTRY_POINTS` の 1 行）。
 
-`supabase/tests/common_ai_gateway_edge_preflight.ts` が作業用の写しで確かめる: 入口を許可なしで置く → FAIL、差分を当てる → PASS（入口も `deno check` OK）、許可を 1 つ抜く → FAIL、入口がほかを import → FAIL。
+`supabase/tests/common_ai_gateway_edge_preflight.ts` が作業用の写しで確かめる:
+- そのまま → PASS（入口と部品は、その場所で `deno check` OK）
+- 許可を G6-24 の前に戻す → FAIL
+- 入口の許可だけを抜く、またはどちらか 1 つを抜く → FAIL
+- 入口がほかのファイルも import する → FAIL
+- 2 つ目の入口 → FAIL
+- 悪い変更 12 種類 → FAIL
+- 許可を 1 つずつ抜く → 48/48 FAIL
 
 ## 4. まだ使えない理由（blocker）
 
 - **G5（BLOCKED_G5_AUTH_EXECUTE）**: R1-MVP の RPC を本人（authenticated）が EXECUTE できる許可が未決（G5-48 が作業中）。今は 403 → `POST_ASSIST_NOT_ENTITLED`、何も送らない。
-- 置くこと（上の 3 つの差分）と deploy・secret の設定は、承認とレビューの後。SQL（台帳 → ai_calls → owner-held の 001 → G5 の MVP）の適用も同じ。
+- 共有 provider の isolation の変更と新しい Edge の入口は、Codex Sol（高）の 1 回のレビューの後。deploy・secret の設定は、さらにユーザーの承認の後。SQL（台帳 → ai_calls → owner-held の 001 → G5 の MVP）の適用も同じ。
 - H2 #329 第 20 TASK（PR #553）の受入と、PR #558 の再確認が未完了。

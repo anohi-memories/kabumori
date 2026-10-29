@@ -24,7 +24,7 @@ import {
   type JsonSchema,
   LedgerOwnerNotHeldError,
   upperBoundAttemptCostUsd,
-} from "../functions/_shared/ai_provider/mod.ts";
+} from "../ai_provider/mod.ts";
 
 export type AppId = "kabumori" | "postona" | "miseiro";
 const APPS: readonly AppId[] = ["kabumori", "postona", "miseiro"];

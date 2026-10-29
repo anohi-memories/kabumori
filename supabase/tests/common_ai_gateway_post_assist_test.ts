@@ -10,11 +10,11 @@ import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { buildAppPolicySet } from "../ai_gateway/app_policies.ts";
-import { createG5AuthorityPort } from "../ai_gateway/authority_port.ts";
-import { createG5RpcTransport } from "../ai_gateway/g5_rpc_transport.ts";
-import { handlePostAssistRequest, POST_ASSIST_SCHEMA_NAME, POSTONA_POST_ASSIST_CONTENT, xWeightedLength } from "../ai_gateway/postona_post_assist.ts";
-import { type AiGateway, createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet } from "../functions/_shared/ai_gateway/app_policies.ts";
+import { createG5AuthorityPort } from "../functions/_shared/ai_gateway/authority_port.ts";
+import { createG5RpcTransport } from "../functions/_shared/ai_gateway/g5_rpc_transport.ts";
+import { handlePostAssistRequest, POST_ASSIST_SCHEMA_NAME, POSTONA_POST_ASSIST_CONTENT, xWeightedLength } from "../functions/_shared/ai_gateway/postona_post_assist.ts";
+import { type AiGateway, createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 import { OwnerHeldModel } from "./common_ai_gateway_owner_held_fake.ts";
 
 type Sample = { name: string; scope: { brand_slug: string | null }; rpc_wire: Record<string, unknown> };

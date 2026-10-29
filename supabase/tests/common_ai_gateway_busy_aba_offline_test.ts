@@ -20,9 +20,9 @@ import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { buildAppPolicySet, type FeatureContent } from "../ai_gateway/app_policies.ts";
-import type { AuthorityPort, AuthVerdict } from "../ai_gateway/gateway.ts";
-import { AiGatewayConfigError, createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet, type FeatureContent } from "../functions/_shared/ai_gateway/app_policies.ts";
+import type { AuthorityPort, AuthVerdict } from "../functions/_shared/ai_gateway/gateway.ts";
+import { AiGatewayConfigError, createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";
 const SERVICE_KEY = "local-g6-18-service-NOT-A-SECRET";

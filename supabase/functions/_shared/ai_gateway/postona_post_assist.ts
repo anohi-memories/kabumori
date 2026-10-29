@@ -8,8 +8,8 @@
 // Who may call (identity, session, workspace ownership, the x_autopost service) is G5's verdict through the gateway
 // (R1 v1 today; G5-47's personal-MVP IF is NOT assumed here). Every call is the gateway's postona:post_generation feature
 // (G5's v1 already knows it), so idempotency, the owner-held ledger and the recheck before the send apply unchanged.
-// NOT deployed: outside supabase/functions, wired into no Edge Function and no app screen (their owners connect it;
-// see docs/ai-provider/G6_20_POSTONA_POST_ASSIST.md).
+// NOT deployed. Served by the postona-post-assist entry (G6-24, undeployed); no app screen calls it yet (see
+// docs/ai-provider/G6_20_POSTONA_POST_ASSIST.md, docs/ai-provider/G6_23_POST_ASSIST_EDGE_ENTRY.md).
 import type { FeatureContent } from "./app_policies.ts";
 import type { GatewayCode, GatewayResult } from "./gateway.ts";
 import type { AiGateway } from "./runtime.ts";

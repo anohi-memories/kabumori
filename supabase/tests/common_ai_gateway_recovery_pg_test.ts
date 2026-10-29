@@ -6,10 +6,10 @@ import assert from "node:assert/strict";
 import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_OPENAI_KEY, jsonResponse, openAiBody, type RecordedCall, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import type { AuthorityPort, AuthVerdict, FeaturePolicy, GatewaySubject } from "../ai_gateway/gateway.ts";
-import { definePolicyRegistry } from "../ai_gateway/policy_registry.ts";
-import { reconcileUnknownCalls, type RecoveryRpc } from "../ai_gateway/recovery.ts";
-import { createAiGateway } from "../ai_gateway/runtime.ts";
+import type { AuthorityPort, AuthVerdict, FeaturePolicy, GatewaySubject } from "../functions/_shared/ai_gateway/gateway.ts";
+import { definePolicyRegistry } from "../functions/_shared/ai_gateway/policy_registry.ts";
+import { reconcileUnknownCalls, type RecoveryRpc } from "../functions/_shared/ai_gateway/recovery.ts";
+import { createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const HOST = Deno.env.get("GWV_PGHOST");
 const PORT = Deno.env.get("GWV_PGPORT");

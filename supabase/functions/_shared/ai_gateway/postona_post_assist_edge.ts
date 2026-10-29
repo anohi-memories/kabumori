@@ -1,11 +1,10 @@
-// G6-23 (2026-10-29): the HTTP entry of POSTONA's AI post assist, as an Edge Function serves it (product source; not
-// deployed, not placed under supabase/functions/). One request: the browser-origin rule (CORS), POST + JSON + the
+// G6-23 (2026-10-29): the HTTP entry of POSTONA's AI post assist, served by supabase/functions/postona-post-assist (G6-24;
+// NOT deployed). One request: the browser-origin rule (CORS), POST + JSON + the
 // person's Bearer token checked before anything is asked, the configuration read from the Edge environment once, then
 // the G6-21 personal-MVP adapter (G5 R1 verdict -> owner-held gateway -> editable candidates). It never posts to a
 // social network and never calls a provider itself. The Edge Function file only serves this handler with readEnv set
-// to the Edge environment's getter (see docs/ai-provider/G6_23_POST_ASSIST_EDGE_ENTRY.md for the exact file).
-// Placing it under supabase/functions/_shared/ needs the shared provider isolation allowlist (same document).
-import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
+// to the Edge environment's getter (docs/ai-provider/G6_23_POST_ASSIST_EDGE_ENTRY.md).
+import { SecretValue } from "../ai_provider/secrets.ts";
 import type { FeatureConfig } from "./app_policies.ts";
 import { createPostonaPostAssistMvp, G5_R1_PERSONAL_MVP_PROFILE, type PostonaPostAssistMvp, type PostonaPostAssistMvpConfig } from "./postona_post_assist_mvp.ts";
 

@@ -4,14 +4,14 @@
 // stale claimant with the same production-shaped URL is in common_ai_gateway_busy_aba_offline_test.ts.
 // No network, no DB, fake URLs and keys, no real AI.
 //   deno test --cached-only --frozen --config supabase/functions/_shared/ai_consumer_bridge/deno.json --deny-net \
-//     --deny-write --allow-env=ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY --allow-read=supabase/ai_gateway \
+//     --deny-write --allow-env=ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY --allow-read=supabase/functions/_shared/ai_gateway \
 //     supabase/tests/common_ai_gateway_legacy_fence_test.ts
 import assert from "node:assert/strict";
 import { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { buildAppPolicySet, type FeatureContent } from "../ai_gateway/app_policies.ts";
-import type { AuthorityPort, AuthVerdict } from "../ai_gateway/gateway.ts";
-import { AiGatewayConfigError, type AiGatewayOptions, createAiGateway } from "../ai_gateway/runtime.ts";
+import { buildAppPolicySet, type FeatureContent } from "../functions/_shared/ai_gateway/app_policies.ts";
+import type { AuthorityPort, AuthVerdict } from "../functions/_shared/ai_gateway/gateway.ts";
+import { AiGatewayConfigError, type AiGatewayOptions, createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
 
 const PROD_URL = "https://abcdefghijklmnopqrst.supabase.co";
 const PROD_KEY = "sb_secret_" + "FAKE_0000000000";
@@ -132,8 +132,8 @@ Deno.test("the legacy fence follows the existing loopback rule exactly: only htt
   }
 });
 
-Deno.test("reachability: in supabase/ai_gateway only runtime.ts composes gatewayExecute and only runtime.ts / gateway.ts name the legacy check, so no other product entry can build the legacy path", async () => {
-  const dir = new URL("../ai_gateway/", import.meta.url);
+Deno.test("reachability: in supabase/functions/_shared/ai_gateway only runtime.ts composes gatewayExecute and only runtime.ts / gateway.ts name the legacy check, so no other product entry can build the legacy path", async () => {
+  const dir = new URL("../functions/_shared/ai_gateway/", import.meta.url);
   for await (const e of Deno.readDir(dir)) {
     const text = await Deno.readTextFile(new URL(e.name, dir));
     const composes = /\bgatewayExecute\s*\(|legacyBusyHeldCheck\s*:\s*true|legacy_busy_check_unsafe/u.test(text);

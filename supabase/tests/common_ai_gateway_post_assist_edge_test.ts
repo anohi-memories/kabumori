@@ -1,4 +1,4 @@
-// G6-23 (2026-10-29): HTTP fake E2E of POSTONA's AI post assist Edge entry (supabase/ai_gateway/postona_post_assist_edge.ts):
+// G6-23 (2026-10-29): HTTP fake E2E of POSTONA's AI post assist Edge entry (supabase/functions/_shared/ai_gateway/postona_post_assist_edge.ts):
 // Request -> origin / method / content type / Bearer checks -> configuration from the Edge environment -> G6-21 personal
 // MVP adapter (G5-47 R1 wire, fake) -> owner-held gateway (common_ai_gateway_owner_held_fake.ts, the SQL's semantics) ->
 // fake OpenAI. The Supabase URL is production-SHAPED (https, sb_secret_-shaped key) and fake: nothing leaves the
@@ -7,8 +7,8 @@
 //     --deny-write --allow-env=ANTHROPIC_CUSTOM_HEADERS,ANTHROPIC_WEBHOOK_SIGNING_KEY supabase/tests/common_ai_gateway_post_assist_edge_test.ts
 import assert from "node:assert/strict";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody, recordingFetch } from "../functions/_shared/ai_provider/test_support.ts";
-import { G5_VERDICT_RPC } from "../ai_gateway/g5_rpc_transport.ts";
-import { createPostonaPostAssistEdgeHandler, parseAllowedOrigins, parseFeatureConfig, POST_ASSIST_EDGE_ENV } from "../ai_gateway/postona_post_assist_edge.ts";
+import { G5_VERDICT_RPC } from "../functions/_shared/ai_gateway/g5_rpc_transport.ts";
+import { createPostonaPostAssistEdgeHandler, parseAllowedOrigins, parseFeatureConfig, POST_ASSIST_EDGE_ENV } from "../functions/_shared/ai_gateway/postona_post_assist_edge.ts";
 import { OwnerHeldModel } from "./common_ai_gateway_owner_held_fake.ts";
 
 const SUPABASE = "https://abcdefghijklmnopqrst.supabase.co";

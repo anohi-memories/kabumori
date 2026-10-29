@@ -4,9 +4,10 @@
 //   - the only external dependency is the exactly pinned official Anthropic SDK, in the Anthropic adapter only;
 //   - provider hosts and model ids appear only where they belong;
 //   - Provider scope: outside this module, only the files in AUTHORIZED_REFERENCES name it, with exactly those
-//     imports: the shared market report handler (F6 V0 / F2, the one Edge entry point that reaches it) and the
-//     unwired H5 consumer bridge library (F6 / H5 boundary, 2026-10-15). Of all deployable sources only
-//     AUTHORIZED_REACHERS reach it, and of the Edge Function entry points only market-report-analysis/index.ts.
+//     imports: the shared market report handler (F6 V0 / F2), the unwired H5 consumer bridge library (F6 / H5
+//     boundary, 2026-10-15) and the G6 common AI gateway (G6-24). Of all deployable sources only
+//     AUTHORIZED_REACHERS reach it, and of the Edge Function entry points only market-report-analysis/index.ts and
+//     postona-post-assist/index.ts (G6-24, through the gateway only).
 //     A deployable file that imports the public entry (mod.ts) may use exactly the names in AUTHORIZED_MOD_IMPORTS
 //     (least privilege: no ledger guard construction, no secret readers, no unpoliced executeAiRequest); the report
 //     handler likewise takes exactly its names from market_report_primary.ts (AUTHORIZED_PROVIDER_IMPORTS). The
@@ -96,18 +97,41 @@ const AUTHORIZED_REFERENCES: Record<string, readonly string[]> = {
   "_shared/ai_consumer_bridge/bridge_test.ts": ["../ai_provider/test_support.ts"],
   "_shared/ai_consumer_bridge/isolation_test.ts": ["../ai_provider/mod.ts"],
   "_shared/ai_consumer_bridge/offline_samples_test.ts": ["../ai_provider/mod.ts", "../ai_provider/test_support.ts"],
+  // G6 common AI gateway (G6-05 grants, placed in G6-24): reached only through its one Edge entry, postona-post-assist.
+  "_shared/ai_gateway/ai_calls_store.ts": ["../ai_provider/adapter.ts", "../ai_provider/redact.ts", "../ai_provider/secrets.ts"],
+  "_shared/ai_gateway/app_policies.ts": ["../ai_provider/mod.ts"],
+  "_shared/ai_gateway/g5_rpc_transport.ts": ["../ai_provider/adapter.ts", "../ai_provider/redact.ts"],
+  "_shared/ai_gateway/gateway.ts": ["../ai_provider/mod.ts"],
+  "_shared/ai_gateway/isolation_test.ts": ["../ai_provider/adapter.ts", "../ai_provider/mod.ts", "../ai_provider/redact.ts", "../ai_provider/secrets.ts"],
+  "_shared/ai_gateway/policy_registry.ts": ["../ai_provider/mod.ts"],
+  "_shared/ai_gateway/postona_post_assist_edge.ts": ["../ai_provider/secrets.ts"],
+  "_shared/ai_gateway/runtime.ts": ["../ai_provider/adapter.ts", "../ai_provider/mod.ts", "../ai_provider/secrets.ts"],
 };
 
-/** The deployable sources that may reach this module: the report handler and its entry point, and the bridge library. */
+/** The deployable sources that may reach this module: the report handler and its entry point, the bridge library, and the G6 gateway with its POSTONA entry. */
 const AUTHORIZED_REACHERS = [
   "_shared/ai_consumer_bridge/bridge.ts",
   "_shared/ai_consumer_bridge/types.ts",
+  "_shared/ai_gateway/ai_calls_store.ts",
+  "_shared/ai_gateway/app_policies.ts",
+  "_shared/ai_gateway/authority_port.ts",
+  "_shared/ai_gateway/g5_rpc_transport.ts",
+  "_shared/ai_gateway/gateway.ts",
+  "_shared/ai_gateway/policy_registry.ts",
+  "_shared/ai_gateway/postona_consult_adapter.ts",
+  "_shared/ai_gateway/postona_post_assist.ts",
+  "_shared/ai_gateway/postona_post_assist_edge.ts",
+  "_shared/ai_gateway/postona_post_assist_mvp.ts",
+  "_shared/ai_gateway/recovery.ts",
+  "_shared/ai_gateway/runtime.ts",
   "market-report-analysis/handler.ts",
   "market-report-analysis/index.ts",
+  // G6-24: POSTONA's AI post assist entry; it reaches the module only through the G6 gateway (postona_post_assist_edge.ts).
+  "postona-post-assist/index.ts",
 ];
 
 /** Edge Function entry points (<function>/index.ts) that may reach this module. */
-const AUTHORIZED_ENTRY_POINTS = ["market-report-analysis/index.ts"];
+const AUTHORIZED_ENTRY_POINTS = ["market-report-analysis/index.ts", "postona-post-assist/index.ts"];
 
 /**
  * Deployable files that import a file of the module -> per module file, exactly the names each may take from it.
@@ -137,6 +161,36 @@ const AUTHORIZED_PROVIDER_IMPORTS: Record<string, Record<string, readonly string
   },
   "_shared/ai_consumer_bridge/types.ts": {
     "_shared/ai_provider/mod.ts": ["AiSubject", "AnthropicModelPolicy", "ExecuteDeps", "JsonSchema"],
+  },
+  // G6 gateway (G6-05 grants, placed in G6-24). runtime.ts is the one place that constructs the ledger guard (SupabaseLedgerBudgetGuard)
+  // and takes a SecretValue; executeAiRequest is called only by gateway.ts, behind the feature policy, the authority
+  // verdict / recheck and the call store. Only postona_post_assist_edge.ts names its settings, through the readEnv its
+  // Edge entry passes in (G6-23 / G6-24); it hands the service key to runtime.ts as a SecretValue.
+  "_shared/ai_gateway/ai_calls_store.ts": {
+    "_shared/ai_provider/adapter.ts": ["FetchLike"],
+    "_shared/ai_provider/redact.ts": ["safeToken"],
+    "_shared/ai_provider/secrets.ts": ["SecretValue"],
+  },
+  "_shared/ai_gateway/app_policies.ts": {
+    "_shared/ai_provider/mod.ts": ["AiReasoningEffort", "findModelSpec", "JsonSchema"],
+  },
+  "_shared/ai_gateway/g5_rpc_transport.ts": {
+    "_shared/ai_provider/adapter.ts": ["FetchLike"],
+    "_shared/ai_provider/redact.ts": ["safeToken"],
+  },
+  "_shared/ai_gateway/gateway.ts": {
+    "_shared/ai_provider/mod.ts": ["AiRequest", "AiSubject", "BudgetGuard", "executeAiRequest", "ExecuteDeps", "findModelSpec", "JsonSchema", "LedgerOwnerNotHeldError", "upperBoundAttemptCostUsd"],
+  },
+  "_shared/ai_gateway/policy_registry.ts": {
+    "_shared/ai_provider/mod.ts": ["AiRequest", "assertSchemaSupported", "findModelSpec", "upperBoundAttemptCostUsd"],
+  },
+  "_shared/ai_gateway/postona_post_assist_edge.ts": {
+    "_shared/ai_provider/secrets.ts": ["SecretValue"],
+  },
+  "_shared/ai_gateway/runtime.ts": {
+    "_shared/ai_provider/adapter.ts": ["FetchLike"],
+    "_shared/ai_provider/mod.ts": ["EnvReader", "PROVIDER_API_KEY_ENV", "RetryTiming", "SupabaseLedgerBudgetGuard"],
+    "_shared/ai_provider/secrets.ts": ["SecretValue"],
   },
   "market-report-analysis/handler.ts": {
     "_shared/ai_provider/market_report_primary.ts": [

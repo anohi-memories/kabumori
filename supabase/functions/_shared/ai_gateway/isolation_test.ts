@@ -1,6 +1,5 @@
-// PROPOSED (G6-05, not applied): supabase/functions/_shared/ai_gateway/isolation_test.ts, the G6-owned isolation test that
-// would sit next to the placed gateway. The shared provider's isolation test decides WHO may reach the provider and with
-// which names; this one decides what the gateway files themselves may do.
+// G6-05 design, placed in G6-24: the G6-owned isolation test next to the gateway. The shared provider's isolation test
+// decides WHO may reach the provider and with which names; this one decides what the gateway files themselves may do.
 import assert from "node:assert/strict";
 
 const HERE = new URL("./", import.meta.url);
@@ -88,5 +87,8 @@ Deno.test("no other function or app file imports the gateway (an Edge entry need
       if (!(e instanceof Deno.errors.NotFound)) throw e;
     }
   }
-  assert.deepEqual(found, []);
+  // G6-24: the one approved Edge entry, which imports exactly postona_post_assist_edge.ts (checked below).
+  assert.deepEqual(found, ["functions/postona-post-assist/index.ts"]);
+  const entry = await Deno.readTextFile(new URL("postona-post-assist/index.ts", FUNCTIONS));
+  assert.deepEqual([...entry.matchAll(/from\s+["']([^"']+)["']/gu)].map((m) => m[1]), ["../_shared/ai_gateway/postona_post_assist_edge.ts"]);
 });

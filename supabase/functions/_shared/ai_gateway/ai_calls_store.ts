@@ -1,15 +1,16 @@
 // G6 runtime candidate (2026-10-19, G6-01): the gateway's CallStore over the ai_calls RPCs of migration
 // 20261017120000 (PR249), called through PostgREST with the service key, like SupabaseLedgerBudgetGuard does for the
-// ledger. NOT deployed: supabase/ai_gateway/ is outside supabase/functions (see docs/ai-provider/G6_AI_GATEWAY_RUNTIME_SOURCE.md).
+// ledger. NOT deployed; since G6-24 only the (undeployed) postona-post-assist entry reaches it (see
+// docs/ai-provider/G6_AI_GATEWAY_RUNTIME_SOURCE.md).
 //
 // claim  -> public.ai_calls_claim:    {kind: acquired, owner} | {kind: busy} | {kind: conflict} | {kind: complete, fingerprint, result}
 // complete -> public.ai_calls_complete: {state: complete, duplicate}
 // Any other answer, an HTTP error or a lost connection throws: the gateway then answers STORE_UNAVAILABLE before
 // anything is sent (claim) or UNKNOWN without resending (complete). Errors carry the RPC name, the HTTP status and a
 // sanitised PostgREST code, never a body, a key or a payload. The key is a SecretValue revealed only into headers.
-import type { FetchLike } from "../functions/_shared/ai_provider/adapter.ts";
-import { safeToken } from "../functions/_shared/ai_provider/redact.ts";
-import type { SecretValue } from "../functions/_shared/ai_provider/secrets.ts";
+import type { FetchLike } from "../ai_provider/adapter.ts";
+import { safeToken } from "../ai_provider/redact.ts";
+import type { SecretValue } from "../ai_provider/secrets.ts";
 import type { CallClaim, CallIdentity, CallStore, ClaimContext, StoredOutcome } from "./gateway.ts";
 
 export type AiCallsStoreOptions = Readonly<{
