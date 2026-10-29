@@ -4,6 +4,7 @@
 -- SYNTHETIC steps (labelled) stand in for writers that are not G4's: the refresh core's lease, a service end, a connection
 -- error. Every case records expected vs actual; the run fails unless all match.
 \set ON_ERROR_STOP 1
+select set_config('g4v.profile', :'profile', false);
 create schema g4v;
 create table g4v.results (n serial, case_id text, expected text, actual text);
 create function g4v.u(p int) returns uuid language sql immutable
@@ -115,6 +116,18 @@ select g4v.check_('9 service ended', 'false|' || g4v.gen(4803) || '|SERVICE_NOT_
 select g4v.check_('10 connect', 'OK/OK', g4v.begin_(4802, 'b1') || '/' || g4v.complete_(4802, 'b1', '1002'));
 delete from postona_g4_x_oauth.connections where social_account_id = g4v.acct(4802);
 select g4v.check_('10 no lineage', 'false|-|LINEAGE_UNKNOWN', g4v.v(4802, g4v.acct(4802)));
+
+-- 11. the service ends and restarts between begin and complete (SYNTHETIC lifecycle_version + 2). G4-02 #5: the personal
+--     profile records G5's g5pv generation at begin, so the callback refuses (OWNER_EPOCH_CHANGED: the reviewed body's code
+--     for a moved recorded generation); the full profile binds F5's owner epoch, which an end + restart does not move.
+select g4v.person(4804);
+select g4v.check_('11 begin', 'OK', g4v.begin_(4804, 'd1'));
+update public.common_accounts set lifecycle_version = lifecycle_version + 2 where user_id = g4v.u(4804);
+select g4v.check_('11 service end + restart between begin and complete',
+  case current_setting('g4v.profile') when 'personal' then 'OWNER_EPOCH_CHANGED' else 'OK' end, g4v.complete_(4804, 'd1', '1004'));
+-- personal: the refused callback leaves the begin open (nothing completed): not verified, CONNECT_PENDING
+select g4v.check_('11 verdict after', case current_setting('g4v.profile') when 'personal' then 'false|CONNECT_PENDING' else 'true|VERIFIED' end,
+  split_part(g4v.v(4804, g4v.acct(4804)), '|', 1) || '|' || split_part(g4v.v(4804, g4v.acct(4804)), '|', 3));
 
 select n, case_id, case when expected = actual then 'ok' else 'FAIL expected ' || expected || ' got ' || actual end from g4v.results order by n;
 do $$ begin

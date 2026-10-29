@@ -231,7 +231,7 @@ if [ -n "${G4T_VERDICT:-}" ]; then
   }
   echo "== G4-02 #4 X verdict through G4's real X SQL (full profile)"
   vx="$(full_with_x verdictx)"
-  out="$(as_owner "$vx" -A -t -f "$xbeh" 2>&1)" || { echo "$out"; fail "X verdict behavior"; }
+  out="$(as_owner "$vx" -A -t -v profile=full -f "$xbeh" 2>&1)" || { echo "$out"; fail "X verdict behavior"; }
   grep -E '^[0-9]+\|' <<<"$out"
   grep -q G4V_X_VERDICT_BEHAVIOR_PASS <<<"$out" || fail "X verdict marker"
   # mutant: the refresh-state check removed -> the behavior must fail on case 5
@@ -240,7 +240,7 @@ if [ -n "${G4T_VERDICT:-}" ]; then
   vm="$(copy verdictxm "$world")"
   for f in "$g443" "${stack[@]}" "$xc/001_x_oauth_personal_epoch.sql" "$xc/002_x_oauth_product_wiring.sql" "$xc/003_x_disconnect_user_rpc.sql" \
     "$xc/004_x_consume_preexchange_recheck.sql" "$xc/005_x_connect_lifecycle_t13.sql" "$tree/v2_mutant.sql"; do need "$vm" "$f"; done
-  if out="$(as_owner "$vm" -A -t -f "$xbeh" 2>&1)"; then fail "the X verdict behavior passed without the refresh-state check"; fi
+  if out="$(as_owner "$vm" -A -t -v profile=full -f "$xbeh" 2>&1)"; then fail "the X verdict behavior passed without the refresh-state check"; fi
   echo "MUTANT_CAUGHT x_refresh_state_ignored by: $(grep -E '\|FAIL ' <<<"$out" | cut -d'|' -f2 | paste -sd ';' -)"
 
   echo "== G4-02 #4 install / rollback / ACL"
@@ -249,11 +249,47 @@ if [ -n "${G4T_VERDICT:-}" ]; then
   pv="$(mvp_world verdictpv)"
   for f in "$g5pv" "${stack[@]}"; do need "$pv" "$f"; done
   echo "ok 001 installed on the PERSONAL profile (g5pv binding)"
-  r="$(apply "$pv" "$v2")"; [ "$r" = G4_X_VERDICT_PRECONDITION_LINEAGE ] || fail "002 on personal: $r"
-  echo "ok 002 refused on the personal profile until G4's X OAuth has a g5pv variant ($r)"
+  r="$(apply "$(copy verdictpvx "$pv")" "$v2")"; [ "$r" = G4_X_VERDICT_PRECONDITION_LINEAGE ] || fail "002 without G4's X lineage: $r"
+  echo "ok 002 refused while G4's X OAuth is not installed ($r)"
   r="$(apply "$pv" "$v1")"; [ "$r" = G4_VERDICT_ALREADY_APPLIED ] || fail "001 twice: $r"
+  # G4-02 #5: G4's X OAuth on the personal profile (001 / 005 g5pv builds + 002-004 verbatim), then the X verdict there too
+  px="$c/postona_g4_x_oauth_personal_mvp"
+  python3 -I "$repo/supabase/tests/postona_g4_x_oauth_personal_mvp_build.py" "$repo" --check > /dev/null || fail "personal X does not re-derive"
+  r="$(apply "$(copy xmixfull "$world")" "$px/001_x_oauth_g5pv.sql")"; [ "$r" = G4X_G5PV_PRECONDITION_FULL_PROFILE ] || fail "personal X on full: $r"
+  echo "ok personal X 001 refused on the full profile ($r)"
+  r="$(apply "$(copy xmixpers "$pv")" "$xc/001_x_oauth_personal_epoch.sql")"
+  [ "$r" = "G4X_PRECONDITION_AUTHORITY_MISSING private.account_lifecycle_brand_owner_epoch(text)" ] || fail "full X on personal: $r"
+  echo "ok full X 001 refused on the personal profile ($r)"
+  for f in "$px/001_x_oauth_g5pv.sql" "$xc/002_x_oauth_product_wiring.sql" "$xc/003_x_disconnect_user_rpc.sql" \
+    "$xc/004_x_consume_preexchange_recheck.sql" "$px/005_x_connect_lifecycle_t13_g5pv.sql" "$v2"; do need "$pv" "$f"; done
+  echo "ok personal X 001-005 + the X verdict installed on the personal profile"
+  echo "== G4-02 #5 X verdict through G4's personal X SQL (personal profile)"
+  out="$(as_owner "$pv" -A -t -v profile=personal -f "$xbeh" 2>&1)" || { echo "$out"; fail "X verdict behavior (personal)"; }
+  grep -E '^[0-9]+\|' <<<"$out"
+  grep -q G4V_X_VERDICT_BEHAVIOR_PASS <<<"$out" || fail "X verdict marker (personal)"
+  # mutant: the personal generation helper returns a constant (the g5pv generation ignored) -> case 11 must fail
+  python3 -I - "$px/001_x_oauth_g5pv.sql" "$tree/x001p_mutant.sql" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src).read()
+old = "  return v_generation;\nend $$;\n"
+assert text.count(old) == 1, "mutant anchor"
+open(dst, "w").write(text.replace(old, "  return 1; -- MUTANT\nend $$;\n"))
+PY
+  pm="$(mvp_world xpmut)"
+  for f in "$g5pv" "${stack[@]}" "$tree/x001p_mutant.sql" "$xc/002_x_oauth_product_wiring.sql" "$xc/003_x_disconnect_user_rpc.sql" \
+    "$xc/004_x_consume_preexchange_recheck.sql" "$px/005_x_connect_lifecycle_t13_g5pv.sql" "$v2"; do need "$pm" "$f"; done
+  if out="$(as_owner "$pm" -A -t -v profile=personal -f "$xbeh" 2>&1)"; then fail "the personal X behavior passed with a constant generation"; fi
+  grep -qE '^28\|11 service end \+ restart between begin and complete\|FAIL' <<<"$out" || { echo "$out" | grep -E '\|FAIL'; fail "the mutant failed for another reason"; }
+  echo "MUTANT_CAUGHT personal_generation_constant by: $(grep -E '\|FAIL ' <<<"$out" | cut -d'|' -f2 | paste -sd ';' -)"
+  # the personal rollbacks are the full-profile ones, verbatim (005 -> 001), after the X verdict
+  pr="$(copy xrb "$pv")"
+  for f in "$v2_rb" "$xc/005_x_connect_lifecycle_t13_rollback.sql" "$xc/004_x_consume_preexchange_recheck_rollback.sql" \
+    "$xc/003_x_disconnect_user_rpc_rollback.sql" "$xc/002_x_oauth_product_wiring_rollback.sql" "$xc/001_x_oauth_personal_epoch_rollback.sql"; do need "$pr" "$f"; done
+  [ -z "$(q "$pr" -c "select to_regnamespace('postona_g4_x_oauth')")" ] || fail "personal X rollback left the schema"
+  echo "ok personal X rolled back with the full-profile rollbacks (005 -> 001), schema gone"
   su_db="$(copy verdictsu "$pv")"
-  need "$su_db" "$v1_rb"
+  need "$su_db" "$v2_rb"; need "$su_db" "$v1_rb"
   r="$({ "$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$su_db" -f "$v1" 2>&1 || true; } | sed -n 's/^.*ERROR: *//p' | head -1)"
   [ "$r" = G4_VERDICT_PRECONDITION_OWNER ] || fail "001 as superuser: $r"
   echo "ok 001 refused as a superuser ($r)"
