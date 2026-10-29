@@ -7,6 +7,8 @@
 // G5-48: R1-MVP's one EXECUTE to authenticated (MVP_R1_EXECUTE_GRANT.sql) refuses every drift with nothing changed; the same R1 calls before
 // the grant (all permission denied), after it (the person allowed, every other caller / token / app / workspace / state fail-closed) and after
 // the idempotent stop (denied again); G6's PR #556 personal-MVP adapter (read-only archive) over its real transport, run here as the person.
+// G5-49 (H1 第28 P2 F1 / F2): the stop also under external ACL drift -- a quoted grantee, a re-grant chain from a grant option, both with
+// PUBLIC / anon / service_role / authenticator -- succeeds twice, leaves owner-only and changes no other ACL or membership.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -293,6 +295,84 @@ test_('R1-MVP before / after the EXECUTE grant / after the stop: as shipped ever
     await stop();
   }
   for (const [label, c, statement, before] of cases) assert.match(await as(c, statement, 'authenticated', before), DENIED, `stopped: ${label}`);
+});
+
+// ---- G5-49: the stop under external ACL drift (H1 第28 P2 F1 / F2) --------------------------------------------------------------------------
+// F1: a grantee whose name needs quoting (hyphen, space, upper case) -- G5-48 quoted regrole::text again, so the stop referred to a role that does
+// not exist and rolled back with authenticated still granted. F2: a re-grant from a grant option (owner -> authenticated WITH GRANT OPTION -> a
+// delegate) -- G5-48 revoked RESTRICT, so "dependent privileges exist" rolled the stop back. H1's two repro roles are used verbatim. Each case:
+// granted + the drift -> the person is allowed; the stop -> owner-only, no named role can execute, the person is denied; nothing else changed
+// (every other function / relation / column / schema ACL, the default ACLs and the role memberships -- also decoys with the same grant-option
+// chain, so the CASCADE is shown to reach only R1-MVP); a second stop changes nothing. Drifts run as a superuser (it may SET ROLE to a grantor).
+const STOP_ROLES = ['h1-r1-stop-reader', 'h1_r1_stop_delegate', 'G5 Stop Mixed'];
+const qi = (r: string) => `"${r.replaceAll('"', '""')}"`;
+const [READER, DELEGATE, MIXED] = STOP_ROLES.map(qi);
+const DECOY = `create function public.g549_decoy() returns int language sql as 'select 1'; create table public.g549_decoy_t (i int);`;
+const DECOY_GRANTS = `grant execute on function public.g549_decoy() to authenticated with grant option; grant select (i) on public.g549_decoy_t to authenticated with grant option;
+  grant select on public.g549_decoy_t to authenticated with grant option; set role authenticated;
+  grant execute on function public.g549_decoy() to ${DELEGATE}, ${READER}; grant select on public.g549_decoy_t to ${DELEGATE}; grant select (i) on public.g549_decoy_t to ${MIXED}; reset role;`;
+const otherAcls = () => sql(NE, `select md5(string_agg(x, E'\n' order by x)) || ' ' || count(*) from (
+    select 'p ' || p.oid::regprocedure::text || ' ' || coalesce(p.proacl::text, '-') x from pg_proc p where p.oid <> ${R1SIG}
+    union all select 'c ' || c.oid::regclass::text || ' ' || coalesce(c.relacl::text, '-') from pg_class c
+    union all select 'a ' || a.attrelid::regclass::text || '.' || a.attname || ' ' || a.attacl::text from pg_attribute a where a.attacl is not null
+    union all select 'n ' || n.nspname || ' ' || coalesce(n.nspacl::text, '-') from pg_namespace n
+    union all select 'd ' || d.defaclrole::regrole::text || ' ' || d.defaclnamespace::text || d.defaclobjtype::text || ' ' || d.defaclacl::text from pg_default_acl d
+    union all select 'm ' || m.roleid::regrole::text || ' ' || m.member::regrole::text || ' ' || m.grantor::regrole::text || m.admin_option || m.inherit_option || m.set_option from pg_auth_members m) s`, superUser);
+const CAN = (roles: string[]) => sql(NE, `select string_agg(r || '=' || has_function_privilege(r, ${R1SIG}, 'EXECUTE'), ',' order by r) from unnest(array[${roles.map(lit).join(', ')}]) r`, superUser);
+// a failed (G5-48) stop leaves extra grantees: put R1-MVP back to owner-only so the next case starts clean
+const resetR1 = () => sql(NE, `do $d$ declare g text; begin
+  for g in select distinct case when x.grantee = 0 then 'public' else format('%I', r.rolname) end from pg_proc p cross join aclexplode(p.proacl) x left join pg_roles r on r.oid = x.grantee
+            where p.oid = ${R1SIG} and x.grantee <> p.proowner loop execute format('revoke all on function ${R1FN} from %s cascade', g); end loop; end $d$`, superUser);
+const STOP_CASES: Array<[string, string, string[]]> = [
+  ['F1 (H1 repro): a quoted grantee "h1-r1-stop-reader"', `grant execute on function ${R1FN} to ${READER}`, ['h1-r1-stop-reader']],
+  ['F1: a grantee with a space and upper case "G5 Stop Mixed"', `grant execute on function ${R1FN} to ${MIXED}`, ['G5 Stop Mixed']],
+  ['F2 (H1 repro): authenticated WITH GRANT OPTION re-grants to h1_r1_stop_delegate', `grant execute on function ${R1FN} to authenticated with grant option;
+    set role authenticated; grant execute on function ${R1FN} to ${DELEGATE}; reset role`, ['h1_r1_stop_delegate']],
+  ['F1 + F2: a chain from a quoted grantee outside the fixed list, "G5 Stop Mixed" (grant option from the owner) -> h1_r1_stop_delegate',
+    `grant execute on function ${R1FN} to ${MIXED} with grant option; set role ${MIXED}; grant execute on function ${R1FN} to ${DELEGATE}; reset role`,
+    ['G5 Stop Mixed', 'h1_r1_stop_delegate']],
+  ['F1 + F2 together: PUBLIC, anon, service_role, authenticator, and a chain authenticated -> "h1-r1-stop-reader" (grant option) -> h1_r1_stop_delegate, "G5 Stop Mixed"',
+    `grant execute on function ${R1FN} to authenticated with grant option; grant execute on function ${R1FN} to public, anon, service_role, authenticator;
+    set role authenticated; grant execute on function ${R1FN} to ${READER} with grant option;
+    set role ${READER}; grant execute on function ${R1FN} to ${DELEGATE}, ${MIXED}; reset role`, STOP_ROLES],
+];
+let STOP_BASE = '';
+
+test_('stop under ACL drift (G5-49) setup: H1\'s repro roles and decoys holding the same grant-option chain on other objects', async () => {
+  STOP_BASE = await catalog(NE);
+  assert.equal(await r1acl(), OWNER_ONLY(), 'owner-only before');
+  await sql(NE, STOP_ROLES.map((r) => `create role ${qi(r)} nologin;`).join(' '), superUser);
+  await sql(NE, DECOY);
+  await sql(NE, DECOY_GRANTS, superUser);
+});
+
+for (const [label, drift, roles] of STOP_CASES) {
+  test_(`stop under ACL drift (G5-49) ${label}: the stop succeeds, R1-MVP is owner-only, no role can execute it, the person is denied, nothing else changed; twice`, async () => {
+    await grant();
+    try {
+      await sql(NE, drift, superUser);
+      assert.match(brief(await as(claims(A, SA), R1(WA), 'authenticated')), /^allow g5pv:[1-9][0-9]*$/u, 'granted + drift: the person is allowed');
+      const others = await otherAcls();
+      const named = ['anon', 'authenticated', 'authenticator', 'service_role', ...roles];
+      for (let i = 1; i <= 2; i++) {
+        const r = await run(NE, ['-f', REVOKE]);
+        assert.ok(r.ok, `stop run ${i}: ${r.error}`);
+        assert.equal(await r1acl(), OWNER_ONLY(), `stop run ${i}: owner-only`);
+        assert.equal(await CAN(named), [...named].sort().map((r) => `${r}=false`).join(','), `stop run ${i}: no role can execute`);
+        assert.match(await as(claims(A, SA), R1(WA), 'authenticated'), DENIED, `stop run ${i}: the person is denied`);
+        assert.equal(await otherAcls(), others, `stop run ${i}: no other ACL, default ACL or membership changed`);
+      }
+    } finally {
+      await resetR1();
+    }
+  });
+}
+
+test_('stop under ACL drift (G5-49) teardown: decoys and roles go, the catalog is as before', async () => {
+  await sql(NE, 'drop function public.g549_decoy(); drop table public.g549_decoy_t;');
+  await sql(NE, STOP_ROLES.map((r) => `drop role ${qi(r)};`).join(' '), superUser);
+  assert.equal(await r1acl(), OWNER_ONLY(), 'owner-only after');
+  assert.equal(await catalog(NE), STOP_BASE, 'the catalog as before');
 });
 
 test_('G6: PR #500\'s UNCHANGED port refuses the MVP allow (fail-closed); PR #556\'s personal-MVP adapter (read-only archive) over its REAL transport, whose request runs here as the person: denied before the grant, allow after it, generation stable / moved / denied, and not allow again after the stop', async () => {
