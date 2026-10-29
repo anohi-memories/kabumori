@@ -11,6 +11,7 @@ The design, the measured fail-closed table, the residual and the per-owner chang
 | `MVP_INSTALL.sql` | **One transaction.** Prerequisites (P1 chain, a stricter P3: no API write on `brand_memberships`, P4 auth, not a superuser; no owner epoch), then:<br>• S2-2 (bundle part 60);<br>• S2-1 T13 (part 70);<br>• the S2-3 predicate only (part 50 slices);<br>• GC (part 10 slice);<br>• the new MV (`parts/M10`);<br>• R1-MVP (`parts/M20`, G5-47);<br>• the owner-only postcondition. |
 | `MVP_ROLLBACK.sql` | **One transaction.** Drops R1-MVP (only the MVP body), MV, the S2-3 predicate and GC (each refuses while another function names it or a dependency is recorded), then bundle R60 / R70. |
 | `MVP_R1_EXECUTE_GRANT.sql` | **One transaction, after the install** (G5-48, hand-written). The ONE privilege G6's real path needs: `EXECUTE` on R1-MVP to `authenticated`, nothing else. It grants only on exactly the M20 body (md5 pin, re-derived by the builder) with an owner-only ACL, no overload, S2-3 / GC still owner-only, and no `anon` / `service_role` membership in `authenticated`. Postcondition: exactly owner + authenticated. |
+| `MVP_RELEASE_PREFLIGHT.sql` | **The release preflight / health check** (G5-50). Read-only (a READ ONLY transaction, rolled back): every finding at once — owner, P1, P3, auth claims, role graph incl. `authenticator`, the owner's default privileges, phase / drift, data shape (counts only) — then `VERDICT PASS phase=absent|installed|granted` or `G5_MVP_PREFLIGHT_FAILED <codes>`. |
 | `MVP_R1_EXECUTE_REVOKE.sql` | **The stop** (G5-48, fixed in G5-49). R1-MVP back to owner-only: idempotent, independent of the body pin, and it revokes from every non-owner grantee — named once by its raw role name (`%I`), `CASCADE` so a re-grant chain goes too. |
 | `parts/M10_personal_worker_verdict.sql`, `parts/RM10_…_rollback.sql` | New SQL: MV `private.postona_personal_worker_verdict(uuid,text,text,bigint)`. |
 | `parts/M20_personal_authorization_verdict.sql`, `parts/RM20_…_rollback.sql` | New SQL (G5-47): R1-MVP `public.common_account_authorization_verdict(text,text,text)`, the R1 v1 wire with `owner_epoch = g5pv:<lifecycle_version>`. Shipped **owner-only**: `authenticated` gets it only through `MVP_R1_EXECUTE_GRANT.sql`, which is part of the bundled review. |
@@ -22,6 +23,7 @@ The design, the measured fail-closed table, the residual and the per-owner chang
 
 ## Apply / withdraw (procedure)
 
+- **Check first** (read-only), and again after each step below: `psql -v ON_ERROR_STOP=1 -f MVP_RELEASE_PREFLIGHT.sql` → `PASS phase=absent`, then `installed`, then `granted`. Any FAIL: stop (nothing was changed). The full order, stop and rollback: `docs/common-account/g5-50-postona-mvp-release-integration.md`.
 - **Apply** as the lifecycle owner (never a superuser):
   ```
   psql -v ON_ERROR_STOP=1 -f MVP_INSTALL.sql
@@ -48,4 +50,5 @@ Results:
   - G5-49: + the stop under external ACL drift (H1 P2 F1 quoted grantee / F2 re-grant chain, 5 cases + setup / teardown). With the G5-48 stop these 5 fail with H1's errors; fixed, they pass.
 - MV mutants: **10 / 10 detected** (G5-46) — 9 by an assertion naming the case, and the dropped `revoke` by the install postcondition `MV_POSTCONDITION_ACL`.
 - R1-MVP mutants: **10 / 10 detected** (G5-47) — 9 by an assertion naming the case, and the dropped `revoke` by `R1MVP_POSTCONDITION_ACL`.
+- G5-50 `postona_personal_mvp_release_pg_run.sh`: **8 / 8, 3 runs in a row** — preflight PASS / refusals / phase at each step, and one chain G1 PR #576's real code → G6 PR #566's real Edge entry → R1-MVP + G6's real ledger SQL (read-only archives); preflight mutants **13 / 13 detected**.
 - Grant / stop mutants: **15 / 15 detected** (G5-48); with G5-49's 4 more, **18 / 19** — the survivor (`PUBLIC` branch of the loop) is equivalent: the fixed `REVOKE … FROM public` runs first, so the loop never sees PUBLIC.
