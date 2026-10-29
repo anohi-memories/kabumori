@@ -5,7 +5,7 @@
 # both read-only, not changed here). Phases:
 #   I   before 001: 002 refused, both new rollbacks answer NOT_APPLIED (catalog unchanged); install all; re-applying 001 / 002 refused;
 #   D   personal_mvp/behavior.sql leaves rows in every state (published / failed / uncertain / planned ...);
-#   R   reverse order. While a later layer is there, the 002 and 001 rollbacks refuse and change nothing (also: 004's rollback with Threads
+#   R   reverse order (G3-42: 008's rollback first refuses while an MVP-bound row is unfinished; they are finished first). While a later layer is there, the 002 and 001 rollbacks refuse and change nothing (also: 004's rollback with Threads
 #       007 present fails as a whole). Then 002's refusals (a member that can SET the role; a foreign privilege; half applied), 002
 #       rollback, 001's refusals (a foreign object; a foreign grant; a consumer function, wrong acknowledgement; live rows; finished rows
 #       not / wrongly counted; a view depending on a table), 001 rollback with the exact counts and consumer list. Every refusal leaves the
@@ -176,6 +176,20 @@ expect_refused "R2a 004 rollback with Threads 007 on" "postona_resv_worker" own 
 expect_refused "R2b 001 rollback, Threads 007 on" "threads_007" own -f "$rb001"
 own -f "$th/007_postona_threads_reservations_rollback.sql" >/dev/null || fail "Threads 007 rollback"
 expect_refused "R2c 002 rollback, X 008 on" "POSTONA_RESV_API_ROLLBACK_LATER_LAYER_PRESENT: 003,004,005,006,008\$" own -f "$rb002"
+# G3-42: 008's rollback refuses while an MVP-bound row is unfinished (the restored pair rule would refuse its next UPDATE and stop claim_due
+# for everyone). Finish them first: the person cancels a planned row, the worker records a claimed row's outcome; an uncertain / expired
+# one (or a planned row its person can no longer cancel) has no path today -- removed here as a TEST stand-in (PENDING_POLICY).
+expect_refused "R2c2 008 rollback, unfinished MVP rows" "G3_MVP_ROLLBACK_LIVE_MVP_ROWS: " own -f "$here/008_postona_x_resv_personal_mvp_rollback.sql"
+for r in $(sval -c "select coalesce(string_agg(id || '/' || revision || '/' || user_id, ' '), '') from postona_x_resv.reservations where status = 'planned' and bound_owner_epoch is null and bound_lifecycle_version is not null"); do
+  IFS=/ read -r id rev uid <<<"$r"
+  st="$(val -c "\\ir $pm/helpers.sql" -c "select pg_temp.api(format('select status from postona_x_resv.cancel(%L, %s)', '$id', $rev), '$uid')" | tail -1)"
+  [ "$st" = cancelled ] || "${S[@]}" -d "$db" -c "delete from postona_x_resv.reservations where id = '$id'" >/dev/null
+done
+for r in $(sval -c "select coalesce(string_agg(id || '/' || lease_token, ' '), '') from postona_x_resv.reservations where status = 'claimed' and lease_expires_at > now() and bound_owner_epoch is null"); do
+  IFS=/ read -r id lease <<<"$r"
+  [ "$(sval -c "set role postona_resv_worker; select postona_x_resv.finish('$id', '$lease', 'failed_before_send', null, 'TEST_STOP')")" = failed_before_send ] || fail "R2c2 finish $id"
+done
+"${S[@]}" -d "$db" -c "delete from postona_x_resv.reservations where bound_owner_epoch is null and bound_lifecycle_version is not null and status in ('claimed', 'uncertain', 'expired')" >/dev/null
 for f in 008_postona_x_resv_personal_mvp_rollback 006_postona_x_single_post_live_fence_rollback 005_postona_x_single_post_rollback; do
   own -f "$here/$f.sql" >/dev/null || fail "$f"
 done
@@ -233,12 +247,21 @@ own -c "create function public.t41_consumer(p_user uuid, p_account text) returns
 expect_refused "R4f 001 rollback, consumer" "POSTONA_RESV_ROLLBACK_CONSUMERS_PRESENT: public.t41_consumer(uuid,text)" own -f "$rb001"
 expect_refused "R4g 001 rollback, wrong consumer list" POSTONA_RESV_ROLLBACK_CONSUMERS_PRESENT own -c "set postona_resv_rollback.ack_consumers = 'public.other()'" -f "$rb001"
 ack="set postona_resv_rollback.ack_consumers = 'public.t41_consumer(uuid,text)'"
-# live rows: planned / claimed / uncertain are never dropped
+# live rows: planned / claimed / uncertain are never dropped. The MVP-bound ones were finished before 008's rollback (R2c2); these are
+# unbound rows (TEST stand-ins, as an operator who has not resolved them would leave them), which the restored pair rule takes.
+ins_row() {  # <status> <draft> <position> <extra columns> <extra values>
+  "${S[@]}" -d "$db" -c "insert into postona_x_resv.reservations (batch_id, user_id, brand_id, social_account_id, draft_id, position, origin, mode, body, content_sha256,
+    scheduled_at, fixed, status, consent_state, consent_sha256, consent_scheduled_at, consent_revision, consent_at, expires_at$4)
+    select batch_id, user_id, brand_id, social_account_id, '$2', $3, origin, mode, body, content_sha256, scheduled_at, fixed, '$1', consent_state,
+           consent_sha256, consent_scheduled_at, consent_revision, consent_at, expires_at$5
+    from postona_x_resv.reservations where status = 'failed' order by id limit 1" >/dev/null
+}
+ins_row planned t41p 47 "" ""
+ins_row claimed t41c 48 ", lease_token, lease_expires_at, claimed_by" ", gen_random_uuid(), now() + interval '2 minutes', 'w41'"
 live="$(sval -c "select count(*) from postona_x_resv.reservations where status in ('planned', 'claimed', 'uncertain')")"
-[ "$live" -gt 0 ] || fail "R4h: behavior left no live row to test with"
+[ "$live" = 2 ] || fail "R4h: live stand-ins $live"
 expect_refused "R4h 001 rollback, live rows" POSTONA_RESV_ROLLBACK_LIVE_ROWS own -c "$ack" -c "set postona_resv_rollback.discard_rows = '$(rows)'" -f "$rb001"
-# one live status at a time: the operator resolves (exports, then removes) each; the rollback refuses while any is left. (An UPDATE is not
-# used: after 008's rollback the restored pair rule refuses every UPDATE of an MVP-bound row -- see the REPORT.)
+# one live status at a time: the operator resolves (exports, then removes) each; the rollback refuses while any is left.
 "${S[@]}" -d "$db" -c "delete from postona_x_resv.reservations where status = 'planned'" >/dev/null
 [ "$(sval -c "select count(*) from postona_x_resv.reservations where status = 'claimed'")" -gt 0 ] || fail "R4i: no claimed row to test with"
 expect_refused "R4i 001 rollback, a claimed row left" POSTONA_RESV_ROLLBACK_LIVE_ROWS own -c "$ack" -c "set postona_resv_rollback.discard_rows = '$(rows)'" -f "$rb001"
