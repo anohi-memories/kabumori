@@ -166,28 +166,40 @@ class RealClaudeAdapter:
     def __init__(self, go):
         self.go = go
 
-    def settings_doc(self, run_id, policy):
+    def settings_doc(self, run_id, policy, edit=None):
+        if edit:  # TASK 26: 許可ファイルへの Edit だけを加える（Write・Bash・Web は拒否のまま）
+            return {"permissions": {"allow": list(READ_TOOLS) + ccp.edit_rules(edit),
+                                    "deny": [t for t in DENIED_TOOLS if t != "Edit"]}}
         return {"permissions": {"allow": list(READ_TOOLS), "deny": list(DENIED_TOOLS)}}
 
-    def plan(self, request, prompt_path, settings_path):
+    def plan(self, request, prompt_path, settings_path, edit=None):
         return ccp.build_plan(self.go["cli_realpath"], request, prompt_path, settings_path, self.go["home"],
-                              self.go["max_turns"])
+                              self.go["max_turns"], edit)
 
-    def command(self, request, prompt_path, settings_path):
-        return self.plan(request, prompt_path, settings_path)["argv"]
+    def command(self, request, prompt_path, settings_path, edit=None):
+        argv = self.plan(request, prompt_path, settings_path, edit)["argv"]
+        if edit:  # TASK 26: カーネルの強制（sandbox-exec）で包む。子プロセスも同じ制限を受ける
+            from .code_edit import wrap
+            return wrap(edit["profile_path"], argv)
+        return argv
 
-    def environment(self, scenario_path):
-        return child_environment(self.go["home"])
+    def environment(self, scenario_path, edit=None):
+        env = child_environment(self.go["home"])
+        if edit:
+            env["TMPDIR"] = edit["tmp_dir"]
+        return env
 
     def source_preparer(self):
         return GitSourcePreparer(self.go["source_repo"])
 
-    def prelaunch(self, request, prompt_path, settings_path, used_states, now=None):
+    def prelaunch(self, request, prompt_path, settings_path, used_states, now=None, edit=None):
         """起動の直前の再検証。理由か None。"""
         if (time.time() if now is None else now) >= self.go["expires_at"]:
             return "real claude GO expired"
-        plan = self.plan(request, prompt_path, settings_path)
+        if edit and not (os.path.isfile(edit["profile_path"]) and os.access("/usr/bin/sandbox-exec", os.X_OK)):
+            return "sandbox for the code edit is not available"
+        plan = self.plan(request, prompt_path, settings_path, edit)
         pinned = {"realpath": self.go["cli_realpath"], "version": self.go["cli_version"]}
         return ccp.prelaunch_check(plan, request, prompt_path, settings_path, self.go["home"], pinned,
                                    list(used_states), lambda: probe_file(self.go["cli_realpath"]),
-                                   self.go["max_turns"])
+                                   self.go["max_turns"], edit)

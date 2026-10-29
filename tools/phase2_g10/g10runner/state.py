@@ -174,6 +174,8 @@ def envelope_covers(envelope, request):
         return False
     if request.get("phase2_scope") not in envelope.get("scopes", []):
         return False
+    if request.get("phase2_scope") == "limited_code_edit":  # TASK 26: コード編集は TASK ごとの人の CONFIRM だけ
+        return False
     if envelope.get("models", {}).get(request.get("model")) != request.get("model_id"):
         return False
     if request.get("effort") not in envelope.get("efforts", []):

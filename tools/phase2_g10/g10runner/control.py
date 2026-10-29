@@ -9,9 +9,9 @@ import os
 import time
 import uuid
 
-from . import binding, issue as issue_mod, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state, wiring
+from . import binding, code_edit, issue as issue_mod, jstclock, logs, meta, norm, notify as notify_mod, policy as policy_mod, procs, registry, report, state, wiring
 from .chainlog import ChainError, ChainLog
-from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
+from .fsutil import FileLock, atomic_write_json, canonical, is_finite_number, loads_strict, read_json, sha256_hex
 from .stub import tree_digest
 
 TRUSTED_LOGIN = issue_mod.TRUSTED_LOGIN
@@ -410,7 +410,7 @@ class Control:
         checks["request_matches_claim"] = bool(claim) and binding.request_matches_claim(req, claim)
         if not checks["request_matches_claim"]:
             violations.append("request differs from the CLAIM (approved content)")
-        breason, _ = binding.check_request(req, self.policy)
+        breason, bfields = binding.check_request(req, self.policy)
         checks["request_binding_valid"] = breason is None
         if breason:
             violations.append("request binding invalid: " + breason)
@@ -428,7 +428,10 @@ class Control:
         checks["self_report_present"] = isinstance(parsed.get("result"), str) and bool(parsed.get("result").strip())
         work_dir = self.layout.work_dir(run_id)
         wd = read_json(os.path.join(run_dir, "work_digest.json"))
-        if wd and os.path.isdir(work_dir):
+        edit_extra = None
+        if req.get("phase2_scope") == code_edit.SCOPE:  # TASK 26: 一覧の照合を再計算し、はみ出しは安全違反（HALT）
+            edit_extra = self._finalize_code_edit(bfields, work_dir, run_dir, parsed, req, checks, violations)
+        elif wd and os.path.isdir(work_dir):
             checks["work_unchanged"] = tree_digest(work_dir) == wd["digest"]
             if not checks["work_unchanged"]:
                 violations.append("work folder changed (observed)")
@@ -513,7 +516,7 @@ class Control:
                                          "absence_confirmed": absent and status != "stop_unconfirmed",
                                          "safety_violations": violations},
                                  self.signer, "runner", self.now())
-        text = report.build(req, entry, result, checks, status, violations)
+        text = report.build(req, entry, result, checks, status, violations, edit_extra)
         path = os.path.join(self.layout.reports, run_id + ".md")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
@@ -526,6 +529,24 @@ class Control:
         elif self.consecutive_failures(self.ledger.read_all()) >= int(self.policy["breaker_consecutive_failures"]):
             self.halt("soft", "breaker: consecutive failures", wait_sync=0)
         return status, end
+
+    def _finalize_code_edit(self, fields, work_dir, run_dir, parsed, req, checks, violations):
+        """限定コード編集の終了判定（TASK 26）。スタブの記録は信用せず、実行前の一覧から再計算する。"""
+        problems, spec = code_edit.spec_from_fields(fields or {}, self.policy)
+        if problems or not os.path.isdir(work_dir):
+            checks["edit_within_bounds"] = False
+            violations.append("code edit unverifiable: " + "; ".join(problems or ["work folder missing"]))
+            return None
+        check = code_edit.verify(work_dir, run_dir, spec)
+        checks["edit_within_bounds"] = not check["violations"]
+        violations.extend("code edit: " + v for v in check["violations"])
+        checks["edit_present"] = check["changed_lines"] > 0
+        test = read_json(os.path.join(run_dir, "test_result.json"))
+        checks["tests_passed"] = code_edit.tests_passed(test, check["manifest_sha256"])
+        cost = parsed.get("total_cost_usd")
+        checks["cost_within_budget"] = (is_finite_number(cost) and not isinstance(cost, bool)
+                                        and 0 <= cost <= float(req["max_budget_usd"]))
+        return {"spec": spec, "check": check, "test": test}
 
     # --- 照合（制御側の台帳 × 実行側の used_requests。v5.4 §2-2） ---
     def reconcile_problems(self):

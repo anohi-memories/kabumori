@@ -34,9 +34,13 @@ CONTEXT_KNOWN = ("generation_limit", "generation_task_no", "completed_tasks_in_g
                  "pinned_head", "evidence_pr", "safety_gate", "migration_state",
                  "protected_predecessor", "predecessor_status", "next_task_allowed", "related_pr",
                  "predecessor_disposition")
-KNOWN_KEYS = set(COMMON_REQUIRED + PHASE1_KEYS + PHASE2_KEYS + CONTEXT_KNOWN)
+# TASK 26: phase2_scope: limited_code_edit のときだけ必須（readonly_trial では書けない）
+CODE_EDIT_KEYS = ("phase2_edit_paths", "phase2_edit_max_lines", "phase2_test_id")
+SCOPES = ("readonly_trial", "limited_code_edit")
+KNOWN_KEYS = set(COMMON_REQUIRED + PHASE1_KEYS + PHASE2_KEYS + CODE_EDIT_KEYS + CONTEXT_KNOWN)
 # 値を ASCII に限る承認用の項目（return_to・recommended_model は日本語を許す）
-ASCII_ONLY = set(COMMON_REQUIRED + PHASE1_KEYS + PHASE2_KEYS + ("generation_limit",)) - {"return_to", "recommended_model"}
+ASCII_ONLY = set(COMMON_REQUIRED + PHASE1_KEYS + PHASE2_KEYS + CODE_EDIT_KEYS + ("generation_limit",)) \
+    - {"return_to", "recommended_model"}
 
 REQUIRED_SECTIONS = ("目的", "preflight", "実行", "安全", "tests・完了条件")
 REPORT_TERMS = ("type: REPORT", "task_id", "next_task_allowed:false", "tests", "changed_files",
@@ -186,7 +190,16 @@ def validate_task(body, policy):
     expect("automation_approval", "approved")
     expect("phase2_run", "approved")
     expect("phase2_norm", "NORM-1")
-    expect("phase2_scope", "readonly_trial")
+    scope = fields.get("phase2_scope")
+    if scope is not None and scope not in SCOPES:
+        r.fail("bad value: phase2_scope")
+    elif scope == "limited_code_edit":
+        from . import code_edit
+        problems, _ = code_edit.spec_from_fields(fields, policy)
+        for problem in problems:
+            r.fail(problem)
+    elif any(key in fields for key in CODE_EDIT_KEYS):
+        r.fail("code edit keys are only allowed with phase2_scope: limited_code_edit")
     expect("phase2_report_mode", "local_only")
     expect("phase2_policy_version", policy.get("version"))
     expect("phase2_policy_sha256", policy.get("_digest"))

@@ -65,6 +65,11 @@ def validate(policy):
     for key in ("breaker_consecutive_failures", "max_concurrent"):
         if not positive(policy.get(key)):
             raise PolicyError("policy value invalid: " + key)
+    if "code_edit" in policy:  # TASK 26: 限定コード編集（無ければ limited_code_edit は使えない）
+        from .code_edit import policy_problems
+        problems = policy_problems(policy["code_edit"])
+        if problems:
+            raise PolicyError("policy " + problems[0])
 
 
 def with_digest(policy):

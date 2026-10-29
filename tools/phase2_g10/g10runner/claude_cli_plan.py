@@ -22,7 +22,7 @@ import pwd
 import re
 import shutil
 
-ENV_ALLOWLIST = ("PATH", "LANG", "HOME", "USER")
+ENV_ALLOWLIST = ("PATH", "LANG", "HOME", "USER", "TMPDIR")  # TMPDIR は限定コード編集のときだけ（TASK 26）
 FORBIDDEN_ENV = re.compile(r"ANTHROPIC|CLAUDE_CODE_USE_|AWS_|GOOGLE_|VERTEX|TOKEN|SECRET|PASSWORD|API_KEY", re.I)
 VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 SECRET_LIKE = re.compile(r"(ghp_|gho_|ghs_|ghu_|github_pat_|sk-ant-)[A-Za-z0-9_-]{8,}")
@@ -40,7 +40,7 @@ def probe(path_env=None):
             "version_from_path": base if VERSION_RE.fullmatch(base) else None, "executed": False}
 
 
-def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30):
+def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30, edit=None):
     """起動するなら使う計画を返す（実行しない）。値が足りない・危険なら ValueError。"""
     if not (isinstance(binary, str) and os.path.isabs(binary)):
         raise ValueError("binary must be an absolute path")
@@ -56,10 +56,28 @@ def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30):
     # 実行ファイルの中で存在を確認。実際の受け付けは実機で未確認）
     argv = [binary, "-p", "--output-format", "json", "--model", request["model_id"],
             "--session-id", request["session_id"], "--settings", settings_path, "--setting-sources", "local",
-            "--strict-mcp-config", "--allowedTools", "Read,Glob,Grep",
-            "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch,Task",
+            "--strict-mcp-config", "--allowedTools", allowed_tools(edit), "--disallowedTools", disallowed_tools(edit),
             "--max-turns", str(max_turns), "--max-budget-usd", str(request["max_budget_usd"])]
-    return {"argv": argv, "env": child_env(home), "stdin_path": prompt_path, "dry_run": True}
+    env = child_env(home)
+    if edit:  # TASK 26: CLI の一時ファイルはランの一時フォルダへ（サンドボックスで /tmp は書けない）
+        env["TMPDIR"] = edit["tmp_dir"]
+    return {"argv": argv, "env": env, "stdin_path": prompt_path, "dry_run": True}
+
+
+def edit_rules(edit):
+    """限定コード編集で許す Edit の規則（許可ファイルの絶対パスだけ。`//` は絶対パスの書き方）。"""
+    return ["Edit(/%s)" % p for p in edit["abs_paths"]]
+
+
+def allowed_tools(edit=None):
+    return ",".join(["Read", "Glob", "Grep"] + (edit_rules(edit) if edit else []))
+
+
+def disallowed_tools(edit=None):
+    tools = ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task"]
+    if edit:  # 許可ファイルへの Edit だけを許す（"Edit" 全体の拒否は許可より優先されるので外す。Write は拒否のまま）
+        tools.remove("Edit")
+    return ",".join(tools)
 
 
 def child_env(home):
@@ -117,7 +135,7 @@ def describe(plan):
 
 
 def prelaunch_check(plan, request, prompt_path, settings_path, home, pinned, used_states, probe_fn=probe,
-                    max_turns=30):
+                    max_turns=30, edit=None):
     """起動するなら直前に行う再検証（実行しない）。問題があれば理由（文字列）、なければ None。
 
     pinned: {"realpath": CLI の実体の絶対パス, "version": 版}（人が確認して固定したもの）。
@@ -131,7 +149,7 @@ def prelaunch_check(plan, request, prompt_path, settings_path, home, pinned, use
     if found.get("realpath") != pinned.get("realpath") or found.get("version_from_path") != pinned.get("version"):
         return "claude CLI changed since it was pinned"
     try:  # 固定した CLI の実体と承認済みの値（計画の中の値ではない）から作り直し、計画と完全に同じであること
-        fresh = build_plan(pinned["realpath"], request, prompt_path, settings_path, home, max_turns)
+        fresh = build_plan(pinned["realpath"], request, prompt_path, settings_path, home, max_turns, edit)
     except ValueError as exc:
         return "plan cannot be rebuilt from the approved request: %s" % exc
     if fresh != plan:

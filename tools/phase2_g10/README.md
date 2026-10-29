@@ -452,6 +452,37 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 | 6 | 検知役（無人） | 5分以内に見つけて1回起動 → 監督 → 終了判定 → ローカル REPORT | 無人 |
 | 7 | G10 | 結果を読んで #323 に REPORT。必要なら halt／bootout | 回収 |
 
+### 9-8. TASK 26（限定コード編集→テスト→ローカル REPORT の一回限りの実行モード。`g10runner/code_edit.py`・`tests/test_task26_code_edit.py`）
+- 本文で `phase2_scope: limited_code_edit` と、次の3つを書いたときだけ有効（`readonly_trial` は従来どおり。3つの項目は書けない）:
+  - `phase2_edit_paths`: 編集してよいファイル（カンマ区切り。相対パス。`..`・隠し・絶対・空白・ワイルドカードは不可。base_sha に既にあるファイルだけ。新規作成・削除はできない）
+  - `phase2_edit_max_lines`: 差分の変更行数（+/-）の上限
+  - `phase2_test_id`: ポリシーに登録したテストの名前（本文ではコマンドを書けない）
+- 有効にするには、署名済みポリシーに `code_edit` 節が要る（`bin/g10_first_run.py code-edit-policy --root R --config F.json [--write]`。版は policy-v2。既定のポリシー・今の常駐の policy-v1 では拒否）。節: `allowed_path_prefixes`・`max_files`（≤10）・`max_changed_lines`（≤1000）・`tests`（名前 → 絶対パスの argv と timeout_seconds ≤600）。
+- 承認の束縛: 上の項目は本文の正式項目なので、NORM-1 ハッシュ（人の CONFIRM と REAL_CLAUDE_GO が束縛）に含まれる。ENVELOPE ではコード編集を起動しない。偽Claude のアダプタも拒否（実 CLI のアダプタとサンドボックスだけ）。
+- 実行中の境界（3重）:
+  1. **カーネル**: CLI を `sandbox-exec` で包む。書き込めるのは許可ファイル・ランの `cli-tmp`・`/dev`・CLI 自身の状態（`~/.claude*`・`~/Library/Caches/claude-cli-nodejs`）だけ。`~/.claude` の settings・CLAUDE.md・hooks・agents・commands・skills・plugins・projects/*/memory は拒否。子プロセスも同じ制限。他の slot の worktree・元のリポジトリ・`/tmp` には書けない。
+  2. **作業フォルダの権限**: 使い捨てのクローンを読み取り専用にし、許可ファイルだけ 0644。
+  3. **CLI の設定**: 道具は Read・Glob・Grep と、許可ファイルの絶対パスへの `Edit(//…)` だけ。Write・Bash・NotebookEdit・Web・Task は拒否。MCP なし。環境は PATH・LANG・HOME・USER と TMPDIR（`cli-tmp`）だけ。
+- 実行後: 実行係が作業フォルダ全体の一覧（種類・権限・中身・リンク先・リンク数）を実行前と照合する（git diff には頼らない）。照合が通って変更があるときだけ、登録したテストを、ネットワークと書き込み（作業フォルダも）を拒否したサンドボックスで実行し、前後で作業フォルダが同じことも確かめる。finalize はスタブの記録を信用せず、照合をやり直す。
+- 判定: `edit_within_bounds`（違反は安全違反 → ハードHALT）・`edit_present`・`tests_passed`・`cost_within_budget`（CLI の申告の費用 ≤ 本文の上限）。`work_unchanged` は読み取りモードだけ。
+- 差分は、使い捨ての作業フォルダの中だけの変更。リポジトリ・GitHub には何も戻さない（ローカル REPORT の第1部の2に、照合・テストの結果・差分を載せる）。
+- 試験（代役の CLI。実 Claude なし）: E2E（編集 → テスト → REPORT → 2回目なし）、カーネルの拒否（許可外の書き込み・新規・削除・リンク・.git・作業フォルダの外・子プロセス・設定）、すり抜けを想定した後からの変更 → HALT、行数の超過 → HALT、テスト失敗 → 失敗（HALT なし）、費用の超過 → 失敗、GO なし・停止中 → 起動なし、本文とポリシーの検査、サンドボックスの設定そのもの。変異 9件。
+
+#### 実機で未確認（NOT_VERIFIED。次の実機の1件で確かめる）
+- 実 CLI 2.1.305 が `Edit(//絶対パス)` の規則を受け付けるか、Edit がファイルをその場で書くか（一時ファイル＋改名なら、親フォルダに書けず編集は失敗する＝止まる側）。
+- サンドボックスの中で、実 CLI のログイン・API 通信・自分の状態の書き込みが動くか（動かなければ起動は失敗で終わる＝止まる側）。
+
+#### 次の実機1件（限定コード編集）に要る承認（すべて、その時点の人の GO の後）
+| 順 | 誰が | 何を | 種類 |
+|---|---|---|---|
+| 1 | G10 | 新しい HEAD から `install` → 新しい版で `plists --live`（旧版は残す） | ファイルの作成 |
+| 2 | 人 | 常駐の入れ替え: bootout（autorun → watchdog）→ bootstrap（watchdog → autorun） | 常駐の停止・開始（OS） |
+| 3 | 人の GO の後に G10 | 新しい版で `code-edit-policy --root R --config F.json --write`（実行中のランがあれば拒否）→ 新しい policy_sha256 を読み返す | **ポリシーの変更** |
+| 4 | G10 → ちゃ | 新しい policy_sha256 で本文を作り直し（NORM-1）、ちゃが #323 に貼る | Issue 本文 |
+| 5 | 人の GO の後に G10 | 新しい approval_id で `approve --valid-minutes 120` | **実 Claude の起動の承認・費用の許可** |
+| 6 | 検知役（無人） | 1回起動 → 照合 → テスト → ローカル REPORT | 無人 |
+| 7 | G10 | 差分とテストの結果を読んで #323 に REPORT（変更をリポジトリに入れるかは別の判断） | 回収 |
+
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。

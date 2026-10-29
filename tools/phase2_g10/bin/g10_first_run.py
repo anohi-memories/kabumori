@@ -14,6 +14,8 @@
   install   （TASK 22）この開発 worktree から、固定の場所に不変の固定版（マニフェストのハッシュつき）を作る。
   plists    （TASK 21/22 固定版の中から実行）S2 と検知役の LaunchAgent の plist を作って検査するだけ（登録しない。登録・停止の手順を表示）。
   unhalt    （TASK 21）人の署名で HALT を解除する（--reason 必須）。実行中のラン・記録の食い違いがあれば解除しない。
+  code-edit-policy  （TASK 26）今のポリシーに限定コード編集の節（--config の JSON）を加えた policy-v2 の候補と
+            ダイジェストを表示する。--write のときだけ置き換える（実行中のランがあれば拒否）。  ← ポリシーの変更（要 GO）
   auth-check  （TASK 19）子と同じ環境で `<CLI> auth status --json` を1回だけ実行し、ログインの有無を表示する。
             モデルは呼ばない（課金なし）。メールアドレス等の生の出力は表示しない。--with-env NAME で、秘密を含まない
             決まった名前の環境変数（USER・LOGNAME・TMPDIR・SHELL・__CF_USER_TEXT_ENCODING）を診断のために加えられる。
@@ -29,7 +31,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import autorun, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, release, signing, wiring  # noqa: E402
+from g10runner import autorun, code_edit, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, registry, release, signing, wiring  # noqa: E402
 from g10runner.control import Control, GoReuseError  # noqa: E402
 from g10runner.fsutil import sha256_hex  # noqa: E402
 from g10runner.layout import Layout  # noqa: E402
@@ -157,6 +159,40 @@ DEFAULT_RELEASE_PARENT = os.path.expanduser("~/Library/Application Support/kabum
 PACKAGE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+CODE_EDIT_POLICY_VERSION = "policy-v2"
+
+
+def code_edit_policy(current, cfg):
+    """今のポリシーに code_edit の節を加えた新しいポリシー（版は policy-v2）。形が正しくなければ PolicyError。"""
+    new = {k: v for k, v in current.items() if not k.startswith("_")}
+    new["version"] = CODE_EDIT_POLICY_VERSION
+    new["code_edit"] = cfg
+    return policy_mod.with_digest(new)
+
+
+def cmd_code_edit_policy(a):
+    """（TASK 26）限定コード編集を有効にするポリシーの候補を表示する（--write のときだけ置き換える）。"""
+    layout = Layout(os.path.realpath(a.root))
+    current = policy_mod.load(layout.policy_pub)
+    with open(a.config, encoding="utf-8") as f:
+        cfg = json.load(f)
+    try:
+        new = code_edit_policy(current, cfg)
+    except policy_mod.PolicyError as exc:
+        raise SystemExit("code edit policy refused: %s" % exc)
+    out = {"current_version": current["version"], "current_policy_sha256": current["_digest"],
+           "new_version": new["version"], "new_policy_sha256": new["_digest"], "code_edit": cfg, "written": False}
+    if a.write:
+        if registry.non_terminal(layout):
+            raise SystemExit("a run is in progress; policy not changed")
+        Control.install_policy(layout, new)
+        if policy_mod.load(layout.policy_pub)["_digest"] != new["_digest"]:
+            raise SystemExit("policy read-back differs")
+        out["written"] = True
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_install(a):
     """（TASK 22）この開発 worktree から固定版を作る（元に未コミットの変更があれば作らない）。登録はしない。"""
     dest, digest = release.install(PACKAGE, os.path.realpath(a.dest))
@@ -231,12 +267,17 @@ def main(argv=None):
     pl.add_argument("--out")
     pl.add_argument("--interval", type=float, default=300.0)
     pl.add_argument("--live", action="store_true", help="検知役の plist に --live を付ける（登録後、条件がそろえば起動する）")
+    ce = sub.add_parser("code-edit-policy")
+    ce.add_argument("--root", required=True)
+    ce.add_argument("--config", required=True, help="code_edit の節の JSON ファイル")
+    ce.add_argument("--write", action="store_true", help="表示した候補でポリシーを置き換える（要 GO）")
     c = sub.add_parser("auth-check")
     c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
     a = p.parse_args(argv)
     return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt, "unhalt": cmd_unhalt,
-            "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check}[a.cmd](a)
+            "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check,
+            "code-edit-policy": cmd_code_edit_policy}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -20,17 +20,17 @@ class FakeClaudeAdapter:
     name = "fake"
     uses_stdin = False
 
-    def settings_doc(self, run_id, policy):
+    def settings_doc(self, run_id, policy, edit=None):
         return {"g10_run": run_id, "tools": ["Read", "Glob", "Grep"], "policy_sha256": policy["_digest"]}
 
     def source_preparer(self):
         from .ifaces import FakeSourcePreparer
         return FakeSourcePreparer()
 
-    def prelaunch(self, request, prompt_path, settings_path, used_states, now=None):
-        return None
+    def prelaunch(self, request, prompt_path, settings_path, used_states, now=None, edit=None):
+        return "the fake Claude adapter does not support code edits" if edit else None
 
-    def command(self, request, prompt_path, settings_path):
+    def command(self, request, prompt_path, settings_path, edit=None):
         return [
             sys.executable, "-I", FAKE_CLAUDE,
             "--session-id", request["session_id"],
@@ -42,7 +42,7 @@ class FakeClaudeAdapter:
             "--prompt-file", prompt_path,
         ]
 
-    def environment(self, scenario_path):
+    def environment(self, scenario_path, edit=None):
         env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
         if scenario_path:
             env["FAKE_CLAUDE_SCENARIO"] = scenario_path

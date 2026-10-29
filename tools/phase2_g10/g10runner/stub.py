@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from . import adapter as adapter_mod, binding, issue as issue_mod, policy as policy_mod, procs, registry, state, supervise, wiring
+from . import adapter as adapter_mod, binding, code_edit, issue as issue_mod, policy as policy_mod, procs, registry, state, supervise, wiring
 from .agent import Agent
 from .chainlog import ChainError
 from .fsutil import FileLock, atomic_write_json, canonical, loads_strict, read_json, sha256_hex
@@ -154,7 +154,11 @@ def run(root, run_id):
     if not verifier.verify("runner", canonical(req), doc["sig"]) or req["run_id"] != run_id:
         agent.mark("ABORTED", req, {"reason": "request signature invalid at stub"})
         return 3
-    reason, _ = binding.check_request(req, policy)
+    reason, fields = binding.check_request(req, policy)
+    spec = None
+    if not reason and fields.get("phase2_scope") == code_edit.SCOPE:  # TASK 26: 編集の範囲は承認済み本文から作る
+        problems, spec = code_edit.spec_from_fields(fields, policy)
+        reason = "code edit spec invalid: " + "; ".join(problems) if problems else None
     if not reason:
         reason = issue_mod.check_request_evidence(req, verifier, policy, time.time(), agent.go_bodies())
     if reason:
@@ -181,7 +185,16 @@ def run(root, run_id):
     except Exception as exc:
         agent.mark("ABORTED", req, {"reason": "adapter unavailable: %s" % exc})
         return 4
-    atomic_write_json(settings_path, adapter.settings_doc(run_id, policy))
+    if spec and adapter.name != "claude_cli":
+        agent.mark("ABORTED", req, {"reason": "code edits need the real CLI adapter with its sandbox"})
+        return 4
+    work_dir = layout.work_dir(run_id)
+    edit = None
+    if spec:  # サンドボックスの設定と許可ファイルの絶対パス（作業フォルダの準備の後に中身を確かめる）
+        edit = {"abs_paths": [os.path.join(os.path.realpath(os.path.dirname(work_dir)), os.path.basename(work_dir), rel)
+                              for rel in spec["paths"]],
+                "profile_path": os.path.join(run_dir, "cli.sb"), "tmp_dir": os.path.realpath(run_dir) + "/cli-tmp"}
+    atomic_write_json(settings_path, adapter.settings_doc(run_id, policy, edit))
     registry.create(layout, {
         "run_id": run_id, "session_id": req["session_id"], "settings_path": settings_path,
         "hard_deadline": now + minutes * policy_mod.timing(policy, "minute_seconds"),
@@ -217,12 +230,18 @@ def run(root, run_id):
         return abort("supervisor_unavailable", True)
 
     # 作業フォルダ（臨界区間の外で準備し、読み取り専用にする）
-    work_dir = layout.work_dir(run_id)
     try:
         adapter.source_preparer().prepare(work_dir, req["base_ref"], req["base_sha"])
     except Exception as exc:
         return abort("work dir preparation failed: %s" % type(exc).__name__, True)
     _readonly_tree(work_dir)
+    if spec:  # TASK 26: 許可ファイルだけ書き込み可にし、実行前の一覧・元の中身・サンドボックスの設定を記録
+        try:
+            prepared = code_edit.prepare(work_dir, run_dir, spec, adapter.go["home"])
+        except (code_edit.CodeEditError, OSError) as exc:
+            return abort("code edit preparation failed: %s" % exc, True)
+        if prepared["abs_paths"] != edit["abs_paths"] or prepared["tmp_dir"] != edit["tmp_dir"]:
+            return abort("code edit paths differ after preparation", True)
     atomic_write_json(os.path.join(run_dir, "work_digest.json"), {"digest": tree_digest(work_dir)})
     prompt_path = os.path.join(run_dir, "prompt.md")
     with open(prompt_path, "w", encoding="utf-8") as f:
@@ -245,7 +264,7 @@ def run(root, run_id):
             return abort(reason, True, "aborted_by_halt" if reason == "halted" else "aborted_before_spawn")
         agent.mark("SPAWNING", req)
         # TASK 17: 実 CLI は起動の直前に再検証（起動待ちちょうど1件・CLI の実体と版・計画・環境・GO の期限）
-        reason = adapter.prelaunch(req, prompt_path, settings_path, agent.used_state(run_id))
+        reason = adapter.prelaunch(req, prompt_path, settings_path, agent.used_state(run_id), edit=edit)
         if reason:
             return abort("prelaunch check failed: " + reason, True)
         _hook(hooks, "before_spawn", run_dir)
@@ -253,8 +272,8 @@ def run(root, run_id):
         err = open(os.path.join(run_dir, "claude.stderr"), "wb")
         stdin = open(prompt_path, "rb") if adapter.uses_stdin else subprocess.DEVNULL
         try:
-            child = subprocess.Popen(adapter.command(req, prompt_path, settings_path),
-                                     env=adapter.environment(scenario_path), cwd=work_dir,
+            child = subprocess.Popen(adapter.command(req, prompt_path, settings_path, edit),
+                                     env=adapter.environment(scenario_path, edit), cwd=work_dir,
                                      stdin=stdin, stdout=out, stderr=err, close_fds=True)
         finally:
             out.close()
@@ -295,6 +314,14 @@ def run(root, run_id):
         parsed = None
     atomic_write_json(os.path.join(run_dir, "result.json"), {
         "exit_code": rc, "raw_sha256": sha256_hex(raw), "parsed": parsed, "ended_at": time.time()})
+    if spec:  # TASK 26: 照合が通り、変更があるときだけ、承認されたテストを実行係が実行する（判定は finalize が再計算）
+        check = code_edit.verify(work_dir, run_dir, spec)
+        atomic_write_json(os.path.join(run_dir, "edit_check.json"), check)
+        if rc == 0 and not check["violations"] and check["changed_lines"] > 0:
+            try:
+                code_edit.run_test(spec, work_dir, run_dir)
+            except (OSError, ValueError) as exc:
+                atomic_write_json(os.path.join(run_dir, "test_result.json"), {"error": type(exc).__name__})
     entry = registry.load(layout, run_id)
     if entry["state"] == "running":
         registry.update(layout, run_id, "exited", exit_code=rc, ended_at=time.time())

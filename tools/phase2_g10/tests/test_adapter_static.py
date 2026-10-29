@@ -76,7 +76,8 @@ class TestAdapterFixed(unittest.TestCase):
         （/usr/bin/openssl による署名・/usr/bin/plutil -lint による plist の検査。TASK 13）だけ。"""
         allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py", "ecdsa_signing.py", "launchd_plan.py",
                    "real_claude.py",  # TASK 17: 作業フォルダの用意の /usr/bin/git だけ（下で固定を確認）
-                   "release.py"}  # TASK 22: 固定版の元の確認の /usr/bin/git だけ（下で固定を確認）
+                   "release.py",  # TASK 22: 固定版の元の確認の /usr/bin/git だけ（下で固定を確認）
+                   "code_edit.py"}  # TASK 26: 承認されたテストを /usr/bin/sandbox-exec で包んで起動するだけ（下で固定を確認）
         for path, text in sources():
             if re.search(r"\bsubprocess\.(run|Popen|call|check_output)\b", text):
                 with self.subTest(path=os.path.basename(path)):
@@ -97,6 +98,10 @@ class TestAdapterFixed(unittest.TestCase):
         rel = texts["release.py"]  # TASK 22: 起動するのは固定の /usr/bin/git だけ
         self.assertIn('GIT = "/usr/bin/git"', rel)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", rel), ["[GIT] + args"])
+        ce = texts["code_edit.py"]  # TASK 26: 起動するのは固定の sandbox-exec（中身はポリシーに登録したテストの argv）だけ
+        self.assertIn('SANDBOX_EXEC = "/usr/bin/sandbox-exec"', ce)
+        self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", ce),
+                         ['wrap(profile_path'])
         launchd = texts["launchd_plan.py"]
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", launchd),
                          ['["/usr/bin/plutil"'])
