@@ -407,6 +407,8 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
     // G6-21: the personal-MVP composition (postona_post_assist_mvp.ts) builds the G5 transport and serves the post assist.
     "./g5_rpc_transport.ts",
     "./postona_post_assist.ts",
+    // G6-23: the Edge entry (postona_post_assist_edge.ts) serves the personal-MVP composition.
+    "./postona_post_assist_mvp.ts",
   ]);
   const consultOnly = new Set(["../functions/social-mobile-consult/logic.ts", "../functions/_shared/brand/social_mobile_content_settings.ts"]);
   const dir = new URL("../ai_gateway/", import.meta.url);
@@ -417,8 +419,9 @@ Deno.test("runtime sources are Edge-compatible and least-privilege: no Deno / co
   // G6-04 adds the transport for G5's proposed verdict RPC (not connected anywhere).
   // G6-06 adds the UNKNOWN recovery coordinator (no provider import; only the three recovery RPCs through its port).
   // G6-20 adds the POSTONA post text / hashtag candidates (no provider import; siblings only).
-  // G6-21 adds their composition on G5-47's personal-MVP verdict (siblings only).
-  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "postona_post_assist.ts", "postona_post_assist_mvp.ts", "recovery.ts", "runtime.ts"]);
+  // G6-21 adds their composition on G5-47's personal-MVP verdict (siblings only); G6-23 its HTTP entry (no Deno API: the
+  // Edge environment is passed in as readEnv).
+  assert.deepEqual(files.sort(), ["ai_calls_store.ts", "app_policies.ts", "authority_port.ts", "g5_rpc_transport.ts", "gateway.ts", "policy_registry.ts", "postona_consult_adapter.ts", "postona_post_assist.ts", "postona_post_assist_edge.ts", "postona_post_assist_mvp.ts", "recovery.ts", "runtime.ts"]);
   for (const name of files) {
     const text = await Deno.readTextFile(new URL(name, dir));
     assert.doesNotMatch(text, /\bDeno\.|\bprocess\.env|\bconsole\.|from\s+["']node:|import\(/u, name);
