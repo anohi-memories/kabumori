@@ -131,10 +131,10 @@ as_owner "$pre" -f "$m/20260918120000_social_mobile_brand_memberships.sql" > /de
 # TEST-WORLD revoke stands in for it.
 q "$pre" -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" > /dev/null
 # G4-02 #2: the G5 PERSONAL MVP world (G5-46/47, g5pv, no owner epoch) for the app flow: this world BEFORE PR #303, then
-# G5's MVP_INSTALL (PR #563 head; the blob is unchanged since PR #550). Only built for G4T_APP_FLOW.
+# G5's MVP_INSTALL (PR #563 head; the blob is unchanged since PR #550). Only built for G4T_APP_FLOW / G4T_BRIDGE_FLOW.
 G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982
 mvp_pre=""
-if [ -n "${G4T_APP_FLOW:-}" ]; then
+if [ -n "${G4T_APP_FLOW:-}${G4T_BRIDGE_FLOW:-}" ]; then
   git -C "$repo" cat-file -e "${G5MVP}^{commit}" 2>/dev/null || fail "missing git objects for $G5MVP (fetch G5 PR #563)"
   [ "$(git -C "$repo" rev-parse "${G5MVP}:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] \
     || fail "G5 MVP_INSTALL blob moved (pin)"
@@ -195,20 +195,44 @@ if [ -n "${G4T_PRINT_PINS:-}" ]; then
   exit 0
 fi
 
+# G4-02 #2/#3: the stack and the personal MVP world, shared by the bridge flow and the app flow
+pub="$c/postona_threads_publish"
+g5pv="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv.sql"
+g5pv_rb="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv_rollback.sql"
+stack=("$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/threads_manual_publish_candidate.sql"
+  "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql"
+  "$c/postona_threads_disconnect/threads_disconnect_candidate.sql")
+# The personal MVP world up to (not including) G4's binding: G5's chain + MVP_INSTALL, PR #124, custody.
+mvp_world() {
+  local db; db="$(copy "$1" "$mvp_pre")"
+  # TEST-WORLD stand-in for G3's L-1 revoke (G5 MVP prerequisite P3: no person can change memberships), as G5's own runner
+  q "$db" -c "revoke insert, update, delete, truncate, references, trigger on public.brand_memberships from anon, authenticated" > /dev/null
+  for f in "${g5chain[@]}" "$tree/g5_mvp_install.sql" "$c/postona_threads_oauth_workspace_candidate.sql" \
+    "$pub/threads_credential_custody_candidate.sql"; do
+    need "$db" "$f"
+  done
+  echo "$db"
+}
 # G4-50: the server chain through G4's owner bridge (Edge handler -> H5 runtime -> bridge -> this SQL), then stop.
 if [ -n "${G4T_BRIDGE_FLOW:-}" ]; then
   h5_claim="$c/postona_threads_auth_runtime/claim_candidate.sql"
-  bridge_db="$(copy bridge "$world")"
-  need "$bridge_db" "$g443"
-  need "$bridge_db" "$cand2"
-  need "$bridge_db" "$h5_claim"
-  nobind_db="$(copy nobind "$pre")"   # PR #124 + H5's claim SQL, but no G4 binding entry
-  need "$nobind_db" "$h5_claim"
-  echo "== G4-50 bridge flow (db $bridge_db, fail-closed db $nobind_db)"
-  G4B_PGHOST="$host" G4B_PGPORT="$port" G4B_PGUSER="$owner" G4B_DB="$bridge_db" G4B_DB_NOBIND="$nobind_db" \
-    deno test --cached-only --no-lock --config "$c/postona_threads_auth_runtime/wiring/deno.json" \
-    --allow-env=G4B_PGHOST,G4B_PGPORT,G4B_PGUSER,G4B_DB,G4B_DB_NOBIND --allow-read="$host" \
-    --allow-write="$host/.s.PGSQL.$port" --allow-net="unix:$host/.s.PGSQL.$port" "$t/postona_g4_threads_bridge_flow.smoke.ts"
+  for profile in ${G4T_PROFILES:-full personal}; do
+    if [ "$profile" = full ]; then
+      bridge_db="$(copy bridge "$world")"
+      for f in "$g443" "$cand2" "$h5_claim"; do need "$bridge_db" "$f"; done
+      nobind_db="$(copy nobind "$pre")"   # PR #124 + H5's claim SQL, but no G4 binding entry
+    else
+      bridge_db="$(mvp_world bridgemvp)"
+      for f in "$g5pv" "$cand2" "$h5_claim"; do need "$bridge_db" "$f"; done
+      nobind_db="$(mvp_world nobindmvp)"
+    fi
+    need "$nobind_db" "$h5_claim"
+    echo "== G4-50 / G4-02 #3 bridge flow, G5 profile $profile (db $bridge_db, fail-closed db $nobind_db)"
+    G4B_PROFILE="$profile" G4B_PGHOST="$host" G4B_PGPORT="$port" G4B_PGUSER="$owner" G4B_DB="$bridge_db" G4B_DB_NOBIND="$nobind_db" \
+      deno test --cached-only --no-lock --config "$c/postona_threads_auth_runtime/wiring/deno.json" \
+      --allow-env=G4B_PROFILE,G4B_PGHOST,G4B_PGPORT,G4B_PGUSER,G4B_DB,G4B_DB_NOBIND --allow-read="$host" \
+      --allow-write="$host/.s.PGSQL.$port" --allow-net="unix:$host/.s.PGSQL.$port" "$t/postona_g4_threads_bridge_flow.smoke.ts"
+  done
   echo "G4T_BRIDGE_FLOW_ALL_PASS"
   exit 0
 fi
@@ -221,23 +245,6 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
   app="$repo/apps/social-mobile"
   [ -d "$app/node_modules/@supabase/supabase-js" ] && [ -d "$app/node_modules/typescript" ] \
     || fail "run 'npm ci --ignore-scripts' in apps/social-mobile first (the real SDK and TypeScript are needed)"
-  pub="$c/postona_threads_publish"
-  g5pv="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv.sql"
-  g5pv_rb="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv_rollback.sql"
-  stack=("$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/threads_manual_publish_candidate.sql"
-    "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql"
-    "$c/postona_threads_disconnect/threads_disconnect_candidate.sql")
-  # The personal MVP world up to (not including) G4's binding: G5's chain + MVP_INSTALL, PR #124, custody.
-  mvp_world() {
-    local db; db="$(copy "$1" "$mvp_pre")"
-    # TEST-WORLD stand-in for G3's L-1 revoke (G5 MVP prerequisite P3: no person can change memberships), as G5's own runner
-    q "$db" -c "revoke insert, update, delete, truncate, references, trigger on public.brand_memberships from anon, authenticated" > /dev/null
-    for f in "${g5chain[@]}" "$tree/g5_mvp_install.sql" "$c/postona_threads_oauth_workspace_candidate.sql" \
-      "$pub/threads_credential_custody_candidate.sql"; do
-      need "$db" "$f"
-    done
-    echo "$db"
-  }
   edge_cmd="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' deno run --cached-only --no-lock \
     --config "$repo/supabase/candidates/postona_threads_auth_runtime/wiring/deno.json" \
     --allow-env=FLOW_PGHOST,FLOW_PGPORT,FLOW_PGUSER,FLOW_DB,FLOW_JWK,FLOW_PROFILE --allow-read="$repo,$host" \
@@ -291,6 +298,44 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
   [ -z "$(q "$rb_db" -c "select to_regnamespace('postona_threads_binding')")" ] || fail "g5pv rollback left the schema"
   need "$rb_db" "$g5pv"
   echo "ok install, ALREADY_APPLIED, rollback (002 first; refused while a view depends on it), install again"
+  # (c2) G4-02 #3 pre-adoption: every install precondition refuses on a fresh MVP world with exactly one thing wrong
+  pre_mvp="$(mvp_world g5pvpre)"
+  probe() {  # label, expected refusal, SQL that breaks the world (as the owner)
+    local db; db="$(copy "g5pv$RANDOM" "$pre_mvp")"
+    [ -n "$3" ] && q "$db" -c "$3" > /dev/null
+    local r; r="$(apply "$db" "$g5pv")"
+    [ "$r" = "$2" ] || fail "g5pv precondition $1: expected $2, got $r"
+    echo "ok refused: $1 ($r)"
+  }
+  probe "G5 MV missing" "THREADS_BINDING_PRECONDITION_DEPENDENCY private.postona_personal_worker_verdict(uuid,text,text,bigint)" \
+    "drop function private.postona_personal_worker_verdict(uuid,text,text,bigint)"
+  probe "G5 MV exposed to authenticated" THREADS_BINDING_PRECONDITION_G5_GATE_EXPOSED \
+    "grant execute on function private.postona_personal_worker_verdict(uuid,text,text,bigint) to authenticated"
+  probe "G5 S2-2 exposed to authenticated" THREADS_BINDING_PRECONDITION_G5_GATE_EXPOSED \
+    "grant execute on function private.postona_personal_session() to authenticated"
+  probe "PR #124 complete exposed" THREADS_BINDING_PRECONDITION_COMPLETE_EXPOSED \
+    "grant execute on function public.complete_social_mobile_threads_oauth_connection(uuid,text,text,text,text) to authenticated"
+  probe "PR #124 complete not the reviewed body" THREADS_BINDING_PRECONDITION_COMPLETE_UNPINNED \
+    "create or replace function public.complete_social_mobile_threads_oauth_connection(p_oauth_state_id uuid, p_platform_user_id text, p_handle text, p_access_token text, p_attestation text) returns void language plpgsql security definer set search_path = '' as \$\$ begin null; end \$\$"
+  # as a superuser, and with an API role able to become the owner (a cluster-wide membership: granted and revoked here)
+  su_db="$(copy g5pvsu "$pre_mvp")"
+  r="$({ "$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$su_db" -f "$g5pv" 2>&1 || true; } | sed -n 's/^.*ERROR: *//p' | head -1)"
+  [ "$r" = THREADS_BINDING_PRECONDITION_OWNER ] || fail "g5pv as superuser: $r"
+  echo "ok refused: run as a superuser ($r)"
+  reach_db="$(copy g5pvreach "$pre_mvp")"
+  "${as_super[@]}" -d postgres -c "grant $owner to authenticator" > /dev/null
+  r="$(apply "$reach_db" "$g5pv")"
+  "${as_super[@]}" -d postgres -c "revoke $owner from authenticator" > /dev/null
+  [ "$r" = "THREADS_BINDING_PRECONDITION_OWNER_REACHABLE authenticator" ] || fail "g5pv with the owner reachable: $r"
+  echo "ok refused: an API role can become the owner ($r)"
+  # (c3) no mixing: the FULL profile's SQL does not install on top of the personal one, nor the full binding on the MVP world
+  mix_db="$(copy g5pvmix "$pre_mvp")"
+  need "$mix_db" "$g5pv"
+  for f in "$cand" "$g442" "$g443"; do
+    r="$(apply "$(copy "g5pvmix$RANDOM" "$mix_db")" "$f")"
+    [ "$r" != applied ] || fail "$(basename "$f") installed on top of the personal profile"
+    echo "ok refused: $(basename "$f") on top of the personal profile ($r)"
+  done
   # (d) mutant: the entry's MV check at completion replaced by a constant -> the personal e2e must fail (ABA scenario 8)
   sed "s/  v_verdict := private.postona_personal_worker_verdict(v_actor, v_gen.brand_id, 'x_autopost', v_gen.lifecycle_version);/  v_verdict := 'active'; -- MUTANT/" \
     "$g5pv" > "$tree/g5pv_mutant.sql"

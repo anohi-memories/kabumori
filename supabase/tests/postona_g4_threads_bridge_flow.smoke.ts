@@ -6,14 +6,16 @@
 // Run only by postona_g4_threads_person_session_run.sh with G4T_BRIDGE_FLOW=1. LOCAL FAKE ONLY: no managed DB, no network.
 import { Client } from "@db/postgres";
 import { createThreadsConnectHandler } from "../functions/_shared/social/threads_connect_edge.ts";
-import { createG4ThreadsOwnerBridge } from "../candidates/postona_g4_threads_personal_auth/owner_bridge.ts";
+import { createG4ThreadsOwnerBridge, type G4AuthProfile } from "../candidates/postona_g4_threads_personal_auth/owner_bridge.ts";
 import { createThreadsRuntime } from "../candidates/postona_threads_auth_runtime/runtime.ts";
 import { createOwnerTransport, type OwnerSqlClient } from "../candidates/postona_threads_auth_runtime/owner_transport.ts";
 import { createActorVerifier } from "../candidates/postona_threads_auth_runtime/verified_actor.ts";
 
 const host = Deno.env.get("G4B_PGHOST") ?? "", port = Number(Deno.env.get("G4B_PGPORT")), user = Deno.env.get("G4B_PGUSER") ?? "";
 const database = Deno.env.get("G4B_DB") ?? "", nobindDb = Deno.env.get("G4B_DB_NOBIND") ?? "";
-if (!/^\/(private\/)?tmp\//.test(host) || !/^kb_tb_owner_\d+$/.test(user) || !/^kabumori_tb_\d+_bridge$/.test(database)) {
+// G4-02 #3: the G5 profile the database runs ("full" = PR #303 owner epoch, "personal" = G5's MVP / g5pv); the bridge is pinned to it
+const profile = (Deno.env.get("G4B_PROFILE") ?? "full") as G4AuthProfile;
+if (!/^\/(private\/)?tmp\//.test(host) || !/^kb_tb_owner_\d+$/.test(user) || !/^kabumori_tb_\d+_bridge(mvp)?$/.test(database)) {
   throw new Error("LOCAL_FIXTURE_REQUIRED");
 }
 const CALLBACK = "https://app.postona.test/oauth/threads/callback";
@@ -108,7 +110,7 @@ async function traced(db = database): Promise<OwnerSqlClient> {
     end: () => c.end(),
   };
 }
-const g4 = (db = database) => createG4ThreadsOwnerBridge(() => traced(db));
+const g4 = (db = database) => createG4ThreadsOwnerBridge(() => traced(db), Date.now, profile);
 
 async function post(handler: (r: Request) => Promise<Response>, bearer: string, body: Record<string, unknown>) {
   const r = await handler(new Request("http://edge.local/threads-oauth-connect-user", {
@@ -174,10 +176,21 @@ function rewriting(db: string, rewrite: (text: string, args: unknown[]) => [stri
       end: () => c.end(),
     };
     return proxy;
+  }, Date.now, profile);
+}
+
+/** G4-02 #3: forged SQL claims for the transactions AFTER the person left for Threads (claim + complete); begin is genuine. */
+type Forge = { on: boolean; json?: (claims: Record<string, unknown>) => Record<string, unknown>; text?: (t: string) => string; args?: (a: unknown[]) => unknown[] };
+function forging(db: string, forge: Forge) {
+  return rewriting(db, (t, a) => {
+    if (!forge.on) return [t, a];
+    if (t.includes("'request.jwt.claims'") && forge.json) return [t, [JSON.stringify(forge.json(JSON.parse(String(a[0]))))]];
+    if (t.includes("request.jwt.claim.sub")) return [forge.text ? forge.text(t) : t, forge.args ? forge.args(a) : a];
+    return [t, a];
   });
 }
 
-Deno.test("G4-50 Threads connect through G4's owner bridge (PG17, fake GoTrue/Threads)", async () => {
+Deno.test(`G4-50 / G4-02 #3 Threads connect through G4's owner bridge (PG17, fake GoTrue/Threads, G5 profile ${profile})`, async () => {
   const h = handlerWith(g4());
   const tA = await person(4501, true);
 
@@ -265,6 +278,61 @@ Deno.test("G4-50 Threads connect through G4's owner bridge (PG17, fake GoTrue/Th
     const r = await connect(handlerWith(bridge as Bridge), t, `178414000000${n}`);
     check(r.status !== 200 && await binding(n) === null, `9 control ${name} connected: ${JSON.stringify(r)}`);
     console.log(`ok 9 control ${name}: refused at ${r.stage} (${r.status} ${r.body.error}; sql: ${lastSqlError})`);
+  }
+
+  // 10. G4-02 #3 pre-adoption: the service ends mid-flow; forged claims after the person left for Threads; what an ended
+  // service leaves behind. Fresh people; every case must end with nothing bound.
+  {
+    const t = await person(4541, true);
+    lastSqlError = "";
+    const r = await connect(handlerWith(g4()), t, "17841400000004541", {
+      between: async () => { await sql("update public.service_entitlements set status='ended', ended_at=now() where user_id=$1::uuid and service_key='x_autopost'", [uid(4541)]); }, // SYNTHETIC end
+    });
+    check(r.status !== 200 && await binding(4541) === null, `10a service ended mid-flow connected: ${JSON.stringify(r)}`);
+    // refused before the code exchange (H5's claim runs T13): the code is never spent
+    check(r.stage === "callback" && r.body.error === "CALLBACK_REFUSED" && lastSqlError === "SERVICE_NOT_ACTIVE", `10a reason ${JSON.stringify(r)} ${lastSqlError}`);
+    console.log(`measured 10a service ended while at Threads: refused at ${r.stage} (${r.status} ${r.body.error}; sql: ${lastSqlError})`);
+  }
+  await person(4549, true); // a second, started person whose ids are borrowed below
+  // measured refusal per profile: [error, sql]; G5's MVP T13 refuses a non-false is_anonymous already in H5's claim
+  const forgeries: Array<[string, Omit<Forge, "on">, Record<G4AuthProfile, [string, string]>]> = [
+    ["sub_of_another_person", { json: (c) => ({ ...c, sub: uid(4549) }), args: (a) => [uid(4549), a[1]] },
+      { full: ["CALLBACK_REFUSED", "H5_ACTOR_INVALID"], personal: ["CALLBACK_REFUSED", "H5_ACTOR_INVALID"] }],
+    ["session_of_another_person", { json: (c) => ({ ...c, session_id: sidOf(4549) }), args: (a) => [a[0], sidOf(4549)] },
+      { full: ["CALLBACK_REFUSED", "ACCOUNT_LIFECYCLE_AUTH_REQUIRED"], personal: ["CALLBACK_REFUSED", "ACCOUNT_LIFECYCLE_AUTH_REQUIRED"] }],
+    ["is_anonymous_true", { json: (c) => ({ ...c, is_anonymous: true }), text: (x) => x.replace("'request.jwt.claim.is_anonymous','false'", "'request.jwt.claim.is_anonymous','true'") },
+      { full: ["COMPLETE_OUTCOME_UNKNOWN", "THREADS_SESSION_NOT_ACTIVE"], personal: ["CALLBACK_REFUSED", "ACCOUNT_LIFECYCLE_AUTH_REQUIRED"] }],
+    ["role_anon", { json: (c) => ({ ...c, role: "anon" }), text: (x) => x.replace("'request.jwt.claim.role','authenticated'", "'request.jwt.claim.role','anon'") },
+      { full: ["CALLBACK_REFUSED", "ACCOUNT_LIFECYCLE_AUTH_REQUIRED"], personal: ["CALLBACK_REFUSED", "ACCOUNT_LIFECYCLE_AUTH_REQUIRED"] }],
+  ];
+  let m = 4550;
+  for (const [name, f, expected] of forgeries) {
+    const forge: Forge = { on: false, ...f };
+    const t = await person(++m, true);
+    lastSqlError = "";
+    const r = await connect(handlerWith(forging(database, forge)), t, `178414000000${m}`, { between: () => { forge.on = true; return Promise.resolve(); } });
+    check(r.status !== 200 && await binding(m) === null, `10b forged ${name} connected: ${JSON.stringify(r)}`);
+    check(r.body.error === expected[profile][0] && lastSqlError === expected[profile][1], `10b ${name} reason ${JSON.stringify(r)} ${lastSqlError}`);
+    console.log(`measured 10b forged ${name} after begin: refused at ${r.stage} (${r.status} ${r.body.error}; sql: ${lastSqlError})`);
+  }
+  {
+    // a connected person's service ends: no new connect starts; in the personal profile G5's MV no longer allows the
+    // generation the binding was made under (what a G3 consumer must check with its own stored generation)
+    const t = await person(4561, true);
+    const ok = await connect(handlerWith(g4()), t, "17841400000004561");
+    check(ok.status === 200 && await binding(4561) !== null, `10c connect ${JSON.stringify(ok)}`);
+    await sql("update public.service_entitlements set status='ended', ended_at=now() where user_id=$1::uuid and service_key='x_autopost'", [uid(4561)]); // SYNTHETIC end
+    lastSqlError = "";
+    const again = await post(handlerWith(g4()), t, { action: "start" });
+    check(again.status === 409 && again.body.error === "START_REFUSED" && lastSqlError === "SERVICE_NOT_ACTIVE", `10c reconnect after end ${JSON.stringify(again)} ${lastSqlError}`);
+    let mv = "n/a (full profile: no MV)";
+    if (profile === "personal") {
+      mv = (await sql<{ v: string }>(
+        `select private.postona_personal_worker_verdict(b.bound_by, b.brand_id, 'x_autopost', b.lifecycle_version) as v
+           from postona_threads_binding.bindings b where b.bound_by=$1::uuid`, [uid(4561)]))[0].v;
+      check(mv === "SERVICE_NOT_ACTIVE", `10c MV for the ended generation: ${mv}`);
+    }
+    console.log(`measured 10c after the service ended: reconnect start refused (sql: ${lastSqlError}); MV for the binding's generation: ${mv}`);
   }
   console.log("G4B_THREADS_BRIDGE_FLOW_PASS");
 });
