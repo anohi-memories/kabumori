@@ -180,7 +180,7 @@ Deno.test("R0 the world: R1 / W1 / W2 are G5's real candidates (no double), 007 
      (select p.prosrc from pg_proc p where p.oid = 'private.account_lifecycle_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure),
      (select p.prosrc from pg_proc p where p.oid = 'public.common_account_worker_brand_verdict(text,text,bigint,bigint)'::regprocedure),
      (select count(*)::text from pg_namespace where nspname = 't_g5'),
-     (select p.prosrc from pg_proc p where p.oid = 'postona_threads_resv.g5_bound_state(text,bigint,bigint)'::regprocedure),
+     (select p.prosrc from pg_proc p where p.oid = 'postona_threads_resv.g5_bound_state(postona_threads_resv.reservations)'::regprocedure),
      has_table_privilege('authenticated', 'public.brand_memberships', 'TRIGGER')::text,
      coalesce(private.account_lifecycle_owner_epoch_exposure(), 'NONE'),
      private.account_lifecycle_generation_covered()::text`);

@@ -51,7 +51,8 @@ select pg_temp.expect(pg_temp.api(q, pg_temp.p(61), pg_temp.sess(61)) like 'ERR:
   'select count(*)::text from postona_threads_resv.reservations']) q;
 select pg_temp.expect(pg_temp.wk(q) like 'ERR:permission denied%', 'L1 worker closed: ' || q) from unnest(array[
   pg_temp.create_sql(pg_temp.th(61), gen_random_uuid(), 'x'), format('select state from postona_threads_resv.receipt(%L, %L)', pg_temp.th(61), gen_random_uuid()),
-  format('select postona_threads_resv.g5_bound_state(%L, 1, 1)', pg_temp.br(61)), format('select postona_threads_resv.parse_owner_epoch_token(%L)', 'g5oe:1:1'),
+  'select postona_threads_resv.g5_bound_state(null::postona_threads_resv.reservations)',
+  format('select owner_epoch::text from postona_threads_resv.g5_r1_bound(%L)', pg_temp.br(61)), format('select postona_threads_resv.parse_owner_epoch_token(%L)', 'g5oe:1:1'),
   'select count(*)::text from postona_threads_resv.reservations']) q;
 select 'L1_ACL_PASS' as result;
 

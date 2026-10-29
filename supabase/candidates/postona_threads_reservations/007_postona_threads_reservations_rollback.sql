@@ -11,7 +11,7 @@ begin
              and c.relname not in ('reservations', 'reservations_pkey', 'reservations_due', 'reservations_user_id_social_account_id_client_request_id_key',
                                'audit', 'audit_pkey', 'audit_id_seq'))
      or exists (select 1 from pg_catalog.pg_proc p where p.pronamespace = 'postona_threads_resv'::regnamespace
-                and p.proname not in ('g4_threads_account_verified', 'parse_owner_epoch_token', 'g5_bound_state', 'threads_credential_generation', 'refresh_in_progress',
+                and p.proname not in ('g4_threads_account_verified', 'parse_owner_epoch_token', 'g5_r1_bound', 'g5_bound_state', 'threads_credential_generation', 'refresh_in_progress',
                                       'fence', 'text_ok', 'create_reservation', 'cancel_reservation', 'receipt', 'claim_due', 'preflight',
                                       'record', 'release_unsent')) then
     raise exception 'POSTONA_THREADS_RESV_ROLLBACK_FOREIGN_OBJECTS';
