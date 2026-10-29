@@ -42,7 +42,8 @@ export type AiGatewayOptions = Readonly<{
    * G6-20: "owner_held" (the default) binds the ledger to each call's claim through public.ai_calls_*_held
    * (supabase/candidates/common_ai_g6/001_ai_calls_owner_held_ledger.sql; without it every send fails closed).
    * "legacy_busy_check_unsafe" is the old busy re-claim check, kept ONLY for the older test suites: a stalled process
-   * can send for a row it no longer owns (G6-18). Anything else is a configuration error.
+   * can send for a row it no longer owns (G6-18). It is accepted only with a loopback supabaseUrl (a local test server);
+   * with any other URL it is a configuration error (G6-22, H2 #329 P2 F1). Anything else is a configuration error.
    */
   ledgerMode?: "owner_held" | "legacy_busy_check_unsafe";
 }>;
@@ -77,6 +78,8 @@ export function createAiGateway(options: AiGatewayOptions): AiGateway {
   if (!isDefinedRegistry(options.policies)) throw new AiGatewayConfigError("policies");
   const ledgerMode = options.ledgerMode ?? "owner_held";
   if (ledgerMode !== "owner_held" && ledgerMode !== "legacy_busy_check_unsafe") throw new AiGatewayConfigError("ledger_mode");
+  // G6-22: the unsafe legacy check can never be composed against a production-shaped (non-loopback) Supabase.
+  if (ledgerMode === "legacy_busy_check_unsafe" && !isLoopback(options.supabaseUrl)) throw new AiGatewayConfigError("ledger_mode_nonloopback");
 
   const outerReadEnv = options.readEnv;
   // Least privilege: the provider layer may read the provider keys and nothing else.
