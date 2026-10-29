@@ -4,8 +4,9 @@
 # the G5 prerequisite world (the G5 Draft chain at 21a5cad4 via `git archive`, as the G5-42 runner):
 #   ne  WITHOUT the brand owner epoch (PR #285 / #303 / #457 left out) -- the MVP's target
 #   ep  WITH it -- to show the MVP profile and the G5-42 migration candidate exclude each other and can be switched
-# G5-47: G6's REAL transport + authority port (PR #500 636c38b9, `git archive`, blob-checked) fed R1-MVP's answers, unchanged; and a TEST-ONLY
-# copy with the one-line OWNER_EPOCH pattern the contract asks G6 for (accept g5pv:<n>) -- G6's source is not changed.
+# G5-47: G6's REAL transport + authority port (PR #500 636c38b9, `git archive`, blob-checked) fed R1-MVP's answers, unchanged (fail-closed).
+# G5-48: R1-MVP's EXECUTE grant / stop candidate, and G6's PR #556 personal-MVP adapter (903a89da, read-only archive, blob-checked) over its real
+# transport -- it replaces G5-47's test-only one-line copy. G6's source is not changed.
 # No network, no credential, no managed project, no OAuth / token / Vault / SNS call. Usage:
 #   CAL_PGHOST=/private/tmp/<socket> CAL_PGPORT=<port> CAL_PGSUPER=<local superuser> bash supabase/tests/postona_personal_mvp_auth_pg_run.sh
 set -euo pipefail
@@ -43,17 +44,16 @@ git -C "$repo" archive "$pin" supabase/migrations supabase/tests supabase/candid
 m="$tree/supabase/migrations"; t="$tree/supabase/tests"
 G6=636c38b9824ae14c734f25da40d2fe6ecaaa1f03
 git -C "$repo" cat-file -e "$G6^{commit}" || { echo "Commit $G6 missing; run git fetch origin." >&2; exit 2; }
-for d in g6 g6p; do mkdir -p "$work/$d"; git -C "$repo" archive "$G6" supabase/ai_gateway supabase/functions/_shared/ai_provider | tar -x -C "$work/$d"; done
+for d in g6; do mkdir -p "$work/$d"; git -C "$repo" archive "$G6" supabase/ai_gateway supabase/functions/_shared/ai_provider | tar -x -C "$work/$d"; done
+# G5-48: G6's personal-MVP adapter (PR #556 903a89da, read-only archive): same transport + port blobs as PR #500, plus postona_post_assist_mvp.ts
+G6M=903a89daf4a4e00604cae5ca7d941d122475e8c0
+git -C "$repo" cat-file -e "$G6M^{commit}" || { echo "Commit $G6M missing; run git fetch origin." >&2; exit 2; }
+mkdir -p "$work/g6m"; git -C "$repo" archive "$G6M" supabase/ai_gateway supabase/functions/_shared/ai_provider | tar -x -C "$work/g6m"
+[ "$(git hash-object "$work/g6m/supabase/ai_gateway/postona_post_assist_mvp.ts")" = e8626373f230386e322926fba51126efc29eff7a ] || { echo "G6 PR #556 adapter differs." >&2; exit 2; }
+[ "$(git hash-object "$work/g6m/supabase/ai_gateway/authority_port.ts")" = 0c7ef2b052ba8af08c7d1bb82d510615fbd34e01 ] || { echo "G6 PR #556 authority_port.ts differs." >&2; exit 2; }
+[ "$(git hash-object "$work/g6m/supabase/ai_gateway/g5_rpc_transport.ts")" = f1fc0ca2571cb0c13c507b80ca762a0c141feb99 ] || { echo "G6 PR #556 g5_rpc_transport.ts differs." >&2; exit 2; }
 [ "$(git hash-object "$work/g6/supabase/ai_gateway/authority_port.ts")" = 0c7ef2b052ba8af08c7d1bb82d510615fbd34e01 ] || { echo "G6 authority_port.ts differs." >&2; exit 2; }
 [ "$(git hash-object "$work/g6/supabase/ai_gateway/g5_rpc_transport.ts")" = f1fc0ca2571cb0c13c507b80ca762a0c141feb99 ] || { echo "G6 g5_rpc_transport.ts differs." >&2; exit 2; }
-python3 - "$work/g6p/supabase/ai_gateway/authority_port.ts" <<'PY2'
-import sys
-p = sys.argv[1]
-s = open(p, encoding='utf-8').read()
-old = 'const OWNER_EPOCH = /^g5oe:[1-9][0-9]{0,18}:[1-9][0-9]{0,18}$/u;'
-assert s.count(old) == 1, 'G6 OWNER_EPOCH line moved'
-open(p, 'w', encoding='utf-8').write(s.replace(old, 'const OWNER_EPOCH = /^(?:g5oe:[1-9][0-9]{0,18}:[1-9][0-9]{0,18}|g5pv:[1-9][0-9]{0,18})$/u;'))
-PY2
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
@@ -88,6 +88,6 @@ for w in ne ep; do
   own -c "create or replace function auth.uid() returns uuid language sql stable as \$\$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid \$\$" >/dev/null
 done
 mkdir -p "$work/tmp"
-( cd "$repo" && env CAL_E2E=1 S46_MVP="$repo/supabase/candidates/postona_personal_mvp_auth" S46_MIG="$mig" S46_OWNER="$owner" S46_PREFIX="$prefix" S46_G6="$work/g6" S46_G6P="$work/g6p" \
+( cd "$repo" && env CAL_E2E=1 S46_MVP="$repo/supabase/candidates/postona_personal_mvp_auth" S46_MIG="$mig" S46_OWNER="$owner" S46_PREFIX="$prefix" S46_G6="$work/g6" S48_G6M="$work/g6m" \
     PGSUPER="$super" PGHOST="$host" PGPORT="$port" PGUSER="$owner" \
     deno test --no-config --no-check --allow-read --allow-env --allow-run=psql "$here/postona_personal_mvp_auth_pg_test.ts" )
