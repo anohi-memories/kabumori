@@ -717,7 +717,7 @@ MUTANTS = [
      '    if kinds:\n', '    if False:\n',
      'test_task28_tempfile_policy.TempFileE2E.test_temp_file_tricks_are_denied_by_the_kernel'),
     ('parent folder of allowed file stays read-only', 'g10runner/code_edit.py',
-     '        os.chmod(parent, stat.S_IMODE(os.lstat(parent).st_mode) | stat.S_IWUSR)', '        pass',
+     '        os.chmod(parent, mode | stat.S_IWUSR)', '        pass',
      'test_task28_tempfile_policy.TempFileE2E.test_atomic_edit_like_the_real_cli_passes_and_leaves_nothing'),
     ('resident never reloads the policy', 'g10runner/autorun.py',
      '    if current["_digest"] == policy["_digest"]:\n        return control, policy, None',
