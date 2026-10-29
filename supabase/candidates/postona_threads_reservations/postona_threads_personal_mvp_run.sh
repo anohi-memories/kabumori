@@ -9,14 +9,19 @@
 #       never claimed (no W1);
 #   P   009 refusals (superuser; G5's W1 present; MV reachable by an API role; R1 not the MVP body), nothing changed; apply; re-apply refused;
 #   M   behaviour with 009 (personal_mvp/behavior.sql);
+#   EC  (G3-43) 011 (the lease-expired audit): refusals (superuser, table / schema of another owner), nothing changed; apply; re-apply
+#       refused; the person's own cancel after the service ended / the account unverified / an old generation (007, unchanged) and the
+#       audit (personal_mvp/owner_cancel.sql); 011's rollback refusals (superuser, other owners, half applied, a widened ACL); rollback =
+#       the procedures before 011, rows / audit untouched; twice refused (rolled back here: 007's own rollback is not taught about 011);
 #   LR  (G3-42) unfinished MVP-bound rows (planned / claimed / lease run out / uncertain) refuse the rollback, nothing changed; also:
-#       superuser, schema / table of another owner, half applied, a broken owner / ACL postcondition. Finish them (cancel, worker outcome;
-#       uncertain: a TEST stand-in removal -- its resolution is PENDING_POLICY), roll back; finished MVP rows stay untouched and another
+#       superuser, schema / table of another owner, half applied, a broken owner / ACL postcondition. Finish them (cancel -- G3-43: every
+#       planned row, also of a person whose service ended; worker outcome; uncertain: a TEST stand-in removal -- its resolution is
+#       PENDING_POLICY), roll back; finished MVP rows stay untouched and another
 #       person's FULL-bound row is claimed (the dispatch is not stopped);
 #   RB  rollback restores 007's adapters exactly; a FULL-bound planned row refuses a re-apply (no mixing); re-apply; 007's rollback still drops all.
 # No network, no credential, no managed project; no OAuth, token, Vault, SNS or paid call. Roles are cluster-wide: run alone. Usage:
 #   RESV_PGHOST=/private/tmp/<socket-dir> RESV_PGPORT=<port> RESV_PGSUPER=<local superuser> personal_mvp_run.sh
-# Optional: THREADS_MVP_CANDIDATE / THREADS_MVP_ROLLBACK / THREADS_RESV_CANDIDATE (mutation runs).
+# Optional: THREADS_MVP_CANDIDATE / THREADS_MVP_ROLLBACK / THREADS_RESV_CANDIDATE / AU_CANDIDATE / AU_ROLLBACK (mutation runs).
 set -euo pipefail
 export LC_ALL=C PGTZ=UTC PGOPTIONS='-c client_min_messages=warning'
 host="${RESV_PGHOST:?RESV_PGHOST (local socket dir) required}"
@@ -28,6 +33,8 @@ repo="$(cd "$here/../../.." && pwd)"
 resv="$here/../postona_x_reservations"
 t007="${THREADS_RESV_CANDIDATE:-$here/007_postona_threads_reservations.sql}"
 candidate="${THREADS_MVP_CANDIDATE:-$here/009_postona_threads_resv_personal_mvp.sql}"
+au="${AU_CANDIDATE:-$here/011_postona_threads_resv_uncertain_audit.sql}"
+aurb="${AU_ROLLBACK:-$here/011_postona_threads_resv_uncertain_audit_rollback.sql}"
 rollback="${THREADS_MVP_ROLLBACK:-$here/009_postona_threads_resv_personal_mvp_rollback.sql}"
 pm="$here/personal_mvp"
 pin=21a5cad4b71de63265db8517da93c6efc60cdde8
@@ -174,6 +181,52 @@ out="$(own -A -t -f "$pm/behavior.sql")" || fail "behavior"
 printf '%s\n' "$out" | grep -qx G3_THREADS_PERSONAL_MVP_BEHAVIOR_PASS || fail "behavior: no PASS line"
 echo "OK M: behaviour with 009"
 
+# --- EC (G3-43) ----------------------------------------------------------------------------------------------------------------
+trig() { sval -c "select coalesce(string_agg(tgname, ',' order by tgname), '') from pg_trigger where tgrelid = 'postona_threads_resv.reservations'::regclass and not tgisinternal"; }
+allrows11() { sval -c "select md5(coalesce(string_agg(concat_ws('/', id, status, outcome_code, lease_token, updated_at), ',' order by id), ''))
+  || ':' || (select md5(string_agg(concat_ws('/', id, action, detail), ',' order by id)) from postona_threads_resv.audit) from postona_threads_resv.reservations"; }
+pre11="$(catalog)/$(trig)"
+pre11_procs="$(procs_only)"
+expect_err "AU0 rollback before 011" G3_THREADS_LEASE_AUDIT_ROLLBACK_NOT_APPLIED own -f "$aurb"
+"${S[@]}" -d "$db" -c "alter role $owner superuser" >/dev/null
+expect_err "AU1 apply as a superuser" G3_THREADS_LEASE_AUDIT_OWNER own -f "$au"
+"${S[@]}" -d "$db" -c "alter role $owner nosuperuser" >/dev/null
+for obj in "table postona_threads_resv.reservations" "schema postona_threads_resv"; do
+  "${S[@]}" -d "$db" -c "alter $obj owner to authenticated" >/dev/null
+  expect_err "AU2 $obj of another owner" G3_THREADS_LEASE_AUDIT_OWNER own -f "$au"
+  "${S[@]}" -d "$db" -c "alter $obj owner to $owner" >/dev/null
+done
+[ "$(catalog)/$(trig)" = "$pre11" ] || fail "AU: a refused apply changed the catalog"
+own -f "$au" >/dev/null || fail "apply 011"
+[ "$(trig)" = reservations_lease_expired_audit ] || fail "AU3 trigger: $(trig)"
+on11="$(catalog)/$(trig)"
+expect_err "AU4 re-apply" G3_THREADS_LEASE_AUDIT_BASE_UNKNOWN own -f "$au"
+[ "$(catalog)/$(trig)" = "$on11" ] || fail "AU4: a refused re-apply changed the catalog"
+out="$(own -A -t -f "$pm/owner_cancel.sql")" || fail "owner cancel: $out"
+printf '%s\n' "$out" | grep -qx G3_THREADS_OWNER_CANCEL_BEHAVIOR_PASS || fail "owner cancel: no PASS line"
+"${S[@]}" -d "$db" -c "alter role $owner superuser" >/dev/null
+expect_err "AU5 rollback as a superuser" G3_THREADS_LEASE_AUDIT_ROLLBACK_OWNER own -f "$aurb"
+"${S[@]}" -d "$db" -c "alter role $owner nosuperuser" >/dev/null
+for obj in "table postona_threads_resv.reservations" "schema postona_threads_resv"; do
+  "${S[@]}" -d "$db" -c "alter $obj owner to authenticated" >/dev/null
+  expect_err "AU6 rollback, $obj of another owner" G3_THREADS_LEASE_AUDIT_ROLLBACK_OWNER own -f "$aurb"
+  "${S[@]}" -d "$db" -c "alter $obj owner to $owner" >/dev/null
+done
+own -c "alter trigger reservations_lease_expired_audit on postona_threads_resv.reservations rename to t43_off" >/dev/null
+expect_err "AU7 rollback, half applied" G3_THREADS_LEASE_AUDIT_ROLLBACK_PARTIAL_STATE own -f "$aurb"
+own -c "alter trigger t43_off on postona_threads_resv.reservations rename to reservations_lease_expired_audit" >/dev/null
+sed 's|^drop function postona_threads_resv.audit_lease_expired();$|&\ngrant select on postona_threads_resv.reservations to authenticated;|' "$aurb" > "$work/aurb_acl.sql"
+grep -q '^grant select on postona_threads_resv.reservations to authenticated;$' "$work/aurb_acl.sql" || fail "AU8 probe not built"
+expect_err "AU8 rollback with a widened ACL" "G3_THREADS_LEASE_AUDIT_ROLLBACK_POSTCONDITION: an owner or ACL changed" own -f "$work/aurb_acl.sql"
+r11="$(allrows11)"
+[ "$(catalog)/$(trig)" = "$on11" ] || fail "AU5-AU8: a refusal changed the catalog"
+own -f "$aurb" >/dev/null || fail "AU9 rollback"
+[ "$(procs_only)" = "$pre11_procs" ] || fail "AU9 not the procedures before 011"
+[ "$(trig)" = "" ] || fail "AU9 trigger left"
+[ "$(allrows11)" = "$r11" ] || fail "AU9 a row or audit row moved"
+expect_err "AU10 rollback twice" G3_THREADS_LEASE_AUDIT_ROLLBACK_NOT_APPLIED own -f "$aurb"
+echo "OK EC: 011 refusals (nothing changed), apply, re-apply refused; own planned row cancelled with the account unverified / the service ending / an old generation; another person, no session, claimed, uncertain refused; lease run out -> uncertain with one audit row, receipt uncertain, another person claimed in the same round; 011 rollback refusals, rollback = procedures before 011, rows / audit untouched, twice refused"
+
 # --- LR (G3-42) -----------------------------------------------------------------------------------------------------------------
 out="$(own -A -t -f "$pm/live_rows.sql")" || fail "live rows"
 printf '%s\n' "$out" | grep -qx G3_THREADS_LIVE_ROWS_SETUP_PASS || fail "live rows: no PASS line"
@@ -208,13 +261,10 @@ own -c "alter table postona_threads_resv.reservations rename constraint t42_off 
 # the person cancels the planned rows, the worker records the claimed rows' outcome (the existing paths); each step still refuses
 ids() { sval -c "select coalesce(string_agg(id::text || '/' || coalesce(lease_token::text, '-') || '/' || user_id, ' ' order by id), '') from postona_threads_resv.reservations
   where bound_owner_epoch is null and bound_lifecycle_version is not null and status = '$1' ${2:-}"; }
-removed=0
 for r in $(ids planned); do
   IFS=/ read -r id _ uid <<<"$r"
   st="$(val -c "\\ir $pm/helpers.sql" -c "select pg_temp.api(format('select postona_threads_resv.cancel_reservation(%L)', '$id'), '$uid')" | tail -1)"
-  [ "$st" = cancelled ] && continue
-  "${S[@]}" -d "$db" -c "delete from postona_threads_resv.reservations where id = '$id'" >/dev/null  # TEST stand-in: the person cannot cancel any more
-  removed=$((removed + 1))
+  [ "$st" = cancelled ] || fail "LR6 $id: the person could not cancel ($st)"  # G3-43: also a person whose service ended
 done
 [ "$(sval -c "select r.status from postona_threads_resv.reservations r join t42.ids i on i.id = r.id where i.name = 'lp'")" = cancelled ] || fail "LR6 A could not cancel lp"
 expect_refused "LR6 rollback, claimed / uncertain left" "G3_THREADS_MVP_ROLLBACK_LIVE_MVP_ROWS: $(expected_live)\$" own -f "$rollback"
@@ -255,7 +305,7 @@ out="$(own -A -t -f "$pm/live_rows_full.sql")" || fail "LR12 full world"
 printf '%s\n' "$out" | grep -qx G3_THREADS_LIVE_ROWS_FULL_PASS || fail "LR12 full world: no PASS line"
 [ "$(sval -c "select md5(string_agg(concat_ws('/', id, status, outcome_code, updated_at), ',' order by id)) from postona_threads_resv.reservations where bound_owner_epoch is null")" = "$finished" ] \
   || fail "LR12 a finished MVP row moved"
-echo "OK LR: unfinished MVP rows ($live; $removed planned not cancellable, removed) refuse (every state, then each left one, a create committed while it waits), superuser / other owner / half applied / ACL postcondition refuse; finished rows stay, B claimed"
+echo "OK LR: unfinished MVP rows ($live; every planned one cancelled by its person) refuse (every state, then each left one, a create committed while it waits), superuser / other owner / half applied / ACL postcondition refuse; finished rows stay, B claimed"
 
 # --- RB ------------------------------------------------------------------------------------------------------------------------
 # (LR rolled 009 back: the checks below run on that rollback)

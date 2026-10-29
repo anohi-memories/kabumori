@@ -11,7 +11,9 @@
  *   3. bearer token verified LIVE by the injected AuthVerifier (Supabase Auth getUser in a reviewed rollout,
  *      never the JWT lifetime alone)               -> 401; verifier missing or failing -> 503;
  *   4. G5 x_autopost entitlement / lifecycle and G4 verified X account, from the injected PermissionSources
- *      (owner-provided implementations; DEFAULT DENY until they exist) -> 403;
+ *      (owner-provided implementations; DEFAULT DENY until they exist) -> 403. Not for cancel (G3-43): a cancel only
+ *      stops a send, so a person whose service ended or whose account is no longer verified can still cancel their
+ *      own planned row; steps 1-3 still apply and the SQL (010) decides own row / revision / status;
  *   5. the database call as the verified subject (ReservationDb): the SQL function re-checks owner, account,
  *      G5 and G4 inside its own transaction, so a permission lost between 4 and 5 is still refused.
  * The client never sends a user id, brand id, approval mode or role: identity comes only from step 3, and every
@@ -277,13 +279,15 @@ export function createReservationApi(deps: {
       return fail(503, "AUTH_UNAVAILABLE");
     }
 
-    try {
-      if ((await permissions.xAutopostAllowed(userId)) !== true) return fail(403, "POSTONA_RESV_SERVICE_NOT_ACTIVE");
-      if (call.accountId !== null && (await permissions.xAccountVerified(userId, call.accountId)) !== true) {
-        return fail(403, "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED");
+    if (call.fn !== "cancel") {
+      try {
+        if ((await permissions.xAutopostAllowed(userId)) !== true) return fail(403, "POSTONA_RESV_SERVICE_NOT_ACTIVE");
+        if (call.accountId !== null && (await permissions.xAccountVerified(userId, call.accountId)) !== true) {
+          return fail(403, "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED");
+        }
+      } catch {
+        return fail(503, "PERMISSION_UNAVAILABLE");
       }
-    } catch {
-      return fail(503, "PERMISSION_UNAVAILABLE");
     }
 
     let result: DbResult;
