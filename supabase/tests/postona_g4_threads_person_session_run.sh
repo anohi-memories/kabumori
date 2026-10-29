@@ -173,6 +173,24 @@ if [ -n "${G4T_PRINT_PINS:-}" ]; then
   exit 0
 fi
 
+# G4-50: the server chain through G4's owner bridge (Edge handler -> H5 runtime -> bridge -> this SQL), then stop.
+if [ -n "${G4T_BRIDGE_FLOW:-}" ]; then
+  h5_claim="$c/postona_threads_auth_runtime/claim_candidate.sql"
+  bridge_db="$(copy bridge "$world")"
+  need "$bridge_db" "$g443"
+  need "$bridge_db" "$cand2"
+  need "$bridge_db" "$h5_claim"
+  nobind_db="$(copy nobind "$pre")"   # PR #124 + H5's claim SQL, but no G4 binding entry
+  need "$nobind_db" "$h5_claim"
+  echo "== G4-50 bridge flow (db $bridge_db, fail-closed db $nobind_db)"
+  G4B_PGHOST="$host" G4B_PGPORT="$port" G4B_PGUSER="$owner" G4B_DB="$bridge_db" G4B_DB_NOBIND="$nobind_db" \
+    deno test --cached-only --no-lock --config "$c/postona_threads_auth_runtime/wiring/deno.json" \
+    --allow-env=G4B_PGHOST,G4B_PGPORT,G4B_PGUSER,G4B_DB,G4B_DB_NOBIND --allow-read="$host" \
+    --allow-write="$host/.s.PGSQL.$port" --allow-net="unix:$host/.s.PGSQL.$port" "$t/postona_g4_threads_bridge_flow.smoke.ts"
+  echo "G4T_BRIDGE_FLOW_ALL_PASS"
+  exit 0
+fi
+
 echo "== G4-43 1. behavior"
 d442="$(copy g442 "$world")"
 out="$(run_mine "$d442" g442)" || fail "mode=g442: $(grep -m1 -E 'FAIL|ERROR' <<<"$out")"
