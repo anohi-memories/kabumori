@@ -53,6 +53,17 @@ R1-MVP is `SECURITY DEFINER` (`search_path ''`, `row_security off`, `STABLE`), o
   - on something that is not R1-MVP (the full profile's ACL is G5-42's).
 - After the stop, G6 gets `permission denied` for every call. This is fail-closed: nothing is sent.
 
+**G5-49 fix (H1 第28 P2 F1 / F2).** H1 found two drifts under which the G5-48 stop failed and rolled back, leaving `authenticated` granted:
+- **F1:** a grantee whose name needs quoting (`"h1-r1-stop-reader"`): `quote_ident(regrole::text)` quoted it twice → `role ""h1-r1-stop-reader"" does not exist`.
+- **F2:** `authenticated` given `WITH GRANT OPTION` and re-granting to another role: the `RESTRICT` revoke failed with `dependent privileges exist`.
+
+The fix (only `MVP_R1_EXECUTE_REVOKE.sql`):
+- The loop takes the raw `pg_roles.rolname` and quotes it once with `format('%I')`; PUBLIC stays the keyword.
+- Every REVOKE (the fixed one and the loop's) is `CASCADE`. A dependent privilege is the same privilege on the same object, so it reaches only R1-MVP's ACL. Measured: every other function / relation / column / schema ACL, the default ACLs and the role memberships are unchanged, also on decoys that carry the same grant-option chain.
+- The preconditions, the postcondition, the grant file, M10 / M20 and the install are unchanged.
+
+Measured (local PG17.11, without #457): 5 drift cases — H1's two repros verbatim, a space + upper-case grantee, a chain from a quoted grantee outside the fixed list, and everything at once with PUBLIC / anon / service_role / authenticator. With the G5-48 stop all 5 fail with H1's errors; with the fix all pass, twice each (idempotent), with the person denied afterwards.
+
 **Rollback:** `MVP_ROLLBACK.sql` works with the grant still in place. Dropping the function removes its ACL, and the catalog is exactly as it was before the install (measured).
 
 ## 4. Measured

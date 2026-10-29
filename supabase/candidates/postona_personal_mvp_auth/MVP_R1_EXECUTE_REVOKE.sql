@@ -3,6 +3,10 @@
 -- does not depend on the body pin, so a drifted R1-MVP can still be closed; and it revokes from EVERY non-owner grantee (also one granted
 -- outside these files), so its postcondition cannot fail and leave authenticated granted. It refuses only on the full profile's reviewed R1 (G5-42: its
 -- ACL is not this file's), and as a superuser. G6 then gets permission denied for every call: fail-closed, nothing is sent.
+-- G5-49 (H1 P2 F1 / F2): a grantee is named by its raw pg_roles.rolname through format(%I) (a quoted role -- hyphen, space, upper case -- is no
+-- longer double-quoted), and every REVOKE is CASCADE: a re-grant made from a grant option (owner -> authenticated WITH GRANT OPTION ->
+-- another role) goes too instead of failing RESTRICT and rolling the whole stop back. CASCADE here reaches only this one function's ACL (a
+-- dependent privilege is the same privilege on the same object); no other object, role or membership is changed.
 -- Run as the lifecycle owner (never a superuser) with ON_ERROR_STOP.
 begin;
 
@@ -21,16 +25,17 @@ begin
   end if;
 end $$;
 
-revoke all on function public.common_account_authorization_verdict(text, text, text) from public, anon, authenticated, service_role;
+revoke all on function public.common_account_authorization_verdict(text, text, text) from public, anon, authenticated, service_role cascade;
 
--- every other grantee too (a drifted grant must not make the stop fail and roll back with authenticated still granted)
+-- every other grantee too (a drifted grant must not make the stop fail and roll back with authenticated still granted): the raw role name, quoted
+-- once by %I; CASCADE for a re-grant chain; a grantee already removed by an earlier CASCADE is only a no-op
 do $$
-declare v_grantee oid;
+declare v_grantee text;
 begin
-  for v_grantee in select distinct x.grantee from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) x
+  for v_grantee in select distinct case when x.grantee = 0 then 'public' else pg_catalog.format('%I', r.rolname) end
+                     from pg_catalog.pg_proc p cross join pg_catalog.aclexplode(p.proacl) x left join pg_catalog.pg_roles r on r.oid = x.grantee
                     where p.oid = 'public.common_account_authorization_verdict(text,text,text)'::regprocedure and x.grantee <> p.proowner loop
-    execute pg_catalog.format('revoke all on function public.common_account_authorization_verdict(text, text, text) from %s',
-                              case when v_grantee = 0 then 'public' else pg_catalog.quote_ident(v_grantee::regrole::text) end);
+    execute pg_catalog.format('revoke all on function public.common_account_authorization_verdict(text, text, text) from %s cascade', v_grantee);
   end loop;
 end $$;
 
