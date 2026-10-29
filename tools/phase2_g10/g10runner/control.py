@@ -23,6 +23,10 @@ class Hold(Exception):
     """起動しない（保留）。理由つき。"""
 
 
+class GoReuseError(ValueError):
+    """同じ approval_id への2回目の REAL_CLAUDE_GO（TASK 24）。新しい phase2_approval_id の本文が要る。"""
+
+
 class Control:
     def __init__(self, layout, signer, verifier, policy, notifier=None, now=time.time, witness=None):
         self.layout = layout
@@ -59,13 +63,41 @@ class Control:
         except Exception:
             return frozenset()
 
+    def go_reuse_problem(self, approval_id, records=None, go_id=None):
+        """その approval_id に GO を出せない理由（TASK 24）。出せるなら None。
+
+        1つの approval_id に GO は1回だけ（state.derive は同じ go_id の2件目を無視する。期限の延長にもならない）。
+        CLAIM 済みの approval_id にも出さない。どちらも、新しい phase2_approval_id の本文が要る。"""
+        records = self.control.read_all() if records is None else records
+        for r in records:
+            if r["type"] == "REAL_CLAUDE_GO" and (r["payload"].get("approval_id") == approval_id
+                                                  or r["payload"].get("go_id") in ("go-" + approval_id, go_id)):
+                return ("a REAL_CLAUDE_GO for approval_id %s already exists (one GO per approval; it cannot be "
+                        "renewed or extended). A new TASK body with a new phase2_approval_id is needed" % approval_id)
+        if any(r["type"] == "CLAIM" and r["payload"].get("approval_id") == approval_id for r in self.ledger.read_all()):
+            return "approval_id %s is already claimed. A new phase2_approval_id is needed" % approval_id
+        return None
+
     def approve_real_claude_go(self, go):
-        """人の署名で、実 Claude の監督付き1回起動を承認する（TASK 17）。形は state.derive と同じ規則で検査する。"""
+        """人の署名で、実 Claude の監督付き1回起動を承認する（TASK 17）。形は state.derive と同じ規則で検査する。
+        TASK 24: 同じ approval_id の GO が既にあれば、追記せずに GoReuseError（検査と追記は同じロックの下）。"""
         from . import real_claude
         problem = real_claude.go_problem(go)
         if problem:
             raise ValueError(problem)
-        return self.append_control("REAL_CLAUDE_GO", dict(go), "human")
+
+        def unused(records):
+            reason = self.go_reuse_problem(go["approval_id"], records, go_id=go["go_id"])
+            return reason is None, reason
+
+        with FileLock(self.layout.halt_lock, "ex") as lock:
+            if not lock.acquired:
+                raise TimeoutError("could not acquire halt.lock exclusively")
+            record, reason = self.control.append_if("REAL_CLAUDE_GO", dict(go), self.signer, "human", self.now(),
+                                                    unused)
+        if record is None:
+            raise GoReuseError(reason)
+        return record
 
     def read_state(self):
         return state.derive(self.control.read_all(), self.agent_events.read_all())

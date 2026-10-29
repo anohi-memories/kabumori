@@ -5,6 +5,7 @@
             読む・共有台帳つき）と、実 Claude CLI 用のポリシーを置き、人の鍵で設定を承認する。  ← 鍵の生成（要 GO）
   approve   Issue #323 を認証なしで読み、その本文だけに結び付いた CONFIRM と REAL_CLAUDE_GO（1回・期限つき）を
             人の鍵で記録する。                                                       ← 実 Claude 起動の承認（要 GO）
+            同じ approval_id の GO が既にある・CLAIM 済みなら、何も記録せずに拒否する（TASK 24。新しい本文が要る）。
   run       （別の端末で S2 の見張り役 `bin/g10_watchdog.py --root ROOT --interval 60` を動かしてから）
             Issue #323 を取得し、その本文の GO の CLI で auth-check と同じ確認をして、ログインしていなければ
             CLAIM の前に止める（承認は消費しない）。ログインしていれば CLAIM し、受理してスタブを起動する（GO と一致すれば実 CLI を1回だけ起動）。
@@ -29,7 +30,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from g10runner import autorun, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, release, signing, wiring  # noqa: E402
-from g10runner.control import Control  # noqa: E402
+from g10runner.control import Control, GoReuseError  # noqa: E402
 from g10runner.fsutil import sha256_hex  # noqa: E402
 from g10runner.layout import Layout  # noqa: E402
 
@@ -101,8 +102,14 @@ def cmd_approve(a):
           "body_sha256": sha256_hex(body.encode("utf-8")), "cli_realpath": cli, "cli_version": os.path.basename(cli),
           "home": os.path.expanduser("~"), "max_turns": a.max_turns, "source_repo": os.path.realpath(a.source_repo),
           "expires_at": time.time() + a.valid_minutes * 60, "max_runs": 1}
+    reuse = control.go_reuse_problem(approval_id)
+    if reuse:
+        raise SystemExit("approve refused (nothing recorded): " + reuse)
     control.confirm(approval_id, task_sha)
-    control.approve_real_claude_go(go)
+    try:
+        control.approve_real_claude_go(go)
+    except GoReuseError as exc:
+        raise SystemExit("approve refused (GO not recorded): %s" % exc)
     shown = dict(go, home="<HOME>")
     print(json.dumps({"confirmed": approval_id, "go": shown}, ensure_ascii=False, indent=1))
     return 0

@@ -11,6 +11,7 @@ import time
 
 from g10runner import adapter, issue as issue_mod, real_claude, signing
 from g10runner.fsutil import read_json, sha256_hex
+from g10runner.control import GoReuseError
 from helpers import TRUSTED_ISSUE, make_body
 from test_task15_wired_e2e import WiredEnv, WiredBase, WIRED_TIMING
 from helpers import test_policy
@@ -142,11 +143,18 @@ class RealAdapterPath(RealAdapterBase):
         self.assertIn("adapter unavailable", json.dumps(self.env.agent.used.read_all()[-1]["payload"]))
 
     def test_expired_or_mismatched_go_means_no_launch(self):
-        cases = {"expired": dict(expires_at=time.time() - 1), "other approval": dict(approval_id="other"),
-                 "other body": dict(body_sha256="0" * 64)}
+        # TASK 24: 1つの approval_id に GO は1件だけ。期限切れは別の試験（test_expired_go_means_no_launch）で見る
+        cases = {"other body": dict(body_sha256="0" * 64), "other approval": dict(approval_id="other")}
         for i, (name, over) in enumerate(cases.items()):
             with self.subTest(case=name):
                 self.go(go_id="go-%d" % i, **over)
+        with self.assertRaises(GoReuseError):  # 同じ approval_id への2件目（期限の延長・本文の差し替え）は記録されない
+            self.go(go_id="go-9")
+        run_id = self.run_once()
+        self.assert_not_launched(run_id)
+
+    def test_expired_go_means_no_launch(self):
+        self.go(expires_at=time.time() - 1)
         run_id = self.run_once()
         self.assert_not_launched(run_id)
 

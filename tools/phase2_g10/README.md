@@ -427,6 +427,31 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 - 費用: まず Max（5x）の枠が使われる。追加使用量が有効なので、枠を超えた分は課金されうる（TASK 20 の1回は CLI 表示で 0.095 USD）。
 - 主ユーザーの権限で動くことの危険: 道具は Read/Glob/Grep だけだが、作業フォルダの外のファイルを読めるかは Claude Code の権限の仕組みに依る（実機で未確認）。結果はローカルの REPORT だけで、外への送信はしない。本文ごとに人の承認が要る。
 
+### 9-7. TASK 24（第23TASKの実稼働で見つかった、無人起動を阻む3件の修正。`tests/test_task24_blockers.py`）
+1. 実行側の HALT の合図（`agent-out/HALT_AGENT`）が、人の署名つき UNHALT の後も残り、検知役が止まったままになっていた。
+   - `halt_agent` は、先にフラグを「記録待ち」で立て、ログに記録してから、フラグに記録の event_id を書く（専用のロックの下）。
+   - S2 は周期ごとに `Agent.sync_flags()` を呼ぶ。フラグを消すのは、ログの署名・鎖・巻き戻りの検査が通り、未解除の HALT_AGENT が無く、
+     フラグの event_id がすべてログにあるときだけ。記録待ち・旧形式（空のファイル）・ログに無い event_id のフラグは残す（人が調べて消す）。
+2. 同じ approval_id への2回目の `approve` が、無視される GO を記録して成功と表示していた。
+   - `approve` は、同じ approval_id（または go_id）の GO が既にある・CLAIM 済みなら、CONFIRM も GO も記録せずに拒否し、新しい
+     phase2_approval_id の本文が要ると表示する。`Control.approve_real_claude_go` も、検査と追記を同じロックの下で行う（GoReuseError）。
+   - 1つの承認で起動は1回・期限つき、は変わらない（期限の延長はできない）。
+3. 終了済みのランの孤立プロセスの確認で、`/bin/ps` が1回失敗しただけで HALT_AGENT になっていた。
+   - 終了済みのランは、3周期続けて観測できないときだけ HALT（`supervise.TERMINAL_OBSERVATION_FAILURE_LIMIT`）。数は
+     `agent-out/s2_terminal_observation.json` に持ち、観測できたら数え直す。ファイルが壊れていれば、最初の失敗で HALT（安全側）。
+   - 孤立プロセスが見つかったときは、従来どおりすぐ止めて HALT。実行中のランの確認（期限・ハードHALT・クラッシュの判定）は変えていない。
+
+修正済みの固定版への切り替え（どれも人の GO の後。順番どおり）:
+| # | 誰が | 何をする | 承認の対象 |
+|---|---|---|---|
+| 1 | G10 | PR の HEAD から `install`（新しい版のフォルダができる。旧版は消さない）→ 新しい版から `plists --live` → plist を読み返す | ファイルの作成だけ |
+| 2 | 人 | 旧版の2つを `launchctl bootout`（検知役 → S2）→ `launchctl list` で消えたことを確認 | **常駐の停止（OS）** |
+| 3 | 人 | 新しい plist の2つを `launchctl bootstrap`（S2 → 検知役）→ `launchctl list`・S2 のハートビート・検知役の記録を確認 | **常駐の開始（OS）** |
+| 4 | ちゃ | G10 が作った approval_id 0004 の本文を #323 に一字一句そのまま貼る | Issue 本文 |
+| 5 | 人の GO の後に G10 | 新しい版の `approve --valid-minutes 120` | **実 Claude の起動の承認・費用の許可** |
+| 6 | 検知役（無人） | 5分以内に見つけて1回起動 → 監督 → 終了判定 → ローカル REPORT | 無人 |
+| 7 | G10 | 結果を読んで #323 に REPORT。必要なら halt／bootout | 回収 |
+
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。

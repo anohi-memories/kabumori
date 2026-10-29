@@ -11,7 +11,7 @@ import time
 
 from . import binding, issue as issue_mod, jstclock, logs, policy as policy_mod, procs, registry, state
 from .chainlog import ChainError, record_hash
-from .fsutil import atomic_write_json, canonical, read_json, touch
+from .fsutil import FileLock, atomic_write_json, canonical, read_json, touch
 
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STUB_SCRIPT = os.path.join(PACKAGE_ROOT, "bin", "g10_stub.py")
@@ -41,20 +41,60 @@ class Agent:
         except Exception:
             return frozenset()
 
+    def _flag_lock(self):
+        path = self.layout.agent_halt_flag + ".lock"
+        touch(path)
+        return FileLock(path, "ex")
+
+    @staticmethod
+    def _flag_event_ids(doc):
+        """フラグに書かれた HALT_AGENT の event_id の一覧。記録が済んでいない・形が違う（旧形式の空ファイルを含む）なら None。"""
+        if not isinstance(doc, dict) or doc.get("pending") is not False:
+            return None
+        ids = doc.get("event_ids")
+        if not isinstance(ids, list) or not ids or not all(isinstance(i, str) and i for i in ids):
+            return None
+        return ids
+
     def halt_agent(self, reason, details=None):
-        touch(self.layout.agent_halt_flag)
-        return self.agent_events.append("HALT_AGENT", {"reason": reason, "details": details or {}},
-                                        self.signer, "agent", self.now())
+        """実行側の HALT。先にフラグ（合図）を立て、ログに記録してから、フラグに記録の event_id を書く（TASK 24）。
+        記録に失敗したときは、フラグが「記録待ち」のまま残り、sync_flags では消えない（安全側）。"""
+        flag = self.layout.agent_halt_flag
+        with self._flag_lock():
+            try:
+                prev = self._flag_event_ids(read_json(flag)) or []
+            except ValueError:
+                prev = []
+            atomic_write_json(flag, {"pending": True, "event_ids": prev})
+            rec = self.agent_events.append("HALT_AGENT", {"reason": reason, "details": details or {}},
+                                           self.signer, "agent", self.now())
+            atomic_write_json(flag, {"pending": False, "event_ids": prev + [rec["event_id"]]})
+        return rec
 
     def sync_flags(self):
-        """実行側のHALTフラグ（合図）を、ログから導いた状態に合わせる。解除は、署名つきUNHALTが
-        実行側の HALT_AGENT をすべて対象にしたときだけ（ログが正本）。"""
-        try:
-            st = self.current_state(update_seen=False)
-        except (ChainError, state.RewindError):
-            return False
-        if not st.agent_halts and os.path.exists(self.layout.agent_halt_flag):
-            os.remove(self.layout.agent_halt_flag)
+        """実行側のHALTフラグ（合図）を、ログから導いた状態に合わせる。S2 の周期ごとに呼ぶ（TASK 24）。
+
+        フラグを消すのは、次のすべてを満たすときだけ（ログが正本。迷えば残す）:
+        - 制御側・実行側のログの署名と鎖が検証でき、巻き戻りが無い
+        - 未解除の HALT_AGENT が1件も無い（人の署名つき UNHALT がすべてを対象にした）
+        - フラグに書かれた event_id がすべてログの HALT_AGENT にあり、記録待ち・旧形式ではない
+        戻り値: フラグが無い・消した → True、残した → False。"""
+        flag = self.layout.agent_halt_flag
+        if not os.path.exists(flag):
+            return True
+        with self._flag_lock():
+            try:  # current_state は失敗時に halt_agent（同じロック）を呼ぶので、ここでは直接導く
+                control_events = self.control.read_all()
+                agent_events = self.agent_events.read_all()
+                state.check_seen(self.layout, control_events, update=False)
+                st = state.derive(control_events, agent_events)
+                logged = {r["event_id"] for r in agent_events if r["type"] == "HALT_AGENT"}
+                ids = self._flag_event_ids(read_json(flag))
+            except (ChainError, state.RewindError, ValueError):
+                return False
+            if st.agent_halts or ids is None or not set(ids) <= logged:
+                return False
+            os.remove(flag)
         return True
 
     # --- 状態（制御側のログを最新まで処理し、巻き戻りを検知） ---

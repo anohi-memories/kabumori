@@ -347,10 +347,21 @@ def reaper_loop(layout, policy, agent, run_id):
         time.sleep(interval)
 
 
+# 終了済みのランの孤立プロセスの確認が、何周期続けて観測できなければ HALT_AGENT にするか（TASK 24）。
+# 終了済みのランは監督の対象外なので、高負荷での一時的な ps の失敗では止めない。実行中のランの確認は従来どおり。
+TERMINAL_OBSERVATION_FAILURE_LIMIT = 3
+
+
+def terminal_observation_path(layout):
+    return os.path.join(layout.agent_out, "s2_terminal_observation.json")
+
+
 def watchdog_cycle(layout, policy, agent, now=None):
     """S2 の1周期。実行係・S1 から独立に、登録簿の全ランを確認する。戻り値: 行った処置の一覧。"""
     now = time.time() if now is None else now
     actions = []
+    if not agent.sync_flags():  # TASK 24: 署名つき UNHALT で解除済みの HALT_AGENT の合図を片付ける（迷えば残す）
+        actions.append(("halt_agent_flag", "kept"))
     problems = registry.inconsistencies(layout)
     if problems:
         agent.halt_agent("registry_inconsistent", {"problems": problems})
@@ -407,6 +418,15 @@ def watchdog_cycle(layout, policy, agent, now=None):
             stop_run(layout, policy, agent, entry, "runner_crashed_running", "S2")
             actions.append((run_id, "crashed"))
     # 終了済みのランの識別子を持つプロセスが残っていないか（孤立したプロセス）
+    fail_path = terminal_observation_path(layout)
+    try:
+        failures = read_json(fail_path, {})
+    except ValueError:
+        failures = None
+    if not isinstance(failures, dict) or not all(isinstance(v, int) and not isinstance(v, bool) and v > 0
+                                                 for v in failures.values()):
+        failures = {k: TERMINAL_OBSERVATION_FAILURE_LIMIT for k in registry.all_entries(layout)}  # 壊れていれば安全側
+    counted = {}
     for run_id in registry.all_entries(layout):
         try:
             entry = registry.load(layout, run_id)
@@ -415,14 +435,23 @@ def watchdog_cycle(layout, policy, agent, now=None):
         if entry and entry["state"] in registry.TERMINAL:
             present = run_processes_present(layout, entry)
             if present is None:
-                agent.halt_agent("observation_unavailable", {"run_id": run_id})
-                actions.append((run_id, "observation_unavailable"))
+                n = failures.get(run_id, 0) + 1
+                if n >= TERMINAL_OBSERVATION_FAILURE_LIMIT:
+                    agent.halt_agent("observation_unavailable", {"run_id": run_id, "consecutive_failures": n})
+                    actions.append((run_id, "observation_unavailable"))
+                    n = 0  # HALT にしたら数え直す（解除の後も続けば、また HALT）
+                else:
+                    actions.append((run_id, "observation_unavailable_transient"))
+                if n:
+                    counted[run_id] = n
             elif present:
                 details = procs.terminate(collector(layout, entry), policy_mod.timing(policy, "grace_seconds"),
                                           policy_mod.timing(policy, "confirm_seconds"))
                 agent.halt_agent("orphan_process", {"run_id": run_id, "absent": details["absent"],
                                                     "observation_unknown": details["unknown"]})
                 actions.append((run_id, "orphan"))
+    if counted != failures:
+        atomic_write_json(fail_path, counted)
     return actions
 
 
