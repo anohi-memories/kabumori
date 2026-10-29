@@ -8,6 +8,7 @@
 # The world, the lifecycle owner and the people (L13-L107 below) are postona_g4_x_oauth_t13_run.sh's (G4-46), copied.
 #   1. mode=main : main's X begin / consume / complete only (what users get today)
 #   2. mode=g4   : + G4 X 001-005 (the candidate stack, PR #511 -> #547) with the disconnect gate opened by the owner
+#   3. mode=g4p  : G4-02 #5 -- the same on G5's PERSONAL MVP profile (no owner epoch; G4 X 001/005 g5pv builds)
 # The scenarios run in apps/social-mobile/tests/x-connect-product-flow.e2e.mjs (needs `npm ci --ignore-scripts` there first).
 # Usage: TQ_PGHOST=/private/tmp/<socket-dir> TQ_PGPORT=<port> TQ_PGSUPER=<superuser> supabase/tests/postona_g4_x_oauth_app_flow_run.sh
 set -euo pipefail
@@ -42,6 +43,13 @@ git -C "$repo" archive "$P21" supabase/migrations supabase/tests supabase/candid
 install="$work/g5_install.sql"
 git -C "$repo" show "$G5:supabase/candidates/postona_personal_auth_migration/20261028090000_postona_personal_auth_install.sql" > "$install"
 echo "G5 install blob: $(git -C "$repo" rev-parse "$G5:supabase/candidates/postona_personal_auth_migration/20261028090000_postona_personal_auth_install.sql")"
+# G4-02 #5: G5's PERSONAL MVP profile (PR #563 head; MVP_INSTALL blob unchanged since PR #550) for mode=g4p
+G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982
+[ "$(git -C "$repo" rev-parse "$G5MVP:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] \
+  || fail "G5 MVP_INSTALL blob moved (pin)"
+mvp_install="$work/g5_mvp_install.sql"
+git -C "$repo" show "$G5MVP:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql" > "$mvp_install"
+python3 -I "$repo/supabase/tests/postona_g4_x_oauth_personal_mvp_build.py" "$repo" --check > /dev/null || fail "the personal X files do not re-derive"
 m="$tree/supabase/migrations"; t="$tree/supabase/tests"
 "${S[@]}" -d postgres >/dev/null <<SQL
 do \$\$ begin
@@ -54,9 +62,10 @@ create role $owner login nosuperuser nocreatedb createrole;
 grant anon, authenticated, service_role to $owner;
 SQL
 
-# world <name>: G5-44's world (copied, see the header), then G5's install, as the lifecycle owner
+# world <name> [personal]: G5-44's world (copied, see the header), then G5's install (full) or G5's MVP_INSTALL (personal: no owner
+# epoch, and the TEST-WORLD stand-in for G3's L-1 revoke that the MVP requires, as G5's own MVP runner), as the lifecycle owner
 world() {
-  local w="$1" f  # (local f: callers keep their own $f)
+  local w="$1" profile="${2:-full}" f  # (local f: callers keep their own $f)
   "${S[@]}" -d postgres -c "create database ${prefix}_$w owner $owner" >/dev/null
   own() { psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "${prefix}_$w" "$@"; }
   own -f "$t/social_mobile_account_deletion_fixture.sql" >/dev/null
@@ -73,9 +82,14 @@ world() {
     own -f "$m/$f.sql" >/dev/null
   done
   own -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" >/dev/null
-  own -f "$tree/supabase/candidates/common_account_brand_owner_epoch/001_brand_owner_epoch.sql" >/dev/null
+  if [ "$profile" = full ]; then own -f "$tree/supabase/candidates/common_account_brand_owner_epoch/001_brand_owner_epoch.sql" >/dev/null; fi
   own -c "create or replace function auth.uid() returns uuid language sql stable as \$\$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid \$\$" >/dev/null
-  own -f "$install" >/dev/null
+  if [ "$profile" = full ]; then
+    own -f "$install" >/dev/null
+  else
+    own -c "revoke insert, update, delete, truncate, references, trigger on public.brand_memberships from anon, authenticated" >/dev/null
+    own -f "$mvp_install" >/dev/null
+  fi
 }
 own_db() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "${prefix}_$1" "${@:2}"; }
 apply() { # <db> <file> [user]: 'applied' or the first ERROR text
@@ -120,7 +134,7 @@ flow() { # <db> <mode>
       FLOW_A="$A" FLOW_B="$B" FLOW_C="$C" FLOW_SA="$SA" FLOW_SB="$SB" FLOW_SC="$SC" \
       FLOW_EDGE="${FLOW_EDGE_OVERRIDE:-$repo/supabase/functions/x-oauth-connect-user/index.ts}" \
       node --test --test-reporter=tap tests/x-connect-product-flow.e2e.mjs 2>&1)"; then
-    grep -E '^# (tests|pass|fail)|^ok |^not ok ' <<<"$out" | sed "s/^/[$mode] /"
+    grep -E '^# (tests|pass|fail|measured)|^ok |^not ok ' <<<"$out" | sed "s/^/[$mode] /"
   else
     grep -E "^not ok |^# (tests|pass|fail)|AssertionError|expected|actual|\[flow\]" <<<"$out" | head -40 >&2
     fail "flow $mode"
@@ -133,4 +147,13 @@ world fg; x4 fg
 [ "$(apply fg "$cand/005_x_connect_lifecycle_t13.sql")" = applied ] || fail "005: $(apply fg "$cand/005_x_connect_lifecycle_t13.sql")"
 own_db fg -c "select postona_g4_x_oauth.set_x_disconnect_enabled(true)" >/dev/null
 people fg; flow fg g4
+echo "== 3. mode=g4p (G4 X on G5's PERSONAL MVP: 001/005 g5pv builds + 002-004 verbatim, disconnect gate open)"
+pcand="$repo/supabase/candidates/postona_g4_x_oauth_personal_mvp"
+world fp personal
+for xf in "$pcand/001_x_oauth_g5pv.sql" "$cand/002_x_oauth_product_wiring.sql" "$cand/003_x_disconnect_user_rpc.sql" \
+  "$cand/004_x_consume_preexchange_recheck.sql" "$pcand/005_x_connect_lifecycle_t13_g5pv.sql"; do
+  [ "$(apply fp "$xf")" = applied ] || fail "$(basename "$xf") on the personal profile: $(apply fp "$xf")"
+done
+own_db fp -c "select postona_g4_x_oauth.set_x_disconnect_enabled(true)" >/dev/null
+people fp; flow fp g4p
 echo "G4X_APP_FLOW_ALL_PASS"

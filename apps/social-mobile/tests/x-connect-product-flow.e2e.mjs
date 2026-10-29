@@ -17,7 +17,7 @@ import * as oauth from '../src/lib/x-oauth-onboarding.ts';
 import * as recoveryBinding from '../src/domain/recovery-binding.ts';
 
 const env = (k) => { const v = process.env[k]; if (!v) throw new Error(`${k} missing (run postona_g4_x_oauth_app_flow_run.sh)`); return v; };
-const MODE = env('FLOW_MODE');  // 'main' | 'g4'
+const MODE = env('FLOW_MODE');  // 'main' | 'g4' | 'g4p'
 const PG = { host: env('FLOW_PGHOST'), port: env('FLOW_PGPORT'), user: env('FLOW_PGUSER'), db: env('FLOW_PGDATABASE') };
 const [A, B, C, SA, SB, SC] = ['FLOW_A', 'FLOW_B', 'FLOW_C', 'FLOW_SA', 'FLOW_SB', 'FLOW_SC'].map(env);
 const SUPABASE_URL = 'https://flow.supabase.test';
@@ -177,7 +177,8 @@ const account = (u) => owner(`select coalesce((select connection_status || '/' |
 const SESSION_A = sessionOf(A, SA);
 const SESSION_B = sessionOf(B, SB);
 const SESSION_C = sessionOf(C, SC);
-const G4 = MODE === 'g4';
+const G4 = MODE === 'g4' || MODE === 'g4p';  // g4p: G4 X 001-005 on G5's personal MVP profile (G4-02 #5)
+const PERSONAL = MODE === 'g4p';
 
 test(`[${MODE}] A connects: start -> X -> callback -> connected, account verified`, async () => {
   const a = app({ ui: SESSION_A, script: [SESSION_A] });
@@ -241,6 +242,23 @@ test(`[${MODE}] A disconnects: ${G4 ? 'unconnected, one reload; then reconnects'
   } else {
     assert.equal(a.render().state, 'terminal_error');
     assert.equal(account(A), 'identity_verified/x_g4ta');
+  }
+});
+
+test(`[${MODE}] A's service ends and restarts while A is at X (SYNTHETIC lifecycle_version + 2): ${PERSONAL ? 'refused at the callback (g5pv generation moved)' : 'connects (only the personal profile binds the service generation)'}`, async () => {
+  const before = account(A);
+  const a = app({ ui: SESSION_A, script: [SESSION_A], duringBrowser: () => {
+    owner(`update public.common_accounts set lifecycle_version = lifecycle_version + 2 where user_id = ${lit(A)}::uuid`);
+  } });
+  await a.render().connect();
+  console.log(`measured [${MODE}] service ABA during X: ${a.render().state} account=${account(A)}`);
+  if (PERSONAL) {
+    // the callback's complete refuses (the recorded g5pv generation moved); the screen says start over, nothing is written
+    assert.equal(a.render().state, 'terminal_error', a.render().stateText);
+    assert.equal(a.reloads(), 0);
+    assert.equal(account(A), before, 'nothing written');
+  } else {
+    assert.equal(a.render().state, 'connected', a.render().stateText);
   }
 });
 
