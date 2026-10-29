@@ -81,7 +81,20 @@ select pg_temp.expect(pg_temp.record(pg_temp.id(n), 'failed_before_send', null, 
 -- TC4 C's service is being ended: create refused; C cancels the planned c2 (007's cancel needs only the person session)
 select pg_temp.expect(pg_temp.as_role(format('select public.begin_service_deletion(%L::uuid, ''x_autopost'')::text', pg_temp.uid(8)), 'service_role') !~ '^ERR', 'setup: C end begins');
 select pg_temp.expect(pg_temp.create_raw(pg_temp.uid(8), 'c6', 360) like 'ERR:POSTONA_%', 'TC4 create refused');
+-- G3-44: after the end C reads c2 through the receipt (pending), cancels, reads again (cancelled); E cannot read C's receipt; anonymous /
+-- no session refused (007's receipt needs only the person session and the own row: no SQL change)
+create function pg_temp.receipt(p_name text, p_sub uuid, p_account uuid default null) returns text language sql as $$
+  select pg_temp.api(format('select state from postona_threads_resv.receipt(%L, %L)', pg_temp.tacct(coalesce(p_account, p_sub)), r.client_request_id), p_sub)
+  from postona_threads_resv.reservations r where r.id = pg_temp.id(p_name) $$;
+select pg_temp.expect(pg_temp.receipt('c2', pg_temp.uid(8)) = 'pending', 'TC4 receipt after the end: pending ' || pg_temp.receipt('c2', pg_temp.uid(8)));
+select pg_temp.expect(pg_temp.receipt('c2', pg_temp.uid(9), pg_temp.uid(8)) = 'ERR:POSTONA_THREADS_RESV_NOT_FOUND', 'TC4 E cannot read C''s receipt');
+select pg_temp.expect(pg_temp.receipt('c2', null, pg_temp.uid(8)) = 'ERR:POSTONA_RESV_AUTH_REQUIRED', 'TC4 receipt, no subject');
 select pg_temp.expect(pg_temp.cancel('c2', pg_temp.uid(8)) = 'cancelled', 'TC4 C cancels c2 ' || pg_temp.cancel('c2', pg_temp.uid(8)));
+select pg_temp.expect(pg_temp.receipt('c2', pg_temp.uid(8)) = 'cancelled', 'TC4 receipt after the cancel: cancelled');
+select pg_temp.expect(pg_temp.receipt('c4', pg_temp.uid(8)) = 'uncertain', 'TC4 the uncertain row reads uncertain after the end');
+update auth.sessions set not_after = now() - interval '1 second' where user_id = pg_temp.uid(8);
+select pg_temp.expect(pg_temp.receipt('c2', pg_temp.uid(8)) = 'ERR:POSTONA_RESV_AUTH_REQUIRED', 'TC4 receipt, ended session');
+update auth.sessions set not_after = null where user_id = pg_temp.uid(8);
 
 -- TC5 E's service restarts (a NEW generation): e2 is bound to the old one; E cancels it
 select pg_temp.restart(pg_temp.uid(9)) is not null;

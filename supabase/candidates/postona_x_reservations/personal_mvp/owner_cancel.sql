@@ -95,13 +95,14 @@ select pg_temp.expect(pg_temp.begin_sp() = pg_temp.id('ek') || ',uncertain', 'EC
 select pg_temp.expect((select count(*) = 1 and bool_and(a.detail ->> 'worker' = 'single_post') from postona_x_resv.audit a
                        where a.reservation_id = pg_temp.id('ek') and a.action = 'lease_expired_uncertain'), 'EC7 one audit row');
 
--- EC8 C's service is being ended: C cannot create / reschedule / list; C's due row is never claimed; C cancels c2 (own row, no service)
+-- EC8 C's service is being ended: C cannot create / reschedule; C's due row is never claimed; C cancels c2 (own row, no service)
 select pg_temp.expect(pg_temp.as_role(format('select public.begin_service_deletion(%L::uuid, ''x_autopost'')::text', pg_temp.uid(8)), 'service_role') !~ '^ERR', 'setup: C end begins');
 select pg_temp.expect(pg_temp.create_raw(pg_temp.uid(8), 'g43c6', 360) like 'ERR:POSTONA_RESV_%', 'EC8 create refused');
 select pg_temp.expect(pg_temp.api(format('select status from postona_x_resv.reschedule(%L, %s, %L)', pg_temp.id('c2'), pg_temp.rev('c2'), now() + interval '311 hours'), pg_temp.uid(8))
   like 'ERR:POSTONA_RESV_%', 'EC8 reschedule refused');
+-- (G3-44: 012 is applied in this suite, so the person still reads their own rows after the end; personal_mvp/owner_read.sql covers it)
 select pg_temp.expect(pg_temp.api(format('select count(*) from postona_x_resv.list_reservations(%L)', pg_temp.acct(pg_temp.uid(8))), pg_temp.uid(8))
-  = 'ERR:POSTONA_RESV_SERVICE_NOT_ACTIVE', 'EC8 list refused (unchanged: a read after the end is not decided here)');
+  = (select count(*)::text from postona_x_resv.reservations where user_id = pg_temp.uid(8)), 'EC8 C lists their own rows after the end (012)');
 update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute' where id = pg_temp.id('c2');
 select pg_temp.expect(pg_temp.claim() not like '%' || pg_temp.id('c2') || '%', 'EC8 not claimed');
 select pg_temp.expect(pg_temp.cancel('c2', pg_temp.uid(8)) = 'cancelled@2', 'EC8 C cancels c2 ' || pg_temp.cancel('c2', pg_temp.uid(8)));
