@@ -291,7 +291,8 @@ print(json.dumps(out))
                          [0o750, 0o750, 0o550, 0o550, 0o550])
         self.assertEqual((mode("pkg/sub/a.py"), mode("pkg/other/c.py")), (0o644, 0o440))
         pre = json.load(open(os.path.join(run_dir, "edit_manifest_pre.json")))
-        self.assertEqual(pre["pkg/sub"][1], 0o750)  # 実行前の一覧は書き込み可にしたあとの状態
+        self.assertEqual(pre["pkg/sub"][1], 0o550)  # TASK 30: 実行前の一覧は開く前の状態（実行後は seal で戻す）
+        self.assertEqual(json.load(open(os.path.join(run_dir, "edit_parents.json"))), {"pkg/sub": 0o550, "tests": 0o550})
 
 
 if __name__ == "__main__":

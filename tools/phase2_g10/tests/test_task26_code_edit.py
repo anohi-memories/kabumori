@@ -30,7 +30,7 @@ FIX = ["edit", "trial/calc.py", "return a - b", "return a + b"]
 
 CODE_STAND_IN = r'''#!/usr/bin/python3 -I
 """代役の CLI（限定コード編集の試験専用）。実 Claude ではない。scenario.json の操作を試み、結果を TMPDIR に記録する。"""
-import json, os, subprocess, sys
+import json, os, subprocess, sys, time
 argv = sys.argv[1:]
 here = os.path.dirname(os.path.abspath(__file__))
 if argv[:2] == ["auth", "status"]:
@@ -100,6 +100,25 @@ for act in sc.get("actions", []):
     elif kind == "temp_over":  # 許可ファイルの一時ファイルの名前で作り、別のファイル（act[2]）へ rename する
         attempt("temp_over %s %s" % (target, act[2]),
                 lambda: rename_new_over(temp_name(os.path.abspath(target)), os.path.abspath(act[2])))
+    elif kind == "swapper":  # TASK 30: CLI の終了後も残り、許可ファイルをその場で書き換え続ける子孫（act[2]: pgid か setsid）
+        pid = os.fork()
+        if pid == 0:
+            if act[2] == "setsid":
+                os.setsid()
+            path, texts, end = os.path.abspath(target), act[3], time.time() + 20
+            i = 0
+            while time.time() < end:
+                try:
+                    with open(path, "r+", encoding="utf-8") as f:
+                        f.truncate(0)
+                        f.write(texts[i % len(texts)])
+                except OSError:
+                    pass
+                i += 1
+                time.sleep(0.005)
+            os._exit(0)
+        record.append(["swapper " + act[2], "pid:%d" % pid])
+        time.sleep(0.2)
     elif kind == "temp_name_variant":  # 名前の形の違う一時ファイル（act[2] を後ろに付ける）
         attempt("temp_name_variant " + act[2], lambda: make_file(os.path.abspath(target) + act[2]))
     elif kind == "child_write":

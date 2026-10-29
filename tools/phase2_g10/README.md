@@ -507,6 +507,32 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 
 **最小の独立レビューの対象（許可を広げた境界）**: `code_edit.cli_profile` の一時ファイルの規則と種類の拒否、`code_edit.prepare` の親フォルダの書き込み可。根拠は上の実機の性質 (a)〜(d) と、照合（`verify`）が変わっていないこと。
 
+### 9-10. TASK 30（第29TASKの独立レビューの2点: ~/.claude の改名のすり抜けと、実行後の競合。`tests/test_task30_home_postrun.py`）
+**A. ~/.claude の保護（High。第26TASKからの穴）**
+- 以前の許可 `(regex #"^<home>/\.claude")` は区切りがなく（`.claudeX` 等も書けた）、パスで書いた拒否は親フォルダの改名・置き換えで抜けられた（`.claudeX` に設定とフックを作り、`.claude` と入れ替える。`projects/<x>` を改名して記憶を仕込む）。
+- 新しい規則（`cli_profile`）:
+  - 許可: `(subpath ~/.claude)`（区切りあり）と、`~/.claude.json` と `~/.claude.json.<何か>`（HOME の直下の名前だけ）。
+  - `~/.claude` と `~/.claude/projects` のフォルダそのものへの書き込み（改名・削除・作成）を拒否する。
+  - 既存の `~/.claude/projects/<x>` の改名・削除を拒否する（file-write-unlink）。新しいプロジェクトのフォルダの作成は許す。
+  - `memory` という名前は、`~/.claude` の下のどこにも作れない（作ったフォルダを `projects/<x>` へ改名して記憶を仕込む道を塞ぐ）。
+  - 拒否するフォルダに `rules`・`output-styles` を加えた。
+- 確かめたこと（偽の HOME で sandbox-exec）: CLI が要る書き込み5通り（`.claude.json` の原子的書き込み・backup・新しいプロジェクトの記録・状態ファイル・プロジェクト内の改名）は通る。すり抜け13通り（`.claudeX`・`.claude-old`・`.claude`／`projects`／既存プロジェクトの改名・空のプロジェクトの削除・既存の記憶の改名・記憶を含むフォルダ・`<project>/memory` への改名・空のプロジェクトへの上書き改名・`hooks` への改名・`settings.json` への改名・`rules`）は EPERM。
+- `~/.claude.json` は CLI 自身が書くので許すしかない。後のセッションの動作を変える項目（キーの名前が mcp・allow・permission・hook・trust・env・command・apikey・plugin・helper・statusline に合う最上位と各プロジェクトの項目。このランの作業フォルダの項目は除く）の指紋を、起動の前（`home_guard_pre.json`）と CLI の終了直後（`edit_postrun.json`）で比べ、違えば安全違反（HALT）。他の対話セッションが同時にそれらを変えても HALT になる（止まる側）。
+
+**B. 実行後の競合（Medium。第28TASKで生じた穴）**
+- `prepare`: 実行前の一覧は親フォルダを開く**前**に取り、開いたフォルダとその元の権限を `edit_parents.json` に記録する。
+- `finish_cli`（スタブが CLI の終了直後、照合の前に行う）:
+  1. `stop_leftovers`: スタブと同じプロセスグループに残った CLI の子孫を SIGKILL し、いなくなったことを確かめる。スタブがグループの先頭でなければ何も止めない（安全違反）。
+  2. `seal`: 親フォルダを元の権限に戻す（以後、どのプロセスもその中で作成・削除・改名できない。権限の変更はサンドボックスが拒否）。
+  3. `home_guard`: 上の指紋。
+- `manifest`／`verify`: 普通のファイルは O_RDONLY|O_NOFOLLOW|O_NONBLOCK で開き、fstat が普通のファイルで lstat と同じ dev・ino かを確かめてから、その fd から1回だけ読む。ハッシュと差分は同じバイト列から作る。差し替えられていれば種類 "x"（必ず違反）。記録（停止・封印）が無い・偽なら違反。
+- 許可ファイルの名前の位置でも、リンク・フォルダ・FIFO 等の作成を拒否する（`vnode-type`）。
+- グループの外へ逃げた子孫（setsid）は止められない。ただし封印のあとは許可ファイルの中身しか変えられない。テストの前後の一覧の一致と、finalize のランのプロセスの確認（`stop_unconfirmed`）で、合格にはならない（代役の E2E で確認）。
+
+試験: 偽の HOME でのすり抜けの拒否と、要る書き込み・許可ファイルの名前の種類の拒否・封印・記録なしは違反・リンク／FIFO で漏れも停止もしない・差し替えられた FIFO を読んでも止まらない・グループの残りの停止・グループの先頭でなければ止めない・指紋が見る項目・代役の E2E（グループの残りは止めてから照合して合格、逃げた子孫では合格にならない）。変異 10件。
+
+**最小の独立レビューの対象**: `cli_profile` の HOME の規則と許可ファイルの名前の種類の拒否、`prepare`／`finish_cli`（`stop_leftovers`・`seal`・`home_guard`）、`manifest`／`verify` の読み取り。
+
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。

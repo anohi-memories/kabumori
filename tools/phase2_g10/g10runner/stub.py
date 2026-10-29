@@ -242,6 +242,9 @@ def run(root, run_id):
             return abort("code edit preparation failed: %s" % exc, True)
         if prepared["abs_paths"] != edit["abs_paths"] or prepared["tmp_dir"] != edit["tmp_dir"]:
             return abort("code edit paths differ after preparation", True)
+        # TASK 30: 後のセッションに効く ~/.claude.json の項目の、実行前の指紋
+        atomic_write_json(os.path.join(run_dir, "home_guard_pre.json"),
+                          code_edit.home_guard(adapter.go["home"], work_dir))
     atomic_write_json(os.path.join(run_dir, "work_digest.json"), {"digest": tree_digest(work_dir)})
     prompt_path = os.path.join(run_dir, "prompt.md")
     with open(prompt_path, "w", encoding="utf-8") as f:
@@ -315,6 +318,8 @@ def run(root, run_id):
     atomic_write_json(os.path.join(run_dir, "result.json"), {
         "exit_code": rc, "raw_sha256": sha256_hex(raw), "parsed": parsed, "ended_at": time.time()})
     if spec:  # TASK 26: 照合が通り、変更があるときだけ、承認されたテストを実行係が実行する（判定は finalize が再計算）
+        # TASK 30: 照合の前に、残りのプロセスを止め、親フォルダを封印し、~/.claude.json の指紋を取る
+        code_edit.finish_cli(work_dir, run_dir, adapter.go["home"])
         check = code_edit.verify(work_dir, run_dir, spec)
         atomic_write_json(os.path.join(run_dir, "edit_check.json"), check)
         if rc == 0 and not check["violations"] and check["changed_lines"] > 0:
