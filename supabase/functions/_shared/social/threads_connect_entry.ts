@@ -1,6 +1,8 @@
 // POSTONA Threads connect — the Edge ENTRY adapter (F4). It joins the three parts that already exist:
 //   H5's hard-disabled handler (candidates/postona_threads_auth_runtime/disabled_entry.ts),
-//   H5's runtime composition seam (candidates/.../wiring/nondeployable.ts: buildForApprovedSourceIntegration),
+//   G4's runtime composition (candidates/postona_g4_threads_personal_auth/composition.ts: buildForApprovedSourceIntegration,
+//   H5's construction with G4's owner bridge; since G4-02 #1 — H5's own wiring/nondeployable.ts cannot complete a
+//   connect against G4's binding entry, and H5's factory has no bridge port),
 //   G4's HTTP contract (./threads_connect_edge.ts: createThreadsConnectHandler).
 //
 // While the static gate THREADS_CONNECT_EDGE_WIRED (G4, false in source) is closed the entry IS H5's disabled handler:
@@ -38,6 +40,10 @@ export type ThreadsConnectEntryDeps = {
   loadComposition?: () => Promise<Composition>;
 };
 
+/** The composition loaded past the gates: G4's (dynamic import only, never at module load). */
+export const loadDefaultComposition = () =>
+  import("../../../candidates/postona_g4_threads_personal_auth/composition.ts") as Promise<Composition>;
+
 const present = (value: string | undefined): value is string => value !== undefined && value !== "";
 
 /**
@@ -73,8 +79,7 @@ export function createThreadsConnectEntry(deps: ThreadsConnectEntryDeps = {}): (
   // Closed in source: exactly H5's disabled handler. Nothing below is reached, read or loaded.
   if (gates.wired !== true) return disabledHandler;
   const read: EnvRead = deps.read ?? ((name) => Deno.env.get(name));
-  const load = deps.loadComposition ??
-    (() => import("../../../candidates/postona_threads_auth_runtime/wiring/nondeployable.ts") as Promise<Composition>);
+  const load = deps.loadComposition ?? loadDefaultComposition;
   let server: Promise<SourceServer> | null = null;
   return async (request: Request) => {
     if (read(THREADS_CONNECT_ENABLE_ENV) !== "true") return disabledHandler(request);

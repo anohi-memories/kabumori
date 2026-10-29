@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createThreadsConnectEntry, THREADS_CONNECT_ENABLE_ENV } from "./threads_connect_entry.ts";
+import { createThreadsConnectEntry, loadDefaultComposition, THREADS_CONNECT_ENABLE_ENV } from "./threads_connect_entry.ts";
 import { fakeConfig } from "../../../candidates/postona_threads_auth_runtime/wiring/offline.fixture.ts";
 
 // The F4 entry adapter with the REAL H5 composition (actual SDK + driver construction, H5 config validation, G4 HTTP
@@ -65,3 +65,15 @@ function aliasVariant(): Record<string, string> {
   values.THREADS_REDIRECT_URI = values.POSTONA_THREADS_CALLBACK; delete values.POSTONA_THREADS_CALLBACK;
   return values;
 }
+
+test("G4-02 #1: past the gates the entry loads G4's composition (G4's owner bridge), not H5's nondeployable", async () => {
+  const loaded = await loadDefaultComposition();
+  const g4 = await import("../../../candidates/postona_g4_threads_personal_auth/composition.ts");
+  assert.equal(loaded, g4, "the default loader is G4's composition module");
+  const h5 = await import("../../../candidates/postona_threads_auth_runtime/wiring/nondeployable.ts");
+  assert.notEqual(loaded, h5);
+  const source = await Deno.readTextFile(new URL("../../../candidates/postona_g4_threads_personal_auth/composition.ts", import.meta.url));
+  const code = source.split("\n").filter((line) => !/^\s*(\/\/|\/\*\*|\*)/.test(line)).join("\n");
+  assert.match(code, /bridge: createG4ThreadsOwnerBridge\(/, "the runtime's bridge is G4's");
+  assert.doesNotMatch(code, /createOwnerTransport|Deno\.(env|serve)/, "no H5 transport, no env read, no serve");
+});
