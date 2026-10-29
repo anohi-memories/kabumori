@@ -334,5 +334,21 @@ Deno.test(`G4-50 / G4-02 #3 Threads connect through G4's owner bridge (PG17, fak
     }
     console.log(`measured 10c after the service ended: reconnect start refused (sql: ${lastSqlError}); MV for the binding's generation: ${mv}`);
   }
+  {
+    // 11. G4-02 #4: the SAME callback twice at once (a double tap / a replayed return): exactly one connects
+    const t = await person(4571, true);
+    const handler = handlerWith(g4());
+    const started = await post(handler, t, { action: "start" });
+    const state = new URL(String(started.body.authorization_url)).searchParams.get("state");
+    const url = `${CALLBACK}?code=code17841400000004571x${++serial}&state=${state}#_`;
+    lastSqlError = "";
+    const both = await Promise.all([1, 2].map(() => post(handler, t, { action: "callback", callback_url: url })));
+    const wins = both.filter((r) => r.status === 200).length;
+    const bindings = Number((await sql<{ n: bigint }>(
+      `select count(*) as n from postona_threads_binding.bindings b join public.social_accounts sa on sa.id=b.social_account_id
+         where sa.brand_id=public.social_mobile_account_deletion_workspace($1::uuid)`, [uid(4571)]))[0].n);
+    check(wins === 1 && bindings === 1, `11 same callback twice: ${JSON.stringify(both)} bindings=${bindings}`);
+    console.log(`ok 11 the same callback twice at once: one connected, the other ${JSON.stringify(both.find((r) => r.status !== 200))} (sql: ${lastSqlError || "none"})`);
+  }
   console.log("G4B_THREADS_BRIDGE_FLOW_PASS");
 });
