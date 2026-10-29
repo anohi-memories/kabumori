@@ -2,10 +2,12 @@
 -- Restores 001's FULL-profile adapters (g5oe / W1) verbatim and its pair rule under its own name. The pair rule comes back NOT VALID, so a row
 -- bound under the MVP (a generation, no owner epoch) can stay only if nothing ever UPDATEs it again: every UPDATE of such a row breaks the
 -- restored rule, and claim_due's sweeps / closes update rows of every person in one statement -- one such row would stop the whole dispatch
--- (G3-42, reproduced on PG17). So the rollback runs only when every MVP-bound row is finished (published / failed / cancelled); a planned,
--- claimed, uncertain or expired one (expired: single post re-arms it) refuses. Finish them first with the existing paths (the person
--- cancels a planned row; the worker records a claimed row's outcome). No path finishes an uncertain or expired row today: while one exists
--- the rollback stays refused (how to resolve them is PENDING_POLICY). Rows are never deleted or rewritten here.
+-- (G3-42, reproduced on PG17). So the rollback runs only when every MVP-bound row is finished (published / failed / cancelled, or G3-43:
+-- expired with a draft that is not `single:` -- no path updates such a row: only single post re-arms an expired row, and only a `single:`
+-- one); a planned, claimed or uncertain one, or an expired `single:` one, refuses. Finish them first with the existing paths (the person
+-- cancels a planned row -- since 010 also after their service ended; the worker records a claimed row's outcome). No path finishes an
+-- uncertain or an expired `single:` row today: while one exists the rollback stays refused (how to resolve them is PENDING_POLICY). Rows are
+-- never deleted or rewritten here.
 -- Refuses (nothing changed) when: 008 is not applied, or only part of it is there; the caller is a superuser or does not own the schema and
 -- the table; an unfinished MVP-bound row exists (checked under the table's ACCESS EXCLUSIVE lock, so none can appear before the commit).
 begin;
@@ -46,6 +48,7 @@ begin
   from (select r.status, pg_catalog.count(*) as n from postona_x_resv.reservations r
         where (r.bound_owner_epoch is null) <> (r.bound_lifecycle_version is null)
           and r.status not in ('published', 'failed', 'cancelled')
+          and not (r.status = 'expired' and r.draft_id !~ '^single:')
         group by r.status) s;
   if v_live is not null then
     raise exception 'G3_MVP_ROLLBACK_LIVE_MVP_ROWS: %', v_live;
@@ -126,7 +129,8 @@ begin
     raise exception 'G3_MVP_ROLLBACK_POSTCONDITION: not the FULL profile';
   end if;
   if exists (select 1 from postona_x_resv.reservations r
-             where (r.bound_owner_epoch is null) <> (r.bound_lifecycle_version is null) and r.status not in ('published', 'failed', 'cancelled')) then
+             where (r.bound_owner_epoch is null) <> (r.bound_lifecycle_version is null) and r.status not in ('published', 'failed', 'cancelled')
+               and not (r.status = 'expired' and r.draft_id !~ '^single:')) then
     raise exception 'G3_MVP_ROLLBACK_POSTCONDITION: an unfinished MVP-bound row';
   end if;
 end $$;

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # G3-41: install order, FULL reverse rollback and re-apply of every G3 reservation candidate -- X 001-006 + 008 and Threads 007 + 009 --
+# (G3-43: + X 010 and Threads 011)
 # including the new 001 / 002 rollbacks, on a THROW-AWAY LOCAL PostgreSQL 17 with fake data, in G5's PERSONAL MVP world (built as
 # personal_mvp_run.sh: the G5 Draft chain at 21a5cad4 via `git archive`, then MVP_INSTALL.sql from PR #550 head 4c97140a, blob-checked;
 # both read-only, not changed here). Phases:
 #   I   before 001: 002 refused, both new rollbacks answer NOT_APPLIED (catalog unchanged); install all; re-applying 001 / 002 refused;
 #   D   personal_mvp/behavior.sql leaves rows in every state (published / failed / uncertain / planned ...);
 #   R   reverse order (G3-42: 008's rollback first refuses while an MVP-bound row is unfinished; they are finished first). While a later layer is there, the 002 and 001 rollbacks refuse and change nothing (also: 004's rollback with Threads
-#       007 present fails as a whole). Then 002's refusals (a member that can SET the role; a foreign privilege; half applied), 002
+#       007 present fails as a whole; G3-43: Threads 007's and X 001's rollbacks refuse 011 / 010 as foreign objects -- they are rolled
+#       back with their own files first; 008's drain cancels every planned row through the person, also after the service ended). Then 002's refusals (a member that can SET the role; a foreign privilege; half applied), 002
 #       rollback, 001's refusals (a foreign object; a foreign grant; a consumer function, wrong acknowledgement; live rows; finished rows
 #       not / wrongly counted; a view depending on a table), 001 rollback with the exact counts and consumer list. Every refusal leaves the
 #       catalog and the rows as they were; after the last step the whole catalog equals the one before 001 (roles included);
@@ -149,7 +151,7 @@ install_all() {
   # the API / worker roles are NOLOGIN roles for the future Edge / worker logins; the TEST WORLD lets the owner act as them
   "${S[@]}" -d "$db" -c "grant postona_resv_api, postona_resv_worker to $owner with set true" >/dev/null
   for f in "$here/008_postona_x_resv_personal_mvp.sql" "$th/007_postona_threads_reservations.sql" "$th/tests/g4_g5_test_doubles.sql" \
-           "$th/009_postona_threads_resv_personal_mvp.sql"; do
+           "$th/009_postona_threads_resv_personal_mvp.sql" "$here/010_postona_x_resv_owner_cancel.sql" "$th/011_postona_threads_resv_uncertain_audit.sql"; do
     own -f "$f" >/dev/null || fail "install $(basename "$f")"
   done
 }
@@ -157,7 +159,7 @@ install_all
 full="$(catalog)"
 expect_refused "I1 re-apply 001" POSTONA_RESV_ALREADY_APPLIED own -f "$here/001_postona_x_reservations.sql"
 expect_refused "I2 re-apply 002" POSTONA_RESV_API_ALREADY_APPLIED own -f "$here/002_postona_x_resv_api_role.sql"
-echo "OK I: 002 before 001 refused, both rollbacks NOT_APPLIED before install (nothing changed); X 001-006 + 008, Threads 007 + 009 installed; re-apply refused"
+echo "OK I: 002 before 001 refused, both rollbacks NOT_APPLIED before install (nothing changed); X 001-006 + 008 + 010, Threads 007 + 009 + 011 installed; re-apply refused"
 
 # --- D: rows in many states ---------------------------------------------------------------------------------------------------------
 own -f "$pm/people.sql" >/dev/null
@@ -174,22 +176,27 @@ own -f "$th/009_postona_threads_resv_personal_mvp_rollback.sql" >/dev/null || fa
 # 004's rollback drops the worker role, which Threads 007 still grants to: it fails as a whole (nothing changed) while 007 is there
 expect_refused "R2a 004 rollback with Threads 007 on" "postona_resv_worker" own -f "$here/004_postona_x_resv_dispatch_rollback.sql"
 expect_refused "R2b 001 rollback, Threads 007 on" "threads_007" own -f "$rb001"
+# G3-43: 007's rollback does not know 011: it refuses its trigger function as a foreign object (nothing changed); 011's own rollback first
+expect_refused "R2b2 Threads 007 rollback, Threads 011 on" POSTONA_THREADS_RESV_ROLLBACK_FOREIGN_OBJECTS own -f "$th/007_postona_threads_reservations_rollback.sql"
+own -f "$th/011_postona_threads_resv_uncertain_audit_rollback.sql" >/dev/null || fail "Threads 011 rollback"
 own -f "$th/007_postona_threads_reservations_rollback.sql" >/dev/null || fail "Threads 007 rollback"
 expect_refused "R2c 002 rollback, X 008 on" "POSTONA_RESV_API_ROLLBACK_LATER_LAYER_PRESENT: 003,004,005,006,008\$" own -f "$rb002"
 # G3-42: 008's rollback refuses while an MVP-bound row is unfinished (the restored pair rule would refuse its next UPDATE and stop claim_due
-# for everyone). Finish them first: the person cancels a planned row, the worker records a claimed row's outcome; an uncertain / expired
-# one (or a planned row its person can no longer cancel) has no path today -- removed here as a TEST stand-in (PENDING_POLICY).
+# for everyone). Finish them first: the person cancels a planned row (G3-43, 010: also after their service ended), the worker records a
+# claimed row's outcome; an uncertain row or an expired single post has no path today -- removed here as a TEST stand-in (PENDING_POLICY);
+# an expired row of a batch stays (nothing updates it).
 expect_refused "R2c2 008 rollback, unfinished MVP rows" "G3_MVP_ROLLBACK_LIVE_MVP_ROWS: " own -f "$here/008_postona_x_resv_personal_mvp_rollback.sql"
 for r in $(sval -c "select coalesce(string_agg(id || '/' || revision || '/' || user_id, ' '), '') from postona_x_resv.reservations where status = 'planned' and bound_owner_epoch is null and bound_lifecycle_version is not null"); do
   IFS=/ read -r id rev uid <<<"$r"
   st="$(val -c "\\ir $pm/helpers.sql" -c "select pg_temp.api(format('select status from postona_x_resv.cancel(%L, %s)', '$id', $rev), '$uid')" | tail -1)"
-  [ "$st" = cancelled ] || "${S[@]}" -d "$db" -c "delete from postona_x_resv.reservations where id = '$id'" >/dev/null
+  [ "$st" = cancelled ] || fail "R2c2 $id: the person could not cancel ($st)"
 done
 for r in $(sval -c "select coalesce(string_agg(id || '/' || lease_token, ' '), '') from postona_x_resv.reservations where status = 'claimed' and lease_expires_at > now() and bound_owner_epoch is null"); do
   IFS=/ read -r id lease <<<"$r"
   [ "$(sval -c "set role postona_resv_worker; select postona_x_resv.finish('$id', '$lease', 'failed_before_send', null, 'TEST_STOP')")" = failed_before_send ] || fail "R2c2 finish $id"
 done
-"${S[@]}" -d "$db" -c "delete from postona_x_resv.reservations where bound_owner_epoch is null and bound_lifecycle_version is not null and status in ('claimed', 'uncertain', 'expired')" >/dev/null
+"${S[@]}" -d "$db" -c "delete from postona_x_resv.reservations where bound_owner_epoch is null and bound_lifecycle_version is not null
+  and (status in ('claimed', 'uncertain') or (status = 'expired' and draft_id ~ '^single:'))" >/dev/null
 for f in 008_postona_x_resv_personal_mvp_rollback 006_postona_x_single_post_live_fence_rollback 005_postona_x_single_post_rollback; do
   own -f "$here/$f.sql" >/dev/null || fail "$f"
 done
@@ -198,7 +205,7 @@ own -f "$here/004_postona_x_resv_dispatch_rollback.sql" >/dev/null || fail "004 
 expect_refused "R2e 002 rollback, 003 on" "POSTONA_RESV_API_ROLLBACK_LATER_LAYER_PRESENT: 003\$" own -f "$rb002"
 expect_refused "R2f 001 rollback, 002 + 003 on" "POSTONA_RESV_ROLLBACK_LATER_LAYER_PRESENT: 002,003\$" own -f "$rb001"
 own -f "$here/003_postona_x_resv_g5_binding_rollback.sql" >/dev/null || fail "003 rollback"
-echo "OK R1-R2: later layers refuse both new rollbacks (nothing changed); Threads 009, 007, X 008, 006, 005, 004, 003 rolled back"
+echo "OK R1-R2: later layers refuse both new rollbacks (nothing changed); Threads 009, 011 (007 refused it first), 007, X 008 (after every planned MVP row was cancelled by its person), 006, 005, 004, 003 rolled back"
 
 # 002: a membership that can SET the role (the test world's) refuses; the owner's own ADMIN-only grant does not
 expect_refused "R3a 002 rollback, member" POSTONA_RESV_API_ROLLBACK_MEMBERS own -f "$rb002"
@@ -223,6 +230,9 @@ own -f "$rb002" >/dev/null || fail "R3 002 rollback"
 expect_refused "R3g 002 rollback twice" POSTONA_RESV_API_ROLLBACK_NOT_APPLIED own -f "$rb002"
 echo "OK R3: 002 refusals (SET member, role in a role, foreign privilege, extra grant, half applied, superuser), rollback, twice refused"
 
+# G3-43: X 010 is still on; 001's rollback does not know it and refuses its trigger function as a foreign object; 010's own rollback first
+expect_refused "R4-010 001 rollback, X 010 on" "POSTONA_RESV_ROLLBACK_FOREIGN_OBJECTS: .*postona_x_resv.audit_lease_expired()" own -f "$rb001"
+own -f "$here/010_postona_x_resv_owner_cancel_rollback.sql" >/dev/null || fail "010 rollback"
 # 001: refusals, each with nothing changed
 own -c "create function postona_x_resv.t41_extra() returns integer language sql as 'select 1'" >/dev/null
 expect_refused "R4a 001 rollback, foreign object" "POSTONA_RESV_ROLLBACK_FOREIGN_OBJECTS: postona_x_resv.t41_extra()" own -f "$rb001"
@@ -291,7 +301,7 @@ expect_refused_nors() { local c0; c0="$(catalog)"; expect_err "$@"; [ "$(catalog
 expect_refused_nors "R4p 001 rollback twice" POSTONA_RESV_ROLLBACK_NOT_APPLIED own -f "$rb001"
 own -c "drop function public.t41_consumer(uuid, text)" >/dev/null
 [ "$(catalog)" = "$pre" ] || fail "R4: the catalog after the full rollback is not the one before 001"
-echo "OK R4: 001 refusals (foreign object / overload / owner, schema / PUBLIC / column grant, consumer, wrong ack, live rows, uncounted / wrong counts, dependent view, superuser), rollback, consumer fails closed, twice refused; whole catalog = before 001"
+echo "OK R4: 001 refusals (X 010 on, then 010 rolled back; foreign object / overload / owner, schema / PUBLIC / column grant, consumer, wrong ack, live rows, uncounted / wrong counts, dependent view, superuser), rollback, consumer fails closed, twice refused; whole catalog = before 001"
 
 # --- A: re-apply ------------------------------------------------------------------------------------------------------------------
 install_all

@@ -94,6 +94,42 @@ test("authentication: missing / malformed / unknown token -> 401, a failing veri
   assert.equal(calls.length, 0);
 });
 
+test("G3-43: cancel skips the G5 / G4 pre-gate (it only stops a send) but keeps Auth and the person session; every other action keeps it", async () => {
+  let asked = 0;
+  const deny: PermissionSources = {
+    xAutopostAllowed: () => { asked += 1; return Promise.resolve(false); },
+    xAccountVerified: () => { asked += 1; return Promise.resolve(false); },
+  };
+  const { db, calls } = recordingDb({ ok: true, rows: [row({ status: "cancelled", revision: 4 })] });
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db });
+  const cancel = { action: "cancel", payload: { reservationId: RID, expectedRevision: 3 } };
+  const ok = await api(req(cancel));
+  assert.equal(ok.status, 200);
+  assert.equal(asked, 0, "no permission source is asked for a cancel");
+  assert.deepEqual(calls.map((c) => [c.fn, c.args, c.subject.userId]), [["cancel", [RID, 3], USER]]);
+  const throwing = createReservationApi({ enabled: true, auth: verifier, db, permissions: { xAutopostAllowed: () => Promise.reject(new Error("x")), xAccountVerified: () => Promise.reject(new Error("x")) } });
+  assert.equal((await throwing(req(cancel))).status, 200, "a failing permission source does not block a cancel");
+  assert.equal(codeOf(await api(req(cancel, { authorization: undefined }))), "AUTH_REQUIRED", "a cancel still needs the bearer token");
+  assert.equal(codeOf(await api(req(cancel, { authorization: "Bearer someone-elses-token-0000" }))), "AUTH_REQUIRED");
+  for (const token of [tokenFor({ sub: USER, session_id: SESSION, is_anonymous: true }), tokenFor({ sub: USER, session_id: SESSION }), tokenFor({ sub: USER })]) {
+    const anyUser = createReservationApi({ enabled: true, auth: { verify: () => Promise.resolve({ userId: USER }) }, permissions: deny, db });
+    assert.equal(codeOf(await anyUser(req(cancel, { authorization: `Bearer ${token}` }))), "AUTH_REQUIRED", "anonymous / unknown / no session: refused");
+  }
+  const n = calls.length;
+  for (const other of [
+    createPayload(),
+    { action: "list", payload: { socialAccountId: "x_a" } },
+    { action: "get", payload: { reservationId: RID } },
+    { action: "reschedule", payload: { reservationId: RID, expectedRevision: 3, scheduledAt: "2026-10-20T01:00:00.000Z" } },
+    { action: "reconfirm", payload: { reservationId: RID, expectedRevision: 3, contentSha256: SHA } },
+  ]) {
+    assert.equal(codeOf(await api(req(other))), "POSTONA_RESV_SERVICE_NOT_ACTIVE", `${other.action} keeps the G5 gate`);
+  }
+  assert.equal(calls.length, n, "no other action reached the database");
+  const sqlSays = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db: recordingDb({ ok: false, code: "POSTONA_RESV_NOT_FOUND" }).db });
+  assert.deepEqual(await sqlSays(req(cancel)), { status: 404, body: { ok: false, code: "POSTONA_RESV_NOT_FOUND" } }, "the SQL decides own row");
+});
+
 test("G5 and G4 decisions are separate and both required; a failing source is 503, never allow", async () => {
   const { db, calls } = recordingDb();
   const g5off = createReservationApi({ enabled: true, auth: verifier, permissions: { ...allow, xAutopostAllowed: () => Promise.resolve(false) }, db });

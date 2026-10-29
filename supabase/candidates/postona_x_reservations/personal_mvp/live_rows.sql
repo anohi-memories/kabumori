@@ -2,6 +2,7 @@
 -- people, A = uid(6) and B = uid(7), set up as people.sql does (own workspace, live session, POSTONA started, fake verified X account),
 -- so behavior.sql's people and rows are not touched. Rows of A (all MVP-bound: no owner epoch, generation V):
 --   lp planned (future) / lc claimed (live lease) / ll claimed, lease run out / lu uncertain (LEASE_EXPIRED) / le expired
+--   ls (G3-43) an expired single post (`single:` draft: single post re-arms it, so it still refuses the rollback; le does not)
 --   lpub published / lf failed / lx cancelled
 -- and of B: bf planned, re-bound as a FULL-profile row (owner epoch 3) -- the restored pair rule accepts it, so it never blocks the rollback.
 -- The states come from the real paths (API create / cancel, worker claim / finish, claim_due's sweeps); only the clock is moved.
@@ -37,10 +38,19 @@ select pg_temp.expect(pg_temp.claimed(array['lu', 'lpub', 'lf']), 'LR lu / lpub 
 select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.finish(%L, %L, ''published'', ''1042000000000000001'', null)', pg_temp.id('lpub'), pg_temp.lease_of(pg_temp.id('lpub')))) = 'published', 'LR lpub');
 select pg_temp.expect(pg_temp.worker(format('select postona_x_resv.finish(%L, %L, ''failed_before_send'', null, ''TEST_STOP'')', pg_temp.id('lf'), pg_temp.lease_of(pg_temp.id('lf')))) = 'failed_before_send', 'LR lf');
 update postona_x_resv.reservations set lease_expires_at = now() - interval '1 second' where id = pg_temp.id('lu');
+-- ls: single post begins (claimed), its lease runs out before the send (handed back to planned), its expiry passes (claim_due's sweep)
+select pg_temp.keep('ls', split_part(pg_temp.api(format('select reservation_id || '','' || state from postona_x_resv.post_now_begin(%L, gen_random_uuid(), %L, %L)',
+  pg_temp.acct(pg_temp.uid(6)), 'G3-43 単発 ls', pg_temp.body_sha('G3-43 単発 ls')), pg_temp.uid(6)), ',', 1)::uuid) is not null;
+select pg_temp.expect(pg_temp.row_of(pg_temp.id('ls')) = 'claimed/-', 'LR ls claimed by single post');
+update postona_x_resv.reservations set lease_expires_at = now() - interval '1 second' where id = pg_temp.id('ls');
+select pg_temp.expect(pg_temp.api(format('select verdict from postona_x_resv.post_now_preflight(%L, %L)', pg_temp.id('ls'), pg_temp.lease_of(pg_temp.id('ls'))), pg_temp.uid(6))
+  = 'RELEASED', 'LR ls released');
+update postona_x_resv.reservations set scheduled_at = now() - interval '3 hours', consent_scheduled_at = now() - interval '3 hours', expires_at = now() - interval '1 second'
+where id = pg_temp.id('ls');
 select pg_temp.make_due(pg_temp.id('le'));
 update postona_x_resv.reservations set scheduled_at = now() - interval '3 hours', consent_scheduled_at = now() - interval '3 hours', expires_at = now() - interval '1 second'
 where id = pg_temp.id('le');
-select pg_temp.claim();  -- the sweeps: lu -> uncertain, le -> expired
+select pg_temp.claim();  -- the sweeps: lu -> uncertain, le / ls -> expired
 select pg_temp.make_due(pg_temp.id(n)) from unnest(array['lc', 'll']) n;
 update postona_x_resv.reservations set scheduled_at = now() - interval '5 hours', consent_scheduled_at = now() - interval '5 hours' where id = pg_temp.id('ll');
 select pg_temp.expect(pg_temp.claimed(array['lc', 'll']), 'LR lc / ll claimed');
@@ -49,6 +59,6 @@ update postona_x_resv.reservations set bound_owner_epoch = 3 where id = pg_temp.
 
 select pg_temp.expect(string_agg(name || '=' || pg_temp.row_of(id) || '@' || pg_temp.bound_of(id), ' ' order by name)
   = format('bf=planned/-@3/%1$s lc=claimed/-@null/%2$s le=expired/-@null/%2$s lf=failed/TEST_STOP@null/%2$s ll=claimed/-@null/%2$s lp=planned/-@null/%2$s '
-           'lpub=published/PUBLISHED@null/%2$s lu=uncertain/LEASE_EXPIRED@null/%2$s lx=cancelled/-@null/%2$s', pg_temp.lv(pg_temp.uid(7)), pg_temp.lv(pg_temp.uid(6))),
+           'lpub=published/PUBLISHED@null/%2$s ls=expired/-@null/%2$s lu=uncertain/LEASE_EXPIRED@null/%2$s lx=cancelled/-@null/%2$s', pg_temp.lv(pg_temp.uid(7)), pg_temp.lv(pg_temp.uid(6))),
   'LR rows ' || string_agg(name || '=' || pg_temp.row_of(id) || '@' || pg_temp.bound_of(id), ' ' order by name)) from t42.ids;
 select 'G3_LIVE_ROWS_SETUP_PASS';
