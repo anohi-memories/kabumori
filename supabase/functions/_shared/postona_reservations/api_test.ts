@@ -118,8 +118,6 @@ test("G3-43: cancel skips the G5 / G4 pre-gate (it only stops a send) but keeps 
   const n = calls.length;
   for (const other of [
     createPayload(),
-    { action: "list", payload: { socialAccountId: "x_a" } },
-    { action: "get", payload: { reservationId: RID } },
     { action: "reschedule", payload: { reservationId: RID, expectedRevision: 3, scheduledAt: "2026-10-20T01:00:00.000Z" } },
     { action: "reconfirm", payload: { reservationId: RID, expectedRevision: 3, contentSha256: SHA } },
   ]) {
@@ -128,6 +126,37 @@ test("G3-43: cancel skips the G5 / G4 pre-gate (it only stops a send) but keeps 
   assert.equal(calls.length, n, "no other action reached the database");
   const sqlSays = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db: recordingDb({ ok: false, code: "POSTONA_RESV_NOT_FOUND" }).db });
   assert.deepEqual(await sqlSays(req(cancel)), { status: 404, body: { ok: false, code: "POSTONA_RESV_NOT_FOUND" } }, "the SQL decides own row");
+});
+
+test("G3-44: get and list skip the G5 / G4 pre-gate (the person reads their own rows after the service ended) but keep Auth and the session", async () => {
+  let asked = 0;
+  const deny: PermissionSources = {
+    xAutopostAllowed: () => { asked += 1; return Promise.resolve(false); },
+    xAccountVerified: () => { asked += 1; return Promise.resolve(false); },
+  };
+  const { db, calls } = recordingDb({ ok: true, rows: [row({ status: "planned", revision: 5 })] });
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db });
+  const get = { action: "get", payload: { reservationId: RID } };
+  const list = { action: "list", payload: { socialAccountId: "x_a" } };
+  const got = await api(req(get));
+  assert.equal(got.status, 200);
+  assert.equal(got.body.ok && got.body.reservations[0].revision, 5, "the current revision reaches the client");
+  assert.equal((await api(req(list))).status, 200);
+  assert.equal(asked, 0, "no permission source is asked for a read");
+  assert.deepEqual(calls.map((c) => [c.fn, c.args, c.subject.userId]), [["get_reservation", [RID], USER], ["list_reservations", ["x_a"], USER]]);
+  const throwing = createReservationApi({ enabled: true, auth: verifier, db, permissions: { xAutopostAllowed: () => Promise.reject(new Error("x")), xAccountVerified: () => Promise.reject(new Error("x")) } });
+  assert.equal((await throwing(req(get))).status, 200, "a failing permission source does not block a read");
+  const n = calls.length;
+  for (const token of [tokenFor({ sub: USER, session_id: SESSION, is_anonymous: true }), tokenFor({ sub: USER, session_id: SESSION }), tokenFor({ sub: USER }), tokenFor({ sub: OTHER, session_id: SESSION, is_anonymous: false })]) {
+    const anyUser = createReservationApi({ enabled: true, auth: { verify: () => Promise.resolve({ userId: USER }) }, permissions: deny, db });
+    for (const p of [get, list]) {
+      assert.equal(codeOf(await anyUser(req(p, { authorization: `Bearer ${token}` }))), "AUTH_REQUIRED", "anonymous / unknown / no session / another subject: refused");
+    }
+  }
+  assert.equal(codeOf(await api(req(get, { authorization: undefined }))), "AUTH_REQUIRED");
+  assert.equal(calls.length, n, "no refused read reached the database");
+  const sqlSays = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db: recordingDb({ ok: false, code: "POSTONA_RESV_NOT_FOUND" }).db });
+  assert.deepEqual(await sqlSays(req(get)), { status: 404, body: { ok: false, code: "POSTONA_RESV_NOT_FOUND" } }, "the SQL decides own row");
 });
 
 test("G5 and G4 decisions are separate and both required; a failing source is 503, never allow", async () => {

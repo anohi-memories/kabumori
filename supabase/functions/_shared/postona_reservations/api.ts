@@ -11,9 +11,10 @@
  *   3. bearer token verified LIVE by the injected AuthVerifier (Supabase Auth getUser in a reviewed rollout,
  *      never the JWT lifetime alone)               -> 401; verifier missing or failing -> 503;
  *   4. G5 x_autopost entitlement / lifecycle and G4 verified X account, from the injected PermissionSources
- *      (owner-provided implementations; DEFAULT DENY until they exist) -> 403. Not for cancel (G3-43): a cancel only
- *      stops a send, so a person whose service ended or whose account is no longer verified can still cancel their
- *      own planned row; steps 1-3 still apply and the SQL (010) decides own row / revision / status;
+ *      (owner-provided implementations; DEFAULT DENY until they exist) -> 403. Not for cancel (G3-43), get and list
+ *      (G3-44): a cancel only stops a send, and reading one's own rows is what makes it usable (current state and
+ *      revision), so a person whose service ended or whose account is no longer verified can still read and cancel
+ *      their own rows; steps 1-3 still apply and the SQL (010 / 012) decides own row / revision / status;
  *   5. the database call as the verified subject (ReservationDb): the SQL function re-checks owner, account,
  *      G5 and G4 inside its own transaction, so a permission lost between 4 and 5 is still refused.
  * The client never sends a user id, brand id, approval mode or role: identity comes only from step 3, and every
@@ -23,6 +24,9 @@
  */
 
 export const POSTONA_RESERVATION_API_ENABLED = false as const;
+
+/** G3-43 / G3-44: the owner actions decided by the person session and row ownership alone (no G5 / G4 pre-gate). */
+const OWNER_ONLY_FNS: ReadonlySet<string> = new Set(["cancel", "get_reservation", "list_reservations"]);
 
 export type ReservationAction = "create" | "list" | "get" | "reschedule" | "reconfirm" | "cancel";
 export type ReservationDbFunction =
@@ -279,7 +283,7 @@ export function createReservationApi(deps: {
       return fail(503, "AUTH_UNAVAILABLE");
     }
 
-    if (call.fn !== "cancel") {
+    if (!OWNER_ONLY_FNS.has(call.fn)) {
       try {
         if ((await permissions.xAutopostAllowed(userId)) !== true) return fail(403, "POSTONA_RESV_SERVICE_NOT_ACTIVE");
         if (call.accountId !== null && (await permissions.xAccountVerified(userId, call.accountId)) !== true) {

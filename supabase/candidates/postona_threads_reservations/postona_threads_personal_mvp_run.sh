@@ -225,7 +225,7 @@ own -f "$aurb" >/dev/null || fail "AU9 rollback"
 [ "$(trig)" = "" ] || fail "AU9 trigger left"
 [ "$(allrows11)" = "$r11" ] || fail "AU9 a row or audit row moved"
 expect_err "AU10 rollback twice" G3_THREADS_LEASE_AUDIT_ROLLBACK_NOT_APPLIED own -f "$aurb"
-echo "OK EC: 011 refusals (nothing changed), apply, re-apply refused; own planned row cancelled with the account unverified / the service ending / an old generation; another person, no session, claimed, uncertain refused; lease run out -> uncertain with one audit row, receipt uncertain, another person claimed in the same round; 011 rollback refusals, rollback = procedures before 011, rows / audit untouched, twice refused"
+echo "OK EC: 011 refusals (nothing changed), apply, re-apply refused; own planned row cancelled with the account unverified / the service ending / an old generation; after the end the receipt reads pending -> cancelled / uncertain (G3-44; another person, no subject, ended session refused); another person, no session, claimed, uncertain refused; lease run out -> uncertain with one audit row, receipt uncertain, another person claimed in the same round; 011 rollback refusals, rollback = procedures before 011, rows / audit untouched, twice refused"
 
 # --- LR (G3-42) -----------------------------------------------------------------------------------------------------------------
 out="$(own -A -t -f "$pm/live_rows.sql")" || fail "live rows"

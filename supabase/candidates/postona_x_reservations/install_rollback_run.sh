@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # G3-41: install order, FULL reverse rollback and re-apply of every G3 reservation candidate -- X 001-006 + 008 and Threads 007 + 009 --
-# (G3-43: + X 010 and Threads 011)
+# (G3-43: + X 010 and Threads 011; G3-44: + X 012)
 # including the new 001 / 002 rollbacks, on a THROW-AWAY LOCAL PostgreSQL 17 with fake data, in G5's PERSONAL MVP world (built as
 # personal_mvp_run.sh: the G5 Draft chain at 21a5cad4 via `git archive`, then MVP_INSTALL.sql from PR #550 head 4c97140a, blob-checked;
 # both read-only, not changed here). Phases:
@@ -151,7 +151,8 @@ install_all() {
   # the API / worker roles are NOLOGIN roles for the future Edge / worker logins; the TEST WORLD lets the owner act as them
   "${S[@]}" -d "$db" -c "grant postona_resv_api, postona_resv_worker to $owner with set true" >/dev/null
   for f in "$here/008_postona_x_resv_personal_mvp.sql" "$th/007_postona_threads_reservations.sql" "$th/tests/g4_g5_test_doubles.sql" \
-           "$th/009_postona_threads_resv_personal_mvp.sql" "$here/010_postona_x_resv_owner_cancel.sql" "$th/011_postona_threads_resv_uncertain_audit.sql"; do
+           "$th/009_postona_threads_resv_personal_mvp.sql" "$here/010_postona_x_resv_owner_cancel.sql" "$th/011_postona_threads_resv_uncertain_audit.sql" \
+           "$here/012_postona_x_resv_owner_read.sql"; do
     own -f "$f" >/dev/null || fail "install $(basename "$f")"
   done
 }
@@ -159,7 +160,7 @@ install_all
 full="$(catalog)"
 expect_refused "I1 re-apply 001" POSTONA_RESV_ALREADY_APPLIED own -f "$here/001_postona_x_reservations.sql"
 expect_refused "I2 re-apply 002" POSTONA_RESV_API_ALREADY_APPLIED own -f "$here/002_postona_x_resv_api_role.sql"
-echo "OK I: 002 before 001 refused, both rollbacks NOT_APPLIED before install (nothing changed); X 001-006 + 008 + 010, Threads 007 + 009 + 011 installed; re-apply refused"
+echo "OK I: 002 before 001 refused, both rollbacks NOT_APPLIED before install (nothing changed); X 001-006 + 008 + 010 + 012, Threads 007 + 009 + 011 installed; re-apply refused"
 
 # --- D: rows in many states ---------------------------------------------------------------------------------------------------------
 own -f "$pm/people.sql" >/dev/null
@@ -205,7 +206,10 @@ own -f "$here/004_postona_x_resv_dispatch_rollback.sql" >/dev/null || fail "004 
 expect_refused "R2e 002 rollback, 003 on" "POSTONA_RESV_API_ROLLBACK_LATER_LAYER_PRESENT: 003\$" own -f "$rb002"
 expect_refused "R2f 001 rollback, 002 + 003 on" "POSTONA_RESV_ROLLBACK_LATER_LAYER_PRESENT: 002,003\$" own -f "$rb001"
 own -f "$here/003_postona_x_resv_g5_binding_rollback.sql" >/dev/null || fail "003 rollback"
-echo "OK R1-R2: later layers refuse both new rollbacks (nothing changed); Threads 009, 011 (007 refused it first), 007, X 008 (after every planned MVP row was cancelled by its person), 006, 005, 004, 003 rolled back"
+# G3-44: 012 replaced 002's get (and 001's list); 002's rollback does not know 012, so 012's own rollback runs first (it needs both there)
+own -f "$here/012_postona_x_resv_owner_read_rollback.sql" >/dev/null || fail "012 rollback"
+[ "$(sval -c "select md5(prosrc) from pg_proc where oid = 'postona_x_resv.get_reservation(uuid)'::regprocedure")" = 301f7792d1e1b8a7b703d2977a2c0914 ] || fail "012 rollback: not 002's get"
+echo "OK R1-R2: later layers refuse both new rollbacks (nothing changed); Threads 009, 011 (007 refused it first), 007, X 008 (after every planned MVP row was cancelled by its person), 006, 005, 004, 003, 012 rolled back"
 
 # 002: a membership that can SET the role (the test world's) refuses; the owner's own ADMIN-only grant does not
 expect_refused "R3a 002 rollback, member" POSTONA_RESV_API_ROLLBACK_MEMBERS own -f "$rb002"

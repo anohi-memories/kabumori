@@ -102,7 +102,7 @@ update public.service_entitlements set status = 'suspended' where user_id = pg_t
 select pg_temp.expect(pg_temp.create_raw(pg_temp.uid(1), 'm8', 40) = 'ERR:POSTONA_RESV_SERVICE_NOT_ACTIVE', 'M8 suspended refused');
 update public.service_entitlements set status = 'active' where user_id = pg_temp.uid(1) and service_key = 'x_autopost';
 select pg_temp.expect(pg_temp.api(format('select count(*) from postona_x_resv.list_reservations(%L)', pg_temp.acct(pg_temp.uid(1))), pg_temp.uid(4))
-  = 'ERR:POSTONA_RESV_ACCOUNT_NOT_FOUND', 'M8 another person''s account');
+  = '0', 'M8 another person''s account lists nothing (G3-44 012: own rows only, no oracle)');
 
 -- M9: single post: begin binds V, the pre-send check passes, the outcome is recorded; a generation move between begin and the send
 -- refuses (no send); a new request in the new generation passes

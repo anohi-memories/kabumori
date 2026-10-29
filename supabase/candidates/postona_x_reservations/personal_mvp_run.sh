@@ -6,6 +6,8 @@
 #   FB  without 008: R1-MVP's g5pv token is refused by the FULL-profile adapters -> every create / single post refused, nothing written;
 #   OC  (G3-43) 010 refusals (superuser; table / schema / cancel of another owner; another cancel version), nothing changed; apply (before
 #       008: it does not depend on the profile); re-apply refused;
+#   OD  (G3-44) 012 refusals (superuser; table / schema / list / get of another owner; another list version), nothing changed; apply (before
+#       008, as 010); re-apply refused;
 #   P   008 refusals (superuser; G5's W1 present; MV reachable by an API role; R1 not the MVP body), nothing changed; apply; re-apply refused;
 #   M   behaviour with 008 (personal_mvp/behavior.sql);
 #   LR  (G3-42) unfinished MVP-bound rows (planned / claimed / lease run out / uncertain / expired) refuse the rollback, nothing changed;
@@ -15,11 +17,15 @@
 #       another person's FULL-bound row is claimed (the dispatch is not stopped);
 #   RB  rollback restores 001's adapters exactly; a FULL-bound planned row refuses a re-apply (no mixing); re-apply.
 #   EC  (G3-43) the person's own cancel without the service gate, the lease-expired audit (personal_mvp/owner_cancel.sql);
+#   RD  (G3-44) after the service ended the person reads their own rows, recovers a stale revision and cancels; another person, no
+#       session, anonymous / unknown anonymity refused (personal_mvp/owner_read.sql);
 #   OR  (G3-43) 010's rollback: refusals (superuser, other owners, half applied, a widened ACL), 001's cancel back byte for byte (the ended
 #       person cannot cancel again), rows and audit rows untouched; twice refused; re-apply, the ended person cancels.
 # No network, no credential, no managed project; no OAuth, token, Vault, SNS or paid call. Roles are cluster-wide: run alone. Usage:
 #   RESV_PGHOST=/private/tmp/<socket-dir> RESV_PGPORT=<port> RESV_PGSUPER=<local superuser> personal_mvp_run.sh
-# Optional: MVP_CANDIDATE / MVP_ROLLBACK / OC_CANDIDATE / OC_ROLLBACK (mutation runs).
+#   RR  (G3-44) 012's rollback: refusals (superuser, other owners, half applied, a widened ACL), 001's list / 002's get back byte for byte (the
+#       ended person cannot read again), rows untouched; twice refused; re-apply, the ended person reads.
+# Optional: MVP_CANDIDATE / MVP_ROLLBACK / OC_CANDIDATE / OC_ROLLBACK / OD_CANDIDATE / OD_ROLLBACK (mutation runs).
 set -euo pipefail
 export LC_ALL=C PGTZ=UTC PGOPTIONS='-c client_min_messages=warning'
 host="${RESV_PGHOST:?RESV_PGHOST (local socket dir) required}"
@@ -32,6 +38,8 @@ candidate="${MVP_CANDIDATE:-$here/008_postona_x_resv_personal_mvp.sql}"
 rollback="${MVP_ROLLBACK:-$here/008_postona_x_resv_personal_mvp_rollback.sql}"
 oc="${OC_CANDIDATE:-$here/010_postona_x_resv_owner_cancel.sql}"
 ocrb="${OC_ROLLBACK:-$here/010_postona_x_resv_owner_cancel_rollback.sql}"
+od="${OD_CANDIDATE:-$here/012_postona_x_resv_owner_read.sql}"
+odrb="${OD_ROLLBACK:-$here/012_postona_x_resv_owner_read_rollback.sql}"
 pm="$here/personal_mvp"
 pin=21a5cad4b71de63265db8517da93c6efc60cdde8
 mvp=4c97140a6f1f2e09da387ec66cf234633d9afdd0
@@ -160,6 +168,34 @@ on10="$(catalog)/$(trig)"
 expect_err "OC5 re-apply" G3_OWNER_CANCEL_BASE_UNKNOWN own -f "$oc"
 [ "$(catalog)/$(trig)" = "$on10" ] || fail "OC5: a refused re-apply changed the catalog"
 echo "OK OC: 010 refusals (superuser; table / schema / cancel of another owner; another cancel version), nothing changed; apply; re-apply refused"
+
+# --- OD (G3-44) ----------------------------------------------------------------------------------------------------------------
+reads_acl() { sval -c "select string_agg(p.proname || '=' || md5(p.prosrc) || ':' || p.proowner::regrole::text || ':' || coalesce(p.proacl::text, '-'), ' ' order by p.proname) from pg_proc p
+  where p.oid in ('postona_x_resv.list_reservations(text)'::regprocedure, 'postona_x_resv.get_reservation(uuid)'::regprocedure)"; }
+pre12="$(catalog)/$(trig)"
+pre12_reads="$(reads_acl)"
+case "$pre12_reads" in "get_reservation=301f7792d1e1b8a7b703d2977a2c0914:"*" list_reservations=ccf161cb8f6dcd9023271ccfc0b9748c:"*) ;; *) fail "OD0 not 001's list / 002's get: $pre12_reads" ;; esac
+expect_err "OD0 rollback before 012" G3_OWNER_READ_ROLLBACK_NOT_APPLIED own -f "$odrb"
+"${S[@]}" -d "$db" -c "alter role $owner superuser" >/dev/null
+expect_err "OD1 apply as a superuser" G3_OWNER_READ_OWNER own -f "$od"
+"${S[@]}" -d "$db" -c "alter role $owner nosuperuser" >/dev/null
+for obj in "table postona_x_resv.reservations" "schema postona_x_resv" "function postona_x_resv.list_reservations(text)" "function postona_x_resv.get_reservation(uuid)"; do
+  "${S[@]}" -d "$db" -c "alter $obj owner to authenticated" >/dev/null
+  expect_err "OD2 $obj of another owner" G3_OWNER_READ_OWNER own -f "$od"
+  "${S[@]}" -d "$db" -c "alter $obj owner to $owner" >/dev/null
+done
+list_def="$(val -c "select pg_get_functiondef('postona_x_resv.list_reservations(text)'::regprocedure)")"
+printf 'begin;\n%s;\n' "${list_def/order by r.scheduled_at, r.id/order by r.id}" > "$work/od_other.sql"
+grep -q 'order by r.id;' "$work/od_other.sql" || fail "OD3 probe not built"
+expect_err "OD3 another list version" G3_OWNER_READ_BASE_UNKNOWN own -f "$work/od_other.sql" -f "$od"
+[ "$(catalog)/$(trig)" = "$pre12" ] || fail "OD: a refused apply changed the catalog"
+[ "$(reads_acl)" = "$pre12_reads" ] || fail "OD: a refused apply changed list / get"
+own -f "$od" >/dev/null || fail "apply 012"
+on12="$(catalog)/$(trig)"
+[ "$(reads_acl | sed 's/=[0-9a-f]*:/:/g')" = "$(printf '%s' "$pre12_reads" | sed 's/=[0-9a-f]*:/:/g')" ] || fail "OD4 list / get owner or ACL moved"
+expect_err "OD5 re-apply" G3_OWNER_READ_BASE_UNKNOWN own -f "$od"
+[ "$(catalog)/$(trig)" = "$on12" ] || fail "OD5: a refused re-apply changed the catalog"
+echo "OK OD: 012 refusals (superuser; table / schema / list / get of another owner; another list version), nothing changed; apply; re-apply refused"
 
 # --- P -------------------------------------------------------------------------------------------------------------------------
 pre="$(catalog)"
@@ -303,6 +339,11 @@ out="$(own -A -t -f "$pm/owner_cancel.sql")" || fail "owner cancel: $out"
 printf '%s\n' "$out" | grep -qx G3_OWNER_CANCEL_BEHAVIOR_PASS || fail "owner cancel: no PASS line"
 echo "OK EC: own planned row cancelled with the X account unverified / the service ending / an old generation; another person, no session, stale or null revision, claimed, uncertain refused; lease run out -> uncertain with one audit row (claim_due, single post), another person claimed in the same round"
 
+# --- RD (G3-44) ----------------------------------------------------------------------------------------------------------------
+out="$(own -A -t -f "$pm/owner_read.sql")" || fail "owner read: $out"
+printf '%s\n' "$out" | grep -qx G3_OWNER_READ_BEHAVIOR_PASS || fail "owner read: no PASS line"
+echo "OK RD: after the service ended the person lists / gets their own rows (state + revision), recovers a stale revision and cancels; uncertain reads as uncertain (final, never claimed); another person (row NOT_FOUND, account lists nothing), no subject, ended session, anonymous / unknown / string anonymity refused; old-generation row read and cancelled"
+
 # --- OR (G3-43) ----------------------------------------------------------------------------------------------------------------
 c9="$(sval -c "select i.id || '/' || r.revision || '/' || r.user_id from t43.ids i join postona_x_resv.reservations r on r.id = i.id where i.name = 'c9'")"
 IFS=/ read -r c9id c9rev c9uid <<<"$c9"
@@ -335,4 +376,37 @@ expect_err "OR7 rollback twice" G3_OWNER_CANCEL_ROLLBACK_NOT_APPLIED own -f "$oc
 own -f "$oc" >/dev/null || fail "OR8 re-apply"
 [ "$(cancel_c9)" = cancelled ] || fail "OR8 re-applied: the ended person cancels c9"
 echo "OK OR: 010 rollback refusals (superuser, other owners, half applied, a widened ACL), rollback = 001's cancel byte for byte (ended person refused again), rows / audit untouched, twice refused, re-apply"
+
+# --- RR (G3-44) ----------------------------------------------------------------------------------------------------------------
+f9="$(sval -c "select i.id || '/' || r.user_id || '/' || r.social_account_id from t44.ids i join postona_x_resv.reservations r on r.id = i.id where i.name = 'f9'")"
+IFS=/ read -r f9id f9uid f9acct <<<"$f9"
+read_f9() { val -c "\\ir $pm/helpers.sql" -c "select pg_temp.api(format('select status || ''@'' || revision from postona_x_resv.get_reservation(%L)', '$f9id'), '$f9uid')" | tail -1; }
+list_f9() { val -c "\\ir $pm/helpers.sql" -c "select pg_temp.api(format('select count(*) from postona_x_resv.list_reservations(%L)', '$f9acct'), '$f9uid')" | tail -1; }
+[ "$(read_f9)" = "planned@1" ] || fail "RR0 the ended person reads f9 ($(read_f9))"
+rr0="$(catalog)/$(trig)"
+"${S[@]}" -d "$db" -c "alter role $owner superuser" >/dev/null
+expect_err "RR1 rollback as a superuser" G3_OWNER_READ_ROLLBACK_OWNER own -f "$odrb"
+"${S[@]}" -d "$db" -c "alter role $owner nosuperuser" >/dev/null
+for obj in "table postona_x_resv.reservations" "schema postona_x_resv" "function postona_x_resv.list_reservations(text)" "function postona_x_resv.get_reservation(uuid)"; do
+  "${S[@]}" -d "$db" -c "alter $obj owner to authenticated" >/dev/null
+  expect_err "RR2 rollback, $obj of another owner" G3_OWNER_READ_ROLLBACK_OWNER own -f "$odrb"
+  "${S[@]}" -d "$db" -c "alter $obj owner to $owner" >/dev/null
+done
+{ echo "begin;"; sed -n "/^-- 001's list_reservations, verbatim$/,/^end \$\$;$/p" "$odrb"; } > "$work/rr_half.sql"
+grep -q 'assert_account_access' "$work/rr_half.sql" || fail "RR3 probe not built"
+expect_err "RR3 rollback, half applied" G3_OWNER_READ_ROLLBACK_PARTIAL_STATE own -f "$work/rr_half.sql" -f "$odrb"
+sed "s|^-- 001's list_reservations, verbatim\$|grant select on postona_x_resv.reservations to authenticated;\n&|" "$odrb" > "$work/rr_acl.sql"
+grep -q '^grant select on postona_x_resv.reservations to authenticated;$' "$work/rr_acl.sql" || fail "RR4 probe not built"
+expect_err "RR4 rollback with a widened ACL" "G3_OWNER_READ_ROLLBACK_POSTCONDITION: an owner or ACL changed" own -f "$work/rr_acl.sql"
+[ "$(catalog)/$(trig)" = "$rr0" ] || fail "RR1-RR4: a refusal changed the catalog"
+rows12="$(allrows10)"
+own -f "$odrb" >/dev/null || fail "RR5 rollback"
+[ "$(reads_acl)" = "$pre12_reads" ] || fail "RR5 not 001's list / 002's get (body, owner, ACL)"
+[ "$(allrows10)" = "$rows12" ] || fail "RR5 a row moved"
+[ "$(read_f9)" = "ERR:POSTONA_RESV_SERVICE_NOT_ACTIVE" ] || fail "RR6 002's get: the ended person is refused again ($(read_f9))"
+[ "$(list_f9)" = "ERR:POSTONA_RESV_SERVICE_NOT_ACTIVE" ] || fail "RR6 001's list: the ended person is refused again ($(list_f9))"
+expect_err "RR7 rollback twice" G3_OWNER_READ_ROLLBACK_NOT_APPLIED own -f "$odrb"
+own -f "$od" >/dev/null || fail "RR8 re-apply"
+[ "$(read_f9)" = "planned@1" ] || fail "RR8 re-applied: the ended person reads f9"
+echo "OK RR: 012 rollback refusals (superuser, other owners, half applied, a widened ACL), rollback = 001's list / 002's get byte for byte (ended person refused again), rows untouched, twice refused, re-apply"
 echo G3_PERSONAL_MVP_PASS
