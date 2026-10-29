@@ -435,3 +435,73 @@ test('14. disconnect (gates opened in this TEST world only), then reconnect thro
   assert.match(binding(A), /^17841400000004701\|/u);
   assert.equal(custody(A), 1);
 });
+
+// ---- G4-02 #2: the G5 authorization profile (FLOW_PROFILE: "full" = PR #303 owner epoch, "personal" = G5's MVP, g5pv) ----
+const PROFILE = env('FLOW_PROFILE');
+
+test('15. the bridge pinned to the OTHER G5 profile than the database: refused at start, nothing recorded, Threads never called', { timeout: 60000 }, async () => {
+  const app = await screen({ session: sessionOf(E) });
+  const before = { states: states(E), threads: await threadsCalls() };
+  flow.connectEntry = 'mismatch';
+  let state;
+  try {
+    state = await connectAs(app, '17841400000004705');
+  } finally {
+    flow.connectEntry = 'open';
+  }
+  assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'START_REFUSED', reconcile: false });
+  assert.equal(app.browser.served, 0);
+  assert.equal(states(E), before.states, 'the begin rolled back with the refused record');
+  assert.equal(await threadsCalls(), before.threads);
+  // the other profile's SQL does not exist in this database: the full bridge reads F5's owner epoch; the personal one calls
+  // the g5pv record_state_generation(uuid, uuid, bigint)
+  assert.equal((await stats()).lastSqlError, PROFILE === 'personal'
+    ? 'function private.account_lifecycle_brand_owner_epoch(text) does not exist'
+    : 'function postona_threads_binding.record_state_generation(uuid, uuid, bigint) does not exist');
+});
+
+test('16. no G5 profile configured: the composition is not built (unavailable), no browser', { timeout: 60000 }, async () => {
+  const app = await screen({ session: sessionOf(E) });
+  flow.connectEntry = 'unpinned';
+  let state;
+  try {
+    state = await connectAs(app, '17841400000004705');
+  } finally {
+    flow.connectEntry = 'open';
+  }
+  assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'THREADS_CONNECT_RUNTIME_UNAVAILABLE', reconcile: false });
+  assert.equal(app.browser.served, 0);
+});
+
+const otherBrandOfE = `insert into public.brands (id, display_name) values ('flow_other_e', 'Another');
+  insert into public.brand_memberships (brand_id, user_id, role) values ('flow_other_e', ${lit(uid(E))}::uuid, 'owner')`;
+
+test('17. E already owns another brand: PR #124\'s begin refuses (both profiles); no state, no browser', { timeout: 60000 }, async () => {
+  owner(otherBrandOfE);
+  try {
+    const app = await screen({ session: sessionOf(E) });
+    const state = await connectAs(app, '17841400000004705');
+    assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'START_REFUSED', reconcile: false });
+    assert.equal(app.browser.served, 0);
+    assert.equal((await stats()).lastSqlError, 'SOCIAL_MOBILE_WORKSPACE_CONFLICT');
+    assert.equal(binding(E), 'none');
+  } finally {
+    owner(`delete from public.brands where id = 'flow_other_e'`);
+  }
+});
+
+test('18. E comes to own another brand while at Threads: refused at the callback, nothing bound', { timeout: 60000 }, async () => {
+  try {
+    const app = await screen({ session: sessionOf(E) });
+    const state = await connectAs(app, async () => { owner(otherBrandOfE); return '17841400000004705'; });
+    assert.equal(state.kind, 'done', JSON.stringify(state));
+    console.log(`measured 18 (${PROFILE}): ${JSON.stringify(state.result)} sql=${(await stats()).lastSqlError}`);
+    // PR #124's complete does not see it; G4's entry does: personal = G5's MV (S2-3 inside), full = G4-42's S2-3 recheck
+    assert.deepEqual({ ...state.result }, { kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true });
+    assert.equal((await stats()).lastSqlError, 'OWN_WORKSPACE_CONFLICT');
+    assert.equal(binding(E), 'none');
+    assert.equal(custody(E), 0);
+  } finally {
+    owner(`delete from public.brands where id = 'flow_other_e'`);
+  }
+});

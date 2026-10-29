@@ -68,7 +68,10 @@ export function productionThreadsConnectDeps(session: () => { userId: string; to
       const subscription = Linking.addEventListener('url', (event) => listener(event.url));
       return () => subscription.remove();
     },
-    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    wait: (ms, cancelled) => new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      void cancelled.then(() => clearTimeout(timer));
+    }),
     now: () => Date.now(),
   };
 }

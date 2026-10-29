@@ -34,3 +34,19 @@ Deno.test("bridge: an unsealed actor never opens a connection", async () => {
   await assertRejects(() => bridge.uncertain(forged, "a".repeat(64)), RuntimeRefusal);
   assertEquals(opened, 0);
 });
+
+// G4-02 #2: the G5 profile is pinned (full | personal); anything else is refused before any connection exists.
+Deno.test("bridge: an unknown G5 profile is refused at construction", () => {
+  let opened = 0;
+  const connect = () => {
+    opened++;
+    return Promise.reject(new Error("unreachable"));
+  };
+  for (const profile of ["", "Personal", "g5pv", "full ", undefined as unknown as string, null as unknown as string]) {
+    if (profile === undefined) continue; // the default is "full" (the existing callers)
+    assertThrows(() => createG4ThreadsOwnerBridge(connect, Date.now, profile as "full"), RuntimeRefusal, "OWNER_TRANSPORT_UNAVAILABLE");
+  }
+  createG4ThreadsOwnerBridge(connect, Date.now, "full");
+  createG4ThreadsOwnerBridge(connect, Date.now, "personal");
+  assertEquals(opened, 0);
+});

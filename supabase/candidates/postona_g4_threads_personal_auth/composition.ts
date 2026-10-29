@@ -9,7 +9,8 @@
 // H5's files are not changed. H5's factory has no bridge port, so the SDK/Auth construction below is a line-for-line
 // copy of createSourceServer's (same origin + /auth/v1/ pin, redirect "error", 5 s timeout, issuer check). When H5
 // adds `bridgeFactory` to ConstructionPorts (G4-50 IF), this module reduces to
-//   createSourceServer(readConfig(read), { handlerFactory, bridgeFactory: createG4ThreadsOwnerBridge }).
+//   createSourceServer(readConfig(read), { handlerFactory, bridgeFactory: (connect) => createG4ThreadsOwnerBridge(connect, Date.now, profile) }).
+// G4-02 #2: the bridge's G5 profile is pinned by POSTONA_THREADS_G4_AUTH_PROFILE ("full" | "personal"; unset = not built).
 // No import-time env/SDK/Auth/SQL/provider effects; not an Edge entry (no Deno.serve, no Deno.env).
 
 import { createClient } from "@supabase/supabase-js";
@@ -19,7 +20,10 @@ import { createThreadsRuntime } from "../postona_threads_auth_runtime/runtime.ts
 import { createPostgresConnector } from "../postona_threads_auth_runtime/wiring/postgres_connector.ts";
 import { readConfig, type RuntimeConfig, validateConfig } from "../postona_threads_auth_runtime/wiring/config.ts";
 import type { HandlerFactory } from "../postona_threads_auth_runtime/wiring/server_factory.ts";
-import { createG4ThreadsOwnerBridge } from "./owner_bridge.ts";
+import { createG4ThreadsOwnerBridge, G4_AUTH_PROFILES, type G4AuthProfile } from "./owner_bridge.ts";
+
+/** G4-02 #2: which G5 profile the database runs ("full" | "personal"); required, never guessed (owner_bridge.ts). */
+export const G4_AUTH_PROFILE_ENV = "POSTONA_THREADS_G4_AUTH_PROFILE";
 
 export type G4ConstructionPorts = {
   /** G4's createThreadsConnectHandler (the entry passes it). */
@@ -30,9 +34,16 @@ export type G4ConstructionPorts = {
   fetch?: typeof fetch;
 };
 
+/** The configured profile, or a refusal (unset or anything else: the composition is not built). */
+export function g4AuthProfile(value: string | undefined): G4AuthProfile {
+  if (!G4_AUTH_PROFILES.includes(value as G4AuthProfile)) throw new RuntimeRefusal("HTTP_INTEGRATION_UNAVAILABLE");
+  return value as G4AuthProfile;
+}
+
 /** Builds the actual SDK + verifier + runtime + G4 bridge + G4 HTTP composition; does not mount or serve it. */
-export function createG4ThreadsSourceServer(config: RuntimeConfig, ports: G4ConstructionPorts) {
+export function createG4ThreadsSourceServer(config: RuntimeConfig, ports: G4ConstructionPorts, profile: G4AuthProfile) {
   const c = validateConfig(config);
+  const pinned = g4AuthProfile(profile);
   if (typeof ports.handlerFactory !== "function") throw new RuntimeRefusal("HTTP_INTEGRATION_UNAVAILABLE");
   const http = ports.fetch ?? fetch;
   // As H5's createSourceServer: the SDK may only reach this project's /auth/v1/, never follows a redirect, 5 s.
@@ -69,7 +80,7 @@ export function createG4ThreadsSourceServer(config: RuntimeConfig, ports: G4Cons
   const runtime = createThreadsRuntime({
     verify: createActorVerifier(auth),
     // The one difference from H5's factory: G4's bridge instead of createOwnerTransport.
-    bridge: createG4ThreadsOwnerBridge(ports.ownerConnect ?? createPostgresConnector(c)),
+    bridge: createG4ThreadsOwnerBridge(ports.ownerConnect ?? createPostgresConnector(c), Date.now, pinned),
     settings: { appId: c.appId, appSecret: c.appSecret, redirectUri: c.callback },
     attestationKey: c.attestationKey,
     fetch: (u, i) => http(u, i),
@@ -89,7 +100,7 @@ export function createG4ThreadsSourceServer(config: RuntimeConfig, ports: G4Cons
   });
 }
 
-/** The entry's composition seam (same shape as H5's nondeployable.ts): H5's strict reader, then the G4 server. */
+/** The entry's composition seam (same shape as H5's nondeployable.ts): H5's strict reader, the pinned profile, then the G4 server. */
 export function buildForApprovedSourceIntegration(handlerFactory: HandlerFactory, read: (name: string) => string | undefined) {
-  return createG4ThreadsSourceServer(readConfig(read), { handlerFactory });
+  return createG4ThreadsSourceServer(readConfig(read), { handlerFactory }, g4AuthProfile(read(G4_AUTH_PROFILE_ENV)));
 }
