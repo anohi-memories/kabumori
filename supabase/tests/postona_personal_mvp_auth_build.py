@@ -11,8 +11,11 @@ POSTONA needs, WITHOUT the brand owner epoch (PR #285 / #303 / #457) -- determin
                       the MVP postcondition (every gate owner-only, no API role reaches it).
   MVP_ROLLBACK.sql  ONE transaction: RM20 (R1-MVP), RM10 (MV), the S2-3 predicate and GC drops (each refuses while another function names it or a dependency is
                       recorded), bundle R60 (S2-2) and R70 (T13 back to its reviewed body), each part's own begin; / commit; removed.
+  MVP_R1_EXECUTE_GRANT.sql / MVP_R1_EXECUTE_REVOKE.sql (G5-48, hand-written): R1-MVP's one EXECUTE to authenticated and its idempotent stop;
+                    this script checks the grant's md5(prosrc) pin is exactly the M20 body.
 Every source is checked by git blob id first. Nothing else ships here but parts/ and README.md.
 Usage: python3 supabase/tests/postona_personal_mvp_auth_build.py <repository root> [--check]"""
+import hashlib
 import os
 import subprocess
 import sys
@@ -187,8 +190,16 @@ for name, text in (('MVP_INSTALL.sql', install), ('MVP_ROLLBACK.sql', rollback))
     else:
         open(path, 'w', encoding='utf-8').write(text)
         print(f'wrote {name}', flush=True)
+# G5-48: the EXECUTE grant (hand-written) grants only on EXACTLY the M20 body: its md5(prosrc) pin must be the body between M20's dollar quotes
+start = m20.index('create function public.common_account_authorization_verdict(')
+body_from = m20.index('$$', start) + 2
+body_md5 = hashlib.md5(m20[body_from:m20.index('$$', body_from)].encode('utf-8')).hexdigest()
+grant = read(os.path.join(OUT, 'MVP_R1_EXECUTE_GRANT.sql'))
+pinned = grant.count(f"pg_catalog.md5(p.prosrc) = '{body_md5}'") == 1
+print(f'{"PASS" if pinned else "FAIL"}  MVP_R1_EXECUTE_GRANT.sql pins the M20 body (md5 {body_md5})', flush=True)
+bad += 0 if pinned else 1
 if check:
-    extra = sorted(set(os.listdir(OUT)) - {'MVP_INSTALL.sql', 'MVP_ROLLBACK.sql', 'README.md', 'parts'})
-    print(f'{"PASS" if not extra else "FAIL"}  only the two entrypoints, parts/ and README.md{": " + ", ".join(extra) if extra else ""}', flush=True)
+    extra = sorted(set(os.listdir(OUT)) - {'MVP_INSTALL.sql', 'MVP_ROLLBACK.sql', 'MVP_R1_EXECUTE_GRANT.sql', 'MVP_R1_EXECUTE_REVOKE.sql', 'README.md', 'parts'})
+    print(f'{"PASS" if not extra else "FAIL"}  only the four entrypoints, parts/ and README.md{": " + ", ".join(extra) if extra else ""}', flush=True)
     bad += 1 if extra else 0
 sys.exit(1 if bad else 0)
