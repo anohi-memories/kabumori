@@ -1,7 +1,24 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
+import * as Crypto from "expo-crypto";
 import { colors } from "@/constants/theme";
 import { ActionButton, Card, Pill, styles } from "@/components/ui";
+import {
+  ASSIST_BLOCK_TEXT,
+  ASSIST_MODES,
+  assistBlock,
+  assistInputIssue,
+  assistOutcomeView,
+  assistScope,
+  newAssistRequest,
+  sendAssist,
+  withHashtags,
+  type AssistEnv,
+  type AssistMode,
+  type AssistRequest,
+  type PostAssistUiState,
+} from "@/features/schedule/post-assist";
+import { usePostAssistEnv } from "@/features/schedule/use-post-assist-env";
 import {
   jstDateOf,
   planBatch,
@@ -37,7 +54,22 @@ const AI_STATUS_TEXT: Record<AiPlanningInput["status"], string> = {
   blocked: "AI相談で覚えた設定を読む権限が確認できませんでした。初期設定（週3回）で枠を作ります。",
 };
 
-type Row = { text: string; date: string; time: string };
+type Row = { id: string; text: string; date: string; time: string };
+
+/** The AI post assist opened under one row. Its answers are suggestions: a row's text changes only when the person adopts one. */
+type AssistPanel = {
+  rowId: string;
+  mode: AssistMode;
+  notes: string;
+  instruction: string;
+  phase: "idle" | "running" | "done";
+  /** The request being awaited or answered; a same-key retry re-sends exactly this. */
+  request: AssistRequest | null;
+  outcome: PostAssistUiState | null;
+  /** The candidates' texts as the person edits them. */
+  edits: string[];
+  issue: string | null;
+};
 
 /** Local form: produces a preview plan through the pure planner. It has no way to save or publish. */
 export function ScheduleComposer({
@@ -54,7 +86,8 @@ export function ScheduleComposer({
   const tomorrow = jstDateOf(context.now.getTime() + DAY_MS);
   const inAWeek = jstDateOf(context.now.getTime() + 7 * DAY_MS);
   const [mode, setMode] = useState<Mode>("manual_exact");
-  const [rows, setRows] = useState<Row[]>([{ text: "", date: tomorrow, time: "09:00" }]);
+  const nextRowId = useRef(1);
+  const [rows, setRows] = useState<Row[]>([{ id: "r0", text: "", date: tomorrow, time: "09:00" }]);
   const [dateFrom, setDateFrom] = useState(tomorrow);
   const [dateTo, setDateTo] = useState(inAWeek);
   const [windowStart, setWindowStart] = useState("09:00");
@@ -67,8 +100,27 @@ export function ScheduleComposer({
   const [everyUnit, setEveryUnit] = useState<"days" | "hours">("days");
   const [issues, setIssues] = useState<PlanIssue[]>([]);
 
+  // AI post assist: asked with the person's own session for their own workspace only; see post-assist.ts.
+  const env: AssistEnv = usePostAssistEnv(context.owner);
+  const block = assistBlock(env);
+  const scope = assistScope(env);
+  const [assistState, setAssist] = useState<AssistPanel | null>(null);
+  // A request made for another session or workspace is as good as never made: its answer is never shown or adopted.
+  const assist: AssistPanel | null = assistState?.request && assistState.request.scope !== scope
+    ? { ...assistState, phase: "idle", request: null, outcome: null, edits: [] }
+    : assistState;
+  const [undo, setUndo] = useState<{ rowId: string; before: string; after: string } | null>(null);
+  // The one request still awaited (null once it is cancelled, closed or replaced), and the latest committed
+  // session/workspace and rows, for handlers of a button from an earlier frame.
+  const live = useRef<{ env: AssistEnv; rows: Row[]; awaiting: AssistRequest | null }>({ env, rows, awaiting: null });
+  useEffect(() => {
+    live.current.env = env;
+    live.current.rows = rows;
+  });
+
   const usesTexts = mode !== "ai_flexible";
   const setRow = (index: number, patch: Partial<Row>) => setRows((current) => current.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  const setRowById = (id: string, patch: Partial<Row>) => setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   const moveRow = (index: number, direction: -1 | 1) => setRows((current) => {
     const target = index + direction;
     if (target < 0 || target >= current.length) return current;
@@ -76,6 +128,137 @@ export function ScheduleComposer({
     [copy[index], copy[target]] = [copy[target], copy[index]];
     return copy;
   });
+  const addRow = () => setRows((current) => {
+    const id = `r${nextRowId.current}`;
+    nextRowId.current += 1;
+    return [...current, { id, text: "", date: current[current.length - 1]?.date ?? tomorrow, time: "09:00" }];
+  });
+  const removeRow = (id: string) => {
+    if (assist?.rowId === id) closeAssist();
+    setRows((current) => current.filter((row) => row.id !== id));
+  };
+
+  function openAssist(rowId: string) {
+    live.current.awaiting = null;
+    setAssist({ rowId, mode: "draft", notes: "", instruction: "", phase: "idle", request: null, outcome: null, edits: [], issue: null });
+  }
+  function closeAssist() {
+    live.current.awaiting = null;
+    setAssist(null);
+  }
+  function cancelAssist() {
+    // The answer of the request already sent is dropped when it arrives; nothing changes in the rows.
+    live.current.awaiting = null;
+    setAssist((current) => current && { ...current, phase: "idle", request: null, outcome: null, edits: [] });
+  }
+  /** One press: a new request (new Idempotency-Key), or -- only after retry_same_key -- the very same request again. */
+  function askAssist(sameKey: boolean) {
+    // One request at a time (also against a double tap before the next render); one for an earlier session never blocks.
+    if (!assist || assist.phase === "running" || (live.current.awaiting && live.current.awaiting.scope === scope)) return;
+    const row = rows.find((item) => item.id === assist.rowId);
+    if (!row) return closeAssist();
+    const request = sameKey
+      ? assist.request // offered only after retry_same_key: the stored request, same key and body
+      : newAssistRequest(env, Crypto.randomUUID, row.id, assist.mode, row.text, assist);
+    const answer = request ? sendAssist(env, request) : null;
+    if (!request || !answer) {
+      const issue = block ? ASSIST_BLOCK_TEXT[block] : assistInputIssue(assist.mode, row.text, assist) ?? "もう一度依頼してください。";
+      setAssist({ ...assist, phase: "idle", request: null, outcome: null, edits: [], issue });
+      return;
+    }
+    live.current.awaiting = request;
+    setAssist({ ...assist, phase: "running", request, outcome: null, edits: [], issue: null });
+    void answer.then((outcome) => {
+      // Shown only if this request is still the panel's own: not after a cancel, close (also by removing the row or
+      // switching to AI自動予約) or a newer request; one of another session / workspace is hidden above.
+      if (live.current.awaiting === request) live.current.awaiting = null;
+      setAssist((current) => (current && current.request === request
+        ? { ...current, phase: "done", outcome, edits: outcome.kind === "candidates" ? outcome.candidates.map((candidate) => candidate.text) : [] }
+        : current));
+    });
+  }
+  /** The person adopts a candidate (as edited): only now does it become the row's text. It can be undone. */
+  function adopt(index: number, withTags: boolean) {
+    // Checked against the latest render (a button from an earlier frame keeps that frame's values).
+    if (!assist || assist.phase !== "done" || assist.outcome?.kind !== "candidates" || assist.request?.scope !== assistScope(live.current.env)) return;
+    const candidate = assist.outcome.candidates[index];
+    const row = live.current.rows.find((item) => item.id === assist.rowId);
+    if (!candidate || !row) return;
+    const base = assist.mode === "hashtags" ? row.text : assist.edits[index] ?? "";
+    const next = withTags ? withHashtags(base, candidate.hashtags) : base;
+    setRowById(row.id, { text: next });
+    setUndo({ rowId: row.id, before: row.text, after: next });
+    closeAssist();
+  }
+
+  function renderAssist(row: Row) {
+    if (!assist || assist.rowId !== row.id) return null;
+    const running = assist.phase === "running";
+    const outcome = assist.phase === "done" ? assist.outcome : null;
+    const view = outcome ? assistOutcomeView(outcome) : null;
+    return (
+      <View style={{ gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8 }}>
+        <Text style={{ color: colors.ink, fontWeight: "700" }}>AI投稿アシスト</Text>
+        <Text style={styles.muted}>AIの案は、あなたが確認して「本文に使う」を押すまで本文に入りません。ここから予約や投稿はされません。</Text>
+        {block ? <Pill tone="warning">{ASSIST_BLOCK_TEXT[block]}</Pill> : (
+          <View style={{ gap: 6 }}>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {ASSIST_MODES.map((item) => (
+                <Choice key={item.mode} label={item.label} selected={assist.mode === item.mode} disabled={running}
+                  onPress={() => setAssist({ ...assist, mode: item.mode, phase: "idle", request: null, outcome: null, edits: [], issue: null })} />
+              ))}
+            </View>
+            <Text style={styles.muted}>{ASSIST_MODES.find((item) => item.mode === assist.mode)?.detail}</Text>
+            {assist.mode === "draft" ? (
+              <TextInput accessibilityLabel="AIへのメモ" value={assist.notes} editable={!running} onChangeText={(notes) => setAssist({ ...assist, notes, issue: null })}
+                placeholder="伝えたいこと・話題・トーンなど" multiline style={[inputStyle, { minHeight: 48 }]} />
+            ) : null}
+            {assist.mode === "refine" ? (
+              <TextInput accessibilityLabel="書き直しの指示" value={assist.instruction} editable={!running} onChangeText={(instruction) => setAssist({ ...assist, instruction, issue: null })}
+                placeholder="例: もっと短く、やわらかく" style={inputStyle} />
+            ) : null}
+            {running ? (
+              <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                <Text style={styles.muted}>AIが考えています…</Text>
+                <SmallButton label="キャンセル" onPress={cancelAssist} />
+              </View>
+            ) : <SmallButton label="AIに依頼する" onPress={() => askAssist(false)} />}
+            {assist.issue ? <Pill tone="danger">{assist.issue}</Pill> : null}
+            {view ? (
+              <View style={{ gap: 6 }}>
+                <Pill tone={view.tone}>{view.text}</Pill>
+                {view.retry === "same_key" ? <SmallButton label="再試行" onPress={() => askAssist(true)} /> : null}
+                {view.retry === "new_key" ? <SmallButton label="もう一度依頼" onPress={() => askAssist(false)} /> : null}
+              </View>
+            ) : null}
+            {outcome?.kind === "candidates" ? (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>{outcome.notice}</Text>
+                {outcome.candidates.map((candidate, index) => (
+                  <View key={index} style={{ gap: 4, borderTopWidth: 1, borderColor: colors.border, paddingTop: 6 }}>
+                    <Text style={{ color: colors.ink, fontWeight: "700" }}>案{index + 1}</Text>
+                    {assist.mode === "hashtags" ? null : (
+                      <TextInput accessibilityLabel={`案${index + 1}の本文`} value={assist.edits[index] ?? ""} multiline style={[inputStyle, { minHeight: 64 }]}
+                        onChangeText={(text) => setAssist({ ...assist, edits: assist.edits.map((edit, i) => (i === index ? text : edit)) })} />
+                    )}
+                    {candidate.hashtags.length ? <Text style={styles.muted}>ハッシュタグ: {candidate.hashtags.join(" ")}</Text> : null}
+                    {assist.mode === "hashtags" ? null : <Text style={styles.muted}>AIの案の長さ: {candidate.length}/{candidate.limit}（編集したら、プレビューで長さを確認してください）</Text>}
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {assist.mode === "hashtags" ? null : <SmallButton label="本文に使う" disabled={!(assist.edits[index] ?? "").trim()} onPress={() => adopt(index, false)} />}
+                      {candidate.hashtags.length ? (
+                        <SmallButton label={assist.mode === "hashtags" ? "タグを本文に追加" : "タグ付きで本文に使う"} disabled={assist.mode !== "hashtags" && !(assist.edits[index] ?? "").trim()} onPress={() => adopt(index, true)} />
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        )}
+        <SmallButton label="AIアシストを閉じる" onPress={closeAssist} />
+      </View>
+    );
+  }
 
   function request(): BatchRequest {
     const texts = rows.map((row) => row.text);
@@ -107,7 +290,11 @@ export function ScheduleComposer({
       <Text style={styles.muted}>ここで作るのは、この画面だけのプレビューです。保存も投稿もされません。</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {MODES.map((item) => (
-          <Choice key={item.mode} label={item.label} selected={mode === item.mode} onPress={() => { setMode(item.mode); setIssues([]); }} />
+          <Choice key={item.mode} label={item.label} selected={mode === item.mode} onPress={() => {
+            if (item.mode === "ai_flexible") closeAssist();
+            setMode(item.mode);
+            setIssues([]);
+          }} />
         ))}
       </View>
       <Text style={styles.muted}>{MODES.find((item) => item.mode === mode)?.detail}</Text>
@@ -115,7 +302,7 @@ export function ScheduleComposer({
       {usesTexts ? (
         <View style={{ gap: 10 }}>
           {rows.map((row, index) => (
-            <View key={index} style={{ gap: 6, borderTopWidth: index ? 1 : 0, borderColor: colors.border, paddingTop: index ? 10 : 0 }}>
+            <View key={row.id} style={{ gap: 6, borderTopWidth: index ? 1 : 0, borderColor: colors.border, paddingTop: index ? 10 : 0 }}>
               <Text style={{ color: colors.ink, fontWeight: "700" }}>{index + 1}件目</Text>
               <TextInput accessibilityLabel={`${index + 1}件目の本文`} value={row.text} onChangeText={(text) => setRow(index, { text })} placeholder="投稿する本文" multiline style={[inputStyle, { minHeight: 64 }]} />
               {mode === "manual_exact" ? (
@@ -127,11 +314,19 @@ export function ScheduleComposer({
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <SmallButton label="↑" disabled={index === 0} onPress={() => moveRow(index, -1)} />
                 <SmallButton label="↓" disabled={index === rows.length - 1} onPress={() => moveRow(index, 1)} />
-                <SmallButton label="削除" disabled={rows.length === 1} onPress={() => setRows((current) => current.filter((_, i) => i !== index))} />
+                <SmallButton label="削除" disabled={rows.length === 1} onPress={() => removeRow(row.id)} />
+                <SmallButton label="AIアシスト" disabled={assist?.phase === "running"} onPress={() => openAssist(row.id)} />
               </View>
+              {undo?.rowId === row.id && row.text === undo.after ? (
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <Text style={styles.muted}>AIの案を本文に入れました。確認・編集してから「プレビューを作成」を押してください。</Text>
+                  <SmallButton label="元に戻す" onPress={() => { setRowById(row.id, { text: undo.before }); setUndo(null); }} />
+                </View>
+              ) : null}
+              {renderAssist(row)}
             </View>
           ))}
-          <SmallButton label="＋ 本文を追加" disabled={rows.length >= 50} onPress={() => setRows((current) => [...current, { text: "", date: current[current.length - 1]?.date ?? tomorrow, time: "09:00" }])} />
+          <SmallButton label="＋ 本文を追加" disabled={rows.length >= 50} onPress={addRow} />
         </View>
       ) : (
         <View style={{ gap: 4 }}>
@@ -206,10 +401,10 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
   );
 }
 
-function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function Choice({ label, selected, onPress, disabled = false }: { label: string; selected: boolean; onPress: () => void; disabled?: boolean }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress}
-      style={{ borderWidth: 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surface, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected, disabled }} disabled={disabled} onPress={onPress}
+      style={{ borderWidth: 1, borderColor: selected ? colors.primary : colors.border, backgroundColor: selected ? colors.primarySoft : colors.surface, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, opacity: disabled ? 0.4 : 1 }}>
       <Text style={{ color: selected ? colors.primary : colors.ink, fontWeight: selected ? "800" : "500" }}>{label}</Text>
     </Pressable>
   );
