@@ -508,3 +508,60 @@ test('18. E comes to own another brand while at Threads: refused at the callback
     owner(`delete from public.brands where id = 'flow_other_e'`);
   }
 });
+
+// ---- G4-02 #4: the read-only Threads publish-credential verdict G3's consumer binds to (postona_g4_credential, 001) ----
+const verdict = (asker, accountId) => owner(`select r.verified::text || '|' || coalesce(r.credential_generation, '-') || '|' || r.code
+  from postona_g4_credential.threads_publish_credential_verdict(${lit(uid(asker))}::uuid, ${lit(accountId)}) r`);
+const stateOf = (n) => binding(n).split('|')[1];
+
+test('19. the Threads verdict across connect / reconnect / re-bind / expiry / error / disconnect / service end', { timeout: 60000 }, async () => {
+  const account = () => threadsAccount(A).id;
+  // connected (scenario 14 left A connected): verified, generation = this binding's connect
+  assert.equal(verdict(A, account()), `true|g4t1:${stateOf(A)}|VERIFIED`);
+  const g1 = verdict(A, account()).split('|')[1];
+  // another person; an absent account; D's account (scenario 8: the ABA connect never bound)
+  assert.equal(verdict(B, account()), 'false|-|NOT_OWN_WORKSPACE');
+  assert.equal(verdict(A, 'sa_000000000000000000000000'), 'false|-|NOT_CONNECTED');
+  const d = threadsAccount(D);
+  if (d) assert.equal(verdict(D, d.id), 'false|-|NOT_BOUND');
+  // no credential material in the answer
+  const secret = owner(`select vault_access_token_secret_id::text from public.social_accounts where id = ${lit(account())}`);
+  assert.ok(!verdict(A, account()).includes(secret) && !/long[0-9]+abc|short[0-9]+abc/u.test(verdict(A, account())), 'no token / secret id');
+  // reconnect (same Threads user): a new generation
+  let app = await screen({ session: SESSION_A });
+  assert.equal((await connectAs(app, '17841400000004701')).kind, 'verifying');
+  const g2 = verdict(A, account()).split('|')[1];
+  assert.ok(g2 !== g1 && verdict(A, account()) === `true|g4t1:${stateOf(A)}|VERIFIED`, 'reconnect = new generation');
+  // re-bind to another Threads user
+  app = await screen({ session: SESSION_A });
+  const rebind = await connectAs(app, '17841400000009701');
+  console.log(`measured 19 re-bind to another Threads user: ${JSON.stringify(rebind.result ?? rebind.kind)} sql=${(await stats()).lastSqlError}`);
+  // a re-bind of the account to another Threads user is refused at completion (the code was spent: reconcile);
+  // the verdict keeps answering for the binding that still holds
+  assert.deepEqual({ ...rebind.result }, { kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true });
+  assert.equal(verdict(A, account()), `true|${g2}|VERIFIED`, 'a refused re-bind leaves the generation');
+  const g3 = verdict(A, account()).split('|')[1];
+  // custody expired; a connection error (SYNTHETIC)
+  owner(`update public.threads_account_credential_custody set expires_at = now() - interval '1 second' where social_account_id = ${lit(account())}`);
+  assert.equal(verdict(A, account()), `false|${g3}|CREDENTIAL_EXPIRED`);
+  owner(`update public.threads_account_credential_custody set expires_at = now() + interval '50 days' where social_account_id = ${lit(account())}`);
+  owner(`update public.social_accounts set last_connection_error_code = 'THREADS_TEST_ERROR' where id = ${lit(account())}`);
+  assert.equal(verdict(A, account()), `false|${g3}|CONNECTION_ERROR`);
+  owner(`update public.social_accounts set last_connection_error_code = null where id = ${lit(account())}`);
+  assert.equal(verdict(A, account()), `true|${g3}|VERIFIED`);
+  // disconnect through the app (the gate scenario 14 opened in this TEST world): the rows are gone
+  const gone = account();
+  app = await screen({ session: SESSION_A });
+  app.setAccounts([{ id: gone, platform: 'threads', connectionStatus: 'connected' }]);
+  app.render().disconnect.ask({ id: gone, handle: threadsAccount(A).handle });
+  await app.render().disconnect.confirm();
+  assert.equal(verdict(A, gone), 'false|-|NOT_CONNECTED');
+  // connect again: verified with a generation never seen before
+  app = await screen({ session: SESSION_A });
+  assert.equal((await connectAs(app, '17841400000004701')).kind, 'verifying');
+  const g4 = verdict(A, account()).split('|')[1];
+  assert.ok(![g1, g2, g3].includes(g4) && verdict(A, account()).startsWith('true|'), 'never an old generation');
+  // the service ends (SYNTHETIC end, as G5 leaves it)
+  owner(`update public.service_entitlements set status = 'ended', ended_at = now() where user_id = ${lit(uid(A))}::uuid and service_key = 'x_autopost'`);
+  assert.equal(verdict(A, account()), `false|${g4}|SERVICE_NOT_ACTIVE`);
+});

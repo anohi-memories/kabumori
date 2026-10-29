@@ -134,7 +134,7 @@ q "$pre" -c "revoke trigger on public.brand_memberships from anon, authenticated
 # G5's MVP_INSTALL (PR #563 head; the blob is unchanged since PR #550). Only built for G4T_APP_FLOW / G4T_BRIDGE_FLOW.
 G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982
 mvp_pre=""
-if [ -n "${G4T_APP_FLOW:-}${G4T_BRIDGE_FLOW:-}" ]; then
+if [ -n "${G4T_APP_FLOW:-}${G4T_BRIDGE_FLOW:-}${G4T_VERDICT:-}" ]; then
   git -C "$repo" cat-file -e "${G5MVP}^{commit}" 2>/dev/null || fail "missing git objects for $G5MVP (fetch G5 PR #563)"
   [ "$(git -C "$repo" rev-parse "${G5MVP}:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] \
     || fail "G5 MVP_INSTALL blob moved (pin)"
@@ -201,7 +201,8 @@ g5pv="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv.sql"
 g5pv_rb="$c/postona_g4_threads_personal_mvp/001_threads_binding_g5pv_rollback.sql"
 stack=("$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/threads_manual_publish_candidate.sql"
   "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql"
-  "$c/postona_threads_disconnect/threads_disconnect_candidate.sql")
+  "$c/postona_threads_disconnect/threads_disconnect_candidate.sql"
+  "$c/postona_g4_credential_verdict/001_threads_publish_credential_verdict.sql")
 # The personal MVP world up to (not including) G4's binding: G5's chain + MVP_INSTALL, PR #124, custody.
 mvp_world() {
   local db; db="$(copy "$1" "$mvp_pre")"
@@ -213,6 +214,64 @@ mvp_world() {
   done
   echo "$db"
 }
+# G4-02 #4: the read-only publish-credential verdicts G3's consumers bind to (X on the full profile, Threads on both).
+if [ -n "${G4T_VERDICT:-}" ]; then
+  vd="$c/postona_g4_credential_verdict"
+  v1="$vd/001_threads_publish_credential_verdict.sql"; v1_rb="$vd/001_threads_publish_credential_verdict_rollback.sql"
+  v2="$vd/002_x_publish_credential_verdict.sql"; v2_rb="$vd/002_x_publish_credential_verdict_rollback.sql"
+  xc="$c/postona_g4_x_oauth_personal_epoch"
+  xbeh="$t/postona_g4_credential_verdict_x_behavior.sql"
+  full_with_x() {
+    local db; db="$(copy "$1" "$world")"
+    for f in "$g443" "${stack[@]}" "$xc/001_x_oauth_personal_epoch.sql" "$xc/002_x_oauth_product_wiring.sql" \
+      "$xc/003_x_disconnect_user_rpc.sql" "$xc/004_x_consume_preexchange_recheck.sql" "$xc/005_x_connect_lifecycle_t13.sql" "$v2"; do
+      need "$db" "$f"
+    done
+    echo "$db"
+  }
+  echo "== G4-02 #4 X verdict through G4's real X SQL (full profile)"
+  vx="$(full_with_x verdictx)"
+  out="$(as_owner "$vx" -A -t -f "$xbeh" 2>&1)" || { echo "$out"; fail "X verdict behavior"; }
+  grep -E '^[0-9]+\|' <<<"$out"
+  grep -q G4V_X_VERDICT_BEHAVIOR_PASS <<<"$out" || fail "X verdict marker"
+  # mutant: the refresh-state check removed -> the behavior must fail on case 5
+  sed "s/  select r.status into v_refresh from public.x_account_refresh_state_v2 r where r.social_account_id = v_account.id;/  v_refresh := null; -- MUTANT/" "$v2" > "$tree/v2_mutant.sql"
+  [ "$(grep -c MUTANT "$tree/v2_mutant.sql")" = 1 ] || fail "X verdict mutant not made"
+  vm="$(copy verdictxm "$world")"
+  for f in "$g443" "${stack[@]}" "$xc/001_x_oauth_personal_epoch.sql" "$xc/002_x_oauth_product_wiring.sql" "$xc/003_x_disconnect_user_rpc.sql" \
+    "$xc/004_x_consume_preexchange_recheck.sql" "$xc/005_x_connect_lifecycle_t13.sql" "$tree/v2_mutant.sql"; do need "$vm" "$f"; done
+  if out="$(as_owner "$vm" -A -t -f "$xbeh" 2>&1)"; then fail "the X verdict behavior passed without the refresh-state check"; fi
+  echo "MUTANT_CAUGHT x_refresh_state_ignored by: $(grep -E '\|FAIL ' <<<"$out" | cut -d'|' -f2 | paste -sd ';' -)"
+
+  echo "== G4-02 #4 install / rollback / ACL"
+  r="$(apply "$(mvp_world verdictp)" "$v1")"; [ "$r" = "G4_VERDICT_PRECONDITION_TABLE postona_threads_binding.bindings" ] || fail "001 without G4's binding: $r"
+  echo "ok 001 refused without G4's Threads binding ($r)"
+  pv="$(mvp_world verdictpv)"
+  for f in "$g5pv" "${stack[@]}"; do need "$pv" "$f"; done
+  echo "ok 001 installed on the PERSONAL profile (g5pv binding)"
+  r="$(apply "$pv" "$v2")"; [ "$r" = G4_X_VERDICT_PRECONDITION_LINEAGE ] || fail "002 on personal: $r"
+  echo "ok 002 refused on the personal profile until G4's X OAuth has a g5pv variant ($r)"
+  r="$(apply "$pv" "$v1")"; [ "$r" = G4_VERDICT_ALREADY_APPLIED ] || fail "001 twice: $r"
+  su_db="$(copy verdictsu "$pv")"
+  need "$su_db" "$v1_rb"
+  r="$({ "$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$su_db" -f "$v1" 2>&1 || true; } | sed -n 's/^.*ERROR: *//p' | head -1)"
+  [ "$r" = G4_VERDICT_PRECONDITION_OWNER ] || fail "001 as superuser: $r"
+  echo "ok 001 refused as a superuser ($r)"
+  acl="$(q "$vx" -c "select string_agg(r || '=' || has_function_privilege(r, f, 'EXECUTE')::text, ',' order by r, f)
+    from unnest(array['anon','authenticated','service_role','authenticator']) r,
+         unnest(array['postona_g4_credential.threads_publish_credential_verdict(uuid,text)','postona_g4_credential.x_publish_credential_verdict(uuid,text)']::regprocedure[]) f")"
+  [ "$(grep -o '=true' <<<"$acl" | wc -l | tr -d ' ')" = 0 ] || fail "an API role can execute a verdict: $acl"
+  q "$vx" -c "select 'acl ' || p.proname || ' ' || array_to_string(p.proacl, ',') from pg_proc p where p.pronamespace = 'postona_g4_credential'::regnamespace order by 1"
+  r="$(apply "$vx" "$v1_rb")"; [ "$r" = G4_VERDICT_ROLLBACK_002_FIRST ] || fail "001 rollback before 002: $r"
+  need "$vx" "$v2_rb"; need "$vx" "$v1_rb"
+  [ -z "$(q "$vx" -c "select to_regnamespace('postona_g4_credential')")" ] || fail "rollback left the schema"
+  need "$vx" "$v1"; need "$vx" "$v2"
+  echo "ok rollback order (002 first), schema gone, install again"
+  q "$vx" -c "select 'md5 ' || p.proname || ' ' || md5(p.prosrc) from pg_proc p where p.pronamespace = 'postona_g4_credential'::regnamespace order by 1"
+  echo "G4T_VERDICT_ALL_PASS"
+  exit 0
+fi
+
 # G4-50: the server chain through G4's owner bridge (Edge handler -> H5 runtime -> bridge -> this SQL), then stop.
 if [ -n "${G4T_BRIDGE_FLOW:-}" ]; then
   h5_claim="$c/postona_threads_auth_runtime/claim_candidate.sql"
