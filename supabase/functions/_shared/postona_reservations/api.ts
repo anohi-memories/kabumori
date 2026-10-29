@@ -116,8 +116,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * The session id of an access token Supabase Auth has ALREADY verified (never used as proof on its own), returned only when the
  * SAME token names the same subject and states is_anonymous as the JSON boolean false (G3-34 F1: missing, null, another type or
  * true is not proof of a non-anonymous sign-in -> null -> 401, before any permission, database or provider call).
+ * G3-46: exported so the Threads reservation API (threads_api.ts) applies the very same check.
  */
-function nonAnonymousSessionOf(token: string, userId: string): string | null {
+export function nonAnonymousSessionOf(token: string, userId: string): string | null {
   const part = token.split(".")[1];
   if (!part) return null;
   try {

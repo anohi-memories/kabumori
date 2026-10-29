@@ -13,6 +13,10 @@
 #       refused; the person's own cancel after the service ended / the account unverified / an old generation (007, unchanged) and the
 #       audit (personal_mvp/owner_cancel.sql); 011's rollback refusals (superuser, other owners, half applied, a widened ACL); rollback =
 #       the procedures before 011, rows / audit untouched; twice refused (rolled back here: 007's own rollback is not taught about 011);
+#   HT  (G3-46) the new Threads app-facing Edge entry (postona-threads-reservations): a real Request through the real http.ts (gate forced
+#       on in the test only) -> threads_api.ts -> threads_postgres_db.ts + the real driver as a TEST-WORLD login member of
+#       postona_resv_api over 127.0.0.1 -> 007's create / cancel / receipt with G5's S2-2 (personal_mvp_http/); fake GoTrue; the
+#       production permission default (deny). Needs the cluster to listen on 127.0.0.1 (trust).
 #   LR  (G3-42) unfinished MVP-bound rows (planned / claimed / lease run out / uncertain) refuse the rollback, nothing changed; also:
 #       superuser, schema / table of another owner, half applied, a broken owner / ACL postcondition. Finish them (cancel -- G3-43: every
 #       planned row, also of a person whose service ended; worker outcome; uncertain: a TEST stand-in removal -- its resolution is
@@ -43,8 +47,9 @@ owner="kb_postona_thmvp_owner"
 db="kabumori_postona_thmvp_$$"
 S=(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
 work="$(mktemp -d /private/tmp/kabumori-postona-thmvp.XXXXXX)"
+login="kb_postona_thhttp_login"
 drop_roles() {
-  "${S[@]}" -d postgres -c "drop role if exists postona_resv_api" -c "drop role if exists postona_resv_worker" >/dev/null 2>&1 || true
+  "${S[@]}" -d postgres -c "drop role if exists $login" -c "drop role if exists postona_resv_api" -c "drop role if exists postona_resv_worker" >/dev/null 2>&1 || true
 }
 cleanup() {
   rm -rf "$work"
@@ -226,6 +231,23 @@ own -f "$aurb" >/dev/null || fail "AU9 rollback"
 [ "$(allrows11)" = "$r11" ] || fail "AU9 a row or audit row moved"
 expect_err "AU10 rollback twice" G3_THREADS_LEASE_AUDIT_ROLLBACK_NOT_APPLIED own -f "$aurb"
 echo "OK EC: 011 refusals (nothing changed), apply, re-apply refused; own planned row cancelled with the account unverified / the service ending / an old generation; after the end the receipt reads pending -> cancelled / uncertain (G3-44; another person, no subject, ended session refused); another person, no session, claimed, uncertain refused; lease run out -> uncertain with one audit row, receipt uncertain, another person claimed in the same round; 011 rollback refusals, rollback = procedures before 011, rows / audit untouched, twice refused"
+
+# --- HT (G3-46) ----------------------------------------------------------------------------------------------------------------
+out="$(own -A -t -f "$here/personal_mvp_http/people.sql")" || fail "http people: $out"
+printf '%s\n' "$out" | grep -qx G3_THREADS_HTTP_E2E_SETUP_PASS || fail "http people: no PASS line"
+# Rollout simulation (TEST WORLD only): the server-side login role is a member of postona_resv_api, nothing else
+"${S[@]}" -d "$db" -c "create role $login login noinherit" -c "grant postona_resv_api to $login" >/dev/null
+ht_out="$work/http_e2e.out"
+if ! RESV_LIVE_DB_URL="postgres://$login@127.0.0.1:$port/$db" RESV_LIVE_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" \
+  DENO_NO_PACKAGE_JSON=1 deno test --no-config --no-check --allow-net=127.0.0.1:"$port" --allow-read \
+  --allow-env=RESV_LIVE_DB_URL,RESV_LIVE_OWNER_URL "$here/personal_mvp_http/http_e2e_test.ts" >"$ht_out" 2>&1; then
+  sed 's/\x1b\[[0-9;]*m//g' "$ht_out" | grep -E 'FAILED|AssertionError|error:|=> |\+|-  ' | head -30 >&2
+  fail "HT http e2e"
+fi
+ht_res="$(sed 's/\x1b\[[0-9;]*m//g' "$ht_out" | grep -E '^ok \|' | tail -1)"
+"${S[@]}" -d "$db" -c "drop owned by $login" -c "drop role $login" >/dev/null
+own -c "drop schema t46 cascade" >/dev/null
+echo "OK HT: Edge entry -> threads_api.ts -> real driver -> SQL ($ht_res): receipt / cancel of the own row (also after the service ended), second cancel 409, uncertain 409 never re-claimed, another person 404, anonymous / unknown / no session / other subject 401 before the database, foreign / ended session 401 (S2-2), create 403 before the database (default) and in the database (G4 double, service end), idempotent create, gate OFF 503, Threads sends 0"
 
 # --- LR (G3-42) -----------------------------------------------------------------------------------------------------------------
 out="$(own -A -t -f "$pm/live_rows.sql")" || fail "live rows"
