@@ -26,14 +26,15 @@ def main():
     elif a.release_digest:
         raise SystemExit("--release-digest is only for an installed release")
     layout = Layout(a.root)
-    policy = policy_mod.load(layout.policy_pub)
+    policy = policy_mod.load_current(layout)  # TASK 28: 正本と公開用が一致しなければ始めない
     signer, verifier = wiring.agent_side(a.root)
     agent = Agent(layout, signer, verifier, policy)
     if a.once:
         supervise.write_s2_heartbeat(layout)
         supervise.watchdog_cycle(layout, policy, agent)
         return 0
-    supervise.watchdog_loop(layout, policy, agent, a.interval)
+    supervise.watchdog_loop(layout, policy, agent, a.interval,
+                            make_agent=lambda pol: Agent(layout, signer, verifier, pol))  # TASK 28: 周期ごとに読み直す
     return 0
 
 

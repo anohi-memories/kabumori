@@ -48,10 +48,34 @@ def attempt(name, fn):
         record.append([name, "ok"])
     except OSError as e:
         record.append([name, "denied:%d" % e.errno])
+def temp_name(path, pid=None):
+    return "%s.tmp.%d.%s" % (path, os.getpid() if pid is None else pid, os.urandom(6).hex())
 def edit(path, old, new):
+    # TASK 28: 実 CLI（2.1.305）の Edit と同じ書き方。同じフォルダの一時ファイルを O_CREAT|O_EXCL|O_NOFOLLOW で作り、
+    # 書いて権限を合わせ fsync し、許可ファイルへ rename する（失敗したら一時ファイルを消す）
     text = open(path, encoding="utf-8").read()
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text.replace(old, new))
+    tmp = temp_name(path)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+    try:
+        os.write(fd, text.replace(old, new).encode("utf-8"))
+        os.fchmod(fd, os.stat(path).st_mode & 0o7777)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    try:
+        os.rename(tmp, path)
+    except OSError:
+        os.unlink(tmp)
+        raise
+def make_file(path):
+    os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644))
+def rename_new_over(src, dst):
+    make_file(src)
+    try:
+        os.rename(src, dst)
+    finally:
+        if os.path.lexists(src):
+            os.unlink(src)
 for act in sc.get("actions", []):
     kind, target = act[0], act[1]
     if kind == "edit":  # CLI の Edit の道具: 許可の規則にあるファイルだけ
@@ -66,6 +90,18 @@ for act in sc.get("actions", []):
         attempt("delete " + target, lambda: os.remove(target))
     elif kind == "symlink":
         attempt("symlink " + target, lambda: os.symlink("/etc/hosts", target))
+    elif kind == "leave_temp":  # 一時ファイルを作ったまま残す（rename しない）
+        attempt("leave_temp " + target, lambda: make_file(temp_name(os.path.abspath(target))))
+    elif kind == "temp_kind":  # 一時ファイルの名前で、普通のファイル以外を作る
+        p = temp_name(os.path.abspath(target))
+        attempt("temp_kind %s %s" % (act[2], target), {"symlink": lambda: os.symlink("/etc/hosts", p),
+                                                        "dir": lambda: os.mkdir(p), "fifo": lambda: os.mkfifo(p),
+                                                        "hardlink": lambda: os.link(act[3], p)}[act[2]])
+    elif kind == "temp_over":  # 許可ファイルの一時ファイルの名前で作り、別のファイル（act[2]）へ rename する
+        attempt("temp_over %s %s" % (target, act[2]),
+                lambda: rename_new_over(temp_name(os.path.abspath(target)), os.path.abspath(act[2])))
+    elif kind == "temp_name_variant":  # 名前の形の違う一時ファイル（act[2] を後ろに付ける）
+        attempt("temp_name_variant " + act[2], lambda: make_file(os.path.abspath(target) + act[2]))
     elif kind == "child_write":
         rc = subprocess.call(["/usr/bin/python3", "-I", "-c", "open(%r, 'a').write('x')" % target],
                              stderr=subprocess.DEVNULL)
@@ -113,11 +149,13 @@ class CodeEditBase(BlockersBase):
         with open(os.path.join(self.cli_dir, "scenario.json"), "w") as f:
             json.dump(dict(extra, actions=actions), f)
 
-    def code_root(self, approve=True, body_kw=None):
+    def code_root(self, approve=True, body_kw=None, before_policy=None):
         fr = __import__("test_task17_real_adapter").load_first_run()
         root = os.path.join(self.env.real, "code-root")
         self.addCleanup(__import__("shutil").rmtree, root, True)
         self.assertEqual(self.quiet(fr.main, ["init", "--root", root, "--issue-source", "file"])[0], 0)
+        if before_policy is not None:  # TASK 28: 常駐が古いポリシーを読み込んだ状態を作る
+            before_policy(root)
         cfg_path = os.path.join(self.env.real, "code_edit.json")
         with open(cfg_path, "w") as f:
             json.dump(CFG, f)

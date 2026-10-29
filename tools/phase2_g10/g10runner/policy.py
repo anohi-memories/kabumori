@@ -86,5 +86,22 @@ def load(path):
     return with_digest(p)
 
 
+class PolicyStateError(Exception):
+    """TASK 28: 正本（control/priv）と公開用（pub）のポリシーが読めない・壊れている・食い違う。起動しない。"""
+
+
+def load_current(layout):
+    """TASK 28: 正本と公開用の両方を読み、どちらも有効で同じダイジェストのときだけ正本を返す（常駐が周期ごとに読み直す）。
+    書き換えの途中（片方だけ新しい）・破損・欠落は PolicyStateError（その周期は起動しない）。"""
+    try:
+        priv = load(layout.policy_priv)
+        pub = load(layout.policy_pub)
+    except (OSError, ValueError, PolicyError) as exc:
+        raise PolicyStateError("policy unreadable or invalid: %s" % type(exc).__name__)
+    if priv["_digest"] != pub["_digest"]:
+        raise PolicyStateError("policy copies differ (control and pub)")
+    return priv
+
+
 def timing(policy, key):
     return float(policy["timing"][key])

@@ -7,6 +7,9 @@
 2. 実行中: CLI を sandbox-exec（カーネルの強制）で包み、書き込めるのは許可ファイル・ランの一時フォルダ・CLI 自身の
    状態（~/.claude 等。ただし設定・フック・記憶は拒否）だけにする。子プロセスも同じ制限を受ける。作業フォルダは
    許可ファイル以外を読み取り専用にする。CLI の道具は Read・Glob・Grep と許可ファイルへの Edit だけ（Write・Bash・Web は拒否）。
+   TASK 28: 実 CLI の Edit は、同じフォルダに `<許可ファイル>.tmp.<pid>.<16進12文字>` を O_CREAT|O_EXCL|O_NOFOLLOW で
+   作って書き、許可ファイルへ rename する（CLI 2.1.305 の本体で確認、第27TASKの実機では作成が EPERM）。この名前の形の
+   普通のファイルだけを許し（リンク・フォルダ・FIFO 等は種類で拒否）、許可ファイルの親フォルダだけを書き込み可にする。
 3. 実行後: 作業フォルダ全体の一覧（種類・権限・中身・リンク先・リンク数）を実行前と照合する。新規・削除・リンク・
    許可外の変更・行数の超過は安全違反（HALT）。テストは実行係が、ネットワークと書き込みを拒否したサンドボックスで実行する。
 
@@ -35,6 +38,11 @@ TEST_OUTPUT_TAIL = 4000
 HOME_DENY_LITERALS = (".claude/settings.json", ".claude/settings.local.json", ".claude/CLAUDE.md",
                       ".claude/keybindings.json")
 HOME_DENY_SUBPATHS = (".claude/hooks", ".claude/agents", ".claude/commands", ".claude/skills", ".claude/plugins")
+# TASK 28: Edit の一時ファイルの名前の後半（`.tmp.<pid>.<randomBytes(6) の16進>`）。sandbox の正規表現は {n} の回数指定を
+# 黙って無視して何にも一致しなくなる（実機で確認）ので、16進1文字を12回並べて書く
+TEMP_SUFFIX_RX = r"\.tmp\.[0-9]+\." + "[0-9a-f]" * 12 + "$"
+# 一時ファイルの名前でも作らせない種類（普通のファイルだけを許す）
+NON_FILE_TYPES = ("SYMLINK", "DIRECTORY", "FIFO", "SOCKET", "CHARACTER-DEVICE", "BLOCK-DEVICE")
 
 
 class CodeEditError(ValueError):
@@ -155,6 +163,9 @@ def prepare(work_dir, run_dir, spec, home):
         except UnicodeDecodeError:
             raise CodeEditError("allowed path is not UTF-8 text: " + rel)
         os.chmod(p, (st.st_mode & 0o111) | 0o644)
+    for parent in sorted({os.path.dirname(os.path.join(real, rel)) for rel in spec["paths"]}):
+        # TASK 28: Edit の一時ファイルの作成と rename に要る。何を作れるかはサンドボックスが名前と種類で決める
+        os.chmod(parent, stat.S_IMODE(os.lstat(parent).st_mode) | stat.S_IWUSR)
     pre = manifest(real)
     atomic_write_json(os.path.join(run_dir, "edit_base.json"), base)
     atomic_write_json(os.path.join(run_dir, "edit_manifest_pre.json"), pre)
@@ -247,9 +258,15 @@ def cli_profile(allowed_abs, tmp_dir, home):
     deny = ["(literal %s)" % _lit(home + "/" + rel) for rel in HOME_DENY_LITERALS]
     deny += ["(subpath %s)" % _lit(home + "/" + rel) for rel in HOME_DENY_SUBPATHS]
     deny.append('(regex %s)' % (_rx_prefix(home + "/.claude/projects/")[:-1] + '[^/]+/memory(/|$)"'))
-    return "\n".join(["(version 1)", "(allow default)", '(deny file-write* (subpath "/"))',
-                      "(allow file-write*\n  " + "\n  ".join(allow) + ")",
-                      "(deny file-write*\n  " + "\n  ".join(deny) + ")", ""])
+    temps = [_rx_prefix(p)[:-1] + TEMP_SUFFIX_RX + '"' for p in allowed_abs]
+    allow += ["(regex %s)" % t for t in temps]
+    kinds = ["(require-all (regex %s) (vnode-type %s))" % (t, k) for t in temps for k in NON_FILE_TYPES]
+    lines = ["(version 1)", "(allow default)", '(deny file-write* (subpath "/"))',
+             "(allow file-write*\n  " + "\n  ".join(allow) + ")",
+             "(deny file-write*\n  " + "\n  ".join(deny) + ")"]
+    if kinds:
+        lines.append("(deny file-write-create\n  " + "\n  ".join(kinds) + ")")
+    return "\n".join(lines + [""])
 
 
 # /usr/bin/python3 等の xcrun の入口が書くキャッシュ（書けないと警告を出すだけだが、出力を汚さないよう許す）

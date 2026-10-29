@@ -471,8 +471,27 @@ def _s2_issue_problem(layout, policy, agent, entry):
     return problem
 
 
-def watchdog_loop(layout, policy, agent, interval):
+def reload_policy(layout, policy, agent, make_agent, out=print):
+    """TASK 28: S2 のポリシーの読み直し。正本と公開用が一致して有効で、ランの途中でないときだけ切り替える。
+    それ以外は読み込んだ版で見張りを続ける（見張りを止めない。起動するかは検知役が同じ条件で決める）。"""
+    try:
+        current = policy_mod.load_current(layout)
+    except policy_mod.PolicyStateError as exc:
+        out(json.dumps({"watchdog": "policy not usable; keeping the loaded policy", "error": str(exc)}))
+        return policy, agent
+    if current["_digest"] == policy["_digest"]:
+        return policy, agent
+    if registry.non_terminal(layout):
+        out(json.dumps({"watchdog": "policy changed while a run is in progress; keeping the loaded policy"}))
+        return policy, agent
+    out(json.dumps({"watchdog": "policy reloaded", "policy_from": policy["_digest"], "policy_to": current["_digest"]}))
+    return current, make_agent(current)
+
+
+def watchdog_loop(layout, policy, agent, interval, make_agent=None):
     while True:
+        if make_agent is not None:
+            policy, agent = reload_policy(layout, policy, agent, make_agent)
         write_s2_heartbeat(layout)
         watchdog_cycle(layout, policy, agent)
         time.sleep(interval)

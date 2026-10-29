@@ -56,8 +56,9 @@ def main(argv=None):
             raise SystemExit("another autorun is already running for this root")
         control, policy = autorun.open_control(root)
         while True:
-            entry = autorun.cycle(control, policy, a.live, release_check=release_check)
-            print(json.dumps(dict(entry, mode="live" if a.live else "dry_run"), ensure_ascii=False), flush=True)
+            control, policy, entries = autorun.step(root, control, policy, a.live, release_check=release_check)
+            for entry in entries:
+                print(json.dumps(dict(entry, mode="live" if a.live else "dry_run"), ensure_ascii=False), flush=True)
             if a.once:
                 return 0 if entry["decision"] != "launched" or entry.get("status") == "ended_checks_passed" else 1
             time.sleep(a.interval)

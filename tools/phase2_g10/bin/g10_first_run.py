@@ -186,7 +186,7 @@ def cmd_code_edit_policy(a):
         if registry.non_terminal(layout):
             raise SystemExit("a run is in progress; policy not changed")
         Control.install_policy(layout, new)
-        if policy_mod.load(layout.policy_pub)["_digest"] != new["_digest"]:
+        if policy_mod.load_current(layout)["_digest"] != new["_digest"]:  # TASK 28: 正本と公開用の両方
             raise SystemExit("policy read-back differs")
         out["written"] = True
     print(json.dumps(out, ensure_ascii=False, indent=1))

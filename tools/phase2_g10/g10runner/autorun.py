@@ -13,6 +13,8 @@ Issue #323 をログインなしで周期的に読み、次の条件がすべて
 - 判定・起動の記録は control/priv/autorun.log（1行1件の JSON）。本文・秘密・メールアドレスは書かない。
 - 常駐（launchd への登録）はここでは行わない。登録は人の明示の GO の後に、人が行う。
 - TASK 22: 固定版（g10runner/release.py）から動くときは、起動の直前ごとに固定版を検証し、合わなければハードHALT。
+- TASK 28: ポリシーは周期ごとに読み直す（refresh）。正本と公開用が一致して有効なときだけ新しい版に切り替え、ランの途中・
+  読めない・食い違うときは切り替えも起動もしない。起動の直前にも、読み込んだ版がまだ正本と同じかを確かめる。
 """
 import json
 import os
@@ -34,7 +36,7 @@ def open_control(root):
     cfg = wiring.load(root)
     signer = ec.EcdsaSigner({"runner": os.path.join(keys, "runner.key"), "human": os.path.join(keys, "human.key")})
     layout = Layout(root)
-    policy = policy_mod.load(layout.policy_pub)
+    policy = policy_mod.load_current(layout)  # TASK 28: 正本と公開用が一致しなければ開かない
     return Control(layout, signer, wiring.verifier(root, cfg), policy, witness=wiring.witness(root, cfg, policy)), policy
 
 
@@ -49,6 +51,35 @@ def usable_go(control, body, now):
 
 def claimed_approvals(control):
     return {r["payload"]["approval_id"] for r in control.ledger.read_all() if r["type"] == "CLAIM"}
+
+
+def refresh(root, control, policy):
+    """TASK 28: ポリシーが置き換えられていれば開き直す。(control, policy, 変化 or None) を返す。
+    読めない・食い違う・ランの途中に変わった・開き直す間に変わった、は PolicyStateError（切り替えない）。"""
+    current = policy_mod.load_current(control.layout)
+    if current["_digest"] == policy["_digest"]:
+        return control, policy, None
+    if registry.non_terminal(control.layout):
+        raise policy_mod.PolicyStateError("policy changed while a run is in progress")
+    new_control, new_policy = open_control(root)
+    if new_policy["_digest"] != current["_digest"]:
+        raise policy_mod.PolicyStateError("policy changed while reloading")
+    return new_control, new_policy, {"policy_from": policy["_digest"], "policy_to": new_policy["_digest"]}
+
+
+def step(root, control, policy, live, auth_fn=real_claude.auth_status, out=print, release_check=None):
+    """TASK 28: 常駐の1周期（ポリシーの読み直し → 検知）。(control, policy, 記録の一覧) を返す。"""
+    try:
+        control, policy, change = refresh(root, control, policy)
+    except policy_mod.PolicyStateError as exc:
+        return control, policy, [record(control.layout, {"decision": "wait", "reason": "policy not usable",
+                                                         "error": str(exc)})]
+    entries = []
+    if change:
+        entries.append(record(control.layout, dict(change, decision="policy_reloaded",
+                                                   reason="policy file changed; reloaded")))
+    entries.append(cycle(control, policy, live, auth_fn=auth_fn, out=out, release_check=release_check))
+    return control, policy, entries
 
 
 def fetch(control, policy):
@@ -120,7 +151,7 @@ def log_path(layout):
 def record(layout, entry):
     """判定・起動の記録（本文・秘密・メールアドレスを含めない項目だけ）。"""
     keep = {k: entry[k] for k in ("decision", "reason", "approval_id", "body_sha256", "run_id", "status", "mode",
-                                   "error", "problems") if k in entry}
+                                   "error", "problems", "policy_from", "policy_to") if k in entry}
     if "auth" in entry:
         keep["logged_in"] = entry["auth"].get("logged_in")
     keep["ts"] = time.time()
@@ -146,6 +177,12 @@ def cycle(control, policy, live, auth_fn=real_claude.auth_status, out=print, rel
         control.halt("hard", "release integrity: " + "; ".join(problems[:3]), wait_sync=0)
         return record(control.layout, dict(d, decision="halted", reason="release verification failed",
                                            problems=problems[:3]))
+    try:  # TASK 28: 判定のあとにポリシーが置き換えられていたら、この周期は起動しない（次の周期で読み直す）
+        current = policy_mod.load_current(control.layout)["_digest"]
+    except policy_mod.PolicyStateError:
+        current = None
+    if current != policy["_digest"]:
+        return record(control.layout, dict(d, decision="wait", reason="policy changed before launch"))
     result = launch(control, policy, d["snap"], out=out)
     return record(control.layout, dict(d, decision="launched", reason=result.get("reason", "launched"),
                                        run_id=result["run_id"], status=result["status"]))
