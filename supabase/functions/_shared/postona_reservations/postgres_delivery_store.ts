@@ -3,7 +3,7 @@
  *
  * One call = one connection session = ONE transaction:
  *   BEGIN ISOLATION LEVEL READ COMMITTED       -- G5's decision refuses any other isolation
- *   SET LOCAL ROLE postona_resv_worker         -- a constant; executes exactly the four worker functions (004)
+ *   SET LOCAL ROLE postona_resv_worker         -- a constant; executes exactly the four worker functions (004) + 015 bound check
  *   SET LOCAL statement_timeout = '15s'
  *   SELECT ... FROM postona_x_resv.<one fixed worker function>($1, ...)   -- every value is a bind parameter
  *   COMMIT
@@ -16,6 +16,7 @@
  */
 import type { PgConnect } from "./postgres_db.ts";
 import type { ClaimedReservation, FinishOutcome, PrePublishVerdict, ReservationDeliveryStore } from "./worker.ts";
+import type { BoundPrePublish, BoundReservationDeliveryStore } from "./x_bound_delivery.ts";
 
 export const WORKER_ROLE = "postona_resv_worker";
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -23,6 +24,7 @@ const ACCOUNT_RE = /^[A-Za-z0-9_:-]{1,128}$/u;
 const VERDICTS: readonly PrePublishVerdict[] = ["OK", "LEASE_LOST", "NOT_PUBLISHABLE", "RELEASED"];
 const FINISHED = ["published", "failed_before_send", "uncertain", "lease_lost"];
 const RELEASES = ["released", "lease_lost"];
+const GENERATION_RE = /^[0-9a-f]{64}$/u;
 
 /** The server error message of a driver error when it is one of our fixed codes, else null. */
 function fixedCode(error: unknown): string | null {
@@ -86,6 +88,33 @@ export function createPostgresDeliveryStore(connect: PgConnect): ReservationDeli
       const answer = await once(connect, "SELECT postona_x_resv.release_unsent($1::uuid, $2::uuid)", [reservationId, leaseToken]);
       if (!RELEASES.includes(answer)) throw new Error("RESERVATION_WORKER_ANSWER_INVALID");
       return answer;
+    },
+  };
+}
+
+/**
+ * G3-49: the same store with 015's bound pre-send check (postona_x_resv.pre_publish_check_bound) in place of 004's verdict-only one,
+ * for x_bound_delivery.ts. One row: { verdict, credential_generation }; the generation is answered only with OK (64 hex), else null.
+ * Any other shape is a throw (never sent).
+ */
+export function createPostgresBoundDeliveryStore(connect: PgConnect): BoundReservationDeliveryStore {
+  const { claimDue, finish, releaseUnsent } = createPostgresDeliveryStore(connect);
+  return {
+    claimDue,
+    finish,
+    releaseUnsent,
+    async prePublishCheckBound(reservationId: string, leaseToken: string): Promise<BoundPrePublish> {
+      const text = await once(connect,
+        "SELECT coalesce(json_agg(r), '[]'::json)::text FROM postona_x_resv.pre_publish_check_bound($1::uuid, $2::uuid) r", [reservationId, leaseToken]);
+      const rows = JSON.parse(text) as Record<string, unknown>[];
+      if (!Array.isArray(rows) || rows.length !== 1 || typeof rows[0] !== "object" || rows[0] === null) throw new Error("RESERVATION_WORKER_ANSWER_INVALID");
+      const { verdict, credential_generation } = rows[0];
+      if (typeof verdict !== "string" || !(VERDICTS as readonly string[]).includes(verdict)) throw new Error("RESERVATION_WORKER_ANSWER_INVALID");
+      if (verdict === "OK" ? !(credential_generation === null || (typeof credential_generation === "string" && GENERATION_RE.test(credential_generation)))
+          : credential_generation !== null) {
+        throw new Error("RESERVATION_WORKER_ANSWER_INVALID");
+      }
+      return { verdict: verdict as PrePublishVerdict, credentialGeneration: credential_generation as string | null };
     },
   };
 }
