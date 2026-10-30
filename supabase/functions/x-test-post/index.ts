@@ -4187,12 +4187,12 @@ Deno.serve(async (req) => {
           // AI Lab is always on the exact-account Vault path. Its sends are observed per X request so that
           // only a failure proven to have created no post (ai_lab_provider_outcome.ts) can release the
           // topic claim; anything else stays ambiguous. postToX/VaultAccountXAuth behavior is unchanged.
-          publishText: (text) => {
+          publishText: (text, pollOptions) => {
             const vaultAccount = xAuth.vaultAccount;
-            if (!vaultAccount) return postToX(xAuth, text);
+            if (!vaultAccount) return postToX(xAuth, text, undefined, pollOptions);
             return sendAiLabXPost({
               send: (request) => vaultAccount.send(request),
-              request: (accessToken) => requestXPost(accessToken, text, undefined, undefined, "manual"),
+              request: (accessToken) => requestXPost(accessToken, text, undefined, pollOptions, "manual"),
               onRequestFailedStatus: (status) => console.error("X API request failed", { status }),
             });
           },

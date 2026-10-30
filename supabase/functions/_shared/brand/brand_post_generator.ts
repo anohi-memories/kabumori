@@ -101,6 +101,7 @@ export async function generateBrandPost({
   generationPurpose = "scheduled",
   contentSettings,
   extraInstructions = [],
+  outputSchema,
   fetchImpl = fetch,
 }: {
   openAiApiKey: string;
@@ -114,6 +115,8 @@ export async function generateBrandPost({
    * leaves the prompt byte-identical to before, so no other brand's generation changes.
    */
   extraInstructions?: readonly string[];
+  /** Optional structured output. Omission preserves the existing text request and prompt. */
+  outputSchema?: { name: string; schema: Record<string, unknown> };
   fetchImpl?: typeof fetch;
 }): Promise<BrandPostDraft> {
   // Generation is allowed for dry_run and live (same rule as buildBrandDryRunPreview) -- only a
@@ -157,7 +160,9 @@ export async function generateBrandPost({
       : []),
     ...(contentSettings ? socialMobileGenerationGuidance(contentSettings) : []),
     ...extraInstructions,
-    lengthPolicy
+    outputSchema
+      ? "指定されたJSON schemaに従うJSONだけを返してください。本文に関する文体・長さ・ハッシュタグの指示はtextフィールドに適用し、前置きやコードブロックは付けないでください。"
+      : lengthPolicy
       ? "日本語で、自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。"
       : "日本語で、200〜400文字程度の自然な一つの投稿本文だけを書いてください。見出し・箇条書き記号・前置きは不要です。",
     ...(lengthPolicy ? [postLengthInstruction(lengthPolicy)] : []),
@@ -177,6 +182,7 @@ export async function generateBrandPost({
     body: JSON.stringify({
       model: MODEL,
       store: false,
+      ...(outputSchema ? { text: { format: { type: "json_schema", ...outputSchema, strict: true } } } : {}),
       reasoning: { effort: "low" },
       max_output_tokens: unlimitedLength
         ? UNLIMITED_LENGTH_MAX_OUTPUT_TOKENS

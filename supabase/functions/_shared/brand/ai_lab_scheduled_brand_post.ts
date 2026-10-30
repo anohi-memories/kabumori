@@ -6,10 +6,13 @@ import {
   fingerprintText,
   type PublishedFingerprint,
 } from "./cross_brand_dedupe.ts";
+import { generateBrandPost } from "./brand_post_generator.ts";
 import {
-  type BrandPostDraft,
-  generateBrandPost,
-} from "./brand_post_generator.ts";
+  type AiLabEngagementDraft,
+  AiLabEngagementGenerationError,
+  assertAiLabEngagementAllowed,
+  collectAiLabEngagementViolations,
+} from "./ai_lab_engagement_guard.ts";
 import { collectAiLabContentViolations } from "./ai_lab_theme_guard.ts";
 import type { AiLabTopicPort } from "./ai_lab_brand_post_store.ts";
 import { AiLabProviderNoPostError } from "./ai_lab_provider_outcome.ts";
@@ -69,7 +72,7 @@ export async function dispatchAiLabScheduledBrandPost({
    */
   topic: AiLabTopicPort;
   loadRecentFingerprints: () => Promise<PublishedFingerprint[]>;
-  publishText: (text: string) => Promise<unknown>;
+  publishText: (text: string, pollOptions?: string[]) => Promise<unknown>;
   completePublishedPost: (args: {
     scheduledPostId: string;
     xPostId: string;
@@ -83,7 +86,7 @@ export async function dispatchAiLabScheduledBrandPost({
     topicSeed: string;
     /** Violations of the previous attempt (empty on the first attempt) so the prompt can name them. */
     retryViolations: readonly string[];
-  }) => Promise<BrandPostDraft>;
+  }) => Promise<AiLabEngagementDraft>;
   /** Recent own-post texts, when the caller has them. Hash-only history cannot supply these today. */
   recentPostTexts?: readonly string[];
   onContentRejected?: (info: { attempt: number; violations: readonly string[] }) => void;
@@ -93,6 +96,7 @@ export async function dispatchAiLabScheduledBrandPost({
   characterCount: number;
   xPostId: string;
   fingerprintPersisted: boolean;
+  pollCreated?: boolean;
   topicEventKey: string;
   /** "PUBLISHED" / "IDEMPOTENT"、または確定の書き込みに失敗した場合 "SETTLE_FAILED"（イベントは provider_started のまま保持）。 */
   topicSettlement: string;
@@ -116,22 +120,31 @@ export async function dispatchAiLabScheduledBrandPost({
   };
 
   // 2. X 前の処理。ここで失敗したら、自分の確保だけを解除する（X に触れていないことが確定しているため）。
-  let draft: BrandPostDraft | null = null;
+  let draft: AiLabEngagementDraft | null = null;
+  let pollOptions: string[] | undefined;
   let characterCount: number;
   let normalizedTextSha256: string;
   try {
     const recentFingerprints = await loadRecentFingerprints();
     let retryViolations: readonly string[] = [];
     for (let attempt = 1; attempt <= AI_LAB_MAX_GENERATION_ATTEMPTS; attempt += 1) {
-      const candidate = await generate({ openAiApiKey, context, postType, topicSeed: claim.topic, retryViolations });
+      let candidate: AiLabEngagementDraft;
+      try {
+        candidate = await generate({ openAiApiKey, context, postType, topicSeed: claim.topic, retryViolations });
+      } catch (error) {
+        if (!(error instanceof AiLabEngagementGenerationError)) throw error;
+        retryViolations = [error.violation];
+        onContentRejected?.({ attempt, violations: retryViolations });
+        continue;
+      }
       if (candidate.brandId !== "ai_salaryman_lab" || candidate.postType !== "brand_post") {
         throw new BrandContextError("AI_LAB_GENERATION_CONTEXT_MISMATCH");
       }
-      const violations = collectAiLabContentViolations({
+      const violations = [...collectAiLabContentViolations({
         text: candidate.text,
         seedText: claim.topic,
         recentPostTexts,
-      });
+      }), ...collectAiLabEngagementViolations(candidate)];
       if (violations.length === 0) {
         draft = candidate;
         break;
@@ -144,6 +157,9 @@ export async function dispatchAiLabScheduledBrandPost({
     // Independent of the generation prompt and generator check: this is the final gate directly before
     // handing text to the existing X text-post abstraction.
     characterCount = assertAiLabBrandPostDispatchAllowed(context, postType, draft.text);
+    assertAiLabEngagementAllowed(draft);
+    // Snapshot validated options before the async provider step. Never silently fall back to text.
+    pollOptions = draft.pollOptions ? [...draft.pollOptions] : undefined;
     const duplicate = await checkCrossBrandDuplicate({
       brandId: context.brand.id,
       candidateText: draft.text,
@@ -178,7 +194,8 @@ export async function dispatchAiLabScheduledBrandPost({
     // Keep this second invocation adjacent to the X callback so later edits cannot accidentally add
     // decoration or another text transform after the length check.
     assertAiLabBrandPostDispatchAllowed(context, postType, draft.text);
-    xResponse = await publishText(draft.text);
+    assertAiLabEngagementAllowed({ ...draft, pollOptions });
+    xResponse = await publishText(draft.text, pollOptions);
   } catch (error) {
     // 解除できるのは、送信の内側で「X が投稿を作らなかった」と観測できた型付きエラーだけ
     // （ai_lab_provider_outcome.ts）。文字列からは判定しない。
@@ -232,6 +249,7 @@ export async function dispatchAiLabScheduledBrandPost({
     characterCount,
     xPostId,
     fingerprintPersisted: completion.fingerprintPersisted,
+    ...(pollOptions ? { pollCreated: true } : {}),
     topicEventKey: claim.eventKey,
     topicSettlement,
   };
