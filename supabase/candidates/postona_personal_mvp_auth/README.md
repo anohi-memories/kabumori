@@ -13,6 +13,9 @@ The design, the measured fail-closed table, the residual and the per-owner chang
 | `MVP_R1_EXECUTE_GRANT.sql` | **One transaction, after the install** (G5-48, hand-written). The ONE privilege G6's real path needs: `EXECUTE` on R1-MVP to `authenticated`, nothing else. It grants only on exactly the M20 body (md5 pin, re-derived by the builder) with an owner-only ACL, no overload, S2-3 / GC still owner-only, and no `anon` / `service_role` membership in `authenticated`. Postcondition: exactly owner + authenticated. |
 | `MVP_RELEASE_PREFLIGHT.sql` | **The release preflight / health check** (G5-50). Read-only (a READ ONLY transaction, rolled back): every finding at once — owner, P1, P3, auth claims, role graph incl. `authenticator`, the owner's default privileges, phase / drift, data shape (counts only) — then `VERDICT PASS phase=absent|installed|granted` or `G5_MVP_PREFLIGHT_FAILED <codes>`. |
 | `MVP_R1_EXECUTE_REVOKE.sql` | **The stop** (G5-48, fixed in G5-49). R1-MVP back to owner-only: idempotent, independent of the body pin, and it revokes from every non-owner grantee — named once by its raw role name (`%I`), `CASCADE` so a re-grant chain goes too. |
+| `MVP_W0_INSTALL.sql` | **W0, one transaction, after the install** (G5-51, hand-written). `public.postona_ensure_my_personal_workspace()`: the person's own first run of the personal workspace, so AI assist no longer waits for the first X connection. No argument; S2-2 → T13 (`x_autopost` active, the account lock) → S2-3 → the begin RPC's two rows → S2-3 again. Shipped **owner-only**. Refuses an owner that cannot use the auth schema (`W0_PRECONDITION_OWNER_AUTH`, G6-26 F2). |
+| `MVP_W0_EXECUTE_GRANT.sql` / `MVP_W0_EXECUTE_REVOKE.sql` | W0 to `authenticated` only (md5 pin, gates still owner-only) / the stop (the G5-49 rule). **A new authorization boundary: independent review before adoption.** |
+| `MVP_W0_ROLLBACK.sql` | Drops W0 (refuses while granted, called or depended on). `MVP_ROLLBACK.sql` refuses while W0 exists. Created workspaces stay (data). |
 | `parts/M10_personal_worker_verdict.sql`, `parts/RM10_…_rollback.sql` | New SQL: MV `private.postona_personal_worker_verdict(uuid,text,text,bigint)`. |
 | `parts/M20_personal_authorization_verdict.sql`, `parts/RM20_…_rollback.sql` | New SQL (G5-47): R1-MVP `public.common_account_authorization_verdict(text,text,text)`, the R1 v1 wire with `owner_epoch = g5pv:<lifecycle_version>`. Shipped **owner-only**: `authenticated` gets it only through `MVP_R1_EXECUTE_GRANT.sql`, which is part of the bundled review. |
 
@@ -23,7 +26,7 @@ The design, the measured fail-closed table, the residual and the per-owner chang
 
 ## Apply / withdraw (procedure)
 
-- **Check first** (read-only), and again after each step below: `psql -v ON_ERROR_STOP=1 -f MVP_RELEASE_PREFLIGHT.sql` → `PASS phase=absent`, then `installed`, then `granted`. Any FAIL: stop (nothing was changed). The full order, stop and rollback: `docs/common-account/g5-50-postona-mvp-release-integration.md`.
+- **Check first** (read-only), and again after each step below: `psql -v ON_ERROR_STOP=1 -f MVP_RELEASE_PREFLIGHT.sql` → `PASS phase=absent`, then `installed`, then `granted`; `PF_W0` shows W0 (absent / installed / granted). Any FAIL: stop (nothing was changed). The full order, stop and rollback: `docs/common-account/g5-50-postona-mvp-release-integration.md`.
 - **Apply** as the lifecycle owner (never a superuser):
   ```
   psql -v ON_ERROR_STOP=1 -f MVP_INSTALL.sql
@@ -34,7 +37,9 @@ The design, the measured fail-closed table, the residual and the per-owner chang
   psql -v ON_ERROR_STOP=1 -f MVP_R1_EXECUTE_GRANT.sql
   ```
 - **Stop G6's real path** at any time: `MVP_R1_EXECUTE_REVOKE.sql`.
-- **Withdraw:** remove the consumers first, then `MVP_ROLLBACK.sql` (it also works with the grant in place).
+- **W0 (optional, G5-51):** `MVP_W0_INSTALL.sql`, preflight, `MVP_W0_EXECUTE_GRANT.sql`; stop with `MVP_W0_EXECUTE_REVOKE.sql`. The app's first run: sign-up → `start_x_autopost_service()` → `postona_ensure_my_personal_workspace()` → read the snapshot. Order, answers and owner: `docs/common-account/g5-51-personal-workspace-provisioning.md`.
+- **Lifecycle owner on Supabase** (G5-51, measured on the image): `postgres`. A dedicated role cannot be given USAGE on `auth` or the `auth.users` row lock by `postgres` (no grant option); the preflight's `PF_OWNER_AUTH` names it.
+- **Withdraw:** remove the consumers first; W0: `MVP_W0_EXECUTE_REVOKE.sql` → `MVP_W0_ROLLBACK.sql`; then `MVP_ROLLBACK.sql` (it also works with the R1 grant in place).
 - **Profiles exclude each other.** This profile and `../postona_personal_auth_migration/` (G5-42) each refuse on top of the other. To switch, roll back one and install the other.
 
 ## Evidence (throw-away PostgreSQL 17.11, local socket, fake data)
@@ -51,4 +56,5 @@ Results:
 - MV mutants: **10 / 10 detected** (G5-46) — 9 by an assertion naming the case, and the dropped `revoke` by the install postcondition `MV_POSTCONDITION_ACL`.
 - R1-MVP mutants: **10 / 10 detected** (G5-47) — 9 by an assertion naming the case, and the dropped `revoke` by `R1MVP_POSTCONDITION_ACL`.
 - G5-50 `postona_personal_mvp_release_pg_run.sh`: **8 / 8, 3 runs in a row** — preflight PASS / refusals / phase at each step, and one chain G1 PR #576's real code → G6 PR #566's real Edge entry → R1-MVP + G6's real ledger SQL (read-only archives); preflight mutants **13 / 13 detected**.
+- G5-51 `postona_personal_workspace_local_run.sh` (the REAL local Supabase: GoTrue ES256 JWTs, PostgREST, Kong, Edge runtime, Postgres 17.6.1.165, owner `postgres`): **9 / 9, 3 runs in a row** — F2 reproduced, release steps, first run, refusals, concurrency, lifecycle, shapes, W0 mutants **6 / 6**, stop / withdraw (catalog restored). The G5-50 suites still pass (8 / 8 ×3, 15 / 15; preflight mutants 13 / 13).
 - Grant / stop mutants: **15 / 15 detected** (G5-48); with G5-49's 4 more, **18 / 19** — the survivor (`PUBLIC` branch of the loop) is equivalent: the fixed `REVOKE … FROM public` runs first, so the loop never sees PUBLIC.

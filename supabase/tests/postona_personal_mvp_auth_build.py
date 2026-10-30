@@ -201,12 +201,22 @@ print(f'{"PASS" if pinned else "FAIL"}  MVP_R1_EXECUTE_GRANT.sql pins the M20 bo
 bad += 0 if pinned else 1
 # G5-50: the read-only release preflight recognises an installed R1-MVP by the same pin
 preflight = read(os.path.join(OUT, 'MVP_RELEASE_PREFLIGHT.sql'))
-pre_pinned = preflight.count(f"pg_catalog.md5(p.prosrc) = '{body_md5}'") == 1 and len(set(re.findall(r"md5\(p\.prosrc\) = '([0-9a-f]{32})'", preflight))) == 1
-print(f'{"PASS" if pre_pinned else "FAIL"}  MVP_RELEASE_PREFLIGHT.sql pins the same M20 body', flush=True)
+# G5-51: and an installed W0 by the pin of MVP_W0_INSTALL.sql's postcondition (the same pin as MVP_W0_EXECUTE_GRANT.sql): exactly these two pins
+w0_pins = re.findall(r"is distinct from '([0-9a-f]{32})' then\n    raise exception 'W0_POSTCONDITION_BODY'", read(os.path.join(OUT, 'MVP_W0_INSTALL.sql')))
+w0_md5 = w0_pins[0] if len(w0_pins) == 1 else None
+pre_pinned = (preflight.count(f"pg_catalog.md5(p.prosrc) = '{body_md5}'") == 1 and w0_md5 is not None
+              and preflight.count(f"pg_catalog.md5(p.prosrc) = '{w0_md5}'") == 1
+              and set(re.findall(r"md5\(p\.prosrc\) = '([0-9a-f]{32})'", preflight)) == {body_md5, w0_md5})
+print(f'{"PASS" if pre_pinned else "FAIL"}  MVP_RELEASE_PREFLIGHT.sql pins the same M20 body (and W0 {w0_md5})', flush=True)
 bad += 0 if pre_pinned else 1
+w0_grant = read(os.path.join(OUT, 'MVP_W0_EXECUTE_GRANT.sql'))
+w0_pinned = w0_md5 is not None and w0_grant.count(f"pg_catalog.md5(p.prosrc) = '{w0_md5}'") == 1 and set(re.findall(r"md5\(p\.prosrc\) = '([0-9a-f]{32})'", w0_grant)) == {w0_md5}
+print(f'{"PASS" if w0_pinned else "FAIL"}  MVP_W0_EXECUTE_GRANT.sql pins the W0 body MVP_W0_INSTALL.sql installs', flush=True)
+bad += 0 if w0_pinned else 1
 if check:
     extra = sorted(set(os.listdir(OUT)) - {'MVP_INSTALL.sql', 'MVP_ROLLBACK.sql', 'MVP_R1_EXECUTE_GRANT.sql', 'MVP_R1_EXECUTE_REVOKE.sql', 'MVP_RELEASE_PREFLIGHT.sql',
+                                           'MVP_W0_INSTALL.sql', 'MVP_W0_EXECUTE_GRANT.sql', 'MVP_W0_EXECUTE_REVOKE.sql', 'MVP_W0_ROLLBACK.sql',
                                            'README.md', 'parts'})
-    print(f'{"PASS" if not extra else "FAIL"}  only the five entrypoints, parts/ and README.md{": " + ", ".join(extra) if extra else ""}', flush=True)
+    print(f'{"PASS" if not extra else "FAIL"}  only the nine entrypoints, parts/ and README.md{": " + ", ".join(extra) if extra else ""}', flush=True)
     bad += 1 if extra else 0
 sys.exit(1 if bad else 0)

@@ -11,6 +11,8 @@
 -- G1's workspace id depends on (counts only, no row is printed): a personal brand whose id is not its owner's derived id, a person with more
 -- than one membership (G1 #576 then shows the first brand it reads; G5 answers only the derived one), a personal workspace that is shared, an
 -- active x_autopost entitlement with no personal workspace (AI post assist answers 403 until the first X connection creates it).
+-- G5-51 adds: PF_OWNER_AUTH (the owner can use schema auth and lock auth.users rows: on Supabase only `postgres` can, G6-26 F2), PF_W0 (the
+-- optional W0 provisioning function: absent / installed / granted / drift), and PF_PHASE reports an owner without USAGE on schema private.
 -- Production NO_GO: running it on a managed project is a read-only connection that still needs the owner's explicit approval.
 begin transaction isolation level repeatable read read only;
 
@@ -20,6 +22,7 @@ do $$
 declare
   v_owner oid := (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user);
   v_r1 regprocedure := pg_catalog.to_regprocedure('public.common_account_authorization_verdict(text,text,text)');
+  v_w0 regprocedure;
   v_gates text[] := array['private.postona_personal_session()', 'private.postona_personal_workspace_eligibility(uuid)',
                           'private.account_lifecycle_generation_covered()', 'private.postona_personal_worker_verdict(uuid,text,text,bigint)'];
   v_p1 text[] := array['private.account_lifecycle_lock', 'private.account_lifecycle_start_service', 'private.account_lifecycle_gate_open',
@@ -64,6 +67,22 @@ begin
     v_lines := v_lines || 'PF_P3 PASS no API write path on brand_memberships'::text;
   end if;
 
+  -- PF_OWNER_AUTH (G5-51, G6-26 F2): the P1 lifecycle lock (T13, every service start / end, W0) takes the person's auth.users row FOR KEY SHARE /
+  -- FOR UPDATE, so the owner needs USAGE on schema auth and UPDATE on a column of auth.users. On the Supabase image `postgres` holds both and
+  -- cannot GRANT either to another role (no grant option, measured): a dedicated owner fails here, otherwise at the first call with
+  -- "permission denied for table users". USAGE is checked first and alone: every auth name lookup below needs it.
+  if pg_catalog.to_regnamespace('auth') is null or not pg_catalog.has_schema_privilege(v_owner, 'auth', 'USAGE') then
+    v_lines := v_lines || 'PF_OWNER_AUTH FAIL the lifecycle owner has no USAGE on schema auth (on Supabase only `postgres` has it to use)'::text;
+    v_fail := v_fail || 'PF_OWNER_AUTH'::text || 'PF_AUTH'::text;
+    v_lines := v_lines || 'PF_AUTH FAIL not checked: no USAGE on schema auth'::text;
+  else
+  if pg_catalog.to_regclass('auth.users') is null or not pg_catalog.has_any_column_privilege(v_owner, 'auth.users', 'UPDATE') then
+    v_lines := v_lines || 'PF_OWNER_AUTH FAIL the lifecycle owner cannot lock auth.users rows (needs UPDATE on a column): T13 / service start would refuse'::text;
+    v_fail := v_fail || 'PF_OWNER_AUTH'::text;
+  else
+    v_lines := v_lines || 'PF_OWNER_AUTH PASS USAGE on auth and the auth.users row lock'::text;
+  end if;
+
   -- PF_AUTH: auth.uid() STABLE and reading the JSON claims PostgREST sets; auth.users / auth.sessions readable with every row
   if pg_catalog.to_regprocedure('auth.uid()') is null or pg_catalog.to_regclass('auth.users') is null or pg_catalog.to_regclass('auth.sessions') is null
      or (select p.provolatile from pg_catalog.pg_proc p where p.oid = 'auth.uid()'::pg_catalog.regprocedure) is distinct from 's'
@@ -81,6 +100,7 @@ begin
     v_lines := v_lines || 'PF_AUTH FAIL auth.uid() does not read request.jwt.claims: every person would be refused (AUTH_REQUIRED)'::text; v_fail := v_fail || 'PF_AUTH'::text;
   else
     v_lines := v_lines || 'PF_AUTH PASS auth.uid() reads request.jwt.claims; auth.users / auth.sessions readable'::text;
+  end if;
   end if;
 
   -- PF_ROLES / PF_ROLE_GRAPH: the Supabase API roles and how they may reach the owner's functions
@@ -126,8 +146,11 @@ begin
     v_lines := v_lines || 'PF_SCHEMA_CREATE WARN an API role may CREATE in public or private (every gate pins search_path to empty)'::text; v_warn := v_warn + 1;
   end if;
 
-  -- PF_PHASE: absent (install next), installed (grant next), granted (wire next); anything else is not this profile or has drifted
-  if v_r1 is null then
+  -- PF_PHASE: absent (install next), installed (grant next), granted (wire next); anything else is not this profile or has drifted.
+  -- (G5-51) The gates live in schema private: an owner without USAGE there is reported, not crashed on (every lookup below needs it).
+  if pg_catalog.to_regnamespace('private') is not null and not pg_catalog.has_schema_privilege(v_owner, 'private', 'USAGE') then
+    v_phase := 'unknown'; v_lines := v_lines || 'PF_PHASE FAIL not checked: the lifecycle owner has no USAGE on schema private'::text; v_fail := v_fail || 'PF_PHASE'::text;
+  elsif v_r1 is null then
     select pg_catalog.string_agg(g, ' ') into v_txt from pg_catalog.unnest(v_gates) g where pg_catalog.to_regprocedure(g) is not null;
     if v_txt is not null then
       v_phase := 'partial'; v_lines := v_lines || ('PF_PHASE FAIL R1-MVP is absent but gates exist: ' || v_txt); v_fail := v_fail || 'PF_PHASE'::text;
@@ -159,6 +182,25 @@ begin
     end loop;
   end if;
 
+  -- PF_W0 (G5-51): the person's own workspace provisioning, optional: absent, installed (owner-only), granted (owner + authenticated);
+  -- anything else (another body / owner / config, a wider ACL) is drift: run MVP_W0_EXECUTE_REVOKE.sql
+  v_w0 := pg_catalog.to_regprocedure('public.postona_ensure_my_personal_workspace()');
+  if v_w0 is null then
+    v_lines := v_lines || 'PF_W0 PASS absent (optional: MVP_W0_INSTALL.sql after the profile)'::text;
+  elsif not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_w0 and p.proowner = v_owner and p.prosecdef and p.provolatile = 'v'
+                     and p.proconfig = array['search_path=""', 'row_security=off'] and pg_catalog.md5(p.prosrc) = '6ea93e3c13d28b8e7aa7520217642f1b') then
+    v_lines := v_lines || 'PF_W0 FAIL W0 is not the reviewed body / owner / config: run MVP_W0_EXECUTE_REVOKE.sql'::text; v_fail := v_fail || 'PF_W0'::text;
+  else
+    v_acl := (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_w0);
+    if v_acl = pg_catalog.format('%s=X/%s', current_user, current_user) then
+      v_lines := v_lines || 'PF_W0 PASS installed (owner-only): MVP_W0_EXECUTE_GRANT.sql next'::text;
+    elsif v_acl = pg_catalog.format('%s=X/%s,authenticated=X/%s', current_user, current_user, current_user) then
+      v_lines := v_lines || 'PF_W0 PASS granted (owner + authenticated): the app may call it'::text;
+    else
+      v_lines := v_lines || ('PF_W0 FAIL W0 ACL drifted (' || v_acl || '): run MVP_W0_EXECUTE_REVOKE.sql'); v_fail := v_fail || 'PF_W0'::text;
+    end if;
+  end if;
+
   -- PF_DATA_*: the shape G1's workspace id and G5's derived id must agree on (counts only; the owner reads with every row, as S2-3 does)
   begin
     set local row_security = off;
@@ -184,7 +226,7 @@ begin
         execute $q$select pg_catalog.count(*) from public.service_entitlements e where e.service_key = 'x_autopost' and e.status = 'active'
                     and not exists (select 1 from public.brands b where b.id = 'u_' || pg_catalog.substr(pg_catalog.md5(e.user_id::text), 1, 24))$q$ into v_n;
         if v_n > 0 then
-          v_lines := v_lines || ('PF_DATA_NO_WORKSPACE WARN ' || v_n || ' active x_autopost person(s) without a personal workspace (403 until the first X connection creates it)');
+          v_lines := v_lines || ('PF_DATA_NO_WORKSPACE WARN ' || v_n || ' active x_autopost person(s) without a personal workspace (403 until W0 or the first X connection creates it)');
           v_warn := v_warn + 1;
         end if;
       end if;
