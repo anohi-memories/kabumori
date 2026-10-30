@@ -37,9 +37,17 @@ export type AssistEnv = {
   preview: boolean;
   /** This very access token was answered 401: nothing is sent until the person has signed in again (a new token). */
   loginRefused: boolean;
+  /** The personal workspace's first run (W0): only 'ready' comes with a workspaceId. */
+  workspaceSetup: WorkspaceSetup;
+  /** Asks W0 again after an answer that decided nothing; null when that is not what stopped it. */
+  retryWorkspaceSetup: (() => void) | null;
 };
 
-export type AssistBlock = 'preview' | 'signed_out' | 'relogin' | 'no_workspace' | 'other_workspace';
+export type WorkspaceSetup = 'idle' | 'preparing' | 'ready' | 'unconfirmed' | 'service_inactive' | 'not_available' | 'support' | 'off' | 'unavailable';
+
+export type AssistBlock =
+  | 'preview' | 'signed_out' | 'relogin' | 'no_workspace' | 'other_workspace'
+  | 'workspace_preparing' | 'workspace_unavailable' | 'workspace_service_inactive' | 'workspace_not_available' | 'workspace_support' | 'workspace_off';
 
 export const ASSIST_BLOCK_TEXT: Record<AssistBlock, string> = {
   preview: 'サンプル表示では、AI投稿アシストは使えません。本文は手で書いて続けられます。',
@@ -47,6 +55,21 @@ export const ASSIST_BLOCK_TEXT: Record<AssistBlock, string> = {
   relogin: 'ログインの有効期限が切れたため、ログインし直すまでAIには依頼できません（設定画面からログアウトして、もう一度ログインしてください）。本文はこのまま手で書いて続けられます。',
   no_workspace: 'ご自身の個人ワークスペースを確認できないため、AI投稿アシストは使えません。本文は手で書いて続けられます。',
   other_workspace: 'このアカウントのワークスペースでは、AI投稿アシストは使えません（ご自身のワークスペースだけで使えます）。',
+  workspace_preparing: 'ご自身の個人ワークスペースを準備しています。準備ができるとAI投稿アシストを使えます。本文は手で書いて続けられます。',
+  workspace_unavailable: 'いまは個人ワークスペースを確認できないため、AI投稿アシストは使えません。時間をおいて「個人ワークスペースを再確認」を押してください。本文は手で書いて続けられます。',
+  workspace_service_inactive: 'X自動投稿の利用登録が有効でないため、AI投稿アシストは使えません。ログインし直すと利用登録を確認できます。本文は手で書いて続けられます。',
+  workspace_not_available: 'アカウントの状態により、AI投稿アシストは使えません。本文は手で書いて続けられます。',
+  workspace_support: '個人ワークスペースを用意できなかったため、AI投稿アシストは使えません。お問い合わせください。本文は手で書いて続けられます。',
+  workspace_off: 'AI投稿アシストは、いまは提供していません。本文は手で書いて続けられます。',
+};
+
+const SETUP_BLOCK: Partial<Record<WorkspaceSetup, AssistBlock>> = {
+  preparing: 'workspace_preparing',
+  unavailable: 'workspace_unavailable',
+  service_inactive: 'workspace_service_inactive',
+  not_available: 'workspace_not_available',
+  support: 'workspace_support',
+  off: 'workspace_off',
 };
 
 /** Why nothing may be sent right now; null when a request may be made. Fail-closed: anything unknown blocks. */
@@ -54,7 +77,9 @@ export function assistBlock(env: AssistEnv): AssistBlock | null {
   if (env.preview || !env.client) return 'preview';
   if (!env.accessToken || !env.userId) return 'signed_out';
   if (env.loginRefused) return 'relogin';
-  if (!env.brandId || !env.workspaceId) return 'no_workspace';
+  // Only a workspace the first run answered and the snapshot then showed; every other state says why (idle / unconfirmed: unknown).
+  if (env.workspaceSetup !== 'ready' || !env.workspaceId) return SETUP_BLOCK[env.workspaceSetup] ?? 'no_workspace';
+  if (!env.brandId) return 'no_workspace';
   // The person's own workspace only: a brand they merely see (another account's workspace) is never sent.
   if (env.brandId !== env.workspaceId) return 'other_workspace';
   return null;

@@ -203,7 +203,12 @@ export function ScheduleComposer({
       <View style={{ gap: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 8 }}>
         <Text style={{ color: colors.ink, fontWeight: "700" }}>AI投稿アシスト</Text>
         <Text style={styles.muted}>AIの案は、あなたが確認して「本文に使う」を押すまで本文に入りません。ここから予約や投稿はされません。</Text>
-        {block ? <Pill tone="warning">{ASSIST_BLOCK_TEXT[block]}</Pill> : (
+        {block ? (
+          <View style={{ gap: 6 }}>
+            <Pill tone="warning">{ASSIST_BLOCK_TEXT[block]}</Pill>
+            {block === "workspace_unavailable" && env.retryWorkspaceSetup ? <SmallButton label="個人ワークスペースを再確認" onPress={env.retryWorkspaceSetup} /> : null}
+          </View>
+        ) : (
           <View style={{ gap: 6 }}>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
               {ASSIST_MODES.map((item) => (

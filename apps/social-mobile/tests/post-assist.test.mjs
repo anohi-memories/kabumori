@@ -7,7 +7,7 @@ import * as assist from '../src/features/schedule/post-assist.ts';
 
 const calls = [];
 const client = { functions: { invoke: async (name, options) => { calls.push({ name, options }); return { data: { candidates: [{ platform: 'x', text: '案', hashtags: [], length: 2, limit: 280, editable: true, requiresUserConfirmation: true }], notice: '確認してください' }, error: null }; } } };
-const env = (over = {}) => ({ client, accessToken: 'jwt-1', userId: 'user-1', brandId: 'u_1', workspaceId: 'u_1', platform: 'x', preview: false, loginRefused: false, ...over });
+const env = (over = {}) => ({ client, accessToken: 'jwt-1', userId: 'user-1', brandId: 'u_1', workspaceId: 'u_1', platform: 'x', preview: false, loginRefused: false, workspaceSetup: 'ready', retryWorkspaceSetup: null, ...over });
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const fields = (over = {}) => ({ notes: '新メニューの告知', instruction: 'もっと短く', ...over });
@@ -100,4 +100,27 @@ test('TASK 28: a token answered 401 blocks as "relogin" (scope null, nothing sen
   assert.match(assist.ASSIST_BLOCK_TEXT.relogin, /ログインし直すまで/u);
   assert.match(assist.ASSIST_BLOCK_TEXT.relogin, /手で書いて続けられます/u);
   assert.match(assist.ASSIST_BLOCK_TEXT.no_workspace, /個人ワークスペース/u);
+});
+
+test('TASK 29: only a first run that is "ready" with a workspace lets a request through; every other state blocks with its own reason', () => {
+  const blocks = {
+    preparing: 'workspace_preparing', unavailable: 'workspace_unavailable', service_inactive: 'workspace_service_inactive',
+    not_available: 'workspace_not_available', support: 'workspace_support', off: 'workspace_off', unconfirmed: 'no_workspace', idle: 'no_workspace',
+  };
+  for (const [setup, block] of Object.entries(blocks)) {
+    // even with a workspace id at hand, a first run that is not ready never sends
+    assert.equal(assist.assistBlock(env({ workspaceSetup: setup })), block, setup);
+    assert.equal(assist.assistScope(env({ workspaceSetup: setup })), null, setup);
+    assert.equal(assist.newAssistRequest(env({ workspaceSetup: setup }), uuid, 'r0', 'hashtags', '本文', fields()), null, setup);
+    assert.match(assist.ASSIST_BLOCK_TEXT[block], /AI投稿アシスト/u, setup);
+  }
+  assert.equal(assist.assistBlock(env({ workspaceSetup: 'ready', workspaceId: null })), 'no_workspace');
+  assert.equal(assist.assistBlock(env({ workspaceSetup: 'ready' })), null);
+  // the order keeps the stronger reason first
+  assert.equal(assist.assistBlock(env({ workspaceSetup: 'preparing', loginRefused: true })), 'relogin');
+  assert.equal(assist.assistBlock(env({ workspaceSetup: 'support', accessToken: null })), 'signed_out');
+  assert.equal(assist.assistBlock(env({ workspaceSetup: 'off', preview: true })), 'preview');
+  for (const block of ['workspace_preparing', 'workspace_unavailable', 'workspace_service_inactive', 'workspace_not_available', 'workspace_support', 'workspace_off']) {
+    assert.match(assist.ASSIST_BLOCK_TEXT[block], /本文は手で書いて続けられます。$/u, block);
+  }
 });

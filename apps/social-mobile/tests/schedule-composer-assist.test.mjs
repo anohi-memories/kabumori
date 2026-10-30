@@ -50,7 +50,7 @@ const ok = (...candidates) => ({ status: 200, body: { candidates, notice: NOTICE
 const fail = (status, error, retry = false) => ({ status, body: { error, retry_same_key: retry } });
 
 /** Mounts the real composer. `answers` are taken in order; `hold: true` keeps a call pending until `release()`. */
-async function mount({ status = 'ready', workspaceId = 'u_1', brandId = 'u_1', signedIn = true, client = true } = {}) {
+async function mount({ status = 'ready', workspaceId = 'u_1', brandId = 'u_1', signedIn = true, client = true, setup = null } = {}) {
   const slots = []; let cursor = 0; const effects = []; // effects: { deps, cleanup }
   const pendingEffects = [];
   const slot = (init) => { const i = cursor++; if (!(i in slots)) slots[i] = init(); return i; };
@@ -64,7 +64,8 @@ async function mount({ status = 'ready', workspaceId = 'u_1', brandId = 'u_1', s
       if (changed) pendingEffects.push({ i, effect, deps });
     },
   };
-  const world = { status, workspaceId, shownWorkspaceId: workspaceId, userId: signedIn ? 'user-1' : null, token: signedIn ? 'jwt-1' : null };
+  // setup: the personal-workspace first run's view; by default 'ready' for workspaceId (W0 answered it and the snapshot shows it).
+  const world = { status, workspaceId, shownWorkspaceId: workspaceId, userId: signedIn ? 'user-1' : null, token: signedIn ? 'jwt-1' : null, setup, retries: 0 };
   const invokes = [];
   const queue = [];
   const held = [];
@@ -95,6 +96,12 @@ async function mount({ status = 'ready', workspaceId = 'u_1', brandId = 'u_1', s
     // The snapshot pins the person's personal workspace (personalWorkspaceId); `workspace` is only what the app shows.
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, snapshot: { workspace: world.shownWorkspaceId ? { id: world.shownWorkspaceId } : null, personalWorkspaceId: world.workspaceId } }) },
     '@/domain/schedule-planner': planner,
+    '@/features/personal-workspace/personal-workspace-provider': {
+      usePersonalWorkspace: () => ({
+        view: world.setup ?? (world.workspaceId ? { kind: 'ready', workspaceId: world.workspaceId } : { kind: 'unconfirmed' }),
+        retry: () => { world.retries += 1; },
+      }),
+    },
   };
   // Both real files: the composer and its only way to the backend (use-post-assist-env.ts).
   const load = async (path) => {
@@ -463,7 +470,7 @@ test('boundary: the composer reaches the backend only through use-post-assist-en
   const importsOf = (source) => [...source.matchAll(/from ["']([^"']+)["']/gu)].map((m) => m[1]).sort();
   assert.deepEqual(importsOf(composer).filter((name) => name.startsWith('@/') && !['@/constants/theme', '@/components/ui', '@/domain/schedule-planner'].includes(name)),
     ['@/features/schedule/post-assist', '@/features/schedule/use-post-assist-env']);
-  assert.deepEqual(importsOf(hook), ['@/features/schedule/post-assist', '@/lib/supabase', '@/providers/auth-provider', '@/providers/data-provider']);
+  assert.deepEqual(importsOf(hook), ['@/features/personal-workspace/personal-workspace-provider', '@/features/schedule/post-assist', '@/lib/supabase', '@/providers/auth-provider', '@/providers/data-provider']);
   assert.deepEqual(importsOf(decisions), ['../../data/post-assist-client.ts']);
   assert.deepEqual(importsOf(client), []);
   const writes = /\.from\(|\.rpc\(|\.insert\(|\.upsert\(|\.update\(|\.delete\(|fetch\(|AsyncStorage|SecureStore|localStorage|saveConfirmed|publish\w*\(|manual-publish|scheduled_posts/u;
@@ -554,4 +561,54 @@ test('the AI asks only for the pinned personal workspace: a shown (first-read) w
   assert.ok(has(tree, 'ご自身の個人ワークスペースを確認できない'));
   assert.equal(small(tree, 'AIに依頼する').length, 0);
   assert.equal(h.invokes.length, 0);
+});
+
+test('TASK 29: the personal workspace\'s first run decides the panel -- each state says why, nothing is sent, and the manual preview goes on', async () => {
+  const cases = [
+    [{ kind: 'preparing' }, '個人ワークスペースを準備しています'],
+    [{ kind: 'unconfirmed' }, 'ご自身の個人ワークスペースを確認できない'],
+    [{ kind: 'idle' }, 'ご自身の個人ワークスペースを確認できない'],
+    [{ kind: 'unavailable' }, 'いまは個人ワークスペースを確認できない'],
+    [{ kind: 'service_inactive' }, 'X自動投稿の利用登録が有効でない'],
+    [{ kind: 'not_available' }, 'アカウントの状態により'],
+    [{ kind: 'support' }, 'お問い合わせください'],
+    [{ kind: 'off' }, 'いまは提供していません'],
+    [{ kind: 'relogin' }, 'ログインし直すまでAIには依頼できません'],
+  ];
+  for (const [setup, words] of cases) {
+    const h = await mount({ setup });
+    openWith(h);
+    const tree = h.render();
+    assert.ok(has(tree, words), words);
+    assert.equal(small(tree, 'AIに依頼する').length, 0, words);
+    assert.equal(small(tree, '個人ワークスペースを再確認').length, setup.kind === 'unavailable' ? 1 : 0, `${words}: retry only when nothing was decided`);
+    type(h, '1件目の本文', '手で書いた投稿');
+    action(h.render(), 'プレビューを作成').onPress();
+    assert.equal(h.planned.length, 1, `${words}: manual flow continues`);
+    assert.equal(h.invokes.length, 0, words);
+  }
+});
+
+test('TASK 29: 「個人ワークスペースを再確認」 asks the first run again; once it is ready the AI can be asked for exactly that workspace', async () => {
+  const h = await mount({ setup: { kind: 'unavailable' } });
+  type(h, '1件目の本文', '手で書いた本文');
+  openWith(h);
+  press(h, '個人ワークスペースを再確認');
+  assert.equal(h.world.retries, 1);
+  assert.equal(h.invokes.length, 0);
+  h.world.setup = { kind: 'ready', workspaceId: 'u_1' };
+  const tree = h.render();
+  assert.equal(small(tree, '個人ワークスペースを再確認').length, 0);
+  assert.equal(h.rowText(), '手で書いた本文', 'the typed text is untouched');
+  type(h, 'AIへのメモ', '週末のお知らせ');
+  h.queue.push(ok(candidate('案です。')));
+  press(h, 'AIに依頼する');
+  await settle();
+  assert.equal(h.invokes.length, 1);
+  assert.equal(h.invokes[0].body.brand_id, 'u_1');
+  // a ready workspace that is not the account's brand is still refused
+  const other = await mount({ setup: { kind: 'ready', workspaceId: 'u_9' } });
+  openWith(other);
+  assert.ok(has(other.render(), 'このアカウントのワークスペースでは'));
+  assert.equal(other.invokes.length, 0);
 });
