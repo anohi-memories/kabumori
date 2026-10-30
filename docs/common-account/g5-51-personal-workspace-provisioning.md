@@ -105,7 +105,7 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
 
 ## 3. Release order (all as `postgres`, each with `ON_ERROR_STOP`)
 
-`MVP_RELEASE_PREFLIGHT.sql` → `MVP_INSTALL.sql` → `MVP_W0_INSTALL.sql` → preflight → `MVP_R1_EXECUTE_GRANT.sql` → `MVP_W0_EXECUTE_GRANT.sql` → preflight (`phase=granted`, `PF_W0 granted`) → wire G1 / G6.
+`MVP_RELEASE_PREFLIGHT.sql` → (G5-02 #3, while `PF_BRANDS` fails) `../postona_brands_tenant_isolation/001_brands_tenant_isolation.sql` as the owner of `brands` → `MVP_INSTALL.sql` → `MVP_W0_INSTALL.sql` → preflight → `MVP_R1_EXECUTE_GRANT.sql` → `MVP_W0_EXECUTE_GRANT.sql` → preflight (`phase=granted`, `PF_W0 granted`) → wire G1 / G6.
 
 - **Stops** (independent, idempotent): `MVP_W0_EXECUTE_REVOKE.sql` and `MVP_R1_EXECUTE_REVOKE.sql`.
 - **Withdraw:** W0 revoke → `MVP_W0_ROLLBACK.sql` → R1 revoke → `MVP_ROLLBACK.sql`. `MVP_ROLLBACK.sql` refuses while W0 exists, and `MVP_W0_ROLLBACK.sql` refuses while W0 is granted. Measured: the catalog is the same as before the release.
@@ -223,17 +223,35 @@ G1 PR #592 (`eb8f5e98`) shows the AI post assist only when W0 answered `ready` *
     - revoke `anon`'s privileges and every write privilege of `authenticated` on `brands`.
   - The suite measures the as-built state first (`FAIL PF_BRANDS`, the exploits above), then each part alone, then restores it (the catalog and ACLs as before).
   - The catalog helper now sorts a relation's ACL items: a revoke followed by a re-grant puts the same item last.
-  - The hardening itself is **not** G5's to ship (owner of `brands`: G4, tentative). It is a handoff (§6).
+  - The hardening itself was then a handoff. Since the coordinator's decision (#299 comment 6520426514) G5 is its single owner: §5c.
+
+## 5c. G5-02 task 3: the brands fix as a G5 source candidate
+
+- **Candidate:** `supabase/candidates/postona_brands_tenant_isolation/` (`001_brands_tenant_isolation.sql` + `_rollback.sql`; its README has the consumers, the order and the refusals). Not in `supabase/migrations/`, not applied anywhere.
+- **What it changes, one transaction, as the owner of `brands`:** row security on (not forced); every privilege of PUBLIC / `anon` revoked; every write of `authenticated` revoked (table and column level, MAINTAIN included); `authenticated` keeps `SELECT` through the member policy. No policy, function, role or grant is created; no row changes.
+- **What it records:** the API roles' privileges and the row security flag before the change (`private.postona_brands_isolation_prestate`, owner-only). The rollback restores exactly that and drops the record.
+- **`PF_BRANDS` now** reads privileges through every role `anon` / `authenticated` can reach (membership with or without inherit, PUBLIC) and at column level. It also FAILs on `anon` SELECT, on another permissive policy on `brands`, and on a view reading `brands` as its owner. Another policy on `brand_memberships` stays a WARN.
+- **Both runners install the real candidate** (the stand-ins are gone). The local suite's brands tests:
+  - roll it back: the world as built, `PF_BRANDS FAIL`, the exploits reproduced;
+  - re-install it twice: the same catalog and the same record;
+  - and drive every refusal.
+- **Measured (real local Supabase, real ES256 JWTs through PostgREST):**
+  - installed: a person reads only their own brand and writes no brand or membership (`403 42501`); `anon` reads and writes nothing (`401 42501`); `service_role` reads every brand and inserts / updates / deletes one; W0, the X OAuth begin RPC and G1 #592's first run → candidates work as before;
+  - rolled back: the world as built again (a person reads, changes and deletes another workspace, `anon` inserts; `PF_BRANDS FAIL`).
+  - A transaction holding `brands` makes the install stop after its 5 s `lock_timeout`, having changed nothing.
+- **Tests:**
+  - the suite: 15 / 15, three runs in a row;
+  - in-suite mutants: 45 / 45 (install 23, rollback 5, `PF_BRANDS` / `PF_APP_READ` 17);
+  - G6 #595's own runner (`d68830bf`) with the candidate installed in a scratch copy: 7 / 7.
 
 ## 6. Handoffs (G5 changed none of these)
 
-- **Owner of `public.brands` (G4 #561, tentative; G3 or G5 if agreed):** before the personal MVP is released, `PF_BRANDS` must PASS in production. As built, that needs:
-  - `alter table public.brands enable row level security`;
-  - `revoke all on public.brands from anon`;
-  - `revoke insert, update, delete, truncate, references, trigger on public.brands from authenticated`;
-  - then the check that every backend writer is `postgres` / `service_role` / SECURITY DEFINER, so that none of them depends on these privileges.
-  
-  Production is [U]: read it with the preflight (read-only, owner's approval). Changing it is an ACL change on a shared table and needs its own approval and review.
+- **`public.brands` (G5 since G5-02 #3, §5c):** before the personal MVP is released, `PF_BRANDS` must PASS in production. The candidate does it; applying it needs, in order:
+  1. one Codex Sol (high) review of the candidate;
+  2. the owner's approval;
+  3. a read-only preflight of production (approval needed; state [U]).
+
+  Production is [U]: read it with the preflight (read-only, owner's approval). G3 #370 (TRUNCATE / REFERENCES / TRIGGER on `brand_memberships`) stays G3's; the install only checks that no API role can write membership rows.
 - **G1 (#316):**
   - PR #592's snapshot query works on the person's real JWT as it is (§5b); nothing to change for `code_profile_key`.
   - Call `start_x_autopost_service()` and then `postona_ensure_my_personal_workspace()` after sign-up and sign-in, before reading the snapshot. Map the answers by the table in §2.
@@ -251,6 +269,10 @@ G1 PR #592 (`eb8f5e98`) shows the AI post assist only when W0 answered `ready` *
 - **G6:** hosted Edge, secrets and the real OpenAI.
 - **G1:** native app and device.
 - **`public.brands` / `brand_memberships` in production (G5-02 #2):** row security, the member policies, the column and write privileges. `PF_APP_READ` / `PF_BRANDS` read them, after approval.
+- **The brands fix (G5-02 #3) outside the local stack:**
+  - who owns `brands` in production, and who granted its privileges (the install refuses if the owner's revoke leaves another grantor's grant);
+  - backend writers that are not in this repository;
+  - the POSTONA deletion functions were not driven end to end: the install only checks that their owner is not filtered.
 - **Also not covered:** Threads, account deletion in progress (`ACCOUNT_DELETION_IN_PROGRESS` was not driven), multiple owners, production.
 - **Open decisions:**
   - P-1 to P-5 (P-1: shared workspaces; P-4: sign-out vs pending jobs);

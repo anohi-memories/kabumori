@@ -465,13 +465,14 @@ async function firstRun(p: Person, o: { brandId?: string } = {}) {
   return { w0: decided.kind === 'ready' ? `ready:${decided.created ? 'created' : 'existing'}` : String(decided.kind), snapshot: String(snap.state), personal, view, outcome };
 }
 
-// what anon / authenticated may write on brands (table privileges)
+// what anon / authenticated may write on brands (table or column privileges)
 const brandWrites = () => sql(SUPER, `select coalesce(string_agg(r || ':' || k, ' ' order by r, k), '-') from unnest(array['anon', 'authenticated']) r,
-  unnest(array['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) k where has_table_privilege(r, 'public.brands', k)`);
+  unnest(array['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN']) k
+  where case when k in ('INSERT', 'UPDATE', 'REFERENCES') then has_any_column_privilege(r, 'public.brands', k) else has_table_privilege(r, 'public.brands', k) end`);
 const code = (r: { error: { code?: string } | null; status: number }) => `${r.status}:${r.error?.code ?? '-'}`;
 
 Deno.test({ name: 'G5-02 #2 G1 #592 on the real JWT: the person reads their own brand\'s kind (code_profile_key) -> ready -> candidates; another person, no login, a signed-out login, an ended service, a second membership and a repeated W0 conflict never become ready and send nothing', ...opts }, async () => {
-  // read-back of the world the suite runs on (the runner's stand-in for the brands owner's hardening; the world as built is the next test)
+  // read-back of the world the suite runs on (G5-02 #3's brands fix, installed by the runner; the world as built is the next test's rollback)
   assert.doesNotMatch(await canRead('authenticated'), /:false/u, 'the person may read every snapshot column, code_profile_key included');
   assert.doesNotMatch(await canRead('anon'), /:true/u);
   assert.equal(await brandWrites(), '-', 'no API write on brands');
@@ -564,51 +565,151 @@ Deno.test({ name: 'G5-02 #2 G1 #592 on the real JWT: the person reads their own 
   assert.equal(provider.calls, sent + 3, 'after P and Q only the three ready runs (E2, M, M with a shared membership) reached the provider');
 });
 
-Deno.test({ name: 'G5-02 #2 brands ACL: the world as built (row security off, the image\'s default write grants) lets a person read and change another workspace and anon insert -- PF_BRANDS FAIL; code_profile_key not granted -> G1 unconfirmed, nothing sent, PF_APP_READ FAIL; restored', ...opts }, async () => {
-  const base = { catalog: await catalog(), acl: await readAcl() };
+// ---- G5-02 #3: the brands fix (supabase/candidates/postona_brands_tenant_isolation), installed by the runner as `postgres` -----------------
+const FIX = Deno.env.get('G5LS_BRANDS_FIX') ?? '';
+const SECRET = Deno.env.get('G5LS_SECRET') ?? '';
+const INSTALL = '001_brands_tenant_isolation.sql';
+const ROLLBACK = '001_brands_tenant_isolation_rollback.sql';
+const fix = (name: string, user = OWNER) => psql(user, ['-f', `${FIX}/${name}`]);
+const fixOk = async (name: string) => { const r = await fix(name); assert.ok(r.ok, `${name}\n${r.error}`); };
+// what the install recorded for the rollback ('-' when there is no record)
+async function prestate() {
+  if (await sql(SUPER, `select to_regclass('private.postona_brands_isolation_prestate') is null`) === 't') return '-';
+  return sql(SUPER, 'select row_security || \' \' || table_acl::text || \' \' || column_acl::text from private.postona_brands_isolation_prestate');
+}
+const AS_BUILT_WRITES = ['anon', 'authenticated'].flatMap((r) => ['DELETE', 'INSERT', 'MAINTAIN', 'REFERENCES', 'TRIGGER', 'TRUNCATE', 'UPDATE'].map((k) => `${r}:${k}`)).join(' ');
+// the backend's own path: service_role (BYPASSRLS) through the real PostgREST
+const backend = () => createClient(API, SECRET, { auth: { persistSession: false, autoRefreshToken: false } });
+// PostgREST serves a new relation only after a schema reload
+async function served(c: SupabaseClient, rel: string) {
+  await sql(SUPER, `notify pgrst, 'reload schema'`);
+  for (let i = 0; i < 100; i++) {
+    if ((await c.from(rel).select('id').limit(1)).error === null) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.fail(`PostgREST never served ${rel}`);
+}
+// drifts (and their restores) shared by the refusal cases and the mutants
+const MEMBER_POLICY = 'exists (select 1 from public.brand_memberships as bm where bm.brand_id = brands.id and bm.user_id = (select auth.uid()))';
+const INVOKER_WRITER: [string, string] = [
+  'create function public.g5ls_touch(p text) returns void language sql as $f$ update public.brands set display_name = display_name where id = p $f$; grant execute on function public.g5ls_touch(text) to authenticated',
+  'drop function public.g5ls_touch(text)'];
+const FILTERED_DEFINER: [string, string] = [
+  'create role g5ls_definer nologin; create function public.g5ls_peek() returns bigint language sql security definer as $f$ select count(*) from public.brands $f$; alter function public.g5ls_peek() owner to g5ls_definer',
+  'drop function public.g5ls_peek(); drop role g5ls_definer'];
+const KIND_REVOKE: [string, string] = [
+  'revoke select on public.brands from authenticated; grant select (id, display_name, is_active, publish_mode) on public.brands to authenticated',
+  'revoke select (id, display_name, is_active, publish_mode) on public.brands from authenticated; grant select on public.brands to authenticated'];
+const WRITER_ROLE: [string, string] = [
+  'create role g5ls_writer nologin; grant update on public.brands to g5ls_writer; grant g5ls_writer to authenticated',
+  'revoke g5ls_writer from authenticated; revoke update on public.brands from g5ls_writer; drop role g5ls_writer'];
+// the owner's default privileges giving the tables it creates in private (the record) to another role
+const DEFAULT_ACL: [string, string] = [
+  'alter default privileges for role postgres in schema private grant select on tables to authenticator',
+  'alter default privileges for role postgres in schema private revoke select on tables from authenticator'];
+
+Deno.test({ name: 'G5-02 #3 brands fix: installed -> a person reads only their own brand and writes none, anon nothing, the backend everything; rollback -> the world as built (a person reads, changes and deletes another workspace, anon inserts: PF_BRANDS FAIL again); re-install -> the same catalog and record', ...opts }, async () => {
+  const base = { catalog: await catalog(), acl: await readAcl(), pre: await prestate() };
+  assert.match(base.pre, /^false \[/u, 'the runner\'s install recorded the world as built: row security off');
+  assert.match(base.pre, /"grantee": "anon", "grantable": false, "privilege": "INSERT"/u);
   const R = await signUp('R');
   const S = await signUp('S');
+  const T = await signUp('T');
   const rws = await derived(R.id);
   const sws = await derived(S.id);
-  assert.equal((await firstRun(R)).view, 'ready');
-  assert.equal((await firstRun(S)).view, 'ready');
+  const tws = await derived(T.id);
+  for (const p of [R, S, T]) assert.equal((await firstRun(p)).view, 'ready');
 
-  // the world exactly as G5's world + 20260918120000 build it on the Supabase image (measured before the runner's stand-in)
-  await sql(SUPER, 'alter table public.brands disable row level security; grant insert, update, delete, truncate, references, trigger, maintain on public.brands to anon, authenticated');
+  // installed: S sees its own brand only, writes no brand (not even its own: brands is backend-written) and no membership (no owner change)
+  const denied = async () => {
+    assert.deepEqual((await S.client.from('brands').select('id')).data, [{ id: sws }]);
+    assert.deepEqual((await S.client.from('brands').select('id').eq('id', rws)).data, []);
+    assert.equal(code(await S.client.from('brands').update({ is_active: true, publish_mode: 'live' }).eq('id', rws)), '403:42501');
+    assert.equal(code(await S.client.from('brands').update({ publish_mode: 'live' }).eq('id', sws)), '403:42501');
+    assert.equal(code(await S.client.from('brands').delete().eq('id', tws)), '403:42501');
+    assert.equal(code(await S.client.from('brands').insert({ id: `g5ls_s_${n}`, display_name: 'S', code_profile_key: 'social_mobile_user_v1' })), '403:42501');
+    assert.equal(code(await S.client.from('brand_memberships').insert({ brand_id: rws, user_id: S.id, role: 'owner' })), '403:42501');
+    assert.equal(code(await S.client.from('brand_memberships').update({ user_id: S.id }).eq('brand_id', sws)), '403:42501');
+    assert.equal(code(await newClient().from('brands').select('id')), '401:42501');
+    assert.equal(code(await newClient().from('brands').insert({ id: `g5ls_anon_${n}`, display_name: 'anon' })), '401:42501');
+    assert.deepEqual([await rows(R.id), await rows(S.id), await rows(T.id)], [PERSONAL, PERSONAL, PERSONAL], 'nothing changed');
+  };
+  await denied();
+  // the backend path is unchanged: service_role reads every brand and writes one through PostgREST
+  const all = Number(await sql(SUPER, 'select count(*) from public.brands'));
+  assert.equal(((await backend().from('brands').select('id')).data ?? []).length, all);
+  assert.equal(code(await backend().from('brands').insert({ id: `g5ls_be_${n}`, display_name: 'backend' })), '201:-');
+  assert.deepEqual((await backend().from('brands').update({ display_name: 'backend 2' }).eq('id', `g5ls_be_${n}`).select('display_name')).data, [{ display_name: 'backend 2' }]);
+  assert.equal(code(await backend().from('brands').delete().eq('id', `g5ls_be_${n}`)), '204:-');
+
+  // rollback: exactly the world as built, re-detected by the preflight; the cross-tenant paths are back
+  await fixOk(ROLLBACK);
+  const built = { catalog: await catalog(), acl: await readAcl() };
+  assert.equal(await prestate(), '-');
+  assert.match(built.acl, /brands:rls=false:force=false/u);
+  assert.equal(await brandWrites(), AS_BUILT_WRITES);
+  const p = await preflight();
+  assert.equal(p.verdict, 'FAIL PF_BRANDS', p.lines.join('\n'));
+  assert.match(p.line('PF_BRANDS'), /^PF_BRANDS FAIL row security off on brands; brands writable by anon, authenticated: /u);
   try {
-    assert.equal(await brandWrites(), 'anon:DELETE anon:INSERT anon:REFERENCES anon:TRIGGER anon:TRUNCATE anon:UPDATE authenticated:DELETE authenticated:INSERT authenticated:REFERENCES authenticated:TRIGGER authenticated:TRUNCATE authenticated:UPDATE');
-    const p = await preflight();
-    assert.equal(p.verdict, 'FAIL PF_BRANDS', p.lines.join('\n'));
-    assert.match(p.line('PF_BRANDS'), /^PF_BRANDS FAIL row security off on brands; brands writable by anon, authenticated: /u);
-    assert.match(p.line('PF_APP_READ'), /^PF_APP_READ PASS/u);
-    // what that lets S's JWT do to R's workspace, through PostgREST
     assert.ok(((await S.client.from('brands').select('id')).data ?? []).some((r) => r.id === rws), 'S reads R\'s brand');
     assert.deepEqual((await S.client.from('brands').update({ is_active: true, publish_mode: 'live' }).eq('id', rws).select('id')).data, [{ id: rws }], 'S sets R\'s workspace active / live');
     assert.equal(await rows(R.id), '1/1/social_mobile_user_v1,My Workspace,true,live');
+    assert.deepEqual((await S.client.from('brands').delete().eq('id', tws).select('id')).data, [{ id: tws }], 'S deletes T\'s workspace');
+    assert.equal(await rows(T.id), '0/0/-', 'T\'s membership went with it');
     assert.equal(code(await newClient().from('brands').insert({ id: `g5ls_anon_${n}`, display_name: 'anon' })), '201:-', 'anon inserts a brand');
-    // G1 itself still names only the person's own (its reads are bounded by the person's memberships)
-    assert.equal((await firstRun(S)).personal, sws);
+    assert.equal((await firstRun(S)).personal, sws, 'G1 itself still names only the person\'s own');
   } finally {
-    await sql(SUPER, `alter table public.brands enable row level security; revoke all on public.brands from anon;
-      revoke insert, update, delete, truncate, references, trigger, maintain on public.brands from authenticated;
-      update public.brands set is_active = false, publish_mode = 'disabled' where id = '${rws}'; delete from public.brands where id = 'g5ls_anon_${n}'`);
+    await sql(SUPER, `update public.brands set is_active = false, publish_mode = 'disabled' where id = '${rws}'; delete from public.brands where id = 'g5ls_anon_${n}'`);
   }
-  assert.equal(await rows(R.id), PERSONAL);
-  assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
+  await assert.rejects(async () => { const r = await fix(ROLLBACK); if (!r.ok) throw new Error(r.error); }, /BRANDS_ISOLATION_NOT_INSTALLED/u);
+  assert.equal(await catalog(), built.catalog, 'the refused rollback changed nothing');
 
-  // each part alone is a FAIL (or, for another policy, a WARN); the preflight changes nothing
+  // re-install (twice: a re-run keeps the first record): the catalog, the ACL and the record are the first install's again
+  await fixOk(INSTALL);
+  assert.deepEqual([await catalog(), await readAcl(), await prestate()], [base.catalog, base.acl, base.pre]);
+  await fixOk(INSTALL);
+  assert.deepEqual([await catalog(), await readAcl(), await prestate()], [base.catalog, base.acl, base.pre]);
+  // T's workspace comes back through the product path (W0), then everything is denied again
+  assert.deepEqual(await firstRun(T), { w0: 'ready:created', snapshot: 'ready', personal: tws, view: 'ready', outcome: 'candidates' });
+  await denied();
+  const after = await preflight();
+  assert.match(after.verdict, /^PASS /u, after.lines.join('\n'));
+  assert.match(after.line('PF_BRANDS'), /^PF_BRANDS PASS/u);
+  // and the cycle is repeatable
+  await fixOk(ROLLBACK);
+  assert.deepEqual([await catalog(), await readAcl()], [built.catalog, built.acl]);
+  await fixOk(INSTALL);
+  assert.deepEqual([await catalog(), await readAcl(), await prestate()], [base.catalog, base.acl, base.pre]);
+});
+
+Deno.test({ name: 'G5-02 #3 preflight on the fixed world: every drift that reopens brands is a PF_BRANDS FAIL (column grants, a role an API role reaches, anon SELECT, another policy, a view as its owner, row security, the member policies) or PF_APP_READ FAIL; the preflight changes nothing; code_profile_key not granted -> G1 unconfirmed, nothing sent', ...opts }, async () => {
+  const base = { catalog: await catalog(), acl: await readAcl() };
+  const R = await signUp('R3');
+  const S = await signUp('S3');
+  const rws = await derived(R.id);
+  assert.equal((await firstRun(R)).view, 'ready');
+  assert.equal((await firstRun(S)).view, 'ready');
+  const KIND = KIND_REVOKE;
   const cases: Array<[string, string, string, RegExp]> = [
     ['row security off on brands', 'alter table public.brands disable row level security', 'alter table public.brands enable row level security', /^PF_BRANDS FAIL row security off on brands: /u],
     ['row security off on brand_memberships', 'alter table public.brand_memberships disable row level security', 'alter table public.brand_memberships enable row level security', /^PF_BRANDS FAIL row security off on brand_memberships: /u],
     ['an UPDATE grant on brands', 'grant update on public.brands to authenticated', 'revoke update on public.brands from authenticated', /^PF_BRANDS FAIL brands writable by authenticated: /u],
+    ['a column UPDATE grant on brands', 'grant update (display_name) on public.brands to authenticated', 'revoke update (display_name) on public.brands from authenticated', /^PF_BRANDS FAIL brands writable by authenticated: /u],
     ['an INSERT grant to anon', 'grant insert on public.brands to anon', 'revoke insert on public.brands from anon', /^PF_BRANDS FAIL brands writable by anon: /u],
+    ['a DELETE grant to PUBLIC', 'grant delete on public.brands to public', 'revoke delete on public.brands from public', /^PF_BRANDS FAIL brands writable by anon, authenticated: /u],
+    ['a role authenticated reaches holds UPDATE', 'create role g5ls_writer nologin; grant update on public.brands to g5ls_writer; grant g5ls_writer to authenticated with inherit false',
+      'revoke g5ls_writer from authenticated; revoke update on public.brands from g5ls_writer; drop role g5ls_writer', /^PF_BRANDS FAIL brands writable by g5ls_writer: /u],
+    ['anon may SELECT', 'grant select on public.brands to anon', 'revoke select on public.brands from anon', /^PF_BRANDS FAIL brands readable by anon: /u],
+    ['another permissive policy on brands', 'create policy g5ls_extra on public.brands for select to authenticated using (true)', 'drop policy g5ls_extra on public.brands',
+      /^PF_BRANDS FAIL another permissive policy on brands \(g5ls_extra\): /u],
+    ['a view reading brands as its owner', 'create view public.g5ls_brands_v as select id, display_name from public.brands; grant select on public.g5ls_brands_v to authenticated',
+      'drop view public.g5ls_brands_v', /^PF_BRANDS FAIL a view reads brands as its owner \((public\.)?g5ls_brands_v\): /u],
     ['the member read policy on brands dropped', 'alter policy social_mobile_member_select_brands on public.brands rename to g5ls_renamed',
-      'alter policy g5ls_renamed on public.brands rename to social_mobile_member_select_brands', /^PF_BRANDS FAIL a member read policy \(20260918120000\) is missing or not for authenticated only: /u],
+      'alter policy g5ls_renamed on public.brands rename to social_mobile_member_select_brands', /^PF_BRANDS FAIL a member read policy \(20260918120000\) is missing or not for authenticated only; another permissive policy on brands \(g5ls_renamed\): /u],
     ['the member read policy widened to anon', 'alter policy social_mobile_membership_self_select on public.brand_memberships to anon, authenticated',
       'alter policy social_mobile_membership_self_select on public.brand_memberships to authenticated', /^PF_BRANDS FAIL a member read policy \(20260918120000\) is missing or not for authenticated only: /u],
-    ['the kind not granted', 'revoke select on public.brands from authenticated; grant select (id, display_name, is_active, publish_mode) on public.brands to authenticated',
-      'revoke select (id, display_name, is_active, publish_mode) on public.brands from authenticated; grant select on public.brands to authenticated',
-      /^PF_APP_READ FAIL authenticated cannot read brands\.code_profile_key: /u],
+    ['the kind not granted', KIND[0], KIND[1], /^PF_APP_READ FAIL authenticated cannot read brands\.code_profile_key: /u],
     ['the membership role not granted', 'revoke select on public.brand_memberships from authenticated; grant select (brand_id, user_id) on public.brand_memberships to authenticated',
       'revoke select (brand_id, user_id) on public.brand_memberships from authenticated; grant select, maintain on public.brand_memberships to authenticated',
       /^PF_APP_READ FAIL authenticated cannot read brand_memberships\.role: /u],
@@ -626,29 +727,351 @@ Deno.test({ name: 'G5-02 #2 brands ACL: the world as built (row security off, th
       await sql(SUPER, restore);
     }
   }
-  await sql(SUPER, `create policy g5ls_extra on public.brands for select to authenticated using (true)`);
+  assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
+  // why the two new reads are FAILs: through PostgREST the extra policy and the view each show S another person's brand
+  await sql(SUPER, cases[8][1]);
+  try {
+    assert.ok(((await S.client.from('brands').select('id')).data ?? []).some((r) => r.id === rws), 'an extra permissive policy widens what S reads');
+  } finally {
+    await sql(SUPER, cases[8][2]);
+  }
+  await sql(SUPER, cases[9][1]);
+  try {
+    await served(S.client, 'g5ls_brands_v');
+    assert.ok(((await S.client.from('g5ls_brands_v').select('id')).data ?? []).some((r) => r.id === rws), 'the view reads as its owner');
+  } finally {
+    await sql(SUPER, cases[9][2]);
+  }
+  // not a FAIL: a security_invoker view (row security binds the reader) and another policy on brand_memberships (still a WARN)
+  await sql(SUPER, 'create view public.g5ls_brands_iv with (security_invoker = true) as select id from public.brands; grant select on public.g5ls_brands_iv to authenticated');
+  try {
+    assert.match((await preflight()).line('PF_BRANDS'), /^PF_BRANDS PASS/u);
+    await served(S.client, 'g5ls_brands_iv');
+    assert.deepEqual((await S.client.from('g5ls_brands_iv').select('id')).data, [{ id: await derived(S.id) }]);
+  } finally {
+    await sql(SUPER, 'drop view public.g5ls_brands_iv');
+  }
+  await sql(SUPER, 'create policy g5ls_extra_m on public.brand_memberships for select to authenticated using (true)');
   try {
     const p = await preflight();
     assert.match(p.verdict, /^PASS /u);
-    assert.match(p.line('PF_BRANDS_POLICIES'), /^PF_BRANDS_POLICIES WARN 1 /u);
-    assert.ok(((await S.client.from('brands').select('id')).data ?? []).some((r) => r.id === rws), 'why it is reported: an extra permissive policy widens what S reads');
+    assert.match(p.line('PF_BRANDS_POLICIES'), /^PF_BRANDS_POLICIES WARN 1 other permissive policy\(ies\) on brand_memberships /u);
   } finally {
-    await sql(SUPER, 'drop policy g5ls_extra on public.brands');
+    await sql(SUPER, 'drop policy g5ls_extra_m on public.brand_memberships');
   }
   assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
 
   // the kind not granted, through the app: W0 is ready but G1 cannot confirm the workspace -> unconfirmed, nothing sent (the product blocker)
   const sent = provider.calls;
-  await sql(SUPER, cases[6][1]);
+  await sql(SUPER, KIND[0]);
   try {
     assert.deepEqual(await firstRun(R), { w0: 'ready:existing', snapshot: 'ready', personal: null, view: 'unconfirmed', outcome: 'NOT_SENT:no_workspace' });
     assert.equal(provider.calls, sent);
   } finally {
-    await sql(SUPER, cases[6][2]);
+    await sql(SUPER, KIND[1]);
   }
   assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
   assert.deepEqual(await firstRun(R), { w0: 'ready:existing', snapshot: 'ready', personal: rws, view: 'ready', outcome: 'candidates' });
   assert.equal(provider.calls, sent + 1);
+});
+
+Deno.test({ name: 'G5-02 #3 brands fix install refuses on a world it is not for (superuser, not the owner, forced row security, memberships not isolated, another member policy, another permissive policy, a view as its owner, an invoker writer, a filtered definer, the kind not readable, a reached role keeping a write, a held lock) and changes nothing', ...opts }, async () => {
+  await fixOk(ROLLBACK);
+  const built = { catalog: await catalog(), acl: await readAcl() };
+  await sql(SUPER, `create role g5ls_stranger login password 'postgres'`);
+  const cases: Array<[string, string, string, RegExp, string?]> = [
+    ['a superuser', 'select 1', 'select 1', /BRANDS_ISOLATION_SUPERUSER/u, SUPER],
+    ['not the owner', 'select 1', 'select 1', /BRANDS_ISOLATION_NOT_OWNER: g5ls_stranger cannot act as postgres/u, 'g5ls_stranger'],
+    ['forced row security', 'alter table public.brands force row level security', 'alter table public.brands no force row level security', /BRANDS_FORCE_ROW_SECURITY/u],
+    ['memberships row security off', 'alter table public.brand_memberships disable row level security', 'alter table public.brand_memberships enable row level security',
+      /BRANDS_MEMBERSHIPS_NOT_ISOLATED: brand_memberships row security off/u],
+    ['memberships self policy widened', 'alter policy social_mobile_membership_self_select on public.brand_memberships to anon, authenticated',
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to authenticated', /BRANDS_MEMBERSHIPS_NOT_ISOLATED: brand_memberships social_mobile_membership_self_select missing or changed/u],
+    ['memberships column-writable', 'grant update (role) on public.brand_memberships to authenticated', 'revoke update (role) on public.brand_memberships from authenticated',
+      /BRANDS_MEMBERSHIPS_NOT_ISOLATED: brand_memberships writable by authenticated:UPDATE/u],
+    ['the member policy reads every brand', 'alter policy social_mobile_member_select_brands on public.brands using (true)',
+      `alter policy social_mobile_member_select_brands on public.brands using (${MEMBER_POLICY})`, /BRANDS_MEMBER_POLICY/u],
+    ['another permissive policy', 'create policy g5ls_extra on public.brands for select to public using (true)', 'drop policy g5ls_extra on public.brands', /BRANDS_UNREVIEWED_POLICY: g5ls_extra/u],
+    ['a view as its owner', 'create view public.g5ls_brands_v as select id from public.brands; grant select on public.g5ls_brands_v to anon', 'drop view public.g5ls_brands_v',
+      /BRANDS_VIEW_BYPASS: (public\.)?g5ls_brands_v/u],
+    ['an invoker writer', ...INVOKER_WRITER, /BRANDS_INVOKER_WRITER: (public\.)?g5ls_touch\(text\)/u],
+    ['a filtered definer', ...FILTERED_DEFINER, /BRANDS_DEFINER_FILTERED: (public\.)?g5ls_peek\(\)/u],
+    ['the kind not readable', ...KIND_REVOKE, /BRANDS_MEMBER_READ_MISSING: authenticated cannot read brands\.code_profile_key/u],
+    ['a reached role keeps a write', ...WRITER_ROLE, /BRANDS_POSTCONDITION_WRITE: authenticated:UPDATE, g5ls_writer:UPDATE/u],
+    ['anon reaches authenticated', 'grant authenticated to anon', 'revoke authenticated from anon', /BRANDS_POSTCONDITION_ANON_READ: anon, authenticated/u],
+    ['the owner\'s default privileges give the record away', ...DEFAULT_ACL, /BRANDS_POSTCONDITION_PRESTATE/u],
+  ];
+  try {
+    for (const [label, drift, restore, want, user] of cases) {
+      await sql(SUPER, drift);
+      try {
+        const during = { catalog: await catalog(), acl: await readAcl() };
+        const r = await fix(INSTALL, user ?? OWNER);
+        assert.ok(!r.ok, `${label}: installed`);
+        assert.match(r.error, want, label);
+        assert.deepEqual([await catalog(), await readAcl(), await prestate()], [during.catalog, during.acl, '-'], `${label}: nothing changed`);
+      } finally {
+        await sql(SUPER, restore);
+      }
+    }
+    assert.deepEqual([await catalog(), await readAcl()], [built.catalog, built.acl], 'restored');
+    // a transaction holding brands: the install waits lock_timeout (5 s), then stops having changed nothing
+    const holder = new Deno.Command('psql', {
+      args: ['-X', '-q', '-h', '127.0.0.1', '-p', DB_PORT, '-U', SUPER, '-d', 'postgres', '-c', 'begin; lock table public.brands in row exclusive mode; select pg_sleep(60); commit'],
+      env: { LC_ALL: 'C' }, stdout: 'null', stderr: 'null',
+    }).spawn();
+    try {
+      for (let i = 0; i < 100 && await sql(SUPER, `select count(*) from pg_stat_activity where wait_event = 'PgSleep' and query like 'begin; lock table public.brands%'`) !== '1'; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const r = await fix(INSTALL);
+      assert.ok(!r.ok);
+      assert.match(r.error, /lock timeout/u);
+      assert.deepEqual([await catalog(), await readAcl(), await prestate()], [built.catalog, built.acl, '-']);
+    } finally {
+      await sql(SUPER, `select pg_terminate_backend(pid) from pg_stat_activity where query like 'begin; lock table public.brands%'`);
+      holder.kill();
+      await holder.status;
+    }
+  } finally {
+    await sql(SUPER, 'drop role g5ls_stranger');
+    await fixOk(INSTALL);
+  }
+  assert.match(await readAcl(), /brands:rls=true:force=false/u);
+  assert.equal(await brandWrites(), '-');
+});
+
+// ---- mutants of the brands fix and of PF_BRANDS (each must change the answer of its case) -------------------------------------------------
+// psql reading SQL text from stdin (a mutant is never written to disk; the reviewed files are only read)
+async function psqlText(user: string, text: string): Promise<Result> {
+  const child = new Deno.Command('psql', {
+    args: ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', DB_PORT, '-U', user, '-d', 'postgres', '-f', '-'],
+    env: { LC_ALL: 'C', PGOPTIONS: '-c client_min_messages=notice' }, stdin: 'piped', stdout: 'piped', stderr: 'piped',
+  }).spawn();
+  const w = child.stdin.getWriter();
+  await w.write(new TextEncoder().encode(text));
+  await w.close();
+  const o = await child.output();
+  return { ok: o.success, out: decoder.decode(o.stdout).trim(), error: decoder.decode(o.stderr).trim() };
+}
+function mutate(text: string, from: string, to: string): string {
+  assert.equal(text.split(from).length, 2, `mutant site not unique: ${from.slice(0, 100)}`);
+  return text.replace(from, to);
+}
+const pfLine = (r: Result, code: string) => [...r.error.matchAll(/G5_MVP_PREFLIGHT (\S+ \S+ [^\n]*)/gu)].map((m) => m[1]).find((l) => l.startsWith(`${code} `)) ?? '-';
+
+Deno.test({ name: 'G5-02 #3 mutants: every guard of the brands install (23) and rollback (5) and every PF_BRANDS / PF_APP_READ clause (17) is load-bearing; the reviewed files are unchanged', ...opts }, async () => {
+  const install = await Deno.readTextFile(`${FIX}/${INSTALL}`);
+  const rollback = await Deno.readTextFile(`${FIX}/${ROLLBACK}`);
+  const pf = await Deno.readTextFile(`${MVP}/MVP_RELEASE_PREFLIGHT.sql`);
+  const installed = { catalog: await catalog(), acl: await readAcl(), pre: await prestate() };
+  const killed: string[] = [];
+
+  // ---- install: on the world as built with the drift each guard refuses, the mutant does not refuse as the original does
+  await fixOk(ROLLBACK);
+  const built = { catalog: await catalog(), acl: await readAcl() };
+  await sql(SUPER, `create role g5ls_stranger login password 'postgres'`);
+  const off = (code: string) => [`  if v_txt is not null then\n    raise exception '${code}`, `  if false then\n    raise exception '${code}`];
+  const IM: Array<[string, string, string, string, string, RegExp, string?]> = [
+    ['IM1 a superuser not refused', "  if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) then\n    raise exception 'BRANDS_ISOLATION_SUPERUSER",
+      "  if false then\n    raise exception 'BRANDS_ISOLATION_SUPERUSER", 'select 1', 'select 1', /BRANDS_ISOLATION_SUPERUSER/u, SUPER],
+    ['IM2 the owner not checked', "  if not pg_catalog.pg_has_role(current_user, v_owner, 'USAGE') then\n    raise exception 'BRANDS_ISOLATION_NOT_OWNER",
+      "  if false then\n    raise exception 'BRANDS_ISOLATION_NOT_OWNER", 'select 1', 'select 1', /BRANDS_ISOLATION_NOT_OWNER/u, 'g5ls_stranger'],
+    ['IM3 forced row security not refused', '  if (select c.relforcerowsecurity from pg_catalog.pg_class c where c.oid = v_brands) then', '  if false then',
+      'alter table public.brands force row level security', 'alter table public.brands no force row level security', /BRANDS_FORCE_ROW_SECURITY/u],
+    ['IM4 memberships row security not checked', "case when not (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = v_members) then 'row security off' end,", 'null::text,',
+      'alter table public.brand_memberships disable row level security', 'alter table public.brand_memberships enable row level security', /BRANDS_MEMBERSHIPS_NOT_ISOLATED/u],
+    ['IM5 memberships self policy roles not checked', "and p.polcmd = 'r' and p.polpermissive and p.polroles = array[v_auth]) then 'social_mobile_membership_self_select",
+      "and p.polcmd = 'r' and p.polpermissive) then 'social_mobile_membership_self_select",
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to anon, authenticated',
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to authenticated', /BRANDS_MEMBERSHIPS_NOT_ISOLATED/u],
+    ['IM6 memberships column writes not seen', 'else pg_catalog.has_any_column_privilege(x.oid, v_members, k) end))', 'else pg_catalog.has_table_privilege(x.oid, v_members, k) end))',
+      'grant update (role) on public.brand_memberships to authenticated', 'revoke update (role) on public.brand_memberships from authenticated', /BRANDS_MEMBERSHIPS_NOT_ISOLATED/u],
+    ['IM7 the member policy condition not checked', "                    and pg_catalog.pg_get_expr(p.polqual, p.polrelid) ~ 'public\\.brand_memberships'\n", '',
+      // a condition that names the person but not their memberships (every signed-in person reads every brand)
+      'alter policy social_mobile_member_select_brands on public.brands using (exists (select 1 from (values (brands.id, (select auth.uid()))) as bm(brand_id, user_id) where bm.user_id = (select auth.uid())))',
+      `alter policy social_mobile_member_select_brands on public.brands using (${MEMBER_POLICY})`, /BRANDS_MEMBER_POLICY/u],
+    ['IM8 the member policy owner check not checked', "                    and pg_catalog.pg_get_expr(p.polqual, p.polrelid) ~ 'bm\\.user_id = \\( SELECT auth\\.uid\\(\\)')", ')',
+      'alter policy social_mobile_member_select_brands on public.brands using (exists (select 1 from public.brand_memberships as bm where bm.brand_id = brands.id))',
+      `alter policy social_mobile_member_select_brands on public.brands using (${MEMBER_POLICY})`, /BRANDS_MEMBER_POLICY/u],
+    ['IM9 other policies not refused', ...off('BRANDS_UNREVIEWED_POLICY') as [string, string],
+      'create policy g5ls_extra on public.brands for select to authenticated using (true)', 'drop policy g5ls_extra on public.brands', /BRANDS_UNREVIEWED_POLICY/u],
+    ['IM10 PUBLIC policies not seen', "                  where u = 0 or pg_catalog.pg_has_role(v_anon, u, 'MEMBER')", "                  where pg_catalog.pg_has_role(v_anon, u, 'MEMBER')",
+      'create policy g5ls_extra on public.brands for select to public using (true)', 'drop policy g5ls_extra on public.brands', /BRANDS_UNREVIEWED_POLICY/u],
+    ['IM11 views not refused', ...off('BRANDS_VIEW_BYPASS') as [string, string],
+      'create view public.g5ls_brands_v as select id from public.brands; grant select on public.g5ls_brands_v to anon', 'drop view public.g5ls_brands_v', /BRANDS_VIEW_BYPASS/u],
+    ['IM12 materialized views not seen', "     and (v.relkind = 'm' or (v.relkind = 'v'", "     and ((v.relkind = 'v'",
+      'create materialized view public.g5ls_brands_m as select id from public.brands; grant select on public.g5ls_brands_m to authenticated', 'drop materialized view public.g5ls_brands_m',
+      /BRANDS_VIEW_BYPASS/u],
+    ['IM13 invoker writers not refused', ...off('BRANDS_INVOKER_WRITER') as [string, string], ...INVOKER_WRITER, /BRANDS_INVOKER_WRITER/u],
+    ['IM14 filtered definers not refused', ...off('BRANDS_DEFINER_FILTERED') as [string, string], ...FILTERED_DEFINER, /BRANDS_DEFINER_FILTERED/u],
+    ['IM15 the kind read not checked', ...off('BRANDS_MEMBER_READ_MISSING') as [string, string], ...KIND_REVOKE, /BRANDS_MEMBER_READ_MISSING/u],
+    ['IM16 reached roles not checked after', "   where (pg_catalog.pg_has_role(v_anon, x.oid, 'MEMBER') or pg_catalog.pg_has_role(v_auth, x.oid, 'MEMBER'))\n     and case when k in",
+      "   where x.rolname in ('anon', 'authenticated')\n     and case when k in", ...WRITER_ROLE, /BRANDS_POSTCONDITION_WRITE: authenticated:UPDATE, g5ls_writer:UPDATE/u],
+    ['IM17 anon reads not checked after', ...off('BRANDS_POSTCONDITION_ANON_READ') as [string, string],
+      'grant authenticated to anon', 'revoke authenticated from anon', /BRANDS_POSTCONDITION_ANON_READ/u],
+    ['IM18 the record\'s ACL not checked', '     or exists (select 1 from pg_catalog.pg_class c, pg_catalog.aclexplode(', '     or false and exists (select 1 from pg_catalog.pg_class c, pg_catalog.aclexplode(',
+      ...DEFAULT_ACL, /BRANDS_POSTCONDITION_PRESTATE/u],
+  ];
+  try {
+    for (const [label, from, to, drift, restore, want, user] of IM) {
+      await sql(SUPER, drift);
+      try {
+        const original = await fix(INSTALL, user ?? OWNER);
+        assert.ok(!original.ok && want.test(original.error), `${label}: the original must refuse\n${original.error}`);
+        const r = await psqlText(user ?? OWNER, mutate(install, from, to));
+        assert.ok(r.ok || !want.test(r.error), `${label}: survived\n${r.error}`);
+        killed.push(label.split(' ')[0]);
+      } finally {
+        if (await prestate() !== '-') {   // a mutant that installed (IM1 as the superuser): back to the world as built
+          await sql(SUPER, 'alter table private.postona_brands_isolation_prestate owner to postgres');
+          await fixOk(ROLLBACK);
+        }
+        await sql(SUPER, restore);
+      }
+    }
+    // the change itself: without each step the postconditions refuse the whole transaction (the original installs on this same world)
+    const CORE: Array<[string, string, string, RegExp]> = [
+      ['IM19 anon kept', 'revoke all on table public.brands from public, anon;', 'revoke all on table public.brands from public;', /BRANDS_POSTCONDITION_WRITE: anon:/u],
+      ['IM20 authenticated writes kept', '  revoke insert, update, delete, truncate, references, trigger on table public.brands from authenticated;\n', '', /BRANDS_POSTCONDITION_WRITE: authenticated:DELETE/u],
+      ['IM21 row security left off', '  alter table public.brands enable row level security;\n', '', /BRANDS_POSTCONDITION_ROW_SECURITY/u],
+    ];
+    for (const [label, from, to, want] of CORE) {
+      const r = await psqlText(OWNER, mutate(install, from, to));
+      assert.ok(!r.ok && want.test(r.error), `${label}: survived\n${r.error}`);
+      assert.deepEqual([await catalog(), await prestate()], [built.catalog, '-'], `${label}: refused as a whole`);
+      killed.push(label.split(' ')[0]);
+    }
+    // MAINTAIN: the same, through the postcondition's MAINTAIN entry
+    {
+      const r = await psqlText(OWNER, mutate(install, "    execute 'revoke maintain on table public.brands from authenticated';", '    null;'));
+      assert.ok(!r.ok && /BRANDS_POSTCONDITION_WRITE: authenticated:MAINTAIN/u.test(r.error), `IM22 survived\n${r.error}`);
+      killed.push('IM22');
+    }
+    assert.deepEqual([await catalog(), await readAcl()], [built.catalog, built.acl], 'restored');
+  } finally {
+    await sql(SUPER, 'drop role g5ls_stranger');
+  }
+
+  // ---- the record: a re-run must keep the first install's (the world as built), never the hardened state
+  await fixOk(INSTALL);
+  assert.equal(await prestate(), installed.pre);
+  const saved = await sql(SUPER, 'select to_jsonb(p)::text from private.postona_brands_isolation_prestate p');
+  {
+    const r = await psqlText(OWNER, mutate(install, '  on conflict (id) do nothing;',
+      '  on conflict (id) do update set row_security = excluded.row_security, table_acl = excluded.table_acl, column_acl = excluded.column_acl;'));
+    assert.ok(r.ok, r.error);
+    assert.notEqual(await prestate(), installed.pre, 'IM23 survived');
+    killed.push('IM23');
+    await sql(SUPER, `update private.postona_brands_isolation_prestate p set (row_security, table_acl, column_acl, recorded_at)
+      = (select s.row_security, s.table_acl, s.column_acl, s.recorded_at from jsonb_populate_record(null::private.postona_brands_isolation_prestate, '${saved}') s)`);
+    assert.equal(await prestate(), installed.pre);
+  }
+
+  // ---- rollback: from the installed world, with a column grant in the record (the as-built world plus anon SELECT (display_name))
+  await fixOk(ROLLBACK);
+  await sql(SUPER, 'grant select (display_name) on public.brands to anon');
+  const builtCol = { catalog: await catalog(), acl: await readAcl() };
+  await fixOk(INSTALL);
+  const installedCol = { catalog: await catalog(), acl: await readAcl() };
+  const recordSql = install.slice(install.indexOf('  create table if not exists private.postona_brands_isolation_prestate'), install.indexOf('  revoke all on table private.postona_brands_isolation_prestate'));
+  const savedCol = await sql(SUPER, 'select to_jsonb(p)::text from private.postona_brands_isolation_prestate p');
+  const RM: Array<[string, string, string, (r: Result) => boolean | Promise<boolean>]> = [
+    ['RM1 table grants not restored', "    execute pg_catalog.format('grant %s on table public.brands to %s%s', v_entry.privilege, v_entry.grantee,\n                              case when v_entry.grantable then ' with grant option' else '' end);",
+      '    null;', (r) => !r.ok && /BRANDS_ROLLBACK_POSTCONDITION/u.test(r.error)],
+    ['RM2 column grants not restored', "    execute pg_catalog.format('grant %s (%I) on table public.brands to %s%s', v_entry.privilege, v_entry.\"column\", v_entry.grantee,\n                              case when v_entry.grantable then ' with grant option' else '' end);",
+      '    null;', (r) => !r.ok && /BRANDS_ROLLBACK_POSTCONDITION/u.test(r.error)],
+    ['RM3 row security not restored', '  if not v_pre.row_security then\n    alter table public.brands disable row level security;\n  end if;\n', '', (r) => !r.ok && /BRANDS_ROLLBACK_POSTCONDITION/u.test(r.error)],
+    ['RM4 the postcondition off (with no column grant restored)', '  if v_got is distinct from v_want\n', '  if false and v_got is distinct from v_want\n',
+      async (r) => r.ok && await readAcl() !== builtCol.acl],
+    ['RM5 the record kept', '  drop table private.postona_brands_isolation_prestate;\n', '', async (r) => r.ok && await prestate() !== '-'],
+  ];
+  for (const [label, from, to, isKilled] of RM) {
+    let text = mutate(rollback, from, to);
+    if (label.startsWith('RM4')) text = mutate(text, RM[1][1], RM[1][2]);
+    const r = await psqlText(OWNER, text);
+    assert.ok(await isKilled(r), `${label}: survived\n${r.error}`);
+    killed.push(label.split(' ')[0]);
+    // back to the installed world: the record (if the mutant dropped it) and the real rollback + install
+    if (await prestate() === '-') {
+      await sql(OWNER, recordSql);
+      await sql(OWNER, `insert into private.postona_brands_isolation_prestate select * from jsonb_populate_record(null::private.postona_brands_isolation_prestate, '${savedCol}')`);
+    }
+    await fixOk(ROLLBACK);
+    assert.deepEqual([await catalog(), await readAcl()], [builtCol.catalog, builtCol.acl], `${label}: the real rollback restores the world with the column grant`);
+    await fixOk(INSTALL);
+    assert.deepEqual([await catalog(), await readAcl()], [installedCol.catalog, installedCol.acl]);
+  }
+  // the original rollback restores the column grant too, then the suite's world comes back
+  await fixOk(ROLLBACK);
+  assert.match(await readAcl(), /col:public\.brands\.display_name:\{anon=r\/postgres\}|col:brands\.display_name:\{anon=r\/postgres\}/u);
+  await sql(SUPER, 'revoke select (display_name) on public.brands from anon');
+  await fixOk(INSTALL);
+  assert.deepEqual([await catalog(), await readAcl(), await prestate()], [installed.catalog, installed.acl, installed.pre]);
+
+  // ---- PF_BRANDS / PF_APP_READ: on the fixed world with the drift each clause catches, the mutant no longer reports it
+  const brandsWhere = "        where (pg_catalog.pg_has_role(pg_catalog.to_regrole('anon'), r.oid, 'MEMBER') or pg_catalog.pg_has_role(pg_catalog.to_regrole('authenticated'), r.oid, 'MEMBER'))\n          and case when k in";
+  const PM: Array<[string, string, string, string, string, string, RegExp]> = [
+    ['PM1 code_profile_key not checked', "('brands', 'publish_mode'), ('brands', 'code_profile_key'),", "('brands', 'publish_mode'),", ...KIND_REVOKE, 'PF_APP_READ', /^PF_APP_READ FAIL/u],
+    ['PM2 the membership role not checked', "('brand_memberships', 'brand_id'), ('brand_memberships', 'role'),", "('brand_memberships', 'brand_id'),",
+      'revoke select on public.brand_memberships from authenticated; grant select (brand_id, user_id) on public.brand_memberships to authenticated',
+      'revoke select (brand_id, user_id) on public.brand_memberships from authenticated; grant select, maintain on public.brand_memberships to authenticated', 'PF_APP_READ', /^PF_APP_READ FAIL/u],
+    ['PM3 row security not checked', 'and not c.relrowsecurity),', 'and false),', 'alter table public.brands disable row level security', 'alter table public.brands enable row level security', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM4 memberships row security not checked', "where c.oid in ('public.brands'::regclass, 'public.brand_memberships'::regclass) and not c.relrowsecurity",
+      "where c.oid in ('public.brands'::regclass) and not c.relrowsecurity",
+      'alter table public.brand_memberships disable row level security', 'alter table public.brand_memberships enable row level security', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM5 member policies not checked', "           then 'a member read policy (20260918120000) is missing or not for authenticated only' end,", "           and false then 'x' end,",
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to anon, authenticated',
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to authenticated', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM6 policy roles not checked', "and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid])\n           then", 'and p.polpermissive)\n           then',
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to anon, authenticated',
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to authenticated', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM7 brand writes not checked', 'pg_catalog.unnest(v_brand_writes) k', "pg_catalog.unnest('{}'::text[]) k",
+      'grant update on public.brands to authenticated', 'revoke update on public.brands from authenticated', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM8 anon\'s reach not checked', brandsWhere, "        where pg_catalog.pg_has_role(pg_catalog.to_regrole('authenticated'), r.oid, 'MEMBER')\n          and case when k in",
+      'grant insert on public.brands to anon', 'revoke insert on public.brands from anon', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM9 memberships\' other policies not warned', "    if v_n > 0 then\n      v_lines := v_lines || ('PF_BRANDS_POLICIES WARN", "    if false then\n      v_lines := v_lines || ('PF_BRANDS_POLICIES WARN",
+      'create policy g5ls_extra_m on public.brand_memberships for select to authenticated using (true)', 'drop policy g5ls_extra_m on public.brand_memberships',
+      'PF_BRANDS_POLICIES', /^PF_BRANDS_POLICIES WARN/u],
+    ['PM10 column grants not seen', "then pg_catalog.has_any_column_privilege(r.oid, 'public.brands', k)", "then pg_catalog.has_table_privilege(r.oid, 'public.brands', k)",
+      'grant update (display_name) on public.brands to authenticated', 'revoke update (display_name) on public.brands from authenticated', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM11 reached roles not seen', brandsWhere, "        where r.rolname in ('anon', 'authenticated')\n          and case when k in",
+      'create role g5ls_writer nologin; grant update on public.brands to g5ls_writer; grant g5ls_writer to authenticated with inherit false',
+      'revoke g5ls_writer from authenticated; revoke update on public.brands from g5ls_writer; drop role g5ls_writer', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM12 MAINTAIN not checked', "then array['MAINTAIN'] else", "then '{}'::text[] else",
+      'grant maintain on public.brands to authenticated', 'revoke maintain on public.brands from authenticated', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM13 anon reads not checked', "and pg_catalog.has_any_column_privilege(r.oid, 'public.brands', 'SELECT')),", 'and false),',
+      'grant select on public.brands to anon', 'revoke select on public.brands from anon', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM14 other brands policies not checked', "where p.polrelid = 'public.brands'::regclass and p.polpermissive and p.polname <> 'social_mobile_member_select_brands'", 'where false',
+      'create policy g5ls_extra on public.brands for select to authenticated using (true)', 'drop policy g5ls_extra on public.brands', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM15 PUBLIC policies not seen', "          and exists (select 1 from pg_catalog.unnest(p.polroles) u where u = 0 or pg_catalog.pg_has_role(",
+      '          and exists (select 1 from pg_catalog.unnest(p.polroles) u where pg_catalog.pg_has_role(',
+      'create policy g5ls_extra on public.brands for select to public using (true)', 'drop policy g5ls_extra on public.brands', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    ['PM16 views not checked', "and d.refobjid = 'public.brands'::regclass and v.oid <> 'public.brands'::regclass", 'and false',
+      'create view public.g5ls_brands_v as select id from public.brands; grant select on public.g5ls_brands_v to authenticated', 'drop view public.g5ls_brands_v', 'PF_BRANDS', /^PF_BRANDS FAIL/u],
+    // the other way round: a security_invoker view is bound by row security and is NOT a finding; the mutant reports it
+    ['PM17 security_invoker views reported', "where pg_catalog.lower(o) in ('security_invoker=true'", "where false and pg_catalog.lower(o) in ('security_invoker=true'",
+      'create view public.g5ls_brands_iv with (security_invoker = true) as select id from public.brands; grant select on public.g5ls_brands_iv to authenticated', 'drop view public.g5ls_brands_iv',
+      'PF_BRANDS', /^PF_BRANDS PASS/u],
+  ];
+  for (const [label, from, to, drift, restore, code, want] of PM) {
+    await sql(SUPER, drift);
+    try {
+      const original = await psqlText(OWNER, pf);
+      assert.match(pfLine(original, code), want, `${label}: the original\n${original.error}`);
+      const r = await psqlText(OWNER, mutate(pf, from, to));
+      assert.notEqual(pfLine(r, 'PF_OWNER'), '-', `${label}: the mutant did not run\n${r.error}`);
+      assert.doesNotMatch(pfLine(r, code), want, `${label}: survived`);
+      killed.push(label.split(' ')[0]);
+    } finally {
+      await sql(SUPER, restore);
+    }
+  }
+  assert.deepEqual([await catalog(), await readAcl(), await prestate()], [installed.catalog, installed.acl, installed.pre], 'restored');
+  // the reviewed files were only read
+  assert.deepEqual([await Deno.readTextFile(`${FIX}/${INSTALL}`), await Deno.readTextFile(`${FIX}/${ROLLBACK}`), await Deno.readTextFile(`${MVP}/MVP_RELEASE_PREFLIGHT.sql`)], [install, rollback, pf]);
+  assert.equal(killed.length, 23 + 5 + 17);
+  console.log(`G5-02 #3 mutants killed ${killed.length} / ${23 + 5 + 17}: ${killed.join(' ')}`);
 });
 
 // ---- mutants of W0's body (each must change an answer above) -------------------------------------------------------------------------

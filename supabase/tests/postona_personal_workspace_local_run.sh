@@ -122,10 +122,15 @@ for f in 20261001150000_common_account_lifecycle_foundation 20261006230000_commo
 done
 # TEST-WORLD stand-in for G3's L-1 revoke (P3), as the earlier runners
 own -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" >/dev/null
-# TEST-WORLD stand-in for the brands owner's hardening (G5-02 #2; brands is not G5's): as built, row security is off on brands (no migration
-# enables it; the member policy of 20260918120000 alone does nothing) and the image's default privileges let anon / authenticated write it. The
-# suite measures that state (a person reads and changes another workspace, anon inserts: PF_BRANDS FAIL) and then runs on this one.
-own -c "alter table public.brands enable row level security; revoke all on public.brands from anon; revoke insert, update, delete, truncate, references, trigger, maintain on public.brands from authenticated" >/dev/null
+# G5-02 #3: the world as built has row security off on brands (no migration enables it; the member policy of 20260918120000 alone does
+# nothing) and the image's default privileges let anon / authenticated write it. Checked here, then THIS TREE's candidate fix is installed as
+# `postgres` (the owner of brands); the suite runs on the result, and its brands test rolls it back (the world as built again) and re-installs.
+[ "$(own -At -c "select c.relrowsecurity || ':' || has_table_privilege('anon', c.oid, 'INSERT') || ':' || has_table_privilege('authenticated', c.oid, 'UPDATE') from pg_class c where c.oid = 'public.brands'::regclass")" = "false:true:true" ] \
+  || { echo "G5LS_BRANDS_NOT_AS_BUILT"; exit 2; }
+# The deletion fixture's test helper fixture_user_with_workspace (an invoker function inserting brands; this suite never calls it) is
+# executable by PUBLIC: the install refuses that (BRANDS_INVOKER_WRITER), so this TEST WORLD takes EXECUTE off it for everyone but its owner.
+own -c "revoke execute on function public.fixture_user_with_workspace(uuid, text) from public, anon, authenticated" >/dev/null
+own -f "$REPO/supabase/candidates/postona_brands_tenant_isolation/001_brands_tenant_isolation.sql" >/dev/null
 
 # ---- G6's ledger side, as `postgres` -----------------------------------------------------------------------------------------------------
 for f in migrations/20261010050613_ai_provider_budget_ledger.sql migrations/20261017120000_ai_consumer_call_store.sql migrations/20261017150000_ai_ledger_user_erasure.sql \
@@ -158,8 +163,8 @@ done
 
 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u OPENAI_API_KEY \
     G5LS_API="http://127.0.0.1:$API_PORT" G5LS_PUBLISHABLE="$PUBLISHABLE" G5LS_DB_PORT="$DB_PORT" G5LS_FAKE_PORT="$FAKE_PORT" \
-    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
+    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_BRANDS_FIX="$REPO/supabase/candidates/postona_brands_tenant_isolation" G5LS_SECRET="$SECRET" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
   deno test --no-config --no-check --cached-only \
-    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
+    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
     --allow-net="127.0.0.1:$API_PORT,127.0.0.1:$FAKE_PORT" --allow-read="$WORK,$REPO" --allow-run=psql ${G5LS_FILTER:+--filter "$G5LS_FILTER"} \
     "$REPO/supabase/tests/postona_personal_workspace_local_test.ts"
