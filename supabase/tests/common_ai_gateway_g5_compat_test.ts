@@ -32,10 +32,12 @@ const scopeOf = (s: Sample["scope"]): VerdictScope => ({ app: s.app as VerdictSc
 /** A fake PostgREST for the proposed RPC: answers a queue of bodies (or a status) and records every request. */
 class FakeRpc {
   requests: RecordedCall[] = [];
+  redirects: string[] = [];
   answers: Array<{ status: number; body: unknown } | Error> = [];
   readonly fetch: FetchLike = async (input, init) => {
     const call: RecordedCall = { url: String(input), method: String(init?.method), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) };
     this.requests.push(call);
+    this.redirects.push(String(init?.redirect));
     const next = this.answers.length > 1 ? this.answers.shift()! : this.answers[0];
     if (!next) return jsonResponse(404, { code: "PGRST202" }); // the RPC does not exist (today)
     if (next instanceof Error) throw next;
@@ -89,7 +91,7 @@ Deno.test("transport request: the proposed RPC, publishable key + the caller's J
   }
 });
 
-Deno.test("transport answers: times added by the Edge (allow 60 s, refusal expires at once); 401/403 -> deny AUTH_REQUIRED; RPC missing (404), 5xx, network, bad JSON, a body with times or extra keys -> unavailable (throws)", async () => {
+Deno.test("transport answers: times added by the Edge (allow 60 s, refusal expires at once); 401/403 -> deny AUTH_REQUIRED; G6-27: RPC missing (404 PGRST202) / ambiguous (300) -> deny G5_RPC_NOT_ADOPTED, any other 4xx or a redirect (never followed) -> deny G5_RPC_REFUSED; 5xx, 408, 429, network, bad JSON, a body with times or extra keys -> unavailable (throws)", async () => {
   const now = 1_760_000_000_000;
   const rpc = new FakeRpc();
   rpc.answers = [{ status: 200, body: ALLOW.rpc_wire }];
@@ -105,9 +107,35 @@ Deno.test("transport answers: times added by the Edge (allow 60 s, refusal expir
     const v = await port.verdict(JWT, scopeOf(ALLOW.scope));
     assert.deepEqual([v.decision, v.reason], ["deny", "AUTH_REQUIRED"], String(status));
   }
+  // G6-27: PostgREST refused the call itself; the same key cannot succeed, so the port refuses (never AUTH_UNAVAILABLE = retry).
+  const refused: Array<[string, { status: number; body: unknown } | undefined, string]> = [
+    ["rpc missing (the fake's default)", undefined, "G5_RPC_NOT_ADOPTED"],
+    ["404 PGRST202", { status: 404, body: { code: "PGRST202", message: "Could not find the function public.common_account_authorization_verdict(p_app, p_brand_id, p_feature) in the schema cache" } }, "G5_RPC_NOT_ADOPTED"],
+    ["404 without a body", { status: 404, body: "" }, "G5_RPC_NOT_ADOPTED"],
+    ["404 with an allow-shaped body", { status: 404, body: ALLOW.rpc_wire }, "G5_RPC_NOT_ADOPTED"],
+    ["300 PGRST203", { status: 300, body: { code: "PGRST203" } }, "G5_RPC_NOT_ADOPTED"],
+    ["302 (a redirect is not followed)", { status: 302, body: ALLOW.rpc_wire }, "G5_RPC_REFUSED"],
+    ["400 P0001", { status: 400, body: { code: "P0001" } }, "G5_RPC_REFUSED"],
+    ["400 PGRST100", { status: 400, body: { code: "PGRST100" } }, "G5_RPC_REFUSED"],
+    ["406 PGRST106", { status: 406, body: { code: "PGRST106" } }, "G5_RPC_REFUSED"],
+    ["409 23505", { status: 409, body: { code: "23505" } }, "G5_RPC_REFUSED"],
+  ];
+  for (const [label, answer, reason] of refused) {
+    const r = new FakeRpc();
+    r.answers = answer === undefined ? [] : [answer];
+    const wire = await transport(r, () => now).fetchVerdict(JWT, scopeOf(ALLOW.scope)) as Record<string, unknown>;
+    assert.deepEqual([wire.decision, wire.reason, wire.owner_epoch, wire.expires_at_ms], ["deny", reason, null, now], label);
+    const v = await createG5AuthorityPort({ transport: transport(r), planAllowlist: PLAN }).verdict(JWT, scopeOf(ALLOW.scope));
+    assert.deepEqual([v.decision, v.reason], ["deny", reason], label);
+    assert.deepEqual(r.redirects, ["manual", "manual"], `${label}: the JWT never follows a redirect`);
+  }
   const unavailable: Array<[string, { status: number; body: unknown } | Error | undefined]> = [
-    ["rpc missing", undefined],
     ["500", { status: 500, body: { code: "XX000" } }],
+    ["502", { status: 502, body: "" }],
+    ["503 PGRST001", { status: 503, body: { code: "PGRST001" } }],
+    ["504 PGRST003", { status: 504, body: { code: "PGRST003" } }],
+    ["408", { status: 408, body: "" }],
+    ["429", { status: 429, body: "" }],
     ["500 with an allow-shaped body", { status: 500, body: ALLOW.rpc_wire }],
     ["network", new TypeError("down")],
     ["not JSON", { status: 200, body: "not json" }],
@@ -255,11 +283,11 @@ function consultWorld(project: FakeProject) {
   return { openai, send };
 }
 
-Deno.test("fail closed today: the RPC is not deployed (404) -> the consult answers CONSULT_AUTH_UNAVAILABLE with nothing claimed, reserved or sent", async () => {
+Deno.test("fail closed today: the RPC is not deployed (404) -> the consult answers CONSULT_NOT_ENTITLED (G6-27: a refusal, not a same-key retry) with nothing claimed, reserved or sent", async () => {
   const project = new FakeProject();
   const w = consultWorld(project);
   const r = await w.send("consult-g5-0001");
-  assert.deepEqual([r.status, r.body.error, w.openai.calls.length, project.gatewayRpc.length, project.rpc.requests.length], [503, "CONSULT_AUTH_UNAVAILABLE", 0, 0, 1]);
+  assert.deepEqual([r.status, r.body.error, w.openai.calls.length, project.gatewayRpc.length, project.rpc.requests.length], [403, "CONSULT_NOT_ENTITLED", 0, 0, 1]);
 });
 
 Deno.test("with G5's own allow on the RPC: the consult goes through once; verdict and recheck both carry the caller's JWT; a moved owner epoch at the recheck -> 403, reservation released, nothing sent", async () => {

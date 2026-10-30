@@ -149,7 +149,15 @@ export type CallClaim =
 /** The durable call store (ai_calls in production design; unapplied). Bound to the verdict's subject per call. */
 /** `storeFeature` is the row's feature (`app:feature`); the stored audit's feature must be the same value. */
 export type ClaimContext = Readonly<{ app: AppId; feature: string; storeFeature: string; subject: GatewaySubject }>;
+/**
+ * G6-27: what CallStore.claim throws when the store refused the claim itself: the RPC is not adopted (PostgREST 404 PGRST202),
+ * not permitted, or does not take this shape. The claim did not run, and the same key cannot succeed until the store changes,
+ * so the gateway answers LEDGER_UNAVAILABLE (not sent, no same-key retry). Any other throw stays STORE_UNAVAILABLE (it may be
+ * transient: the same key may be asked again).
+ */
+export class CallStoreRefusedError extends Error {}
 export interface CallStore {
+  /** Throws CallStoreRefusedError when the store refused the claim itself (see there); anything else it throws may be transient. */
   claim(identity: CallIdentity, context: ClaimContext): Promise<CallClaim>;
   complete(identity: CallIdentity, owner: string, outcome: StoredOutcome): Promise<void>;
 }
@@ -327,8 +335,8 @@ export async function gatewayExecute(deps: GatewayDeps, credential: unknown, req
   let claim: CallClaim;
   try {
     claim = await deps.store.claim(identity, claimContext);
-  } catch {
-    return fail("STORE_UNAVAILABLE");
+  } catch (e) {
+    return fail(e instanceof CallStoreRefusedError ? "LEDGER_UNAVAILABLE" : "STORE_UNAVAILABLE");
   }
   if (claim.kind === "conflict") return fail("OPERATION_REUSED");
   if (claim.kind === "busy") return fail("IN_PROGRESS");

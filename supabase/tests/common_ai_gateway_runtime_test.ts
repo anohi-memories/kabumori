@@ -19,9 +19,10 @@ import {
   type RecordedCall,
   recordingFetch,
 } from "../functions/_shared/ai_provider/test_support.ts";
-import { type AuthorityPort, type AuthVerdict, type FeaturePolicy, type GatewaySubject, policyKey } from "../functions/_shared/ai_gateway/gateway.ts";
+import { type AuthorityPort, type AuthVerdict, CallStoreRefusedError, type FeaturePolicy, type GatewaySubject, policyKey } from "../functions/_shared/ai_gateway/gateway.ts";
 import { definePolicyRegistry, PolicyRegistryError } from "../functions/_shared/ai_gateway/policy_registry.ts";
 import { AiGatewayConfigError, createAiGateway } from "../functions/_shared/ai_gateway/runtime.ts";
+import { AiCallsClaimRefused, AiCallsRpcError, SupabaseAiCallsStore } from "../functions/_shared/ai_gateway/ai_calls_store.ts";
 
 const SUPABASE = "http://127.0.0.1:54321";
 const SERVICE_KEY = "local-gateway-runtime-key-NOT-A-SECRET";
@@ -305,14 +306,20 @@ Deno.test("the authority port: expired, denied, unreachable, revoked at recheck,
   }
 });
 
-Deno.test("call store failures: claim unreachable / failing / answering nonsense -> STORE_UNAVAILABLE before any reservation or send; complete failing -> UNKNOWN after ONE send, never resent", async () => {
-  for (const fault of ["network", 500, "bad", "error-ok"] as const) {
+Deno.test("call store failures: claim unreachable / failing / answering nonsense -> STORE_UNAVAILABLE before any reservation or send; claim refused by PostgREST itself (G6-27: 404 PGRST202 not adopted, 401 / 403, 400, 302) -> LEDGER_UNAVAILABLE (no same-key retry); complete failing (refused or not) -> UNKNOWN after ONE send, never resent", async () => {
+  for (const fault of ["network", 500, 502, 503, 408, 429, "bad", "error-ok"] as const) {
     const w = world();
     w.supabase.fault = { ai_calls_claim: fault };
     const r = await w.run("jwt-a", ideas());
     assert.deepEqual([code(r), w.provider.calls.length, w.supabase.calls], ["STORE_UNAVAILABLE", 0, ["claim"]], String(fault));
   }
-  for (const fault of ["network", 500, "bad", "lost", "error-ok"] as const) {
+  for (const fault of [404, 401, 403, 400, 302, 300] as const) {
+    const w = world();
+    w.supabase.fault = { ai_calls_claim: fault };
+    const r = await w.run("jwt-a", ideas());
+    assert.deepEqual([code(r), w.provider.calls.length, w.supabase.calls], ["LEDGER_UNAVAILABLE", 0, ["claim"]], String(fault));
+  }
+  for (const fault of ["network", 500, 404, 403, "bad", "lost", "error-ok"] as const) {
     const w = world();
     w.supabase.fault = { ai_calls_complete: fault };
     const r = await w.run("jwt-a", ideas());
@@ -323,6 +330,30 @@ Deno.test("call store failures: claim unreachable / failing / answering nonsense
     // "lost": the row WAS written and only the answer was lost -> the stored answer is served; otherwise in progress.
     assert.equal(code(again), fault === "lost" || fault === "error-ok" ? "OK" : "IN_PROGRESS", String(fault));
   }
+});
+
+Deno.test("G6-27: the call store's errors: only a claim that PostgREST refused itself is a CallStoreRefusedError (the gateway's no-retry signal); the same refusal of complete, and any 5xx / 408 / 429 / network claim, stays a plain AiCallsRpcError; no RPC follows a redirect", async () => {
+  const identity = { key: `h5m2_${"a".repeat(64)}`, tenantTag: "b".repeat(64), fingerprint: "c".repeat(64) };
+  const context = { app: "postona" as const, feature: "post_generation", storeFeature: "postona:post_generation", subject: { kind: "user" as const, app: "postona" as const, userId: "11111111-2222-4333-8444-555555555555", brand: { app: "postona" as const, slug: "u_ae343f5caedb67d4af33fc7a" } } };
+  const outcome = { ok: false, code: "NOT_SENT", audit: {} } as never;
+  for (const [status, refused] of [[404, true], [300, true], [302, true], [400, true], [401, true], [403, true], [409, true], [408, false], [429, false], [500, false], [503, false]] as const) {
+    const redirects: string[] = [];
+    const fetch: FetchLike = (_input, init) => {
+      redirects.push(String(init?.redirect));
+      return Promise.resolve(new Response(JSON.stringify({ code: "PGRST202" }), { status }));
+    };
+    const store = new SupabaseAiCallsStore({ supabaseUrl: SUPABASE, serviceKey: new SecretValue("k", SERVICE_KEY), fetch });
+    const claim = await store.claim(identity, context).then(() => null, (e: unknown) => e);
+    assert.ok(claim instanceof Error && (claim instanceof CallStoreRefusedError) === refused && (claim instanceof AiCallsClaimRefused) === refused, `claim ${status}`);
+    assert.ok(refused || claim instanceof AiCallsRpcError, `claim ${status}`);
+    assert.match(String((claim as Error).message), new RegExp(`^AI_CALLS_RPC_FAILED:ai_calls_claim:${status}:PGRST202$`, "u"));
+    const complete = await store.complete(identity, "11111111-2222-4333-8444-666666666666", outcome).then(() => null, (e: unknown) => e);
+    assert.ok(complete instanceof AiCallsRpcError && !(complete instanceof CallStoreRefusedError), `complete ${status}`);
+    assert.deepEqual(redirects, ["manual", "manual"], String(status));
+  }
+  const down = new SupabaseAiCallsStore({ supabaseUrl: SUPABASE, serviceKey: new SecretValue("k", SERVICE_KEY), fetch: () => Promise.reject(new TypeError("down")) });
+  const e = await down.claim(identity, context).then(() => null, (x: unknown) => x);
+  assert.ok(e instanceof AiCallsRpcError && !(e instanceof CallStoreRefusedError));
 });
 
 Deno.test("the ledger: a budget limit is QUOTA_EXCEEDED, an outage UNKNOWN with nothing recorded (G6-10) (nothing sent either way); a failed settle keeps the ledger 'sent' (it stays the source of truth)", async () => {

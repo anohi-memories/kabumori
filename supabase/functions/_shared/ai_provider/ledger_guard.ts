@@ -129,6 +129,7 @@ export class SupabaseLedgerBudgetGuard implements BudgetGuard {
         },
         body: JSON.stringify({ p }),
         signal: AbortSignal.timeout(this.#timeoutMs),
+        redirect: "manual", // G6-27: the service key is in the headers; a redirect is an error, never followed
       });
     } catch {
       throw new LedgerRpcError(name, null, null);
