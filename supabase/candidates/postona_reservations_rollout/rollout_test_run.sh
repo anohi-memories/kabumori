@@ -78,9 +78,12 @@ if [ -n "${G3RO_PREFLIGHT_SQL:-}" ]; then
   cp "$here/rollout.sh" "$here/MANIFEST.tsv" "$bundle/"; cp "$G3RO_PREFLIGHT_SQL" "$bundle/preflight.sql"
   sed -i '' "s|^root=.*|root=\"$here/..\"|" "$bundle/rollout.sh"
 fi
+# G3-02 #4 (H4-16 P2): the throw-away world is marked by its creator (this runner, as the superuser); rollout.sh checks the mark
+att="g3ro-throwaway-$(openssl rand -hex 16)"
+sval -c "alter database $db set g3ro.throwaway_attestation = '$att'" >/dev/null
 ro() {  # <mode> [env assignments...]
   local m="$1"; shift
-  env G3RO_PGHOST="$host" G3RO_PGPORT="$port" G3RO_DB="$db" G3RO_OWNER="$owner" "$@" bash "$bundle/rollout.sh" "$m"
+  env G3RO_PGHOST="$host" G3RO_PGPORT="$port" G3RO_DB="$db" G3RO_OWNER="$owner" G3RO_DB_ATTESTATION="$att" "$@" bash "$bundle/rollout.sh" "$m"
 }
 # the WHOLE database: every function / relation / constraint / namespace outside the system schemas, roles, memberships, default privileges
 dbfp() { sval -c "select md5(string_agg(x, '|' order by x)) from (
@@ -120,7 +123,46 @@ printf '%s\n' "$o" | grep -q G3_ROLLOUT_REFUSED_HOST || fail "RM1: $o"
 awk -F '\t' 'BEGIN { OFS = "\t" } $2 == "x012" && $1 == "install" { $4 = "0" substr($4, 2) } { print }' "$here/MANIFEST.tsv" > "$work/m_tampered.tsv"
 cmp -s "$work/m_tampered.tsv" "$here/MANIFEST.tsv" && fail "RM2 probe not built"
 expect_ro "RM2 tampered manifest sha" "G3_ROLLOUT_MANIFEST_SHA: install x012" install G3RO_MANIFEST="$work/m_tampered.tsv"
-echo "OK RM: a non-/tmp host refused (no managed / production mode); a tampered sha refused before the database is touched"
+# P2: the host proves nothing; the attestation decides. A TCP forwarder on 127.0.0.1 stands for a tunnel to another server.
+o="$(env G3RO_PGHOST="$host" G3RO_PGPORT="$port" G3RO_DB="$db" G3RO_OWNER="$owner" bash "$bundle/rollout.sh" preflight 2>&1)" && fail "RM3 no attestation accepted"
+printf '%s\n' "$o" | grep -q G3_ROLLOUT_ATTESTATION_REQUIRED || fail "RM3: $o"
+expect_ro "RM4 a malformed attestation" G3_ROLLOUT_ATTESTATION_REQUIRED preflight G3RO_DB_ATTESTATION=g3ro-throwaway-xyz
+other="kabumori_tb_${suffix}_rmother"
+"${S[@]}" -d postgres -c "create database $other owner $owner" >/dev/null
+fwd_port="$(python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+python3 -I - "$fwd_port" "$port" >/dev/null 2>&1 <<'PY' &
+import socket, sys, threading
+listen, target = int(sys.argv[1]), int(sys.argv[2])
+srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(("127.0.0.1", listen)); srv.listen(16)
+def pipe(a, b):
+    try:
+        while (data := a.recv(65536)):
+            b.sendall(data)
+    except OSError:
+        pass
+    finally:
+        for x in (a, b):
+            try: x.close()
+            except OSError: pass
+while True:
+    c, _ = srv.accept()
+    u = socket.create_connection(("127.0.0.1", target))
+    threading.Thread(target=pipe, args=(c, u), daemon=True).start()
+    threading.Thread(target=pipe, args=(u, c), daemon=True).start()
+PY
+fwd_pid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do psql -X -q -A -t -h 127.0.0.1 -p "$fwd_port" -U "$owner" -d "$db" -c "select 1" >/dev/null 2>&1 && break; sleep 0.3; done
+fwd() { env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$fwd_port" G3RO_OWNER="$owner" G3RO_DB_ATTESTATION="$att" "$@" bash "$bundle/rollout.sh" preflight; }
+o="$(fwd G3RO_DB="$other" 2>&1)" && fail "RM5 an unmarked database behind 127.0.0.1 accepted"
+printf '%s\n' "$o" | grep -q G3_ROLLOUT_ATTESTATION_MISSING || fail "RM5: $o"
+"${S[@]}" -d postgres -c "alter database $other set g3ro.throwaway_attestation = 'g3ro-throwaway-$(openssl rand -hex 16)'" >/dev/null
+o="$(fwd G3RO_DB="$other" 2>&1)" && fail "RM6 a database with another attestation accepted"
+printf '%s\n' "$o" | grep -q G3_ROLLOUT_ATTESTATION_MISMATCH || fail "RM6: $o"
+o="$(fwd G3RO_DB="$db" 2>&1)" || fail "RM7 the attested database through the forwarder: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh' || fail "RM7: $o"
+kill "$fwd_pid" >/dev/null 2>&1 || true
+[ "$("${S[@]}" -d "$other" -c "select count(*) from pg_namespace where nspname in ('postona_x_resv', 'postona_threads_resv')")" = 0 ] || fail "RM5/6 touched the other database"
+echo "OK RM: a non-/tmp host refused (no managed / production mode); a tampered sha refused before the database is touched; P2: no / malformed attestation refused; behind a 127.0.0.1 forwarder an unmarked database (MISSING) and a differently marked one (MISMATCH) refused, nothing touched; the attested database passes through the same forwarder"
 
 # --- RP -------------------------------------------------------------------------------------------------------------------------------
 fresh_g3="$(g3fp)"
@@ -214,14 +256,40 @@ expect_ro "RB2 finished X rows not stated" "G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATE
 expect_ro "RB2b finished X rows wrongly stated" G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATED rollback G3RO_X_DISCARD_ROWS=0:0:0
 expect_ro "RB3 Threads rows wrongly stated" "G3_ROLLOUT_ROLLBACK_THREADS_ROWS_NOT_STATED: G3RO_THREADS_DISCARD_ROWS must be 0:0" rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS=1:0
 expect_ro "RB4 consumers not stated" "G3_ROLLOUT_ROLLBACK_CONSUMERS_NOT_STATED" rollback G3RO_X_DISCARD_ROWS="$xrows"
-expect_ro "RB4b a member that can SET the API / worker roles" "G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS: postona_resv_api>$owner,postona_resv_worker>$owner" rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers"
+# G3-02 #4: the body-only Threads consumers (the smoke helpers) must be stated too
+tconsumers="$(sval -c "select coalesce(string_agg(p.oid::regprocedure::text, ',' order by p.oid::regprocedure::text), '') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname not in ('postona_x_resv', 'postona_threads_resv') and n.nspname !~ '^(pg_catalog|information_schema|pg_toast|pg_temp_|pg_toast_temp_)' and p.prosrc ~* 'postona_threads_resv'")"
+[ -n "$tconsumers" ] || fail "RB: the smoke helpers should be Threads consumers"
+expect_ro "RB4c Threads consumers not stated" "G3_ROLLOUT_ROLLBACK_THREADS_CONSUMERS_NOT_STATED: G3RO_ACK_THREADS_CONSUMERS must be '$tconsumers'" rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers"
+expect_ro "RB4b a member that can SET the API / worker roles" "G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS: postona_resv_api>$owner,postona_resv_worker>$owner" rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers"
 # the TEST WORLD's options go (the owner keeps the implicit ADMIN-only membership the rollbacks expect)
 sval -c "revoke set option for postona_resv_api, postona_resv_worker from $owner" -c "revoke inherit option for postona_resv_api, postona_resv_worker from $owner" >/dev/null
-o="$(ro rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" 2>&1)" || fail "RB5 rollback: $o"
+# --- RX (G3-02 #4, H4-16 P1): an object OUTSIDE G3's schemas depending on them refuses the rollback before ANY step, nothing changed --
+rx() {  # <label> <create SQL> <drop SQL> <pattern>
+  own -c "$2" >/dev/null || fail "$1 probe not created"
+  expect_ro "$1" "$4" rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers"
+  own -c "$3" >/dev/null || fail "$1: the external object is gone"
+}
+rx "RX1 (H4) an external view on Threads reservations" "create view public.g3rx_threads_v as select id, status from postona_threads_resv.reservations" \
+   "drop view public.g3rx_threads_v" "G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS: .*public.g3rx_threads_v"
+rx "RX2 an external view on X reservations" "create view public.g3rx_x_v as select id, status from postona_x_resv.reservations" \
+   "drop view public.g3rx_x_v" "G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS: .*public.g3rx_x_v"
+rx "RX3 an external foreign key to Threads" "create table public.g3rx_fk (r uuid references postona_threads_resv.reservations (id))" \
+   "drop table public.g3rx_fk" "G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS: .*g3rx_fk"
+rx "RX4 an external function taking an X row type" "create function public.g3rx_f(r postona_x_resv.reservations) returns int language sql as 'select 1'" \
+   "drop function public.g3rx_f(postona_x_resv.reservations)" "G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS: .*g3rx_f"
+rx "RX5 an external view calling a Threads function" "create view public.g3rx_fn_v as select postona_threads_resv.text_ok('x') as ok" \
+   "drop view public.g3rx_fn_v" "G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS: .*g3rx_fn_v"
+own -c "create function public.g3rx_tc() returns bigint language plpgsql as \$\$ begin return (select count(*) from postona_threads_resv.audit); end \$\$" >/dev/null
+expect_ro "RX6 a body-only Threads consumer not stated" "G3_ROLLOUT_ROLLBACK_THREADS_CONSUMERS_NOT_STATED: G3RO_ACK_THREADS_CONSUMERS must be '.*g3rx_tc()" rollback \
+  G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers"
+own -c "drop function public.g3rx_tc()" >/dev/null
+echo "OK RX: rollback refused before any step, nothing changed, the external object kept: an external view on Threads (H4's case) / on X, a foreign key to Threads, a function taking an X row type, a view calling a Threads function; a body-only Threads consumer not stated"
+o="$(ro rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers" 2>&1)" || fail "RB5 rollback: $o"
 printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=15$' || fail "RB5: $o"
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RB5 G3's catalog is not the fresh one"
 expect_ro "RB6 rollback twice" "G3_ROLLOUT_PREFLIGHT_NOT_INSTALLED: fresh" rollback
-echo "OK RB: rollback refused with a live row, unstated / wrong finished-row counts, unstated consumers, a member that can SET the roles (nothing changed); full rollback = G3's fresh catalog; twice refused"
+echo "OK RB: rollback refused with a live row, unstated / wrong finished-row counts, unstated X / Threads consumers, a member that can SET the roles (nothing changed); full rollback = G3's fresh catalog; twice refused"
 
 # --- RF -------------------------------------------------------------------------------------------------------------------------------
 printf '%s\n' "begin;" "create function postona_x_resv.g3ro_broken() returns integer language sql as 'select 1';" "select 1 / 0;" "commit;" > "$work/broken.sql"
@@ -242,4 +310,20 @@ echo "OK RF: 015 failing mid-install -> the 14 applied steps rolled back (G3's f
 o="$(ro install 2>&1)" || fail "RA re-install: $o"
 [ "$(g3fp)" = "$installed_g3" ] || fail "RA the re-installed catalog is not the first install"
 echo "OK RA: re-install = the first install"
+
+# --- RT (G3-02 #4): Threads 007's rollback file itself (no rollout.sh) refuses an external dependent instead of CASCADE-dropping it ------
+for step in x015 x014 t013 t009 t011; do
+  rel="$(awk -F '\t' -v s="$step" '$1 == "rollback" && $2 == s { print $3 }' "$here/MANIFEST.tsv")"
+  own -c "set postona_resv_rollback.discard_rows = '0:0:0'" -f "$here/../$rel" >/dev/null || fail "RT rollback $step"
+done
+t007="$here/../$(awk -F '\t' '$1 == "rollback" && $2 == "t007" { print $3 }' "$here/MANIFEST.tsv")"
+own -c "create view public.g3rt_threads_v as select id from postona_threads_resv.reservations" >/dev/null
+before="$(dbfp)"
+o="$(own -f "$t007" 2>&1)" && fail "RT1 007 rollback dropped past an external view"
+printf '%s\n' "$o" | grep -q 'POSTONA_THREADS_RESV_ROLLBACK_FOREIGN_DEPENDENTS' || fail "RT1: $o"
+[ "$(dbfp)" = "$before" ] || fail "RT1 the refusal changed the database"
+own -c "drop view public.g3rt_threads_v" >/dev/null
+own -f "$t007" >/dev/null || fail "RT2 007 rollback"
+[ "$(sval -c "select count(*) from pg_namespace where nspname = 'postona_threads_resv'")" = 0 ] || fail "RT2 schema left"
+echo "OK RT: 007's rollback alone refuses an external view (FOREIGN_DEPENDENTS, nothing changed, the view kept); without it, the schema goes (RESTRICT drops)"
 echo G3_ROLLOUT_TEST_PASS

@@ -2,7 +2,15 @@
 
 G3-51, Issue #318. **Not applied anywhere, not deployed, PRODUCTION_NO_GO.** This bundle gathers G3's reservation SQL into one ordered, pinned, fail-closed install and rollback. It is for the personal MVP profile: G5's personal MVP plus G4's verified credential verdicts.
 
-The runner refuses every host except a local `/tmp` socket directory and `127.0.0.1` (G3-02 #1: the local Supabase stack's database is reached only through its loopback TCP port; the password comes from the caller's `PGPASSWORD` / `.pgpass`). It has no managed or production mode. A loopback tunnel to another server cannot be told apart from a local one, so never point `127.0.0.1` at anything but a throw-away local stack. A real rollout needs, first:
+The runner refuses every host except a local `/tmp` socket directory and `127.0.0.1`. G3-02 #1 added `127.0.0.1` because the local Supabase stack's database is reached only through its loopback TCP port; the password comes from the caller's `PGPASSWORD` / `.pgpass`. It has no managed or production mode.
+
+**Attestation (G3-02 #4, H4-16 P2).** A host name proves nothing: a socket or `127.0.0.1` can be forwarded to another server.
+- Whoever creates the throw-away database marks it: `alter database <db> set g3ro.throwaway_attestation = 'g3ro-throwaway-<32 hex>'` (random per database).
+- The operator passes the same value in `G3RO_DB_ATTESTATION`.
+- `rollout.sh` reads the mark back before anything else, and every later session re-checks it as its first statement.
+- A missing, malformed or different mark stops with `G3_ROLLOUT_ATTESTATION_REQUIRED / MISSING / MISMATCH` before any change.
+
+A real rollout needs, first:
 - the reviewed plan;
 - G4's and G5's adoption;
 - the one batch security review;
@@ -54,12 +62,19 @@ If a step fails, every step already applied is rolled back in the manifest's rol
 - G3 is installed exactly.
 
 ### Before any rollback step
-`preflight.sql rollback` must pass (G3 installed exactly). Then:
+`preflight.sql rollback` must pass:
+- G3 is installed exactly.
+- **G3-02 #4 (H4-16 P1)**: no catalog dependency from outside G3's two schemas on anything inside them — a view, a foreign key, a column / argument / return type, a default, a SQL-body function (`G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS`).
+  - Before this, Threads 007's `DROP SCHEMA ... CASCADE` dropped such an object silently.
+  - X 001's RESTRICT drops refused only as the last step, after 14 steps had rolled back.
+  - 007's rollback now drops its own functions, tables and schema with RESTRICT, so on its own it refuses too (`POSTONA_THREADS_RESV_ROLLBACK_FOREIGN_DEPENDENTS`).
+
+Then:
 - **No live row.** X or Threads rows that are `planned`, `claimed` or `uncertain` are refused.
 - **Finished rows stated exactly.** X's 001 rollback discards them, and Threads' 007 rollback drops its schema with every row:
   - `G3RO_X_DISCARD_ROWS=<reservations>:<batches>:<audit>`
   - `G3RO_THREADS_DISCARD_ROWS=<reservations>:<audit>`
-- **Consumers stated exactly.** Functions outside G3's schemas that name `postona_x_resv` are listed in `G3RO_ACK_CONSUMERS`.
+- **Consumers stated exactly.** Functions outside G3's schemas that name `postona_x_resv` are listed in `G3RO_ACK_CONSUMERS`. Those that name `postona_threads_resv` are listed in `G3RO_ACK_THREADS_CONSUMERS` (G3-02 #4).
 - **No login or option on the API / worker roles.** The owner may only hold its implicit ADMIN-only membership.
 
 A refusal of a later step (an unforeseen reason) stops there. Each step is atomic, and the steps before it stay rolled back.

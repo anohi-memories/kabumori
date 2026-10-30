@@ -20,6 +20,7 @@
 --   the tables G3 reads: public.social_accounts, brands, brand_memberships, x_account_refresh_state_v2, threads_account_credential_custody.
 --   no default privilege of this role (global or on G3's schemas) granting anything to another role: new G3 objects must start closed.
 --   install only: CREATEROLE (002 / 004 create the NOLOGIN API / worker roles), and neither role exists yet.
+--   rollback only (G3-02 #4): no catalog dependency from outside G3's two schemas on anything inside them.
 \set ON_ERROR_STOP 1
 begin;
 set local search_path = '';
@@ -123,6 +124,40 @@ begin
   end if;
   if v_mode = 'install' and not (select r.rolcreaterole from pg_catalog.pg_roles r where r.oid = v_me) then
     raise exception 'G3_ROLLOUT_PREFLIGHT_CREATEROLE: 002 / 004 create the NOLOGIN API / worker roles';
+  end if;
+  -- G3-02 #4 (H4-16 P1): before ANY rollback step, nothing outside G3's schemas may depend on anything inside them (a view, a foreign
+  -- key, a column / argument / return type, a default, a SQL-body function, ...). 007's old DROP SCHEMA ... CASCADE removed such an
+  -- object silently, and 001's RESTRICT drops refused only as the LAST step (after 14 steps had rolled back). Catalog dependencies only;
+  -- body-text consumers are rollout.sh's stated lists (G3RO_ACK_CONSUMERS / G3RO_ACK_THREADS_CONSUMERS).
+  if v_mode = 'rollback' then
+    -- the dependent's own schema, resolved through what owns it (a default / rule / trigger / policy belongs to its table); anything
+    -- that cannot be resolved counts as outside (fail closed)
+    select pg_catalog.string_agg(distinct o.identity, ', ' order by o.identity) into v_bad
+    from pg_catalog.pg_depend d
+    cross join lateral pg_catalog.pg_identify_object(d.classid, d.objid, d.objsubid) o
+    cross join lateral (select case d.classid
+        when 'pg_catalog.pg_class'::regclass then (select c.relnamespace from pg_catalog.pg_class c where c.oid = d.objid)
+        when 'pg_catalog.pg_proc'::regclass then (select x.pronamespace from pg_catalog.pg_proc x where x.oid = d.objid)
+        when 'pg_catalog.pg_type'::regclass then (select t.typnamespace from pg_catalog.pg_type t where t.oid = d.objid)
+        when 'pg_catalog.pg_constraint'::regclass then (select k.connamespace from pg_catalog.pg_constraint k where k.oid = d.objid)
+        when 'pg_catalog.pg_attrdef'::regclass then (select c.relnamespace from pg_catalog.pg_attrdef a join pg_catalog.pg_class c on c.oid = a.adrelid where a.oid = d.objid)
+        when 'pg_catalog.pg_rewrite'::regclass then (select c.relnamespace from pg_catalog.pg_rewrite r join pg_catalog.pg_class c on c.oid = r.ev_class where r.oid = d.objid)
+        when 'pg_catalog.pg_trigger'::regclass then (select c.relnamespace from pg_catalog.pg_trigger g join pg_catalog.pg_class c on c.oid = g.tgrelid where g.oid = d.objid)
+        when 'pg_catalog.pg_policy'::regclass then (select c.relnamespace from pg_catalog.pg_policy y join pg_catalog.pg_class c on c.oid = y.polrelid where y.oid = d.objid)
+        else (select n.oid from pg_catalog.pg_namespace n where n.nspname = o.schema) end as nsp) dn
+    where d.deptype in ('n', 'a')
+      and ((d.refclassid = 'pg_catalog.pg_class'::regclass and d.refobjid in (select c.oid from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+                                                                             where n.nspname in ('postona_x_resv', 'postona_threads_resv')))
+        or (d.refclassid = 'pg_catalog.pg_proc'::regclass and d.refobjid in (select p.oid from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+                                                                            where n.nspname in ('postona_x_resv', 'postona_threads_resv')))
+        or (d.refclassid = 'pg_catalog.pg_type'::regclass and d.refobjid in (select t.oid from pg_catalog.pg_type t join pg_catalog.pg_namespace n on n.oid = t.typnamespace
+                                                                            where n.nspname in ('postona_x_resv', 'postona_threads_resv')))
+        or (d.refclassid = 'pg_catalog.pg_namespace'::regclass and d.refobjid in (select n.oid from pg_catalog.pg_namespace n
+                                                                                 where n.nspname in ('postona_x_resv', 'postona_threads_resv'))))
+      and (dn.nsp is null or dn.nsp not in (select n.oid from pg_catalog.pg_namespace n where n.nspname in ('postona_x_resv', 'postona_threads_resv')));
+    if v_bad is not null then
+      raise exception 'G3_ROLLOUT_PREFLIGHT_EXTERNAL_DEPENDENTS: %', v_bad;
+    end if;
   end if;
 
   if v_mode = 'postcheck' then
