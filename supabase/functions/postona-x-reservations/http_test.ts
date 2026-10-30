@@ -69,7 +69,9 @@ test("source: the entry point builds the real driver only through the factory an
   }
   const http = await readFile(new URL("./http.ts", import.meta.url), "utf8");
   assert.match(http, /const enabled = overrides\.enabled \?\? POSTONA_RESERVATION_API_ENABLED;/u);
-  assert.match(http, /permissions: overrides\.permissions \?\? PERMISSIONS_NOT_CONNECTED,/u);
+  // G3-02 #2: the production port is the database's own decision (G5 / G4 inside the owner function), never a TS allow
+  assert.match(http, /permissions: overrides\.permissions \?\? PERMISSIONS_DECIDED_IN_DATABASE,/u);
+  assert.doesNotMatch(http.replace(/\/\/.*$/gmu, ""), /Promise\.resolve\(true\)|=> true/u);
   const index = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   assert.doesNotMatch(index, /enabled:|permissions:/u, "production passes no gate or permission override");
 });

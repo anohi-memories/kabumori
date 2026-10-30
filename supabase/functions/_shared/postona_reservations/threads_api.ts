@@ -37,6 +37,14 @@ export type ThreadsPermissionSources = { threadsPublishAllowed(userId: string, s
 export const THREADS_PERMISSIONS_NOT_CONNECTED: ThreadsPermissionSources = Object.freeze({
   threadsPublishAllowed: () => Promise.resolve(false),
 });
+/**
+ * G3-02 #2: no TS pre-check -- create_reservation decides, in its own transaction, with the REAL sources: G5's person session (caller()),
+ * fence (brand owner, personal profile, verified account, G4's Threads verdict, publish_enabled = U8) and G5's R1 verdict (g5_r1_bound),
+ * each refusal a fixed code. Identity only: this object's method is never asked (it would deny).
+ */
+export const THREADS_PERMISSIONS_DECIDED_IN_DATABASE: ThreadsPermissionSources = Object.freeze({
+  threadsPublishAllowed: () => Promise.resolve(false),
+});
 export const THREADS_DB_NOT_CONNECTED: ThreadsReservationDb = Object.freeze({
   call: () => Promise.resolve({ ok: false as const, code: "DB_UNAVAILABLE" }),
 });
@@ -178,7 +186,7 @@ export function createThreadsReservationApi(deps: {
       return fail(503, "AUTH_UNAVAILABLE");
     }
 
-    if (call.action === "create") {
+    if (call.action === "create" && permissions !== THREADS_PERMISSIONS_DECIDED_IN_DATABASE) {
       try {
         if ((await permissions.threadsPublishAllowed(subject.userId, call.accountId as string)) !== true) {
           return fail(403, "POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE");

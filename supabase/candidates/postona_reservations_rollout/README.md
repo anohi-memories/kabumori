@@ -72,7 +72,7 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
 - **Threads**:
   - The credential port stays unavailable until G4's ONE-statement credential read exists. That statement must answer `postona_threads_resv.threads_credential_generation(account)`.
   - Create stays refused by U8 (`POSTONA_THREADS_RESV_PUBLISH_DISABLED`).
-- **App permissions**: the permission ports are `PERMISSIONS_NOT_CONNECTED`. Create, reschedule and reconfirm answer 403 / 503 before the database. Only the owner's `cancel`, `get` and `list` reach SQL, each gated by G5's person session.
+- **App permissions** (G3-02 #2): the entries' permission ports are `PERMISSIONS_DECIDED_IN_DATABASE` / `THREADS_PERMISSIONS_DECIDED_IN_DATABASE`. There is no TS pre-check and no mock allow: the owner function decides in the write's own transaction with the real sources. Those are G5's person session (S2-2), the brand owner + personal profile, G5's x_autopost service state / R1 verdict, and G4's account verdict; for Threads also `publish_enabled` (U8). Every refusal is a fixed code. A row created this way is never sent while G4's token read is NOT_CONNECTED.
 
 ## HTTP contract for the app (G1 / G2 own the stores and screens; G3 does not edit them)
 
@@ -97,7 +97,18 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
 
 ### X reservations (`postona-x-reservations`)
 - Actions: `create`, `list`, `get`, `reschedule`, `reconfirm`, `cancel`.
-- Today only the owner's `cancel`, `get` and `list` can succeed; the rest are permission-gated (deny).
+- Each action is decided in the database (G3-02 #2):
+  - `create` / `reschedule` / `reconfirm` need G5's live person session, the caller's own workspace (G5 W0), the x_autopost service active and G4's verdict VERIFIED.
+  - `cancel` / `get` / `list` need the session and row ownership only, so they still work after a service end or an X disconnect.
+- Codes seen on the real local runtime (`local_stack/`):
+  - 404 `POSTONA_RESV_ACCOUNT_NOT_FOUND`: create on an account that is not the caller's (no oracle).
+  - 403 `POSTONA_RESV_SERVICE_NOT_ACTIVE`: the service ended or never started.
+  - 403 `POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED`: X is disconnected. Offer reconnect; after the reconnect, create works again.
+  - 409 `POSTONA_RESV_IDEMPOTENCY_CONFLICT`: the same `clientBatchId` with another body. The same id with the same body answers the same rows, so a retry is safe.
+  - 409 `POSTONA_RESV_SLOT_CONFLICT`: within 60 minutes of another row.
+  - 409 `POSTONA_RESV_NOT_PLANNED`: reschedule of a row that is no longer planned (for example `uncertain`).
+  - 422 `POSTONA_RESV_CONSENT_REQUIRED`: a reconfirm hash that does not match the body.
+- After `reschedule`, `consentState` is `needs_reconfirm`. Send `reconfirm` with the body's SHA-256 before the row can be sent.
 - A row's `status`:
   - `planned`: waiting, or handed back unsent.
   - `claimed`: a worker holds it. It can no longer be cancelled (refused as too late).
@@ -114,7 +125,7 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
 - Actions: `create`, `cancel`, `receipt`.
 - `receipt(socialAccountId, clientRequestId)` answers the state and a fixed `outcomeCode`.
 - An unknown outcome → 503 `STORE_UNAVAILABLE`: read the receipt again, never re-create.
-- Create stays refused while U8 holds.
+- Create is decided in the database (G3-02 #2). While U8 holds it answers 403 `POSTONA_THREADS_RESV_PUBLISH_DISABLED`; another person's account answers 404 `POSTONA_THREADS_RESV_ACCOUNT_NOT_FOUND`.
 
 ### Single X post (`postona-x-single-post`)
 - One manual post, bound to the generation at begin and re-checked before send.
@@ -130,7 +141,12 @@ A throw-away local project (`supabase start`, project id `g3ls`, ports 559xx; ne
 What it showed, for the operator:
 - **Owner role.** The owner (`postgres`, PG 17) cannot `SET ROLE` to the API or worker role: since PG 16 the creator holds an ADMIN-only membership. The Edge entries need a LOGIN role that is a member with `SET` (and `INHERIT FALSE`). That is a separate, approved rollout step that this bundle does not do.
 - **Rollback.** A rollback refuses while such a member exists (`G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS`). Drop or revoke the logins first.
-- **Unreachable database.** When the API login cannot connect, the entry answers 503 `STORE_UNAVAILABLE`.
+- **Unreachable database.** When the API login cannot connect, the entry answers 503 `STORE_UNAVAILABLE`, and a create writes nothing.
+- **First run (G3-02 #2).** With G5's accepted W0 (PR #590) applied unchanged, the person's own PostgREST calls work as follows:
+  - `start_x_autopost_service`, then `postona_ensure_my_personal_workspace`, give `{status: ready, created: true}`, then `created: false`;
+  - a person who has not started the service gets no workspace.
+
+  The app then creates over HTTP, and nothing is sent.
 
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.

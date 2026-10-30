@@ -6,9 +6,10 @@
 //          is_anonymous JSON false (shared with the X API)
 //   DB   : one transaction per request as a login role that is a member of postona_resv_api (see
 //          _shared/postona_reservations/threads_postgres_db.ts); its connection string is a server-side secret, the same as the X entry's
-//   G5/G4: create is pre-gated by the TS permission port, THREADS_PERMISSIONS_NOT_CONNECTED (deny) until the owners deliver reviewed
-//          decisions, and re-checked inside the database (007's fence; G4 still DENY). cancel / receipt: the person session and row
-//          ownership, decided in the database.
+//   G5/G4: decided inside the database, in create's own transaction (G3-02 #2): THREADS_PERMISSIONS_DECIDED_IN_DATABASE -- G5's
+//          person session, 007's fence (brand owner, profile, verified account, G4's Threads verdict, publish_enabled = U8) and G5's
+//          R1 verdict; no TS pre-check, no mock. While U8 holds, create answers 403 POSTONA_THREADS_RESV_PUBLISH_DISABLED. cancel /
+//          receipt: the person session and row ownership, decided in the database.
 // This file holds no service-role key, never reads one, never logs, and never calls Threads.
 import { createSupabaseAuthVerifier } from "../_shared/postona_reservations/supabase_auth.ts";
 import type { ApiRequest } from "../_shared/postona_reservations/api.ts";
@@ -17,7 +18,7 @@ import {
   createThreadsReservationApi,
   POSTONA_THREADS_RESERVATION_API_ENABLED,
   type ThreadsPermissionSources,
-  THREADS_PERMISSIONS_NOT_CONNECTED,
+  THREADS_PERMISSIONS_DECIDED_IN_DATABASE,
 } from "../_shared/postona_reservations/threads_api.ts";
 import { createPostgresThreadsReservationDb } from "../_shared/postona_reservations/threads_postgres_db.ts";
 
@@ -63,7 +64,7 @@ export type HttpOverrides = {
   fetch?: FetchLike;
   /** Tests only: a connection factory (production builds it from POSTONA_RESV_DATABASE_URL). */
   connect?: PgConnect;
-  /** Tests only (MOCK_ONLY). Production: THREADS_PERMISSIONS_NOT_CONNECTED until G5 / G4 deliver. */
+  /** Tests only (MOCK_ONLY). Production: THREADS_PERMISSIONS_DECIDED_IN_DATABASE (create_reservation decides with G5 / G4 / U8). */
   permissions?: ThreadsPermissionSources;
   createConnect?: (databaseUrl: string) => PgConnect;
 };
@@ -91,7 +92,7 @@ export function createHttpHandler(env: { get(name: string): string | undefined }
     const api = createThreadsReservationApi({
       enabled: true,
       auth,
-      permissions: overrides.permissions ?? THREADS_PERMISSIONS_NOT_CONNECTED,
+      permissions: overrides.permissions ?? THREADS_PERMISSIONS_DECIDED_IN_DATABASE,
       db: createPostgresThreadsReservationDb(connect),
     });
     const answer = await api(apiRequest);

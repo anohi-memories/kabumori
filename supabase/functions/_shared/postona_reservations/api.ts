@@ -87,6 +87,16 @@ export const PERMISSIONS_NOT_CONNECTED: PermissionSources = Object.freeze({
   xAutopostAllowed: () => Promise.resolve(false),
   xAccountVerified: () => Promise.resolve(false),
 });
+/**
+ * G3-02 #2: no TS pre-check -- the owner function decides, in the write's own transaction, with the REAL sources: G5's person session
+ * (S2-2, via caller()), the brand owner + personal profile, G5's x_autopost service state and G4's account verdict
+ * (assert_account_access, reached by create_batch / reschedule / reconfirm through lock_own), each refusal a fixed POSTONA_RESV_* code.
+ * Identity only: this object's methods are never asked (they would deny).
+ */
+export const PERMISSIONS_DECIDED_IN_DATABASE: PermissionSources = Object.freeze({
+  xAutopostAllowed: () => Promise.resolve(false),
+  xAccountVerified: () => Promise.resolve(false),
+});
 export const DB_NOT_CONNECTED: ReservationDb = Object.freeze({
   call: () => Promise.resolve({ ok: false as const, code: "DB_UNAVAILABLE" }),
 });
@@ -284,7 +294,7 @@ export function createReservationApi(deps: {
       return fail(503, "AUTH_UNAVAILABLE");
     }
 
-    if (!OWNER_ONLY_FNS.has(call.fn)) {
+    if (!OWNER_ONLY_FNS.has(call.fn) && permissions !== PERMISSIONS_DECIDED_IN_DATABASE) {
       try {
         if ((await permissions.xAutopostAllowed(userId)) !== true) return fail(403, "POSTONA_RESV_SERVICE_NOT_ACTIVE");
         if (call.accountId !== null && (await permissions.xAccountVerified(userId, call.accountId)) !== true) {
