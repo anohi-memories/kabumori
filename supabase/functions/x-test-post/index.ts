@@ -93,9 +93,11 @@ import {
   buildAiLabTopicCandidates,
   loadAiLabDevDiaryMarkdown,
 } from "../_shared/brand/ai_lab_dev_diary_context.ts";
-import { aiLabDiversityInstructions } from "../_shared/brand/ai_lab_theme_guard.ts";
+import {
+  aiLabEngagementMode,
+  createAiLabScheduledPostGenerator,
+} from "../_shared/brand/ai_lab_engagement.ts";
 import { sendAiLabXPost } from "../_shared/brand/ai_lab_provider_outcome.ts";
-import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
 import {
   checkVaultAccountPublishAuthority,
   completeVaultAccountBrandPost,
@@ -4157,6 +4159,7 @@ Deno.serve(async (req) => {
             console.info("AI_LAB_TOPIC_CLAIM", {
               scheduledPostId: scheduledPost.id,
               rotationIndex,
+              engagementMode: aiLabEngagementMode(rotationIndex),
               claimedEventKey: claimResult.claim?.eventKey ?? null,
               claimedUnitKey: claimResult.claim?.unitKey ?? null,
               conflict: claimResult.conflict,
@@ -4176,12 +4179,7 @@ Deno.serve(async (req) => {
               attempt,
               violations,
             }),
-          generate: ({ retryViolations, topicSeed, ...args }) =>
-            generateBrandPost({
-              ...args,
-              topicSeed,
-              extraInstructions: aiLabDiversityInstructions(retryViolations),
-            }),
+          generate: createAiLabScheduledPostGenerator(rotationIndex),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
             supabaseUrl,
             serviceRoleKey,
