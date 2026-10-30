@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # G3 SOURCE CANDIDATE (2026-10-30, Issue #318 G3-51): the POSTONA X + Threads reservation rollout for the PERSONAL MVP profile, in one
-# runner. NOT run against anything but a THROW-AWAY LOCAL PostgreSQL: the host must be a /tmp socket directory. There is no managed /
-# production mode (PRODUCTION_NO_GO); a real rollout needs the reviewed plan, G4 / G5 adoption and the user's approval first.
+# runner. NOT run against anything but a THROW-AWAY LOCAL PostgreSQL: the host must be a /tmp socket directory, or 127.0.0.1 (G3-02 #1: the
+# local Supabase stack's database is reached only through its loopback TCP port). There is no managed / production mode (PRODUCTION_NO_GO);
+# a real rollout needs the reviewed plan, G4 / G5 adoption and the user's approval first. A loopback tunnel to another server cannot be
+# told apart from a local one: never point 127.0.0.1 at anything but a throw-away local stack.
 #   rollout.sh preflight  manifest sha256 + preflight.sql (mode install): prerequisites and a fresh G3 state; changes nothing.
 #   rollout.sh install    preflight, then every `install` step of MANIFEST.tsv in order (each file is its own transaction). If a step
 #                         fails, the steps already applied are rolled back in the manifest's rollback order and the G3 catalog
@@ -12,7 +14,7 @@
 #                         every row), the consumers outside G3's schemas stated exactly, no login / option on the API / worker roles;
 #                         then every `rollback` step in order. A refusal
 #                         stops at that step (each step is atomic; the steps before it stay rolled back).
-# Environment: G3RO_PGHOST (a /tmp socket dir), G3RO_PGPORT, G3RO_DB, G3RO_OWNER (the non-superuser lifecycle owner G3's objects
+# Environment: G3RO_PGHOST (a /tmp socket dir, or 127.0.0.1; a password comes from the caller's PGPASSWORD / .pgpass), G3RO_PGPORT, G3RO_DB, G3RO_OWNER (the non-superuser lifecycle owner G3's objects
 # belong to; G5 / G4 objects must belong to it too). rollback only: G3RO_X_DISCARD_ROWS ('<reservations>:<batches>:<audit>', 001),
 # G3RO_THREADS_DISCARD_ROWS ('<reservations>:<audit>'), G3RO_ACK_CONSUMERS (001's consumer list, empty when none). Optional:
 # G3RO_MANIFEST (another manifest; paths may be absolute).
@@ -22,13 +24,13 @@ set -euo pipefail
 export LC_ALL=C PGOPTIONS='-c client_min_messages=warning'
 mode="${1:-}"
 case "$mode" in preflight|install|rollback) ;; *) echo "usage: rollout.sh preflight|install|rollback" >&2; exit 2 ;; esac
-host="${G3RO_PGHOST:?G3RO_PGHOST (a local /tmp socket directory) required}"
+host="${G3RO_PGHOST:?G3RO_PGHOST (a local /tmp socket directory, or 127.0.0.1) required}"
 port="${G3RO_PGPORT:?G3RO_PGPORT required}"
 db="${G3RO_DB:?G3RO_DB required}"
 owner="${G3RO_OWNER:?G3RO_OWNER (the lifecycle owner) required}"
 case "$host" in
-  /private/tmp/*|/tmp/*) ;;
-  *) echo "G3_ROLLOUT_REFUSED_HOST: local /tmp socket only (PRODUCTION_NO_GO: no managed / production mode)" >&2; exit 2 ;;
+  /private/tmp/*|/tmp/*|127.0.0.1) ;;
+  *) echo "G3_ROLLOUT_REFUSED_HOST: local /tmp socket or 127.0.0.1 only (PRODUCTION_NO_GO: no managed / production mode)" >&2; exit 2 ;;
 esac
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
