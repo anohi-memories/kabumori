@@ -768,6 +768,10 @@ MUTANTS = [
     ('home guard not compared', 'g10runner/code_edit.py',
      '    if not isinstance(home_pre, dict) or not isinstance(postrun, dict) or postrun.get("home_guard") != home_pre:', '    if False:',
      'test_task30_home_postrun.PostRunGuards.test_home_guard_watches_only_settings_that_affect_later_sessions'),
+    # v2レビュー指摘2: .config.json を拒否から外すと _kaburun の後続ランへ設定を仕込める
+    ('home .config.json may be written', 'g10runner/code_edit.py',
+     '".claude/keybindings.json", ".claude/.config.json")', '".claude/keybindings.json")',
+     'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
 ]
 
 

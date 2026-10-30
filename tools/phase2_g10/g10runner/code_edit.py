@@ -37,7 +37,7 @@ SAFE_ABS = re.compile(r"^/[A-Za-z0-9/._ -]+$")
 TEST_OUTPUT_TAIL = 4000
 # CLI の状態のうち、書けると後の対話セッションに影響するもの（実行中は拒否）
 HOME_DENY_LITERALS = (".claude/settings.json", ".claude/settings.local.json", ".claude/CLAUDE.md",
-                      ".claude/keybindings.json")
+                      ".claude/keybindings.json", ".claude/.config.json")  # .config.json: 設定系の注入口（v2レビュー指摘2）
 HOME_DENY_SUBPATHS = (".claude/hooks", ".claude/agents", ".claude/commands", ".claude/skills", ".claude/plugins",
                       ".claude/rules", ".claude/output-styles")
 # TASK 30: ~/.claude.json は CLI 自身が書くので許すが、後のセッションの動作を変える項目（MCP・許可・フック・環境・信頼）は

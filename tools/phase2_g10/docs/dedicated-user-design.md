@@ -176,3 +176,11 @@ _kaburun 作成（済）／ジョブ実行エージェント登録（gui/503）�
 
 ### 14.8 次のビルド手順（各別途GO）
 1. ランナーのコード変更（14.5・テスト込み・静的検証）。2. ジョブ実行エージェントの最小実装（署名検証＋CLI起動だけ）。3. ACL付き handoff の机上検証（偽の2ユーザー相当）。4. エージェント登録＋ACL作成（GO）。5. 隔離の最小検証（yuya の資産に届かない・受け渡し成立・HALT で止まる）。6. 実機1回の限定編集（GO・未使用の承認番号）。
+
+### 14.9 v2 レビュー指摘への対応（2026-10-30・REPORT 6523744098）
+- **指摘1（読み取り分離・最重要）**: yuya への書き込みは OS 所有権で堅いが、staff 共有＋0755/0644 で _kaburun は yuya の repos・settings.json 等を**読める**（CLI はネットワーク持ち＝外部送信の経路になりうる。ただし ~/.claude.json は 0600 で機微は保護）。対応:
+  - **ソースは handoff 経由にする**。現状の `git clone --shared <source_repo>` は source_repo が yuya の repo だと _kaburun が yuya のホームを読む必要がある。v2 では base_sha のソースを yuya 側が handoff/in に用意し（bundle 等）、_kaburun は yuya のホームを一切読まない。→ source preparer の実装変更（ジョブ実行エージェント実装時に対応）。
+  - **/Users/yuya を 0700 に締める**（_kaburun の侵入を遮断。staff 共有のため 0750 では不足）。上のソース handoff 化が先（さもないと --shared が壊れる）。一度きりの setup・ユーザー判断（管理者不要・自分のホームの chmod）。
+  - 最低限、yuya の world/グループ可読ファイルに秘密を置かない。
+- **指摘2（contained）: 対応済み** — `~/.claude/.config.json` を HOME_DENY_LITERALS に追加（テスト・変異つき）。deny-list は本質的に whack-a-mole なので、指摘3のドライラン後に tight allow-list への移行を再検討。
+- **指摘3（liveness・要GO）**: 実 `-p` 限定編集の1回ドライランで、CLI が許可集合（~/.claude の許可部分）だけで動くか確認。その結果で ~/.claude の許可/拒否を最終確定。

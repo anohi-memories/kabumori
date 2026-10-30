@@ -56,6 +56,7 @@ t("rename crafted over empty project", lambda: (os.makedirs(C + "/crafted3"),
 t("rename dir to hooks", lambda: (os.makedirs(C + "/crafted4"), os.rename(C + "/crafted4", C + "/hooks")))
 t("rename file to settings.json", lambda: (w(C + "/s.tmp"), os.rename(C + "/s.tmp", C + "/settings.json")))
 t("write rules", lambda: (os.makedirs(C + "/rules"), w(C + "/rules/r.md")))
+t("write .config.json", lambda: w(C + "/.config.json"))
 t("unlink approved", lambda: os.unlink(A))
 t("symlink at approved", lambda: os.symlink("/etc/hosts", A))
 t("fifo at approved", lambda: os.mkfifo(A))
