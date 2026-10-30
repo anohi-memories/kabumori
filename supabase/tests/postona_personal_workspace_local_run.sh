@@ -10,6 +10,9 @@
 #                    provider), the ledger / ai_calls / owner-held SQL as `postgres`
 #   G1               PR #576 8d95307c (read-only archive, blob-checked; 3 import specifiers rewritten for Deno, counted): the app's real
 #                    snapshot read (SupabaseSocialRepository over supabase-js 2.115.0 and the real PostgREST / RLS) and its assist client
+#   G1 (G5-02 #2)    PR #592 eb8f5e98 (read-only archive, blob-checked, the same 3 rewrites): the app's first run as it now ships -- the W0 call
+#                    and its one bounded retry (personal-workspace.ts), the snapshot's personal workspace (brands.code_profile_key) and the
+#                    assist gate that sends only for a W0-ready workspace the snapshot then shows
 # Needs: supabase CLI 2.116.0, a running Docker-API engine with the images below already present (never pulls; refuses instead), deno, psql,
 # git. Everything it starts is stopped and removed at exit (`supabase stop --no-backup`).
 set -euo pipefail
@@ -17,6 +20,7 @@ REPO="$(git rev-parse --show-toplevel)"
 G5W=21a5cad4b71de63265db8517da93c6efc60cdde8   # G5's Draft chain world (as G6-26 / PR #563's runners)
 G6=1a567ea8facd36f20a767c999bd36f59db5d8740    # G6 PR #582 HEAD
 G1=8d95307c7001a6456719c6a829ef41a83ab703c3    # G1 PR #576 HEAD
+G1B=eb8f5e983d2a2a7d4e3716368cf3c20f2ca76370   # G1 PR #592 HEAD (G1-29: service start -> W0 -> snapshot -> AI)
 W0_585=04a239074eb7e575f772a545f9e6755a2a59f070 # G5 PR #585 HEAD: W0 before the H1 P2 F1 fix (the F1 test reproduces the defect on it)
 ENGINE="${G5LS_ENGINE:-podman}"
 API_PORT=55721 DB_PORT=55722 FAKE_PORT=55799
@@ -25,7 +29,7 @@ API_PORT=55721 DB_PORT=55722 FAKE_PORT=55799
 for image in postgres:17.6.1.165 gotrue:v2.196.0 postgrest:v16.1 kong:2.8.1 edge-runtime:v1.74.3 storage-api:v1.70.3; do
   "$ENGINE" image exists "public.ecr.aws/supabase/$image" || { echo "G5LS_IMAGE_MISSING: $image (this script does not pull)"; exit 2; }
 done
-for commit in "$G5W" "$G6" "$G1" "$W0_585"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G5LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
+for commit in "$G5W" "$G6" "$G1" "$G1B" "$W0_585"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G5LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/g5ls.XXXXXX")"
 SERVE_PID=""
@@ -38,16 +42,19 @@ cleanup() {
 trap cleanup EXIT
 
 # ---- read-only copies, blob-checked ---------------------------------------------------------------------------------------------------
-mkdir -p "$WORK/p" "$WORK/g5w" "$WORK/g6" "$WORK/g1"
+mkdir -p "$WORK/p" "$WORK/g5w" "$WORK/g6" "$WORK/g1" "$WORK/g1b"
 git -C "$REPO" archive "$G5W" supabase/migrations supabase/tests | tar -x -C "$WORK/g5w"
 git -C "$REPO" archive "$G6" supabase/functions/postona-post-assist supabase/functions/_shared supabase/tests/fixtures/g6_26_local_edge \
   supabase/migrations supabase/candidates/common_ai_g6 | tar -x -C "$WORK/g6"
 git -C "$REPO" show "$W0_585:supabase/candidates/postona_personal_mvp_auth/MVP_W0_INSTALL.sql" > "$WORK/w0_585.sql"
 git -C "$REPO" archive "$G1" apps/social-mobile/src/data apps/social-mobile/src/features/schedule apps/social-mobile/src/domain | tar -x -C "$WORK/g1"
+git -C "$REPO" archive "$G1B" apps/social-mobile/src/data apps/social-mobile/src/features/schedule apps/social-mobile/src/domain | tar -x -C "$WORK/g1b"
 for pair in "$G6:supabase/functions/postona-post-assist/index.ts:g6" "$G6:supabase/tests/fixtures/g6_26_local_edge/postona-post-assist-localtest/index.ts:g6" \
             "$G6:supabase/functions/_shared/ai_gateway/g5_rpc_transport.ts:g6" "$G6:supabase/candidates/common_ai_g6/001_ai_calls_owner_held_ledger.sql:g6" \
             "$G1:apps/social-mobile/src/data/post-assist-client.ts:g1" "$G1:apps/social-mobile/src/features/schedule/post-assist.ts:g1" \
-            "$G1:apps/social-mobile/src/data/supabase-repository.ts:g1"; do
+            "$G1:apps/social-mobile/src/data/supabase-repository.ts:g1" "$G1B:apps/social-mobile/src/data/supabase-repository.ts:g1b" \
+            "$G1B:apps/social-mobile/src/data/post-assist-client.ts:g1b" "$G1B:apps/social-mobile/src/features/schedule/post-assist.ts:g1b" \
+            "$G1B:apps/social-mobile/src/domain/personal-workspace.ts:g1b" "$G1B:apps/social-mobile/src/domain/service-enrollment.ts:g1b"; do
   commit="${pair%%:*}"; rest="${pair#*:}"; path="${rest%:*}"; dir="${rest##*:}"
   [ "$(git hash-object "$WORK/$dir/$path")" = "$(git -C "$REPO" rev-parse "$commit:$path")" ] || { echo "G5LS_BLOB_MISMATCH: $path"; exit 2; }
 done
@@ -56,6 +63,11 @@ sed -i.orig -e "s#from '@/domain/post-status'#from '../domain/post-status.ts'#" 
 sed -i.orig -e "s#from './types'#from './types.ts'#" "$g1/domain/post-status.ts"
 [ "$(diff "$g1/data/supabase-repository.ts.orig" "$g1/data/supabase-repository.ts" | grep -c '^>')" = 2 ] || { echo "G5LS_G1_REWRITE: not exactly 2 lines"; exit 2; }
 [ "$(diff "$g1/domain/post-status.ts.orig" "$g1/domain/post-status.ts" | grep -c '^>')" = 1 ] || { echo "G5LS_G1_REWRITE: not exactly 1 line"; exit 2; }
+g1b="$WORK/g1b/apps/social-mobile/src"
+sed -i.orig -e "s#from '@/domain/post-status'#from '../domain/post-status.ts'#" -e "s#from '@/domain/types'#from '../domain/types.ts'#" "$g1b/data/supabase-repository.ts"
+sed -i.orig -e "s#from './types'#from './types.ts'#" "$g1b/domain/post-status.ts"
+[ "$(diff "$g1b/data/supabase-repository.ts.orig" "$g1b/data/supabase-repository.ts" | grep -c '^>')" = 2 ] || { echo "G5LS_G1B_REWRITE: not exactly 2 lines"; exit 2; }
+[ "$(diff "$g1b/domain/post-status.ts.orig" "$g1b/domain/post-status.ts" | grep -c '^>')" = 1 ] || { echo "G5LS_G1B_REWRITE: not exactly 1 line"; exit 2; }
 
 # ---- the local project ------------------------------------------------------------------------------------------------------------------
 (cd "$WORK/p" && supabase init --force --with-vscode-settings=false --with-intellij-settings=false >/dev/null 2>&1)
@@ -110,6 +122,10 @@ for f in 20261001150000_common_account_lifecycle_foundation 20261006230000_commo
 done
 # TEST-WORLD stand-in for G3's L-1 revoke (P3), as the earlier runners
 own -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" >/dev/null
+# TEST-WORLD stand-in for the brands owner's hardening (G5-02 #2; brands is not G5's): as built, row security is off on brands (no migration
+# enables it; the member policy of 20260918120000 alone does nothing) and the image's default privileges let anon / authenticated write it. The
+# suite measures that state (a person reads and changes another workspace, anon inserts: PF_BRANDS FAIL) and then runs on this one.
+own -c "alter table public.brands enable row level security; revoke all on public.brands from anon; revoke insert, update, delete, truncate, references, trigger, maintain on public.brands from authenticated" >/dev/null
 
 # ---- G6's ledger side, as `postgres` -----------------------------------------------------------------------------------------------------
 for f in migrations/20261010050613_ai_provider_budget_ledger.sql migrations/20261017120000_ai_consumer_call_store.sql migrations/20261017150000_ai_ledger_user_erasure.sql \
@@ -142,8 +158,8 @@ done
 
 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u OPENAI_API_KEY \
     G5LS_API="http://127.0.0.1:$API_PORT" G5LS_PUBLISHABLE="$PUBLISHABLE" G5LS_DB_PORT="$DB_PORT" G5LS_FAKE_PORT="$FAKE_PORT" \
-    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_G1="$g1" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
+    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
   deno test --no-config --no-check --cached-only \
-    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_G1,G5LS_G6,G5LS_W0_585,PGPASSWORD \
-    --allow-net="127.0.0.1:$API_PORT,127.0.0.1:$FAKE_PORT" --allow-read="$WORK,$REPO" --allow-run=psql \
+    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
+    --allow-net="127.0.0.1:$API_PORT,127.0.0.1:$FAKE_PORT" --allow-read="$WORK,$REPO" --allow-run=psql ${G5LS_FILTER:+--filter "$G5LS_FILTER"} \
     "$REPO/supabase/tests/postona_personal_workspace_local_test.ts"

@@ -13,6 +13,8 @@
 -- active x_autopost entitlement with no personal workspace (AI post assist answers 403 until the first X connection creates it).
 -- G5-51 adds: PF_OWNER_AUTH (the owner can use schema auth and lock auth.users rows: on Supabase only `postgres` can, G6-26 F2), PF_W0 (the
 -- optional W0 provisioning function: absent / installed / granted / drift), and PF_PHASE reports an owner without USAGE on schema private.
+-- G5-02 #2 adds: PF_APP_READ (the person can read the columns G1's snapshot confirms the personal workspace by, code_profile_key included) and
+-- PF_BRANDS (row security and the member read policies on brands / brand_memberships, no API write on brands; other policies are a WARN).
 -- Production NO_GO: running it on a managed project is a read-only connection that still needs the owner's explicit approval.
 begin transaction isolation level repeatable read read only;
 
@@ -65,6 +67,62 @@ begin
     v_lines := v_lines || 'PF_P3 FAIL brand_memberships is missing or an API role can write it (G3 L-1 revoke first)'::text; v_fail := v_fail || 'PF_P3'::text;
   else
     v_lines := v_lines || 'PF_P3 PASS no API write path on brand_memberships'::text;
+  end if;
+
+  -- PF_APP_READ (G5-02 #2): the person, with their own JWT, reads what G1's snapshot needs to find the personal workspace: their
+  -- memberships (brand_id, role, user_id) and the brand's id, display_name, is_active, publish_mode and code_profile_key (the kind). Without
+  -- the kind G1 never confirms the workspace W0 answered (unconfirmed) and never asks the AI post assist.
+  if pg_catalog.to_regrole('authenticated') is null or pg_catalog.to_regclass('public.brands') is null or pg_catalog.to_regclass('public.brand_memberships') is null then
+    v_lines := v_lines || 'PF_APP_READ FAIL authenticated, public.brands or public.brand_memberships is missing'::text; v_fail := v_fail || 'PF_APP_READ'::text;
+  else
+    select pg_catalog.string_agg(v.t || '.' || v.c, ', ' order by v.t, v.c) into v_txt
+      from (values ('brands', 'id'), ('brands', 'display_name'), ('brands', 'is_active'), ('brands', 'publish_mode'), ('brands', 'code_profile_key'),
+                   ('brand_memberships', 'brand_id'), ('brand_memberships', 'role'), ('brand_memberships', 'user_id')) v(t, c)
+      left join pg_catalog.pg_attribute a on a.attrelid = pg_catalog.to_regclass('public.' || v.t) and a.attname = v.c and a.attnum > 0 and not a.attisdropped
+     where a.attnum is null or not pg_catalog.has_column_privilege(pg_catalog.to_regrole('authenticated')::oid, a.attrelid, a.attnum, 'SELECT');
+    if v_txt is not null then
+      v_lines := v_lines || ('PF_APP_READ FAIL authenticated cannot read ' || v_txt || ': G1 never confirms the personal workspace (no AI)');
+      v_fail := v_fail || 'PF_APP_READ'::text;
+    else
+      v_lines := v_lines || 'PF_APP_READ PASS authenticated reads the snapshot columns (code_profile_key included)'::text;
+    end if;
+  end if;
+
+  -- PF_BRANDS (G5-02 #2): a person reads only their own memberships and brands, and no API role writes brands. S2-3 and W0 trust the brand
+  -- row (its id, its kind) as backend-written, as PF_P3 does the membership. No migration enables row security on brands (the member policy
+  -- of 20260918120000 alone does nothing); on the local Supabase world as built, a person read every brand, set another person's workspace
+  -- active / live and deleted it (its membership went with it), and anon inserted brands. Owner of brands: not G5 (G4, tentative).
+  -- The member policies are checked by name, command and role, not by their condition (its text differs between versions); the local
+  -- suite shows what they let a person read.
+  if pg_catalog.to_regrole('anon') is null or pg_catalog.to_regrole('authenticated') is null
+     or pg_catalog.to_regclass('public.brands') is null or pg_catalog.to_regclass('public.brand_memberships') is null then
+    v_lines := v_lines || 'PF_BRANDS FAIL anon, authenticated, public.brands or public.brand_memberships is missing'::text; v_fail := v_fail || 'PF_BRANDS'::text;
+  else
+    v_txt := pg_catalog.concat_ws('; ',
+      (select 'row security off on ' || pg_catalog.string_agg(c.relname::text, ', ' order by c.relname) from pg_catalog.pg_class c
+        where c.oid in ('public.brands'::regclass, 'public.brand_memberships'::regclass) and not c.relrowsecurity),
+      case when not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.brands'::regclass and p.polname = 'social_mobile_member_select_brands'
+                              and p.polcmd = 'r' and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid])
+                or not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.brand_memberships'::regclass and p.polname = 'social_mobile_membership_self_select'
+                              and p.polcmd = 'r' and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid])
+           then 'a member read policy (20260918120000) is missing or not for authenticated only' end,
+      (select 'brands writable by ' || pg_catalog.string_agg(distinct r.rolname::text, ', ') from pg_catalog.pg_roles r,
+              pg_catalog.unnest(array['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) k
+        where r.rolname in ('anon', 'authenticated') and pg_catalog.has_table_privilege(r.oid, 'public.brands', k)));
+    if v_txt <> '' then
+      v_lines := v_lines || ('PF_BRANDS FAIL ' || v_txt || ': a person could read or change another workspace (the owner of brands hardens it first)');
+      v_fail := v_fail || 'PF_BRANDS'::text;
+    else
+      v_lines := v_lines || 'PF_BRANDS PASS row security and the member read policies on brands / brand_memberships; no API write on brands'::text;
+    end if;
+    select pg_catalog.count(*) into v_n from pg_catalog.pg_policy p
+     where p.polrelid in ('public.brands'::regclass, 'public.brand_memberships'::regclass) and p.polpermissive
+       and p.polname not in ('social_mobile_member_select_brands', 'social_mobile_membership_self_select')
+       and (p.polroles && array[0::oid, pg_catalog.to_regrole('anon')::oid, pg_catalog.to_regrole('authenticated')::oid]);
+    if v_n > 0 then
+      v_lines := v_lines || ('PF_BRANDS_POLICIES WARN ' || v_n || ' other permissive policy(ies) on brands / brand_memberships reach anon or authenticated (they widen what a person reads or writes: review)');
+      v_warn := v_warn + 1;
+    end if;
   end if;
 
   -- PF_OWNER_AUTH (G5-51, G6-26 F2): the P1 lifecycle lock (T13, every service start / end, W0) takes the person's auth.users row FOR KEY SHARE /

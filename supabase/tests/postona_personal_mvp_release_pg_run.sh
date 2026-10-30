@@ -96,6 +96,8 @@ for f in 20261001150000_common_account_lifecycle_foundation 20261006230000_commo
 done
 # TEST-WORLD stand-ins, as the G5 verdict suites: G3's L-1 revoke (P3) and auth.uid() reading both claim sources; managed behaviour NOT_VERIFIED
 own -c "revoke trigger on public.brand_memberships from anon, authenticated, service_role; revoke truncate, references on public.brand_memberships from anon, authenticated" >/dev/null
+# and the brands owner's hardening (G5-02 #2, PF_BRANDS: no migration enables row security on brands; brands is not G5's)
+own -c "alter table public.brands enable row level security; revoke insert, update, delete, truncate, references, trigger on public.brands from anon, authenticated" >/dev/null
 own -c "create or replace function auth.uid() returns uuid language sql stable as \$\$ select coalesce(nullif(current_setting('request.jwt.claim.sub', true), ''), (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'))::uuid \$\$" >/dev/null
 # the app reads these as the person (G1's snapshot, under the RLS policies of 20260918120000): the SELECT grants Supabase's defaults give them
 own -c "grant usage on schema public to authenticated; grant select on public.brand_memberships, public.brands, public.social_accounts, public.scheduled_posts to authenticated" >/dev/null

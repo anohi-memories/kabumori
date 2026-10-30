@@ -185,9 +185,57 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
   - on this body, for each writer: `OWN_WORKSPACE_CONFLICT`, the person has 0 memberships, the foreign row is unchanged with 0 memberships; later calls refuse it at S2-3 (`WORKSPACE_OWNER_UNKNOWN`), and G1 sends nothing (**PASS**).
 - New mutants: M7 (the brand insert result unchecked = PR #585's behaviour) and M8 (the membership insert result unchecked) are detected; W0 mutants now **8 / 8**.
 
+## 5b. G5-02 task 2: the snapshot's personal workspace (`brands.code_profile_key`) on the person's real JWT
+
+G1 PR #592 (`eb8f5e98`) shows the AI post assist only when W0 answered `ready` **and** the re-read snapshot names the same id as the person's personal workspace: the one brand they own whose `code_profile_key` is `social_mobile_user_v1` (`supabase-repository.ts`, `readPersonalWorkspaceId`; any read error → `null` → `unconfirmed`). The suite now runs G1 #592's own W0 call (with its one bounded retry), snapshot read and assist gate on the real local GoTrue / PostgREST / Kong / Edge.
+
+- **The column is readable; no grant is needed.** `20260918120000` grants table-level `SELECT` on `brands` to `authenticated`, so the person reads all five snapshot columns including `code_profile_key`, and `id, role, user_id` of their memberships. Measured: sign-up → start → W0 `ready:created` → snapshot `personalWorkspaceId` = W0's id → `ready` → `candidates` (one provider call); again `ready:existing` → `candidates`. G5 adds no grant, revoke, role or function.
+- **What the person reads (with the stand-in below):** their own brand only. Another person sees `[]` for it and gets `403 42501` on update / insert / delete. `anon` gets `401 42501`.
+- **Never ready, nothing sent:**
+  - no login → snapshot `blocked`;
+  - a signed-out login whose JWT is still within exp → W0 `SESSION_REVOKED` → `relogin`;
+  - an ended service → `service_inactive`;
+  - two owned brands of the personal kind → G1 names neither (`null`), W0 refuses (`support`);
+  - W0 `OWN_WORKSPACE_CONFLICT` on both of G1's calls → `support`, 0 rows;
+  - another person aiming at the workspace → G1's gate `other_workspace`.
+  
+  A second, shared membership is fine: S2-3 still answers `own` for the sole personal workspace, and G1 finds it by its kind among the person's brands → `candidates`. The shared brand itself is never sent.
+- **The product blocker, if `code_profile_key` were not granted** (column grants without it): W0 `ready:existing`, snapshot `ready` but `personalWorkspaceId: null` → `unconfirmed` → `NOT_SENT:no_workspace`, 0 provider calls. The new preflight check **`PF_APP_READ`** fails it before release, naming the column. A missing `brand_memberships.role` is also caught.
+- **Found: brands has no row security as built.**
+  - No migration enables row security on `public.brands`; the member policy of `20260918120000` has no effect without it.
+  - The Supabase image's default privileges also give `anon` and `authenticated` INSERT / UPDATE / DELETE / TRUNCATE / REFERENCES / TRIGGER on it. Only `anon`'s SELECT is revoked.
+  - On that world (G5's world + the migrations, before any stand-in), with real JWTs through PostgREST:
+    - a person read every brand;
+    - a person set another person's workspace to `is_active = true, publish_mode = 'live'`;
+    - a person deleted another person's workspace, and its membership went with it by cascade (W0 then created a new one);
+    - a person inserted arbitrary brands;
+    - `anon` inserted a brand (`201`).
+  - G1's own reads stay correct, because they are bounded by the person's memberships. The exposure is through the Data API itself.
+  - **Production is not known.** Whether row security is on for `brands` there is [U] (G4-17 PR #420, "G5 E-2"), and G5 did not connect.
+- **New preflight check `PF_BRANDS`** (read-only, G5-owned):
+  - **FAIL** if row security is off on `brands` or `brand_memberships`.
+  - **FAIL** if either member read policy of `20260918120000` is missing or is not `SELECT` for `authenticated` only. It checks the name, command and roles; the condition text is not compared.
+  - **FAIL** if `anon` or `authenticated` can INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES or TRIGGER `brands`. This is the same rule as `PF_P3` for memberships: S2-3 and W0 trust the brand row as backend-written.
+  - **WARN** (`PF_BRANDS_POLICIES`) for any other permissive policy on either table that reaches `anon`, `authenticated` or PUBLIC. Measured: an extra `using (true)` policy lets another person read the workspace again.
+- **Test world:**
+  - Both runners now apply a TEST-WORLD stand-in for the brands owner's hardening:
+    - `alter table public.brands enable row level security`;
+    - revoke `anon`'s privileges and every write privilege of `authenticated` on `brands`.
+  - The suite measures the as-built state first (`FAIL PF_BRANDS`, the exploits above), then each part alone, then restores it (the catalog and ACLs as before).
+  - The catalog helper now sorts a relation's ACL items: a revoke followed by a re-grant puts the same item last.
+  - The hardening itself is **not** G5's to ship (owner of `brands`: G4, tentative). It is a handoff (§6).
+
 ## 6. Handoffs (G5 changed none of these)
 
+- **Owner of `public.brands` (G4 #561, tentative; G3 or G5 if agreed):** before the personal MVP is released, `PF_BRANDS` must PASS in production. As built, that needs:
+  - `alter table public.brands enable row level security`;
+  - `revoke all on public.brands from anon`;
+  - `revoke insert, update, delete, truncate, references, trigger on public.brands from authenticated`;
+  - then the check that every backend writer is `postgres` / `service_role` / SECURITY DEFINER, so that none of them depends on these privileges.
+  
+  Production is [U]: read it with the preflight (read-only, owner's approval). Changing it is an ACL change on a shared table and needs its own approval and review.
 - **G1 (#316):**
+  - PR #592's snapshot query works on the person's real JWT as it is (§5b); nothing to change for `code_profile_key`.
   - Call `start_x_autopost_service()` and then `postona_ensure_my_personal_workspace()` after sign-up and sign-in, before reading the snapshot. Map the answers by the table in §2.
   - Re-copy G6's reference client for the gateway 401 (G6-26 F1).
   - Gap 1 (a second membership) stays G1's; W0 itself refuses to create one.
@@ -202,6 +250,7 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
 - **Managed Supabase:** whether `postgres` there has the same attributes and grant options (BYPASSRLS, `UPDATE` / `USAGE` without grant option), PostgREST claims and GoTrue. The preflight is the read-only check for these, and it needs explicit approval to run there.
 - **G6:** hosted Edge, secrets and the real OpenAI.
 - **G1:** native app and device.
+- **`public.brands` / `brand_memberships` in production (G5-02 #2):** row security, the member policies, the column and write privileges. `PF_APP_READ` / `PF_BRANDS` read them, after approval.
 - **Also not covered:** Threads, account deletion in progress (`ACCOUNT_DELETION_IN_PROGRESS` was not driven), multiple owners, production.
 - **Open decisions:**
   - P-1 to P-5 (P-1: shared workspaces; P-4: sign-out vs pending jobs);

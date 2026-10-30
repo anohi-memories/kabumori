@@ -188,7 +188,7 @@ Deno.test({ name: 'preflight on the release world: PASS phase=absent, every chec
   const p = await preflight();
   assert.equal(p.verdict, 'PASS phase=absent warnings=0', p.lines.join('\n'));
   assert.deepEqual(p.lines.filter((l) => !l.startsWith('VERDICT')).map((l) => l.split(' ').slice(0, 2).join(' ')),
-    ['PF_OWNER PASS', 'PF_P1 PASS', 'PF_P3 PASS', 'PF_OWNER_AUTH PASS', 'PF_AUTH PASS', 'PF_ROLE_GRAPH PASS', 'PF_AUTHENTICATOR PASS', 'PF_DEFAULT_ACL PASS', 'PF_PHASE PASS', 'PF_W0 PASS', 'PF_DATA PASS']);
+    ['PF_OWNER PASS', 'PF_P1 PASS', 'PF_P3 PASS', 'PF_APP_READ PASS', 'PF_BRANDS PASS', 'PF_OWNER_AUTH PASS', 'PF_AUTH PASS', 'PF_ROLE_GRAPH PASS', 'PF_AUTHENTICATOR PASS', 'PF_DEFAULT_ACL PASS', 'PF_PHASE PASS', 'PF_W0 PASS', 'PF_DATA PASS']);
   assert.equal(await catalog(), PRE.catalog);
 });
 
