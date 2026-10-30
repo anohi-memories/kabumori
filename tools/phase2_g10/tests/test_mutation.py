@@ -703,6 +703,9 @@ MUTANTS = [
     ('code edit keys allowed on readonly', 'g10runner/meta.py',
      '    elif any(key in fields for key in CODE_EDIT_KEYS):', '    elif False:',
      'test_task26_code_edit.CodeEditValidation.test_code_edit_keys_need_the_scope_and_budget_cap_holds'),
+    ('cli profile allows ~/.claude settings', 'g10runner/code_edit.py',
+     '    deny = ["(literal %s)" % _lit(home + "/" + rel) for rel in HOME_DENY_LITERALS]', '    deny = []',
+     'test_task26_code_edit.SandboxProfiles.test_cli_profile'),
     # TASK 28: Edit の一時ファイルとポリシーの読み直し
     ('temp file pattern uses a brace quantifier', 'g10runner/code_edit.py',
      'TEMP_SUFFIX_RX = r"\\.tmp\\.[0-9]+\\." + "[0-9a-f]" * 12 + "$"', 'TEMP_SUFFIX_RX = r"\\.tmp\\.[0-9]+\\.[0-9a-f]{12}$"',
@@ -735,9 +738,21 @@ MUTANTS = [
      '    if False:\n        out(json.dumps({"watchdog": "policy changed while',
      'test_task28_tempfile_policy.PolicyReload.test_watchdog_reloads_only_a_consistent_policy_outside_a_run'),
     # TASK 30: ~/.claude の改名のすり抜けと、実行後の競合（残りのプロセスの停止・封印・安全な読み取り・指紋）
+    ('home dir nodes may be renamed', 'g10runner/code_edit.py',
+     '    deny += ["(literal %s)" % _lit(claude), "(literal %s)" % _lit(claude + "/projects")]', '    deny += []',
+     'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
+    ('memory denied only under projects', 'g10runner/code_edit.py',
+     '\'(.*/)?memory(/|$)"\'', '\'projects/[^/]+/memory(/|$)"\'',
+     'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
+    ('existing projects may be renamed away', 'g10runner/code_edit.py',
+     '\'[^/]+$"\')', '\'NEVER$"\')',
+     'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
+    ('home state allow not anchored', 'g10runner/code_edit.py',
+     '"(subpath %s)" % _lit(claude),', '"(regex %s)" % _rx_prefix(claude),',
+     'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
     ('approved name may become a link', 'g10runner/code_edit.py',
      '    names = ["(regex %s)" % t for t in temps] + ["(literal %s)" % _lit(p) for p in allowed_abs]', '    names = ["(regex %s)" % t for t in temps]',
-     'test_task30_home_postrun.HomeAndApprovedNameRules.test_real_home_fully_denied_disposable_home_writable'),
+     'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
     ('check reads block on a FIFO', 'g10runner/code_edit.py',
      'os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)', 'os.O_RDONLY | os.O_NOFOLLOW)',
      'test_task30_home_postrun.PostRunGuards.test_reading_a_file_swapped_for_a_fifo_does_not_block'),
@@ -753,14 +768,6 @@ MUTANTS = [
     ('home guard not compared', 'g10runner/code_edit.py',
      '    if not isinstance(home_pre, dict) or not isinstance(postrun, dict) or postrun.get("home_guard") != home_pre:', '    if False:',
      'test_task30_home_postrun.PostRunGuards.test_home_guard_watches_only_settings_that_affect_later_sessions'),
-    # TASK 33: 使い捨ての HOME（本物の ~/.claude を書かせない）
-    ("disposable home not writable in cli profile", "g10runner/code_edit.py",
-     ', "(subpath %s)" % _lit(cli_home)]', ']',
-     'test_task30_home_postrun.HomeAndApprovedNameRules.test_real_home_fully_denied_disposable_home_writable'),
-    ("base file-write deny removed", "g10runner/code_edit.py",
-     '"(version 1)", "(allow default)", \'(deny file-write* (subpath "/"))\',',
-     '"(version 1)", "(allow default)",',
-     'test_task26_code_edit.CodeEditE2E.test_kernel_denies_every_write_outside_the_allowed_file'),
 ]
 
 

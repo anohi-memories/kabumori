@@ -44,9 +44,6 @@ class FakeClaudeAdapter:
 
     def environment(self, scenario_path, edit=None):
         env = {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"}
-        if edit and edit.get("home"):  # TASK 33: 実 CLI と同じく使い捨ての HOME で動かす
-            env["HOME"] = edit["home"]
-            env["TMPDIR"] = edit["tmp_dir"]
         if scenario_path:
             env["FAKE_CLAUDE_SCENARIO"] = scenario_path
         return env

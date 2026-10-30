@@ -533,20 +533,6 @@ CLOSED（本文は不変でも）・idle・review_required・本文だけの変�
 
 **最小の独立レビューの対象**: `cli_profile` の HOME の規則と許可ファイルの名前の種類の拒否、`prepare`／`finish_cli`（`stop_leftovers`・`seal`・`home_guard`）、`manifest`／`verify` の読み取り。
 
-### 9-11. TASK 33（第30TASKの再レビューの H1/H2 を原因ごと解消: 使い捨ての HOME。`tests/test_task30_home_postrun.py`）
-第29〜30TASKでは、本物の ~/.claude への書き込みを「細かく拒否」する形だったため、.config.json の作成や親フォルダの改名で後の対話セッションの設定を仕込む道（H2）と、終了後に残ったプロセスが本物の ~/.claude を書き換える道（H1 の深刻な部分）が残り、修正とレビューが反復した。TASK 33 は、抜け道を一つずつ塞ぐのをやめ、**CLI に使い捨ての HOME を渡して本物の ~/.claude を一切触らせない**形に変えた。
-
-- **使い捨ての HOME**: ランごとに `<run_dir>/cli-home` を作り、CLI の子に `HOME=cli-home` を渡す（`prepare` が作成、`edit["home"]` で配線。`claude_cli_plan.child_env`・`real_claude.environment`・stand-in の環境）。CLI 自身の状態（設定・projects・キャッシュ）はすべて cli-home の下に書かれ、ランごとに捨てる。認証は Keychain（USER 鍵。TASK 19）なので HOME に依存しない見込み（実機は未確認＝NOT_VERIFIED。合わなければ「Not logged in」で失敗＝止まる側）。
-- **本物の ~/.claude は全拒否**: `cli_profile(allowed_abs, tmp_dir, cli_home, real_home)` に変更。書き込みを許すのは「許可ファイル＋その一時ファイル・ランの tmp_dir・/dev・使い捨ての cli_home」だけ。本物の ~/.claude と ~/.claude.json* は、基底の全拒否に加えて明示でも拒否。これで H2（.config.json・改名すり抜け）は**規則の有無に関係なく、構造として成り立たなくなる**（本物の HOME が許可リストに無い）。
-- **H1 の深刻な部分の解消**: カーネルのサンドボックスは setsid でグループの外へ逃げても外れない。本物の ~/.claude が全拒否なので、残ったプロセス（逃げたものを含む）も本物の設定を書き換えられない。
-- **H1 の作業フォルダ内の残り**: 終了後に残ったプロセスが許可ファイルの中身を書き換えても、(1) 照合（verify）は O_NOFOLLOW の1回読みで、その読みから diff を作る、(2) テストは実行前後の一覧の一致（tree_unchanged）を確かめる、(3) verify の記録とテストの記録のハッシュを突き合わせる、ので、合格にはならない（既存の仕組みで捕捉。stand-in E2E で確認）。差分はローカル REPORT に載るだけで、リポジトリには自動で入らない（人が見て判断）。`stop_leftovers`（グループの残りの SIGKILL）は多層目として残す。
-- 旧 TASK 30 の「本物の ~/.claude の細かい拒否（settings/hooks/memory/projects の改名禁止等）」は、全拒否に置き換えたので不要になり削除した。
-
-試験: 本物の ~/.claude 全拒否＋使い捨ての HOME 書き込み可、setsid の子孫も本物の ~/.claude に書けない、許可ファイルの名前の種類すり替えの拒否、実行後の競合（封印・安全な読み取り・残りの停止）、代役の E2E。変異は2件入れ替え（使い捨ての HOME の許可・基底の全拒否が効いていること）。
-
-#### NOT_VERIFIED（次の実機で確かめる）
-- 実 CLI 2.1.305 が、使い捨ての HOME（空の ~/.claude.json 相当）で、Keychain のログインを使って動くか。動かなければ「Not logged in」で失敗＝止まる側。
-
 ### 10. 監督付き実 Claude 初回起動までに残る現実の操作（最小の依存順。どれも未実施・各項目に承認とレビューが必要）
 1. 認証情報: 人が scope なしの classic token を用意（可能なら Phase 1 と別の主体）→ 取得係のユーザーだけが読める場所へ置く →
    `verify_token`（GET /rate_limit を1回、X-OAuth-Scopes が空）→ 上の検証計画 1〜6 を読み取りだけで実施。

@@ -414,19 +414,16 @@ class SandboxProfiles(unittest.TestCase):
         return json.loads(r.stdout)
 
     def test_cli_profile(self):
-        cli_home = os.path.join(self.tmp, "cli-home")
-        os.makedirs(cli_home)
-        profile = code_edit.cli_profile([self.allowed], os.path.join(self.tmp, "cli-tmp"), cli_home, self.home)
-        j = lambda *p: os.path.join(self.home, *p)  # noqa: E731  本物の HOME（拒否）
-        out = self.try_writes(profile, [self.allowed, os.path.join(self.tmp, "cli-tmp", "t"),
-                                        os.path.join(cli_home, ".claude.json"), os.path.join(cli_home, "state.json"),
-                                        j(".claude.json"), j(".claude", "settings.json"),
-                                        j(".claude", "projects", "p", "memory", "m.md"),
-                                        os.path.join(self.tmp, "work", "x.py"), j("Documents.txt"),
+        profile = code_edit.cli_profile([self.allowed], os.path.join(self.tmp, "cli-tmp"), self.home)
+        j = lambda *p: os.path.join(self.home, *p)  # noqa: E731
+        out = self.try_writes(profile, [self.allowed, os.path.join(self.tmp, "cli-tmp", "t"), j(".claude.json"),
+                                        j(".claude", "projects", "p", "s.jsonl"), os.path.join(self.tmp, "work", "x.py"),
+                                        j(".claude", "settings.json"), j(".claude", "hooks", "h"),
+                                        j(".claude", "projects", "p", "memory", "m.md"), j("Documents.txt"),
                                         os.path.join(self.tmp, "p.sb")])
         values = list(out.values())
-        self.assertEqual(values[:4], ["ok"] * 4)  # 許可ファイル・cli-tmp・使い捨て HOME ×2
-        self.assertEqual(values[4:], [1] * 6)  # 本物の ~/.claude*・他の作業・Documents・p.sb は EPERM
+        self.assertEqual(values[:4], ["ok"] * 4)
+        self.assertEqual(values[4:], [1] * 6)
 
     def test_test_profile_denies_network_and_writes(self):
         server = socket.socket()
@@ -449,7 +446,7 @@ class SandboxProfiles(unittest.TestCase):
         for bad in ('/tmp/a"b', "/tmp/a\\b", "relative/x", "/tmp/a\nb"):
             with self.subTest(path=bad):
                 with self.assertRaises(code_edit.CodeEditError):
-                    code_edit.cli_profile([bad], self.tmp, self.tmp, self.home)
+                    code_edit.cli_profile([bad], self.tmp, self.home)
 
 
 if __name__ == "__main__":

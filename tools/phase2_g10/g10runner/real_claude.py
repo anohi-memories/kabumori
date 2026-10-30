@@ -184,7 +184,7 @@ class RealClaudeAdapter:
         return argv
 
     def environment(self, scenario_path, edit=None):
-        env = child_environment(edit["home"] if edit and edit.get("home") else self.go["home"])  # TASK 33: 使い捨て HOME
+        env = child_environment(self.go["home"])
         if edit:
             env["TMPDIR"] = edit["tmp_dir"]
         return env

@@ -36,6 +36,10 @@ MAX_LINES_RE = re.compile(r"^[1-9][0-9]{0,3}$")
 SAFE_ABS = re.compile(r"^/[A-Za-z0-9/._ -]+$")
 TEST_OUTPUT_TAIL = 4000
 # CLI の状態のうち、書けると後の対話セッションに影響するもの（実行中は拒否）
+HOME_DENY_LITERALS = (".claude/settings.json", ".claude/settings.local.json", ".claude/CLAUDE.md",
+                      ".claude/keybindings.json")
+HOME_DENY_SUBPATHS = (".claude/hooks", ".claude/agents", ".claude/commands", ".claude/skills", ".claude/plugins",
+                      ".claude/rules", ".claude/output-styles")
 # TASK 30: ~/.claude.json は CLI 自身が書くので許すが、後のセッションの動作を変える項目（MCP・許可・フック・環境・信頼）は
 # 実行の前後で指紋を比べ、変わっていれば安全違反にする（このランの作業フォルダの項目は CLI が作るので除く）
 SENSITIVE_KEY = re.compile(r"mcp|allow|permission|hook|trust|env|command|apikey|plugin|helper|statusline", re.I)
@@ -206,17 +210,14 @@ def prepare(work_dir, run_dir, spec, home):
     atomic_write_json(os.path.join(run_dir, "edit_parents.json"), parents)
     tmp = os.path.join(run_dir, "cli-tmp")
     os.makedirs(tmp, exist_ok=True)
-    cli_home = os.path.join(run_dir, "cli-home")  # TASK 33: CLI の使い捨ての HOME（ランごとに捨てる）
-    os.makedirs(cli_home, 0o700, exist_ok=True)
     profile = cli_profile([os.path.join(real, rel) for rel in spec["paths"]], os.path.realpath(tmp),
-                          os.path.realpath(cli_home),
                           os.path.realpath(home))  # カーネルは実体のパスで照合する（/var → /private/var 等）
     profile_path = os.path.join(run_dir, "cli.sb")
     with open(profile_path, "w", encoding="utf-8") as f:
         f.write(profile)
     os.chmod(profile_path, 0o444)
     return {"work_dir": real, "abs_paths": [os.path.join(real, rel) for rel in spec["paths"]],
-            "profile_path": profile_path, "tmp_dir": os.path.realpath(tmp), "home": os.path.realpath(cli_home)}
+            "profile_path": profile_path, "tmp_dir": os.path.realpath(tmp)}
 
 
 def _changed_lines(old, new, rel):
@@ -386,30 +387,35 @@ def _rx_prefix(path):
     return '#"^%s"' % re.sub(r"([.+*?()\[\]{}|^$])", r"\\\1", path)
 
 
-def cli_profile(allowed_abs, tmp_dir, cli_home, real_home):
-    """CLI 用: 書き込みは許可ファイル・その一時ファイル・ランの tmp_dir・/dev・使い捨ての HOME（cli_home）だけ。
+def cli_profile(allowed_abs, tmp_dir, home):
+    """CLI 用: 書き込みは許可ファイル・tmp_dir・/dev・CLI 自身の状態（~/.claude 以下・~/.claude.json*・キャッシュ）だけ。
+    ~/.claude の設定・フック・道具の定義・記憶は拒否（後の規則が優先）。ネットワークは CLI の API 通信に要るので拒否しない
+    （Web の道具と Bash は CLI の設定で拒否）。
 
-    TASK 33（第29〜30TASKの H1/H2 を原因ごと解消）: 以前は本物の ~/.claude 以下への書き込みを（細かく拒否しつつ）
-    許していたため、.config.json の作成や親フォルダの改名で、後の対話セッションの設定を仕込む道（H2）と、終了後に残った
-    プロセスが本物の ~/.claude を書き換える道（H1 の深刻な部分）が残った。本方式では CLI に使い捨ての HOME を渡し
-    （child env の HOME = cli_home）、本物の ~/.claude・~/.claude.json* へは一切書かせない。CLI 自身の状態（設定・
-    projects・キャッシュ）は cli_home の下に書かれ、ランごとに捨てる。"""
-    cli_home = cli_home.rstrip("/")
-    real_home = real_home.rstrip("/")
-    real_claude = real_home + "/.claude"
+    TASK 30（第29TASKの独立レビュー A）: パスの拒否は、親フォルダの改名・置き換えで抜けられた（`.claudeX` に設定を作り
+    `.claude` と入れ替える等）。許可は境界のある subpath と `.claude.json*` の名前だけにし、`~/.claude`・`~/.claude/projects`
+    のフォルダそのものへの書き込み（改名・削除・作成）と、既存のプロジェクトのフォルダの改名・削除を拒否する。`memory` という
+    名前は ~/.claude の下のどこにも作らせない（作ったフォルダを projects/<x> へ改名して記憶を仕込む道を塞ぐ）。"""
+    home = home.rstrip("/")
+    claude = home + "/.claude"
     allow = ["(literal %s)" % _lit(p) for p in allowed_abs]
-    allow += ["(subpath %s)" % _lit(tmp_dir), '(subpath "/dev")', "(subpath %s)" % _lit(cli_home)]
+    allow += ["(subpath %s)" % _lit(tmp_dir), '(subpath "/dev")', "(subpath %s)" % _lit(claude),
+              "(regex %s)" % (_rx_prefix(home + "/.claude.json")[:-1] + '(\\.[^/]+)?$"'),
+              "(subpath %s)" % _lit(home + "/Library/Caches/claude-cli-nodejs")]
+    deny = ["(literal %s)" % _lit(home + "/" + rel) for rel in HOME_DENY_LITERALS]
+    deny += ["(subpath %s)" % _lit(home + "/" + rel) for rel in HOME_DENY_SUBPATHS]
+    deny.append("(regex %s)" % (_rx_prefix(claude + "/")[:-1] + '(.*/)?memory(/|$)"'))
+    deny += ["(literal %s)" % _lit(claude), "(literal %s)" % _lit(claude + "/projects")]
+    projects = "(regex %s)" % (_rx_prefix(claude + "/projects/")[:-1] + '[^/]+$"')
     temps = [_rx_prefix(p)[:-1] + TEMP_SUFFIX_RX + '"' for p in allowed_abs]
     allow += ["(regex %s)" % t for t in temps]
-    # 本物の ~/.claude と ~/.claude.json* は、基底の全拒否に加えて明示でも拒否（cli_home とは別の場所。重ねて安全側）
-    deny = ["(subpath %s)" % _lit(real_claude),
-            "(regex %s)" % (_rx_prefix(real_home + "/.claude.json")[:-1] + '(\\.[^/]+)?$"')]
-    # 許可ファイル・一時ファイルの名前の位置にも、普通のファイル以外（リンク・FIFO 等）を作らせない
+    # TASK 30（B）: 許可ファイルの名前の位置にも、普通のファイル以外を作らせない（消してリンク・FIFO に置き換える道）
     names = ["(regex %s)" % t for t in temps] + ["(literal %s)" % _lit(p) for p in allowed_abs]
     kinds = ["(require-all %s (vnode-type %s))" % (n, k) for n in names for k in NON_FILE_TYPES]
     lines = ["(version 1)", "(allow default)", '(deny file-write* (subpath "/"))',
              "(allow file-write*\n  " + "\n  ".join(allow) + ")",
-             "(deny file-write*\n  " + "\n  ".join(deny) + ")"]
+             "(deny file-write*\n  " + "\n  ".join(deny) + ")",
+             "(deny file-write-unlink\n  " + projects + ")"]
     if kinds:
         lines.append("(deny file-write-create\n  " + "\n  ".join(kinds) + ")")
     return "\n".join(lines + [""])
