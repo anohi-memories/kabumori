@@ -1,0 +1,196 @@
+{
+ "column_acl_count": 0,
+ "columns": [
+  "brand_id:text:t:",
+  "created_at:timestamp with time zone:t:clock_timestamp()",
+  "persona_confirmed:boolean:t:false",
+  "persona_last_analyzed_at:timestamp with time zone:f:",
+  "persona_last_analyzed_count:integer:f:",
+  "persona_profile:jsonb:t:'{}'::jsonb",
+  "persona_provenance:text:t:'conversation'::text",
+  "settings:jsonb:t:jsonb_build_object('locale', 'ja-JP', 'preferredTone', '自然で親しみやすく、押しつけない', 'themes', jsonb_build_array('日々の生活や仕事に役立つ小さな工夫'), 'objective', '読者にひとつの実用的な気づきを届ける', 'frequencyTargetPerWeek', 3, 'approvalMode', 'manual_review', 'generationWindow', jsonb_build_object('timezone', 'Asia/Tokyo', 'startLocal', '09:00', 'endLocal', '24:00', 'defaultGenerationLocal', '17:00', 'generationDayOffset', '-1'::integer), 'optionalNgWords', jsonb_build_array(), 'notes', '')",
+  "updated_at:timestamp with time zone:t:clock_timestamp()"
+ ],
+ "constraints": [
+  "social_mobile_content_settings_analyzed_count_check:c:t:CHECK (((persona_last_analyzed_count IS NULL) OR (((persona_last_analyzed_count >= 0) AND (persona_last_analyzed_count <= 1000)) IS TRUE)))",
+  "social_mobile_content_settings_brand_id_fkey:f:t:FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE",
+  "social_mobile_content_settings_finite_versions:c:t:CHECK (((isfinite(created_at) AND isfinite(updated_at)) IS TRUE))",
+  "social_mobile_content_settings_persona_contract:c:t:CHECK ((social_mobile_content_settings_valid_persona(persona_profile) IS TRUE))",
+  "social_mobile_content_settings_persona_provenance_check:c:t:CHECK (((persona_provenance = ANY (ARRAY['conversation'::text, 'past_post_analysis'::text, 'manual'::text])) IS TRUE))",
+  "social_mobile_content_settings_pkey:p:t:PRIMARY KEY (brand_id)",
+  "social_mobile_content_settings_settings_contract:c:t:CHECK ((social_mobile_content_settings_valid_settings(settings) IS TRUE))"
+ ],
+ "effective_table_privileges": {
+  "anon": [],
+  "authenticated": [
+   "INSERT",
+   "SELECT",
+   "UPDATE"
+  ],
+  "service_role": []
+ },
+ "functions": [
+  {
+   "acl": [
+    "OWNER=EXECUTE",
+    "authenticated=EXECUTE"
+   ],
+   "config": [
+    "search_path=pg_catalog"
+   ],
+   "execute": [
+    "authenticated"
+   ],
+   "kind": "f",
+   "language": "plpgsql",
+   "owner_is_table_owner": true,
+   "parallel": "s",
+   "returns": "boolean",
+   "secdef": false,
+   "signature": "social_mobile_content_settings_text_list_ok(p_value jsonb, p_max_items integer, p_max_length integer)",
+   "src_md5": "cbb3838e61ea6e2e46ddaa780a7925c8",
+   "volatility": "i"
+  },
+  {
+   "acl": [
+    "OWNER=EXECUTE",
+    "authenticated=EXECUTE"
+   ],
+   "config": [
+    "search_path=pg_catalog"
+   ],
+   "execute": [
+    "authenticated"
+   ],
+   "kind": "f",
+   "language": "plpgsql",
+   "owner_is_table_owner": true,
+   "parallel": "s",
+   "returns": "boolean",
+   "secdef": false,
+   "signature": "social_mobile_content_settings_text_ok(p_value jsonb, p_max_length integer, p_allow_blank boolean)",
+   "src_md5": "dc5ee184082f268859385ef9787e143e",
+   "volatility": "i"
+  },
+  {
+   "acl": [
+    "OWNER=EXECUTE",
+    "authenticated=EXECUTE"
+   ],
+   "config": [
+    "search_path=pg_catalog"
+   ],
+   "execute": [
+    "authenticated"
+   ],
+   "kind": "f",
+   "language": "plpgsql",
+   "owner_is_table_owner": true,
+   "parallel": "s",
+   "returns": "boolean",
+   "secdef": false,
+   "signature": "social_mobile_content_settings_valid_persona(p_persona jsonb)",
+   "src_md5": "ee713ccb734b6fac122d37f760b18b65",
+   "volatility": "i"
+  },
+  {
+   "acl": [
+    "OWNER=EXECUTE",
+    "authenticated=EXECUTE"
+   ],
+   "config": [
+    "search_path=pg_catalog"
+   ],
+   "execute": [
+    "authenticated"
+   ],
+   "kind": "f",
+   "language": "plpgsql",
+   "owner_is_table_owner": true,
+   "parallel": "s",
+   "returns": "boolean",
+   "secdef": false,
+   "signature": "social_mobile_content_settings_valid_settings(p_settings jsonb)",
+   "src_md5": "9b337c5bb2808acb4dfce77e24555f14",
+   "volatility": "i"
+  },
+  {
+   "acl": [
+    "OWNER=EXECUTE"
+   ],
+   "config": [
+    "search_path=pg_catalog"
+   ],
+   "execute": null,
+   "kind": "f",
+   "language": "plpgsql",
+   "owner_is_table_owner": true,
+   "parallel": "u",
+   "returns": "trigger",
+   "secdef": false,
+   "signature": "social_mobile_content_settings_version()",
+   "src_md5": "a0c66e10eb31409dec83f5071f0a7d66",
+   "volatility": "v"
+  }
+ ],
+ "indexes": [
+  "CREATE UNIQUE INDEX social_mobile_content_settings_pkey ON public.social_mobile_content_settings USING btree (brand_id)"
+ ],
+ "policies": [
+  {
+   "check": "(EXISTS ( SELECT 1\n   FROM brand_memberships bm\n  WHERE ((bm.brand_id = social_mobile_content_settings.brand_id) AND (bm.user_id = ( SELECT auth.uid() AS uid)) AND (bm.role = 'owner'::text))))",
+   "cmd": "a",
+   "name": "social_mobile_content_settings_owner_insert",
+   "permissive": true,
+   "roles": [
+    "authenticated"
+   ],
+   "using": null
+  },
+  {
+   "check": null,
+   "cmd": "r",
+   "name": "social_mobile_content_settings_owner_select",
+   "permissive": true,
+   "roles": [
+    "authenticated"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM brand_memberships bm\n  WHERE ((bm.brand_id = social_mobile_content_settings.brand_id) AND (bm.user_id = ( SELECT auth.uid() AS uid)) AND (bm.role = 'owner'::text))))"
+  },
+  {
+   "check": "(EXISTS ( SELECT 1\n   FROM brand_memberships bm\n  WHERE ((bm.brand_id = social_mobile_content_settings.brand_id) AND (bm.user_id = ( SELECT auth.uid() AS uid)) AND (bm.role = 'owner'::text))))",
+   "cmd": "w",
+   "name": "social_mobile_content_settings_owner_update",
+   "permissive": true,
+   "roles": [
+    "authenticated"
+   ],
+   "using": "(EXISTS ( SELECT 1\n   FROM brand_memberships bm\n  WHERE ((bm.brand_id = social_mobile_content_settings.brand_id) AND (bm.user_id = ( SELECT auth.uid() AS uid)) AND (bm.role = 'owner'::text))))"
+  }
+ ],
+ "public_table_privileges": [],
+ "table": {
+  "force_rls": false,
+  "owner_is_current_user": true,
+  "partition": false,
+  "persistence": "p",
+  "relkind": "r",
+  "rls": true
+ },
+ "table_acl": [
+  "OWNER=DELETE",
+  "OWNER=INSERT",
+  "OWNER=MAINTAIN",
+  "OWNER=REFERENCES",
+  "OWNER=SELECT",
+  "OWNER=TRIGGER",
+  "OWNER=TRUNCATE",
+  "OWNER=UPDATE",
+  "authenticated=INSERT",
+  "authenticated=SELECT",
+  "authenticated=UPDATE"
+ ],
+ "triggers": [
+  "CREATE TRIGGER social_mobile_content_settings_version BEFORE INSERT OR UPDATE ON public.social_mobile_content_settings FOR EACH ROW EXECUTE FUNCTION social_mobile_content_settings_version()"
+ ]
+}
