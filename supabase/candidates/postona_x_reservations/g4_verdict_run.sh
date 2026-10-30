@@ -12,7 +12,9 @@
 #       re-apply;
 #   VW  (G3-49) 015 refusals (014 not applied, superuser, also the owner itself), apply, re-apply refused; the generation-bound X
 #       worker (g4_verdict/bound_worker_e2e_test.ts) through the real bound store + driver + x_publisher (fake fetch) on G4's real
-#       verdict; 015 rollback refusals (superuser, also the owner itself, another body, a widened ACL), rollback, twice refused, re-apply.
+#       verdict; 015 rollback refusals (superuser, also the owner itself, another body, a widened ACL), rollback, twice refused, re-apply;
+#   VH  (G3-50) the PRODUCT worker entry (postona-x-reservation-worker/http.ts, g4_verdict/worker_http_e2e_test.ts): a real Request ->
+#       createWorkerHandler -> bound delivery -> 015 -> fake X; the production default and a token-only source claim / connect nothing.
 # No network, no credential, no managed project; no OAuth, token, Vault, SNS or paid call. Roles are cluster-wide: run alone. Usage:
 #   RESV_PGHOST=/private/tmp/<socket-dir> RESV_PGPORT=<port> RESV_PGSUPER=<local superuser> g4_verdict_run.sh
 # The cluster must listen on 127.0.0.1 too (G4's runner). Optional: G3V_013 / G3V_014 / G3V_015 / G3V_013_RB / G3V_014_RB / G3V_015_RB
@@ -229,8 +231,18 @@ if ! RESV_LIVE_DB_URL="postgres://$wlogin@127.0.0.1:$port/$db" RESV_LIVE_OWNER_U
 fi
 grep -q '^G3_BOUND_WORKER_E2E_PASS ' "$vw_out" || fail "VW: no PASS line"
 vw_res="$(grep '^G3_BOUND_WORKER_E2E_PASS ' "$vw_out")"
+vh_out="$work/worker_http_e2e.out"
+if ! RESV_LIVE_DB_URL="postgres://$wlogin@127.0.0.1:$port/$db" RESV_LIVE_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" \
+  DENO_NO_PACKAGE_JSON=1 deno run --no-config --no-check --allow-net=127.0.0.1:"$port" --allow-read \
+  --allow-env=RESV_LIVE_DB_URL,RESV_LIVE_OWNER_URL "$here/g4_verdict/worker_http_e2e_test.ts" >"$vh_out" 2>&1; then
+  sed 's/\x1b\[[0-9;]*m//g' "$vh_out" | grep -vE '^ok ' | head -30 >&2
+  fail "VH worker http e2e"
+fi
+grep -q '^G3_WORKER_HTTP_E2E_PASS ' "$vh_out" || fail "VH: no PASS line"
+vh_res="$(grep '^G3_WORKER_HTTP_E2E_PASS ' "$vh_out")"
 "${S[@]}" -d "$db" -c "drop owned by $wlogin" -c "drop role $wlogin" >/dev/null
 echo "OK VW worker: ${vw_res#G3_BOUND_WORKER_E2E_PASS } -- TS derivation == DB (X, Threads); pinned == token generation -> one send with that token; disconnect / A->B->A / refresh after the token read -> NOT_PUBLISHABLE; stale token generation -> CREDENTIAL_GENERATION_CHANGED; lease too short -> RELEASED then one send; unknown -> uncertain, never re-sent; the worker login cannot call G4"
+echo "OK VH: ${vh_res#G3_WORKER_HTTP_E2E_PASS } -- the product entry: production default / token-only source -> notAvailable, claim 0, connection 0, X 0; gate OFF 503, wrong secret 401; same generation -> one send with that token; disconnect / A->B->A -> NOT_PUBLISHABLE; other generation -> CREDENTIAL_GENERATION_CHANGED; lease too short -> RELEASED then one send; unknown -> uncertain, never re-sent"
 expect_err "VW5 015 rollback as a superuser" G3_X_BOUND_ROLLBACK_OWNER sval -f "$x015rb"
 sval -c "alter role $owner superuser" >/dev/null
 expect_err "VW5b 015 rollback, the owner is a superuser" G3_X_BOUND_ROLLBACK_OWNER own -f "$x015rb"
