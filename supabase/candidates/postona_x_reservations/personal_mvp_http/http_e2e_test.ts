@@ -4,9 +4,10 @@
 //   -> a real Request / Response through the REAL Edge handler (postona-x-reservations/http.ts; gate forced on here only)
 //   -> the REAL api.ts -> the REAL postgres_db.ts + driver, as a login role that is a member of postona_resv_api
 //   -> the SQL candidates, with G5's real S2-2 person-session gate (live auth.sessions rows) and the MVP adapters.
-// MOCK_ONLY: GoTrue (fetch) answers by token, and the TS permission port is the PRODUCTION default PERMISSIONS_NOT_CONNECTED (deny), so
-// create / reschedule / reconfirm answer 403 before the database exactly as a gated-on deployment would until G5 / G4 deliver. Nothing
-// here proves the real Auth, G5 or G4 boundary. The Edge never calls X: every fetch must be the Auth endpoint.
+// MOCK_ONLY: GoTrue (fetch) answers by token. The TS permission port is the PRODUCTION default, PERMISSIONS_DECIDED_IN_DATABASE (G3-02 #2):
+// create / reschedule / reconfirm are decided by the owner functions with G5's real S2-2 gate, the MVP's service state and G3's G4 TEST
+// DOUBLE (not G4's verdict). Nothing here proves the real Auth or G4 boundary (local_stack/ does, on the real runtime). The Edge never
+// calls X: every fetch must be the Auth endpoint.
 import assert from "node:assert/strict";
 import { createHttpHandler } from "../../../functions/postona-x-reservations/http.ts";
 import { createDriverConnect } from "../../../functions/_shared/postona_reservations/postgres_driver.ts";
@@ -33,6 +34,9 @@ const people = Object.fromEntries((await owner<[string, string, string, string]>
 const H = people.h, I = people.i;
 const rowOf = async (name: string) => (await owner<[string, number]>("select status, revision from postona_x_resv.reservations where id = $1::uuid", [ids[name]]))[0];
 const auditCount = async () => Number((await owner<[bigint]>("select count(*) from postona_x_resv.audit"))[0][0]);
+const rowCount = async () => Number((await owner<[bigint]>("select count(*) from postona_x_resv.reservations"))[0][0]);
+const sha = async (text: string) =>
+  Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)))).map((b) => b.toString(16).padStart(2, "0")).join("");
 
 // MOCK_ONLY GoTrue: alias -> user; the token carries sub / session_id / is_anonymous as an Auth token would (read only after Auth accepted it).
 const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
@@ -59,7 +63,7 @@ const ENV = new Map([["SUPABASE_URL", "https://project.example.invalid"], ["SUPA
 const realConnect = createDriverConnect({ databaseUrl: DB_URL, allowInsecureLoopback: true });
 let connects = 0;
 const connect: PgConnect = () => { connects += 1; return realConnect(); };
-// the production defaults except the gate: no `permissions` override -> PERMISSIONS_NOT_CONNECTED (deny)
+// the production defaults except the gate: no `permissions` override -> PERMISSIONS_DECIDED_IN_DATABASE
 const handler = createHttpHandler({ get: (n) => ENV.get(n) }, { enabled: true, fetch: fakeAuth, connect });
 const post = async (alias: string, call: unknown, h = handler) => {
   const response = await h(new Request("http://localhost/functions/v1/postona-x-reservations", {
@@ -120,7 +124,11 @@ Deno.test("HE5 anonymous, unknown anonymity, no session, an ended / foreign sess
   const c0 = connects;
   for (const alias of ["h_anon", "h_unknown", "h_no_session", "h_as_i", "nobody"]) {
     for (const call of [{ action: "get", payload: { reservationId: ids.h2 } }, { action: "list", payload: { socialAccountId: H.account } },
-                        { action: "cancel", payload: { reservationId: ids.h2, expectedRevision: 1 } }]) {
+                        { action: "cancel", payload: { reservationId: ids.h2, expectedRevision: 1 } },
+                        // G3-02 #3: create / reschedule reach the database only after Auth and the token's session: still 401 first
+                        { action: "create", payload: { socialAccountId: H.account, clientBatchId: crypto.randomUUID(), revision: 1, mode: "manual_exact", band: null,
+                          items: [{ draft_id: "g302anon", scheduled_at: new Date(Date.now() + 800 * 3600e3).toISOString(), body: "x", consent: { confirmed: true, content_sha256: "d".repeat(64) } }] } },
+                        { action: "reschedule", payload: { reservationId: ids.h2, expectedRevision: 1, scheduledAt: new Date(Date.now() + 810 * 3600e3).toISOString() } }]) {
       assert.deepEqual(await post(alias, call), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, `${alias} ${call.action}`);
     }
   }
@@ -137,17 +145,64 @@ Deno.test("HE5 anonymous, unknown anonymity, no session, an ended / foreign sess
   assert.deepEqual(await rowOf("h2"), ["planned", 1]);
 });
 
-Deno.test("HE6 create / reschedule / reconfirm answer 403 before the database (the production permission default); the store's save is a definite failure", async () => {
-  const c0 = connects;
-  assert.deepEqual(await post("i", { action: "reschedule", payload: { reservationId: ids.i1, expectedRevision: 1, scheduledAt: new Date(Date.now() + 600 * 3600e3).toISOString() } }),
-    { status: 403, body: { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" } });
+Deno.test("HE6 G3-02 #3: create / reschedule / reconfirm are decided in the database (PERMISSIONS_DECIDED_IN_DATABASE): I (service active, X verified) saves and edits; H (service ending), another person's account, an unverified X account and a wrong hash are refused with nothing written", async () => {
+  const hour = 3600e3;
+  const one = (answer: { status: number; body: { reservations?: Array<Record<string, unknown>> } }) => {
+    assert.equal(answer.status, 200, JSON.stringify(answer));
+    return answer.body.reservations![0];
+  };
+  const rows0 = await rowCount();
+  // allowed: I saves through the app's store (create -> an independent list read-back -> 'saved')
+  const body = "G3-02 本文 i-new";
+  const request = { socialAccountId: I.account, clientBatchId: crypto.randomUUID(), revision: 1, mode: "manual_exact" as const, band: null,
+    items: [{ draft_id: "g302i1", scheduled_at: new Date(Date.now() + 700 * hour).toISOString(), body, consent: { confirmed: true as const, content_sha256: await sha(body) } }] };
+  const saved = await store("i").save(request);
+  assert.equal(saved.kind, "saved", JSON.stringify(saved));
+  const newId = saved.kind === "saved" ? saved.reservations[0].reservationId : "";
+  const rev0 = saved.kind === "saved" ? saved.reservations[0].revision : 0;
+  await owner("insert into t45.ids values ('i_new', $1::uuid)", [newId]);
+  // the same request again (a retry) answers the same row; nothing new is written
+  const again = await post("i", { action: "create", payload: request });
+  assert.deepEqual([again.status, again.body.reservations.map((r: { reservationId: string }) => r.reservationId)], [200, [newId]]);
+  assert.equal(await rowCount(), rows0 + 1);
+  // reschedule -> needs_reconfirm; a wrong hash 422; reconfirm with the body's hash -> confirmed
+  const moved = await post("i", { action: "reschedule", payload: { reservationId: newId, expectedRevision: rev0, scheduledAt: new Date(Date.now() + 710 * hour).toISOString() } });
+  const rev1 = Number(one(moved).revision);
+  assert.deepEqual([rev1, one(moved).consentState], [rev0 + 1, "needs_reconfirm"]);
+  assert.deepEqual(await post("i", { action: "reconfirm", payload: { reservationId: newId, expectedRevision: rev1, contentSha256: "0".repeat(64) } }),
+    { status: 422, body: { ok: false, code: "POSTONA_RESV_CONSENT_REQUIRED" } });
+  const confirmed = await post("i", { action: "reconfirm", payload: { reservationId: newId, expectedRevision: rev1, contentSha256: await sha(body) } });
+  assert.deepEqual(one(confirmed).consentState, "confirmed");
+  const rev2 = Number(one(confirmed).revision);
+
+  // refused by the database, each with nothing written
+  const r1 = await rowCount(), a1 = await auditCount(), c1 = connects;
+  const createFor = async (account: string, text: string, hours: number, hash?: string) => ({ action: "create", payload: { socialAccountId: account,
+    clientBatchId: crypto.randomUUID(), revision: 1, mode: "manual_exact", band: null,
+    items: [{ draft_id: `g302${hours}`, scheduled_at: new Date(Date.now() + hours * hour).toISOString(), body: text, consent: { confirmed: true, content_sha256: hash ?? await sha(text) } }] } });
+  assert.deepEqual(await post("h", await createFor(H.account, "G3-02 H after end", 720)), { status: 403, body: { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" } }, "H: service ending");
   assert.deepEqual(await post("h", { action: "reconfirm", payload: { reservationId: ids.h2, expectedRevision: 1, contentSha256: "a".repeat(64) } }),
-    { status: 403, body: { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" } });
-  const created = await post("i", { action: "create", payload: { socialAccountId: I.account, clientBatchId: crypto.randomUUID(), revision: 1, mode: "manual_exact", band: null,
-    items: [{ draft_id: "g45new", scheduled_at: new Date(Date.now() + 700 * 3600e3).toISOString(), body: "G3-45 本文", consent: { confirmed: true, content_sha256: "b".repeat(64) } }] } });
-  assert.deepEqual(created, { status: 403, body: { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" } });
-  assert.equal(connects, c0, "no write reached the database");
+    { status: 403, body: { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" } }, "H: reconfirm while ending");
+  assert.deepEqual(await post("i", await createFor(H.account, "G3-02 I on H", 730)), { status: 404, body: { ok: false, code: "POSTONA_RESV_ACCOUNT_NOT_FOUND" } }, "I on H's account");
+  assert.deepEqual(await post("i", { action: "reschedule", payload: { reservationId: ids.h2, expectedRevision: 1, scheduledAt: new Date(Date.now() + 740 * hour).toISOString() } }),
+    { status: 404, body: { ok: false, code: "POSTONA_RESV_NOT_FOUND" } }, "I on H's row");
+  assert.deepEqual(await post("i", await createFor(I.account, "G3-02 wrong hash", 750, "c".repeat(64))), { status: 422, body: { ok: false, code: "POSTONA_RESV_CONSENT_REQUIRED" } });
+  // I's X account no longer verified (G3's G4 TEST DOUBLE reads the onboarding error code): create / reschedule refused
+  await owner("update public.social_accounts set last_connection_error_code = 'G3_TEST_REAUTH' where id = $1", [I.account]);
+  try {
+    assert.deepEqual(await post("i", await createFor(I.account, "G3-02 unverified", 760)), { status: 403, body: { ok: false, code: "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED" } });
+    assert.deepEqual(await post("i", { action: "reschedule", payload: { reservationId: newId, expectedRevision: rev2, scheduledAt: new Date(Date.now() + 770 * hour).toISOString() } }),
+      { status: 403, body: { ok: false, code: "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED" } });
+  } finally {
+    await owner("update public.social_accounts set last_connection_error_code = null where id = $1", [I.account]);
+  }
+  assert.ok(connects > c1, "the refusals came from the database, not a TS pre-check");
+  assert.deepEqual([await rowCount(), await auditCount()], [r1, a1], "no refusal wrote a row or an audit row");
+  // the new row is cancelled again, so the later phases see only the rows they expect
+  const done = await post("i", { action: "cancel", payload: { reservationId: newId, expectedRevision: rev2 } });
+  assert.deepEqual(one(done).status, "cancelled");
   assert.deepEqual(await rowOf("i1"), ["planned", 1]);
+  assert.deepEqual(await rowOf("h2"), ["planned", 1]);
 });
 
 Deno.test("HE7 H cancels h4 with the revision from a fresh list; I's row stays; the gate OFF answers 503 and touches nothing", async () => {

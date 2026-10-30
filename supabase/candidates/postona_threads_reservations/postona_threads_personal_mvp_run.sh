@@ -247,7 +247,7 @@ fi
 ht_res="$(sed 's/\x1b\[[0-9;]*m//g' "$ht_out" | grep -E '^ok \|' | tail -1)"
 "${S[@]}" -d "$db" -c "drop owned by $login" -c "drop role $login" >/dev/null
 own -c "drop schema t46 cascade" >/dev/null
-echo "OK HT: Edge entry -> threads_api.ts -> real driver -> SQL ($ht_res): receipt / cancel of the own row (also after the service ended), second cancel 409, uncertain 409 never re-claimed, another person 404, anonymous / unknown / no session / other subject 401 before the database, foreign / ended session 401 (S2-2), create 403 before the database (default) and in the database (G4 double, service end), idempotent create, gate OFF 503, Threads sends 0"
+echo "OK HT: Edge entry -> threads_api.ts -> real driver -> SQL ($ht_res): receipt / cancel of the own row (also after the service ended), second cancel 409, uncertain 409 never re-claimed, another person 404, anonymous / unknown / no session / other subject 401 before the database, foreign / ended session 401 (S2-2), create decided in the database with the production default (G3-02 #3: allowed, then publish disabled / G4 double / another account / service end refused), idempotent create, gate OFF 503, Threads sends 0"
 
 # --- LR (G3-42) -----------------------------------------------------------------------------------------------------------------
 out="$(own -A -t -f "$pm/live_rows.sql")" || fail "live rows"

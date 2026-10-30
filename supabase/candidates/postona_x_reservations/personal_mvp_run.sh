@@ -362,7 +362,7 @@ if ! RESV_LIVE_DB_URL="postgres://$login@127.0.0.1:$port/$db" RESV_LIVE_OWNER_UR
 fi
 he_res="$(sed 's/\x1b\[[0-9;]*m//g' "$he_out" | grep -E '^ok \|' | tail -1)"
 "${S[@]}" -d "$db" -c "drop owned by $login" -c "drop role $login" >/dev/null
-echo "OK HE: app store -> Edge handler -> api.ts -> real driver -> SQL ($he_res): list / get after the end, 409 STALE_REVISION -> re-read -> cancel, uncertain / double cancel 409, another person 404 / empty list, anonymous / unknown / no or foreign session / other subject 401, create / reschedule / reconfirm 403 before the database, gate OFF 503, X sends 0"
+echo "OK HE: app store -> Edge handler -> api.ts -> real driver -> SQL ($he_res): list / get after the end, 409 STALE_REVISION -> re-read -> cancel, uncertain / double cancel 409, another person 404 / empty list, anonymous / unknown / no or foreign session / other subject 401, create / reschedule / reconfirm decided in the database (G3-02 #3: I saves and edits; H ending 403, another account 404, unverified X 403, wrong hash 422, nothing written), gate OFF 503, X sends 0"
 
 # --- OR (G3-43) ----------------------------------------------------------------------------------------------------------------
 c9="$(sval -c "select i.id || '/' || r.revision || '/' || r.user_id from t43.ids i join postona_x_resv.reservations r on r.id = i.id where i.name = 'c9'")"
