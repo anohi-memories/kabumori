@@ -197,7 +197,8 @@ Deno.test({ name: 'preflight refuses each environment the release must not go in
     ['authenticator cannot SET ROLE authenticated', 'revoke authenticated from authenticator', 'grant authenticated to authenticator with inherit false, set true', 'PF_AUTHENTICATOR', SUPER],
     ['authenticator inherits authenticated', 'revoke authenticated from authenticator; grant authenticated to authenticator with inherit true, set true',
       'revoke authenticated from authenticator; grant authenticated to authenticator with inherit false, set true', 'PF_AUTHENTICATOR', SUPER],
-    ['anon is a member of authenticated', 'grant authenticated to anon', 'revoke authenticated from anon', 'PF_ROLE_GRAPH', SUPER],
+    // (G5-02 #3: anon then also reaches authenticated's SELECT on brands -> PF_BRANDS "brands readable by anon" as well)
+    ['anon is a member of authenticated', 'grant authenticated to anon', 'revoke authenticated from anon', 'PF_BRANDS PF_ROLE_GRAPH', SUPER],
     ['authenticator is a member of the lifecycle owner', `grant ${OWNER} to authenticator with inherit false`, `revoke ${OWNER} from authenticator`, 'PF_ROLE_GRAPH', SUPER],
     ['the owner\'s default privileges give functions to a role the install does not revoke (authenticator)', 'alter default privileges in schema private grant execute on functions to authenticator',
       'alter default privileges in schema private revoke execute on functions from authenticator', 'PF_DEFAULT_ACL'],
@@ -224,7 +225,7 @@ Deno.test({ name: 'preflight refuses each environment the release must not go in
   for (const [, drift, , , user] of cases.slice(1, 6)) await sql(drift, user ?? OWNER);
   try {
     const all = await preflight();
-    assert.equal(all.verdict, 'FAIL PF_AUTH PF_AUTHENTICATOR PF_DEFAULT_ACL PF_ROLE_GRAPH', all.lines.join('\n'));
+    assert.equal(all.verdict, 'FAIL PF_AUTH PF_AUTHENTICATOR PF_BRANDS PF_DEFAULT_ACL PF_ROLE_GRAPH', all.lines.join('\n'));
     console.log(`G5-50 all at once: ${all.verdict}`);
     // why PF_DEFAULT_ACL is a release blocker: the install itself refuses late, as one transaction
     const r = await file('MVP_INSTALL.sql');
