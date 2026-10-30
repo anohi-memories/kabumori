@@ -259,7 +259,8 @@ print(json.dumps(out))
         return json.loads(r.stdout)
 
     def test_only_the_real_cli_temp_file_pattern_is_allowed(self):
-        profile = code_edit.cli_profile([self.target], os.path.join(self.tmp, "cli-tmp"), os.path.join(self.tmp, "h"))
+        profile = code_edit.cli_profile([self.target], os.path.join(self.tmp, "cli-tmp"),
+                                        os.path.join(self.tmp, "cli-home"), os.path.join(self.tmp, "h"))
         self.assertNotIn("{", profile)  # sandbox の正規表現は {n} を黙って無視する（一致しなくなる）
         out = self.run_probe(profile)
         # 大文字の16進も通る（このディスクではカーネルのパスの照合が大文字・小文字を区別しない）。作れるのは普通の

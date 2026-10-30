@@ -193,7 +193,8 @@ def run(root, run_id):
     if spec:  # サンドボックスの設定と許可ファイルの絶対パス（作業フォルダの準備の後に中身を確かめる）
         edit = {"abs_paths": [os.path.join(os.path.realpath(os.path.dirname(work_dir)), os.path.basename(work_dir), rel)
                               for rel in spec["paths"]],
-                "profile_path": os.path.join(run_dir, "cli.sb"), "tmp_dir": os.path.realpath(run_dir) + "/cli-tmp"}
+                "profile_path": os.path.join(run_dir, "cli.sb"), "tmp_dir": os.path.realpath(run_dir) + "/cli-tmp",
+                "home": os.path.realpath(run_dir) + "/cli-home"}  # TASK 33: 使い捨ての HOME
     atomic_write_json(settings_path, adapter.settings_doc(run_id, policy, edit))
     registry.create(layout, {
         "run_id": run_id, "session_id": req["session_id"], "settings_path": settings_path,
@@ -240,7 +241,8 @@ def run(root, run_id):
             prepared = code_edit.prepare(work_dir, run_dir, spec, adapter.go["home"])
         except (code_edit.CodeEditError, OSError) as exc:
             return abort("code edit preparation failed: %s" % exc, True)
-        if prepared["abs_paths"] != edit["abs_paths"] or prepared["tmp_dir"] != edit["tmp_dir"]:
+        if prepared["abs_paths"] != edit["abs_paths"] or prepared["tmp_dir"] != edit["tmp_dir"] \
+                or prepared["home"] != edit["home"]:
             return abort("code edit paths differ after preparation", True)
         # TASK 30: 後のセッションに効く ~/.claude.json の項目の、実行前の指紋
         atomic_write_json(os.path.join(run_dir, "home_guard_pre.json"),

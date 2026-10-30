@@ -58,7 +58,7 @@ def build_plan(binary, request, prompt_path, settings_path, home, max_turns=30, 
             "--session-id", request["session_id"], "--settings", settings_path, "--setting-sources", "local",
             "--strict-mcp-config", "--allowedTools", allowed_tools(edit), "--disallowedTools", disallowed_tools(edit),
             "--max-turns", str(max_turns), "--max-budget-usd", str(request["max_budget_usd"])]
-    env = child_env(home)
+    env = child_env(edit["home"] if edit and edit.get("home") else home)  # TASK 33: 限定コード編集は使い捨ての HOME
     if edit:  # TASK 26: CLI の一時ファイルはランの一時フォルダへ（サンドボックスで /tmp は書けない）
         env["TMPDIR"] = edit["tmp_dir"]
     return {"argv": argv, "env": env, "stdin_path": prompt_path, "dry_run": True}

@@ -24,7 +24,8 @@ from test_task26_code_edit import FIX, CodeEditBase
 
 HOME_PROBE = r'''
 import json, os, sys
-H = os.path.realpath(sys.argv[1]); C = H + "/.claude"; A = sys.argv[2]
+real = os.path.realpath(sys.argv[1]); cli = os.path.realpath(sys.argv[2]); A = sys.argv[3]
+C = real + "/.claude"
 out = []
 def t(name, fn):
     try:
@@ -34,64 +35,106 @@ def t(name, fn):
 def w(p, text="x"):
     with open(p, "w") as f:
         f.write(text)
-def atomic(p):
-    tmp = "%s.tmp.%d.0123456789ab" % (p, os.getpid()); w(tmp); os.rename(tmp, p)
-t("need .claude.json atomic", lambda: atomic(H + "/.claude.json"))
-t("need .claude.json.backup", lambda: w(H + "/.claude.json.backup"))
-t("need new project transcript", lambda: (os.makedirs(C + "/projects/-run-1"), w(C + "/projects/-run-1/s.jsonl")))
-t("need state file in .claude", lambda: atomic(C + "/statsig.json"))
-t("need rename inside a project", lambda: os.rename(C + "/projects/-run-1/s.jsonl", C + "/projects/-run-1/t.jsonl"))
-t("mkdir .claudeX", lambda: os.makedirs(H + "/.claudeX/hooks"))
-t("file .claude-old", lambda: w(H + "/.claude-old"))
-t("rename .claude away", lambda: os.rename(C, H + "/.claude-old"))
-t("rename projects away", lambda: os.rename(C + "/projects", C + "/p-old"))
-t("rename existing project away", lambda: os.rename(C + "/projects/user-repo", C + "/projects/x-old"))
-t("remove empty project", lambda: os.rmdir(C + "/projects/empty-proj"))
-t("rename existing memory away", lambda: os.rename(C + "/projects/user-repo/memory", C + "/projects/user-repo/m-old"))
-t("crafted dir with memory", lambda: os.makedirs(C + "/crafted/memory"))
-t("rename dir to <project>/memory", lambda: (os.makedirs(C + "/projects/-run-1/m"),
-                                            os.rename(C + "/projects/-run-1/m", C + "/projects/-run-1/memory")))
-t("rename crafted over empty project", lambda: (os.makedirs(C + "/crafted3"),
-                                                os.rename(C + "/crafted3", C + "/projects/empty-proj")))
-t("rename dir to hooks", lambda: (os.makedirs(C + "/crafted4"), os.rename(C + "/crafted4", C + "/hooks")))
-t("rename file to settings.json", lambda: (w(C + "/s.tmp"), os.rename(C + "/s.tmp", C + "/settings.json")))
-t("write rules", lambda: (os.makedirs(C + "/rules"), w(C + "/rules/r.md")))
-t("unlink approved", lambda: os.unlink(A))
-t("symlink at approved", lambda: os.symlink("/etc/hosts", A))
-t("fifo at approved", lambda: os.mkfifo(A))
-t("dir at approved", lambda: os.mkdir(A))
+# 使い捨ての HOME（CLI の設定・projects・キャッシュの置き場）には書ける
+t("cli_home .claude.json", lambda: w(cli + "/.claude.json"))
+t("cli_home .claude project", lambda: (os.makedirs(cli + "/.claude/projects/x"), w(cli + "/.claude/projects/x/s.jsonl")))
+t("cli_home .config.json", lambda: w(cli + "/.config.json"))
+t("cli_home cache", lambda: (os.makedirs(cli + "/Library/Caches/claude-cli-nodejs"), w(cli + "/Library/Caches/claude-cli-nodejs/c")))
+# 本物の ~/.claude は、直接も・.config.json も・改名も、一切書けない（H2 を原因ごと解消）
+t("real settings.json", lambda: w(C + "/settings.json"))
+t("real .config.json", lambda: w(C + "/.config.json"))
+t("real .claude.json", lambda: w(real + "/.claude.json"))
+t("real new file", lambda: w(C + "/anything"))
+t("real mkdir .claudeX", lambda: os.makedirs(real + "/.claudeX"))
+t("real rename .claude", lambda: os.rename(C, real + "/.claude-old"))
+t("real write existing memory", lambda: w(C + "/projects/user-repo/memory/m.md"))
+t("real new project", lambda: os.makedirs(C + "/projects/-run-1"))
+# 許可ファイルの名前の位置の種類すり替え（普通のファイル以外は作らせない）
+t("symlink at approved temp", lambda: os.symlink("/etc/hosts", A + ".tmp.1.0123456789ab"))
+t("fifo at approved temp", lambda: os.mkfifo(A + ".tmp.1.0123456789ab"))
+t("symlink at approved file", lambda: (os.unlink(A), os.symlink("/etc/hosts", A)))
+t("fifo at approved file", lambda: os.mkfifo(A))
 print(json.dumps(out))
 '''
 
 
 class HomeAndApprovedNameRules(unittest.TestCase):
-    """A と、許可ファイルの名前の位置での種類の拒否（sandbox-exec の設定そのもの）。"""
+    """H2: 本物の ~/.claude は全拒否・使い捨ての HOME は書ける。許可ファイルの名前の種類の拒否も（設定そのもの）。"""
 
-    def test_home_rename_bypasses_are_denied_and_needed_state_still_works(self):
+    def test_real_home_fully_denied_disposable_home_writable(self):
         tmp = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, True)
-        home = os.path.join(tmp, "home")
-        for d in (".claude/projects/user-repo/memory", ".claude/projects/empty-proj", ".claude/hooks", "w"):
-            os.makedirs(os.path.join(home if d != "w" else tmp, d))
+        home = os.path.join(tmp, "home")  # 本物の HOME（書けてはいけない）
+        for d in (".claude/projects/user-repo/memory", ".claude/projects/empty-proj", ".claude/hooks"):
+            os.makedirs(os.path.join(home, d))
         with open(os.path.join(home, ".claude/projects/user-repo/memory/m.md"), "w") as f:
             f.write("m\n")
+        cli_home = os.path.join(tmp, "cli-home")  # 使い捨ての HOME（CLI が書く先）
+        os.makedirs(cli_home)
+        os.makedirs(os.path.join(tmp, "w"))
         approved = os.path.join(tmp, "w", "a.py")
         with open(approved, "w") as f:
             f.write("old\n")
         os.makedirs(os.path.join(tmp, "cli-tmp"))
         profile = os.path.join(tmp, "p.sb")
         with open(profile, "w") as f:
-            f.write(code_edit.cli_profile([approved], os.path.join(tmp, "cli-tmp"), home))
-        r = subprocess.run(code_edit.wrap(profile, ["/usr/bin/python3", "-I", "-c", HOME_PROBE, home, approved]),
+            f.write(code_edit.cli_profile([approved], os.path.join(tmp, "cli-tmp"), cli_home, home))
+        r = subprocess.run(code_edit.wrap(profile, ["/usr/bin/python3", "-I", "-c", HOME_PROBE, home, cli_home, approved]),
                            capture_output=True, text=True, timeout=30)
         out = json.loads(r.stdout)
-        self.assertEqual([x for x in out if x[0].startswith("need")], [[n, "ok"] for n, _ in out[:5]])
-        denied = [x for x in out if not x[0].startswith("need") and x[0] != "unlink approved"]
-        self.assertEqual(denied, [[n, 1] for n, _ in denied])  # どれもカーネルの拒否（EPERM）
+        d = dict(out)
+        for n in ("cli_home .claude.json", "cli_home .claude project", "cli_home .config.json", "cli_home cache"):
+            self.assertEqual(d[n], "ok", n)  # 使い捨ての HOME は書ける
+        for name, result in out:
+            if name.startswith("cli_home"):
+                continue
+            self.assertEqual(result, 1, name)  # 本物の HOME と種類すり替えは、どれもカーネルの拒否（EPERM）
         self.assertTrue(os.path.isdir(os.path.join(home, ".claude", "projects", "user-repo", "memory")))
         self.assertFalse(os.path.exists(os.path.join(home, ".claude", "settings.json")))
-        self.assertEqual(sorted(n for n in os.listdir(home) if n.startswith(".claude")),
-                         [".claude", ".claude.json", ".claude.json.backup"])
+        self.assertFalse(os.path.exists(os.path.join(home, ".claude", ".config.json")))
+        self.assertEqual([n for n in os.listdir(home) if n != ".claude"], [])  # 本物の HOME に何も作られていない
+
+
+    def test_setsid_descendant_still_cannot_write_real_home(self):
+        """H1 の核心: プロセスグループの外へ逃げた（setsid）子孫も、カーネルのサンドボックスは外れないので、本物の
+        ~/.claude には書けない。停止処理をすり抜けても、本物の設定を書き換える道はない。"""
+        tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        home = os.path.join(tmp, "home")
+        os.makedirs(os.path.join(home, ".claude"))
+        cli_home = os.path.join(tmp, "cli-home")
+        os.makedirs(cli_home)
+        os.makedirs(os.path.join(tmp, "w"))
+        approved = os.path.join(tmp, "w", "a.py")
+        with open(approved, "w") as f:
+            f.write("old\n")
+        os.makedirs(os.path.join(tmp, "cli-tmp"))
+        profile = os.path.join(tmp, "p.sb")
+        with open(profile, "w") as f:
+            f.write(code_edit.cli_profile([approved], os.path.join(tmp, "cli-tmp"), cli_home, home))
+        result = os.path.join(cli_home, "result.json")  # 子は結果をここ（使い捨て HOME = 書ける）に残す
+        probe = ("import os, sys, json\n"
+                 "real, out = sys.argv[1], sys.argv[2]\n"
+                 "pid = os.fork()\n"
+                 "if pid == 0:\n"
+                 "    os.setsid()\n"  # グループの外へ逃げる
+                 "    rec = []\n"
+                 "    for target in (real + '/.claude/evil.json', real + '/.claude/.config.json'):\n"
+                 "        try:\n"
+                 "            open(target, 'w').write('x'); rec.append([target, 'WROTE'])\n"
+                 "        except OSError as e:\n"
+                 "            rec.append([target, e.errno])\n"
+                 "    json.dump(rec, open(out, 'w'))\n"
+                 "    os._exit(0)\n"
+                 "os.waitpid(pid, 0)\n")
+        r = subprocess.run(code_edit.wrap(profile, ["/usr/bin/python3", "-I", "-c", probe, home, result]),
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rec = json.load(open(result))
+        for target, outcome in rec:
+            self.assertEqual(outcome, 1, (target, outcome))  # 2 件とも EPERM（カーネルの拒否）
+        self.assertFalse(os.path.exists(os.path.join(home, ".claude", "evil.json")))
+        self.assertFalse(os.path.exists(os.path.join(home, ".claude", ".config.json")))
 
 
 class PostRunGuards(unittest.TestCase):
