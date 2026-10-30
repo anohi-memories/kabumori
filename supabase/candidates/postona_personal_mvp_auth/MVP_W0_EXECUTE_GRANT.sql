@@ -19,7 +19,7 @@ begin
     raise exception 'W0_EXEC_GRANT_PRECONDITION_OWNER_IS_SUPERUSER';
   end if;
   if v_fn is null or not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_fn and p.proowner = v_owner and p.prosecdef and p.provolatile = 'v'
-                                   and p.proconfig = array['search_path=""', 'row_security=off'] and pg_catalog.md5(p.prosrc) = '6ea93e3c13d28b8e7aa7520217642f1b') then
+                                   and p.proconfig = array['search_path=""', 'row_security=off'] and pg_catalog.md5(p.prosrc) = '3b3cc024c7816fa5e86a65e71f90060c') then
     raise exception 'W0_EXEC_GRANT_PRECONDITION_NOT_W0';
   end if;
   v_acl := (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_fn);

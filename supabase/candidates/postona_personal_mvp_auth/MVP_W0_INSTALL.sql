@@ -17,8 +17,11 @@
 --                   shared and staff workspaces are outside the personal MVP, P-1)
 --        other   -> {"status": OWN_WORKSPACE_CONFLICT | WORKSPACE_OWNER_UNKNOWN}; nothing written, nothing repaired
 --   4. the same two rows the X OAuth begin RPC (20260919120000) creates: brands (u_<md5(user)[1..24]>, 'My Workspace', inactive, publish
---      disabled, social_mobile_user_v1) and brand_memberships (that id, the person, owner). Then S2-3 again in a fresh statement: anything but
---      own (a concurrent writer left another shape) undoes both inserts (a subtransaction) and returns {"status":"OWN_WORKSPACE_CONFLICT"}.
+--      disabled, social_mobile_user_v1) and brand_memberships (that id, the person, owner), each checked by RETURNING: if the brand insert
+--      did not write (another writer took the derived id after step 3 -- H1 P2 F1, G5-02 task 1) W0 adds NO membership and answers
+--      {"status":"OWN_WORKSPACE_CONFLICT"} with nothing written; the final S2-3 = own alone is never enough. Then S2-3 again in a fresh
+--      statement: anything but own (a concurrent writer left another shape) undoes both inserts (a subtransaction), same answer.
+--      A refusal writes nothing, so one more call is safe: if the other writer was the person's own begin RPC, it answers ready / created false.
 -- X is NOT required: the workspace is inactive and publish-disabled exactly as the begin RPC leaves it; the begin RPC later finds it (one owned
 -- brand) and adds the X account to it. No other table, setting, entitlement or lifecycle version is written; R1-MVP's g5pv:<lifecycle_version>
 -- is unchanged by W0.
@@ -95,6 +98,8 @@ declare
   v_user uuid;
   v_workspace text;
   v_state text;
+  v_brand_written boolean;
+  v_member_written boolean;
 begin
   -- 1. the person and the session (S2-2). A refusal takes no lock and writes nothing.
   v_session := private.postona_personal_session();
@@ -127,15 +132,22 @@ begin
     return pg_catalog.jsonb_build_object('status', 'OTHER_WORKSPACE_MEMBERSHIP');
   end if;
 
-  -- 4. the begin RPC's two rows, then S2-3 must answer own; otherwise both inserts are undone
+  -- 4. the begin RPC's two rows, BOTH written by this call or none: a row W0 did not write is never joined, changed or reported as created
+  --    (G5-02 task 1, H1 P2 F1: another writer that takes the derived id after step 3 -- a backend as postgres / service_role, or the begin RPC --
+  --    is refused here, whatever shape it left). Then S2-3 must answer own; otherwise both inserts are undone.
   begin
     insert into public.brands (id, display_name, is_active, publish_mode, code_profile_key)
     values (v_workspace, 'My Workspace', false, 'disabled', 'social_mobile_user_v1')
-    on conflict (id) do nothing;
+    on conflict (id) do nothing
+    returning true into v_brand_written;
+    if v_brand_written is not true then
+      raise exception 'W0_POSTCONDITION_NOT_OWN';
+    end if;
     insert into public.brand_memberships (brand_id, user_id, role)
     values (v_workspace, v_user, 'owner')
-    on conflict on constraint brand_memberships_pkey do nothing;
-    if private.postona_personal_workspace_eligibility(v_user) is distinct from 'own' then
+    on conflict on constraint brand_memberships_pkey do nothing
+    returning true into v_member_written;
+    if v_member_written is not true or private.postona_personal_workspace_eligibility(v_user) is distinct from 'own' then
       raise exception 'W0_POSTCONDITION_NOT_OWN';
     end if;
   exception when raise_exception then
@@ -157,7 +169,7 @@ begin
   if v_fn is null then
     raise exception 'W0_POSTCONDITION_MISSING';
   end if;
-  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from '6ea93e3c13d28b8e7aa7520217642f1b' then
+  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from '3b3cc024c7816fa5e86a65e71f90060c' then
     raise exception 'W0_POSTCONDITION_BODY';
   end if;
   if (select p.proowner = v_owner and p.prosecdef and p.provolatile = 'v' and p.proconfig = array['search_path=""', 'row_security=off']

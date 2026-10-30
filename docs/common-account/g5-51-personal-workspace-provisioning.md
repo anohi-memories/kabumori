@@ -83,7 +83,8 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
 | `SERVICE_NOT_ACTIVE` | POSTONA ended / suspended | the existing reactivate flow, or not available |
 | `ACCOUNT_LOCKED`, `ACCOUNT_DELETION_IN_PROGRESS`, `SERVICE_DELETION_IN_PROGRESS` | not available | not available; no retry |
 | `ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE` | the server cannot check (configuration) | unavailable |
-| `OWN_WORKSPACE_CONFLICT`, `WORKSPACE_OWNER_UNKNOWN`, `OTHER_WORKSPACE_MEMBERSHIP` | the data is not one personal workspace | not available (support) |
+| `OWN_WORKSPACE_CONFLICT` | another writer holds the derived id, or the data is not one personal workspace (nothing was written) | call W0 **once more**: `ready` / created false if the other writer was the person's own X begin RPC; otherwise not available (support) |
+| `WORKSPACE_OWNER_UNKNOWN`, `OTHER_WORKSPACE_MEMBERSHIP` | the data is not one personal workspace | not available (support) |
 | HTTP 401 / 403 `42501` | no Bearer, or W0 not granted (stopped) | unavailable (401: sign in) |
 | HTTP 404 (`PGRST202` / `42883`) | W0 not installed | the feature is off |
 
@@ -92,7 +93,7 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
 - **Idempotent.** A second call returns the same row with `created:false`.
 - **Concurrent calls of one person.** 6 people each sent two calls at the same time. Each got one `created` and one `existing`, and exactly one brand and one membership exist.
 - **Against G4's X begin RPC.**
-  - W0 and the begin RPC at the same time: one workspace (4 people).
+  - W0 and the begin RPC at the same time: one workspace (4 people). Since G5-02 task 1, W0 answers `OWN_WORKSPACE_CONFLICT` when the begin RPC took the id first (it joins nothing it did not write); the next call answers `ready` / created false. Measured: each of the 4 races either way, every retry `existing`.
   - The begin RPC first: W0 adopts its workspace (`existing`).
   - G4's file was not changed.
 - **No adoption, no repair.** Each of these returns a refusal and leaves the rows unchanged:
@@ -122,7 +123,7 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
   - leaving a half-written shape;
   - reaching the gates it calls.
 - **Why the existing tests were not enough:** H1 / H4 reviewed readers (S2-2, S2-3, R1-MVP) and T13 as a fence. None of them writes membership facts for a caller.
-- **What the review covers:** W0's body (md5 `6ea93e3c13d28b8e7aa7520217642f1b`) and its grant / stop / rollback files. Everything else is unchanged and already reviewed.
+- **What the review covers:** W0's body (md5 `3b3cc024c7816fa5e86a65e71f90060c` since G5-02 task 1; `6ea93e3c13d28b8e7aa7520217642f1b` at PR #585) and its grant / stop / rollback files. Everything else is unchanged and already reviewed.
 - **Coverage so far:**
   - the real-stack suite (§5);
   - 6 / 6 body mutants detected: no T13, no S2-2, no other-membership refusal, no postcondition, `own` reported as created, the fence for another service;
@@ -130,7 +131,7 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
 
 ## 5. Measured
 
-**`supabase/tests/postona_personal_workspace_local_run.sh`** (the real local Supabase: GoTrue ES256 JWTs, PostgREST v16.1, Kong 2.8.1 `verify_jwt`, Edge runtime v1.74.3, Postgres 17.6.1.165; owner `postgres`; G6's localtest twin of the real entry; G1's own snapshot read and assist client over supabase-js 2.115.0; a fake provider): **9 / 9, three runs in a row.**
+**`supabase/tests/postona_personal_workspace_local_run.sh`** (the real local Supabase: GoTrue ES256 JWTs, PostgREST v16.1, Kong 2.8.1 `verify_jwt`, Edge runtime v1.74.3, Postgres 17.6.1.165; owner `postgres`; G6's localtest twin of the real entry; G1's own snapshot read and assist client over supabase-js 2.115.0; a fake provider): **9 / 9, three runs in a row** (G5-51); **10 / 10, three runs in a row** with the F1 test (G5-02 task 1).
 
 1. **F2.** The image's grant options, measured. A dedicated owner gets `PF_OWNER_AUTH FAIL` (no USAGE; then, via `authenticated`, no lock), and W0 install refuses (`schema` / `tables`). Its `FOR KEY SHARE` fails with `permission denied for table users`.
 2. **Release steps.**
@@ -174,6 +175,15 @@ W0 writes nothing else: no X account, no setting, no entitlement, no lifecycle v
 - The builder `--check`: 6 PASS. `MVP_INSTALL` / `MVP_ROLLBACK` re-derive byte for byte; the preflight pins M20 and W0; the W0 grant pins W0.
 
 **One run before these** (while the suite was being written) saw G1's first assist call answer `unavailable` instead of `candidates`. The Edge log of that run was not kept. Four later full runs did not repeat it. The cause is **not identified**: possibly G6-26's F5 first-request behaviour of the local gateway (NOT_VERIFIED).
+
+## 5a. G5-02 task 1: H1 P2 F1 fixed (fail-closed)
+
+- **Defect (H1 #306, PR #585 `04a23907`):** S2-3 sees the derived id absent; another writer then inserts a brand under it (a backend as `postgres` or `service_role`; active, live, the personal kind). W0's `ON CONFLICT DO NOTHING` skipped its own brand insert, W0 still inserted the person's owner membership, and the final S2-3 answered `own`, so W0 returned `created: true` for a foreign active / live brand.
+- **Fix (W0 body only, md5 `3b3cc024c7816fa5e86a65e71f90060c`):** both inserts are checked with `RETURNING`. If the brand insert wrote nothing, W0 adds no membership and answers `OWN_WORKSPACE_CONFLICT` with nothing written. If its membership insert wrote nothing, or S2-3 is not `own`, both inserts are undone, same answer. The final S2-3 = `own` alone is no longer enough. No grant, role or entry point changed; the pins in `MVP_W0_EXECUTE_GRANT.sql`, the preflight and the builder follow the new md5.
+- **Measured (real local Supabase, a deterministic two-session race: the writer holds its insert open until W0 waits on it, then commits):**
+  - on PR #585's body, for each writer (`postgres`, `service_role`): `ready:created`, and the person became owner of the foreign `Backend,true,live` brand (**FAIL reproduced**);
+  - on this body, for each writer: `OWN_WORKSPACE_CONFLICT`, the person has 0 memberships, the foreign row is unchanged with 0 memberships; later calls refuse it at S2-3 (`WORKSPACE_OWNER_UNKNOWN`), and G1 sends nothing (**PASS**).
+- New mutants: M7 (the brand insert result unchecked = PR #585's behaviour) and M8 (the membership insert result unchecked) are detected; W0 mutants now **8 / 8**.
 
 ## 6. Handoffs (G5 changed none of these)
 

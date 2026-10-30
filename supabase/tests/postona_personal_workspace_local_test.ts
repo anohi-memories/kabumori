@@ -131,6 +131,56 @@ async function app(p: Person, o: { brandId?: string; workspaceId?: string } = {}
   return { snapshot: snap.state as string, workspaceId: snap.data.workspace?.id ?? null, outcome: outcome === null ? 'NOT_SENT' : String(outcome.kind) };
 }
 
+// W0's body as a CREATE OR REPLACE (keeps the ACL), from an install file: this tree's, or PR #585's (G5LS_W0_585, read-only archive)
+async function w0Body(path: string): Promise<string> {
+  const src = await Deno.readTextFile(path);
+  const start = src.indexOf('create function public.postona_ensure_my_personal_workspace()');
+  assert.ok(start > 0, path);
+  return src.slice(start, src.indexOf('end $$;', start) + 'end $$;'.length).replace('create function', 'create or replace function');
+}
+const installBody = async (text: string) => { const r = await psql(OWNER, ['-c', text]); assert.ok(r.ok, r.error); };
+
+// H1 P2 F1, deterministic: a backend writer (postgres, or service_role through SET ROLE) inserts a FOREIGN brand under the person's derived
+// id -- active, live, the personal kind -- and holds its transaction open; W0 is called meanwhile (S2-3 still sees the id absent, its brand
+// insert waits on the writer's row); the writer commits; W0 resumes and meets the conflict.
+async function foreignRace(p: Person, writer: 'postgres' | 'service_role'): Promise<string> {
+  const id = await derived(p.id);
+  const child = new Deno.Command('psql', {
+    args: ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', '127.0.0.1', '-p', DB_PORT, '-U', OWNER, '-d', 'postgres'],
+    env: { LC_ALL: 'C' }, stdin: 'piped', stdout: 'piped', stderr: 'piped',
+  }).spawn();
+  const stdin = child.stdin.getWriter();
+  const out = child.stdout.getReader();
+  const say = (t: string) => stdin.write(new TextEncoder().encode(t + '\n'));
+  await say(`begin;${writer === 'service_role' ? ' set local role service_role;' : ''}`);
+  await say(`insert into public.brands (id, display_name, is_active, publish_mode, code_profile_key) values ('${id}', 'Backend', true, 'live', 'social_mobile_user_v1');`);
+  await say(`select 'g5ls-held-' || current_user;`);
+  let seen = '';
+  while (!seen.includes('g5ls-held-')) {
+    const { value, done } = await out.read();
+    assert.ok(!done, 'the writer exited early');
+    seen += decoder.decode(value);
+  }
+  assert.ok(seen.includes(`g5ls-held-${writer}`), seen);
+  const call = w0(p.token);
+  let waiting = false;
+  for (let i = 0; i < 100 && !waiting; i++) {
+    waiting = (await sql(SUPER, `select count(*) from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%${W0}%'`)) === '1';
+    if (!waiting) await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.ok(waiting, 'W0 waits on the writer\'s row');
+  await say('commit;');
+  await stdin.close();
+  out.releaseLock();
+  const status = await child.status;
+  assert.ok(status.success, 'the writer committed');
+  return await call;
+}
+// the foreign row and the person's memberships after the race: <display_name,is_active,publish_mode>/<memberships of the person>/<memberships of the brand>
+const foreignAfter = (u: string) => sql(SUPER, `select (select display_name || ',' || is_active || ',' || publish_mode from public.brands where id = 'u_' || substr(md5('${u}'), 1, 24)) || '/'
+  || (select count(*) from public.brand_memberships where user_id = '${u}') || '/'
+  || (select count(*) from public.brand_memberships where brand_id = 'u_' || substr(md5('${u}'), 1, 24))`);
+
 const people: Record<string, Person> = {};
 const PRE = { catalog: '' };
 
@@ -268,18 +318,51 @@ Deno.test({ name: 'concurrent: W0 || W0 of one person -> one created, one existi
     p_state_hash: Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join(''),
     p_redirect_uri: 'kabumori://oauth/x', p_expires_at: new Date(Date.now() + 600_000).toISOString(),
   });
+  const beginRace: string[] = [];
   for (let i = 0; i < 4; i++) {
     const Q = await signUp(`Q${i}`);
     const [a, b] = await Promise.all([w0(Q.token), begin(Q)]);
-    assert.match(a, /^ready:(created|existing)$/u, `Q${i}`);
+    // (G5-02 task 1) W0 writes both rows or none: if the begin RPC took the derived id first, W0 refuses without joining it; the refusal
+    // wrote nothing, so the next call finds the person's own workspace
+    assert.match(a, /^(ready:(created|existing)|OWN_WORKSPACE_CONFLICT)$/u, `Q${i}`);
+    beginRace.push(a);
     assert.equal(b.status, 200, JSON.stringify(b.body));
     assert.equal((b.body as unknown as Array<{ brand_id: string }>)[0].brand_id, await derived(Q.id));
     assert.equal(await rows(Q.id), PERSONAL, `Q${i}`);
+    assert.equal(await w0(Q.token), 'ready:existing', `Q${i} again`);
   }
+  console.log(`W0 || begin RPC answers: ${beginRace.join(' ')}`);
   const R = await signUp('R');
   assert.equal((await begin(R)).status, 200);
   assert.equal(await w0(R.token), 'ready:existing', 'the begin RPC created it first');
   assert.equal(await rows(R.id), PERSONAL);
+});
+
+// ---- H1 P2 F1 (G5-02 task 1) ---------------------------------------------------------------------------------------------------------
+Deno.test({ name: 'F1: a backend writer (postgres / service_role) takes the derived id between S2-3 and the insert -> PR #585\'s body joins it and says created (FAIL reproduced); this body refuses, writes nothing, leaves the foreign row as it was (PASS)', ...opts }, async () => {
+  const fixed = await w0Body(`${MVP}/MVP_W0_INSTALL.sql`);
+  const before = await w0Body(Deno.env.get('G5LS_W0_585') ?? '');
+  try {
+    await installBody(before);
+    for (const writer of ['postgres', 'service_role'] as const) {
+      const p = await signUp(`F1old-${writer}`);
+      assert.equal(await foreignRace(p, writer), 'ready:created', `PR #585 body, ${writer}: the defect`);
+      assert.equal(await foreignAfter(p.id), 'Backend,true,live/1/1', `PR #585 body, ${writer}: the person was made owner of the foreign active / live brand`);
+    }
+  } finally {
+    await installBody(fixed);
+  }
+  assert.equal(await sql(SUPER, `select md5(prosrc) from pg_proc where oid = 'public.${W0}()'::regprocedure`), '3b3cc024c7816fa5e86a65e71f90060c');
+  for (const writer of ['postgres', 'service_role'] as const) {
+    const p = await signUp(`F1-${writer}`);
+    assert.equal(await foreignRace(p, writer), 'OWN_WORKSPACE_CONFLICT', writer);
+    assert.equal(await foreignAfter(p.id), 'Backend,true,live/0/0', `${writer}: no membership, the foreign row untouched`);
+    // later calls meet it at step 3: S2-3 refuses the committed foreign row (personal kind, no owner) -- no repair, no adoption
+    assert.equal(await w0(p.token), 'WORKSPACE_OWNER_UNKNOWN', `${writer}: and every later call refuses it too`);
+    assert.equal(await foreignAfter(p.id), 'Backend,true,live/0/0');
+    assert.equal((await app(p)).outcome, 'NOT_SENT', `${writer}: G1 has no workspace to send for`);
+  }
+  assert.match((await preflight()).line('PF_W0'), /^PF_W0 PASS granted/u);
 });
 
 // ---- lifecycle ---------------------------------------------------------------------------------------------------------------------------
@@ -342,11 +425,9 @@ Deno.test({ name: 'not adopted, not repaired: a foreign brand under the derived 
 });
 
 // ---- mutants of W0's body (each must change an answer above) -------------------------------------------------------------------------
-Deno.test({ name: 'W0 mutants: every guard is load-bearing (6 / 6 detected); the reviewed body is restored by its pin', ...opts }, async () => {
-  const src = await Deno.readTextFile(`${MVP}/MVP_W0_INSTALL.sql`);
-  const start = src.indexOf('create function public.postona_ensure_my_personal_workspace()');
-  const body = src.slice(start, src.indexOf('end $$;', start) + 'end $$;'.length).replace('create function', 'create or replace function');
-  const install = async (text: string) => { const r = await psql(OWNER, ['-c', text]); assert.ok(r.ok, r.error); };
+Deno.test({ name: 'W0 mutants: every guard is load-bearing (8 / 8 detected); the reviewed body is restored by its pin', ...opts }, async () => {
+  const body = await w0Body(`${MVP}/MVP_W0_INSTALL.sql`);
+  const install = installBody;
   const cut = (from: string, to: string) => (t: string) => { const i = t.indexOf(from), j = t.indexOf(to, i); assert.ok(i > 0 && j > i, from); return t.slice(0, i) + t.slice(j); };
   const swap = (a: string, b: string) => (t: string) => { assert.ok(t.includes(a), a); return t.replace(a, b); };
   const scenarios: Record<string, () => Promise<[string, string]>> = {
@@ -366,6 +447,16 @@ Deno.test({ name: 'W0 mutants: every guard is load-bearing (6 / 6 detected); the
       try { return [await w0(p.token), 'OWN_WORKSPACE_CONFLICT']; } finally { await sql(SUPER, 'drop trigger g5ls_test_intruder on public.brands; drop function public.g5ls_test_intruder()'); }
     },
     again: async () => [await w0(people.B.token), 'ready:existing'],
+    raceForeign: async () => [await foreignRace(await signUp('mF'), 'postgres'), 'OWN_WORKSPACE_CONFLICT'],
+    memberTaken: async () => {
+      // a writer that already put the person into the brand W0 is creating (test-only trigger, as the intruder): W0's own membership insert
+      // writes nothing, so W0 did not write both rows
+      const p = await signUp('mG');
+      await sql(SUPER, `create function public.g5ls_test_intruder() returns trigger language plpgsql as $f$ begin
+          insert into public.brand_memberships (brand_id, user_id, role) values (new.id, '${p.id}', 'owner'); return null; end $f$;
+        create trigger g5ls_test_intruder after insert on public.brands for each row when (new.id = '${await derived(p.id)}') execute function public.g5ls_test_intruder()`);
+      try { return [await w0(p.token), 'OWN_WORKSPACE_CONFLICT']; } finally { await sql(SUPER, 'drop trigger g5ls_test_intruder on public.brands; drop function public.g5ls_test_intruder()'); }
+    },
     foreignBrand: async () => {
       const p = await signUp('mE');
       await sql(SUPER, `insert into public.brands (id, display_name, is_active, publish_mode, code_profile_key) values ('${await derived(p.id)}', 'Other', true, 'live', 'kabumori_brand')`);
@@ -376,8 +467,10 @@ Deno.test({ name: 'W0 mutants: every guard is load-bearing (6 / 6 detected); the
     ['M1 no T13 writer fence', cut('  begin\n    perform private.account_lifecycle_assert_active_service_write', '  -- 3. the S2-3 facts'), 'notStarted'],
     ['M2 no S2-2 session gate', cut('  if v_session is distinct from \'active\' then', '  v_user := (select auth.uid());'), 'loggedOut'],
     ['M3 no other-membership refusal', cut('  if exists (select 1 from public.brand_memberships m where m.user_id = v_user and m.brand_id <> v_workspace) then', '  -- 4. the begin RPC'), 'otherMember'],
-    ['M4 no postcondition', cut('    if private.postona_personal_workspace_eligibility(v_user) is distinct from \'own\' then', '  exception when raise_exception then'), 'intruder'],
+    ['M4 no S2-3 postcondition', swap(" or private.postona_personal_workspace_eligibility(v_user) is distinct from 'own' then", ' then'), 'intruder'],
     ['M5 own reported as created', swap("'workspace_id', v_workspace, 'created', false", "'workspace_id', v_workspace, 'created', true"), 'again'],
+    ['M7 the brand insert result unchecked (H1 P2 F1)', cut('    if v_brand_written is not true then', '    insert into public.brand_memberships'), 'raceForeign'],
+    ['M8 the membership insert result unchecked', swap('if v_member_written is not true or private', 'if private'), 'memberTaken'],
     ['M6 the fence for another service', swap("assert_active_service_write(v_user, 'x_autopost')", "assert_active_service_write(v_user, 'kabumori')"), 'again'],
   ];
   // (not a mutant here: dropping the early S2-3 refusal. The postcondition re-runs the same S2-3 rule after the inserts and undoes them, so the
@@ -395,7 +488,7 @@ Deno.test({ name: 'W0 mutants: every guard is load-bearing (6 / 6 detected); the
     await install(body);
   }
   assert.deepEqual(detected, mutants.map((m) => m[0]));
-  assert.equal(await sql(SUPER, `select md5(prosrc) from pg_proc where oid = 'public.${W0}()'::regprocedure`), '6ea93e3c13d28b8e7aa7520217642f1b', 'restored');
+  assert.equal(await sql(SUPER, `select md5(prosrc) from pg_proc where oid = 'public.${W0}()'::regprocedure`), '3b3cc024c7816fa5e86a65e71f90060c', 'restored');
   assert.match((await preflight()).line('PF_W0'), /^PF_W0 PASS granted/u);
 });
 
