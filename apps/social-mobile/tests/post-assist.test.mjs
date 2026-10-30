@@ -7,7 +7,7 @@ import * as assist from '../src/features/schedule/post-assist.ts';
 
 const calls = [];
 const client = { functions: { invoke: async (name, options) => { calls.push({ name, options }); return { data: { candidates: [{ platform: 'x', text: '案', hashtags: [], length: 2, limit: 280, editable: true, requiresUserConfirmation: true }], notice: '確認してください' }, error: null }; } } };
-const env = (over = {}) => ({ client, accessToken: 'jwt-1', userId: 'user-1', brandId: 'u_1', workspaceId: 'u_1', platform: 'x', preview: false, ...over });
+const env = (over = {}) => ({ client, accessToken: 'jwt-1', userId: 'user-1', brandId: 'u_1', workspaceId: 'u_1', platform: 'x', preview: false, loginRefused: false, ...over });
 let n = 0;
 const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
 const fields = (over = {}) => ({ notes: '新メニューの告知', instruction: 'もっと短く', ...over });
@@ -21,7 +21,7 @@ test('fail-closed: sample data, no client, signed out, unknown workspace or anot
   assert.equal(assist.assistBlock(env({ brandId: null })), 'no_workspace');
   assert.equal(assist.assistBlock(env({ workspaceId: null })), 'no_workspace');
   assert.equal(assist.assistBlock(env({ brandId: 'shared-brand' })), 'other_workspace');
-  for (const block of ['preview', 'signed_out', 'no_workspace', 'other_workspace']) assert.ok(assist.ASSIST_BLOCK_TEXT[block].length > 10);
+  for (const block of ['preview', 'signed_out', 'relogin', 'no_workspace', 'other_workspace']) assert.ok(assist.ASSIST_BLOCK_TEXT[block].length > 10);
   assert.equal(assist.assistScope(env()), 'user-1\nu_1');
   assert.equal(assist.assistScope(env({ brandId: 'shared-brand' })), null);
   assert.notEqual(assist.assistScope(env({ userId: 'user-2' })), assist.assistScope(env()));
@@ -85,4 +85,19 @@ test('hashtags are appended on their own line, only the ones the text does not h
   assert.equal(assist.withHashtags('本文 #Cafe', ['#cafe']), '本文 #Cafe', 'case-insensitive, nothing to add');
   assert.equal(assist.withHashtags('', ['#a', '#a']), '#a');
   assert.equal(assist.ASSIST_MODES.map((m) => m.label).join('/'), 'AIで下書き/書き直し/ハッシュタグ案');
+});
+
+test('TASK 28: a token answered 401 blocks as "relogin" (scope null, nothing sent); sample data and signed-out keep their own reason', async () => {
+  calls.length = 0;
+  assert.equal(assist.assistBlock(env({ loginRefused: true })), 'relogin');
+  assert.equal(assist.assistScope(env({ loginRefused: true })), null);
+  assert.equal(assist.newAssistRequest(env({ loginRefused: true }), uuid, 'r0', 'hashtags', '本文', fields()), null);
+  const request = assist.newAssistRequest(env(), uuid, 'r0', 'hashtags', '本文', fields());
+  assert.equal(assist.sendAssist(env({ loginRefused: true }), request), null);
+  assert.equal(calls.length, 0);
+  assert.equal(assist.assistBlock(env({ loginRefused: true, preview: true })), 'preview');
+  assert.equal(assist.assistBlock(env({ loginRefused: true, accessToken: null })), 'signed_out');
+  assert.match(assist.ASSIST_BLOCK_TEXT.relogin, /ログインし直すまで/u);
+  assert.match(assist.ASSIST_BLOCK_TEXT.relogin, /手で書いて続けられます/u);
+  assert.match(assist.ASSIST_BLOCK_TEXT.no_workspace, /個人ワークスペース/u);
 });

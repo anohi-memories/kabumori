@@ -8,7 +8,7 @@ import type { AssistEnv } from '@/features/schedule/post-assist';
  * person's own session, for the brand the composer plans for, checked against the person's workspace. It reads; it never
  * saves, schedules or posts (post-assist.ts decides whether anything may be sent at all).
  */
-export function usePostAssistEnv(owner: { brandId: string; platform: 'x' }): AssistEnv {
+export function usePostAssistEnv(owner: { brandId: string; platform: 'x' }, refusedToken: string | null): AssistEnv {
   const { session } = useAuth();
   const { status, snapshot } = useDataStatus();
   return {
@@ -16,8 +16,10 @@ export function usePostAssistEnv(owner: { brandId: string; platform: 'x' }): Ass
     accessToken: session?.access_token ?? null,
     userId: session?.user?.id ?? null,
     brandId: owner.brandId,
-    workspaceId: snapshot?.workspace?.id ?? null,
+    // Only the person's own personal workspace, as the snapshot pinned it down -- never the first brand they happen to see.
+    workspaceId: snapshot?.personalWorkspaceId ?? null,
     platform: owner.platform,
     preview: status === 'mock_preview',
+    loginRefused: refusedToken !== null && refusedToken === (session?.access_token ?? null),
   };
 }

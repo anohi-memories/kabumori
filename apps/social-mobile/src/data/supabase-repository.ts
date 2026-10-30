@@ -5,9 +5,15 @@ import { mapScheduledPostStatus } from '@/domain/post-status';
 export const KABUMORI_BRAND_ID = 'kabumori';
 export type ReadState = 'ready' | 'blocked' | 'unavailable';
 export type SupabaseReadResult<T> = { state: ReadState; data: T; reason?: string };
-export type SocialDataSnapshot = { workspace: Workspace | null; accounts: SocialAccount[]; plannedPosts: PlannedPost[]; history: PlannedPost[] };
+/**
+ * `personalWorkspaceId` is the person's own personal workspace (POSTONA personal MVP, G5): a brand they are the owner of whose
+ * code_profile_key is PERSONAL_WORKSPACE_KIND -- set only when exactly one such brand is visible, else null (nothing is guessed).
+ * The server (G5) still checks the rest (derived id, sole owner, no other brand); this only picks which brand to ask for.
+ */
+export type SocialDataSnapshot = { workspace: Workspace | null; personalWorkspaceId: string | null; accounts: SocialAccount[]; plannedPosts: PlannedPost[]; history: PlannedPost[] };
+export const PERSONAL_WORKSPACE_KIND = 'social_mobile_user_v1';
 
-const emptySnapshot: SocialDataSnapshot = { workspace: null, accounts: [], plannedPosts: [], history: [] };
+const emptySnapshot: SocialDataSnapshot = { workspace: null, personalWorkspaceId: null, accounts: [], plannedPosts: [], history: [] };
 
 function classifyReadError(code: string | undefined): { state: ReadState; reason: string } {
   if (code === '42501') return { state: 'blocked', reason: 'このアカウントの運用データを読む権限が確認できません。' };
@@ -55,7 +61,26 @@ export class SupabaseSocialRepository {
       // attribute a post to the first account merely because it is available.
       return [{ id: row.id, accountId: 'unknown', brandId: row.brand_id, scheduledAt: row.scheduled_for, origin: 'ai_generated', status, text: '' }];
     });
-    const brand = brandRows?.find((row) => typeof row.id === 'string' && brandIds.includes(row.id)) ?? brandRows?.[0];
-    return { state: 'ready', data: { workspace: brand ? { id: String(brand.id), name: typeof brand.display_name === 'string' ? brand.display_name : String(brand.id), plan: 'standard' } : null, accounts, plannedPosts: posts.filter((post) => post.status !== 'published'), history: posts } };
+    const personalWorkspaceId = await this.readPersonalWorkspaceId(membershipRows ?? [], brandIds);
+    // With several memberships the personal workspace is the one shown; otherwise the first visible brand, as before.
+    const brand = brandRows?.find((row) => row.id === personalWorkspaceId) ?? brandRows?.find((row) => typeof row.id === 'string' && brandIds.includes(row.id)) ?? brandRows?.[0];
+    return { state: 'ready', data: { workspace: brand ? { id: String(brand.id), name: typeof brand.display_name === 'string' ? brand.display_name : String(brand.id), plan: 'standard' } : null, personalWorkspaceId, accounts, plannedPosts: posts.filter((post) => post.status !== 'published'), history: posts } };
+  }
+
+  /**
+   * The one brand the person owns whose kind is the personal workspace; null when there is none, more than one, or the kind cannot be
+   * read (a column not granted, an error) -- the snapshot itself never fails because of this read.
+   */
+  private async readPersonalWorkspaceId(memberships: { brand_id?: unknown; role?: unknown }[], brandIds: string[]): Promise<string | null> {
+    const owned = [...new Set(memberships.flatMap((row) => row.role === 'owner' && typeof row.brand_id === 'string' && brandIds.includes(row.brand_id) ? [row.brand_id] : []))];
+    if (!owned.length) return null;
+    try {
+      const { data, error } = await this.client.from('brands').select('id,code_profile_key').in('id', owned).limit(50);
+      if (error || !Array.isArray(data)) return null;
+      const personal = [...new Set(data.flatMap((row) => typeof row.id === 'string' && owned.includes(row.id) && row.code_profile_key === PERSONAL_WORKSPACE_KIND ? [row.id] : []))];
+      return personal.length === 1 ? personal[0] : null;
+    } catch {
+      return null;
+    }
   }
 }
