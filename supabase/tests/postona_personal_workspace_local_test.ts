@@ -46,13 +46,14 @@ async function preflight(user = OWNER) {
   const line = (code: string) => lines.find((l) => l.startsWith(`${code} `)) ?? '-';
   return { verdict, lines, line };
 }
-// every function (body / ACL / owner / config), default ACL, role membership and relation ACL outside the system schemas
+// every function (body / ACL / owner / config), default ACL, role membership and relation ACL outside the system schemas (a relation's ACL
+// items sorted: a revoke and a re-grant put the same item last)
 const catalog = () => sql(SUPER, `select md5(string_agg(x, E'\\n' order by x)) from (
   select 'p ' || p.oid::regprocedure::text || ' ' || md5(p.prosrc) || ' ' || coalesce(p.proacl::text, '-') || ' ' || p.proowner::regrole::text || coalesce(p.proconfig::text, '') x
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname !~ '^(pg_|information_schema)'
   union all select 'd ' || d.defaclrole::regrole::text || ' ' || d.defaclnamespace::text || d.defaclobjtype::text || ' ' || d.defaclacl::text from pg_default_acl d
   union all select 'm ' || m.roleid::regrole::text || ' ' || m.member::regrole::text || m.admin_option || m.inherit_option || m.set_option from pg_auth_members m
-  union all select 'c ' || c.oid::regclass::text || ' ' || coalesce(c.relacl::text, '-') from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname !~ '^(pg_|information_schema)') s`);
+  union all select 'c ' || c.oid::regclass::text || ' ' || coalesce((select string_agg(a::text, ',' order by a::text) from unnest(c.relacl) a), '-') from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname !~ '^(pg_|information_schema)') s`);
 const derived = (u: string) => sql(SUPER, `select 'u_' || substr(md5('${u}'), 1, 24)`);
 // <brands with the derived id>/<the person's memberships>/<the derived brand's shape>
 const rows = (u: string) => sql(SUPER, `select (select count(*) from public.brands where id = 'u_' || substr(md5('${u}'), 1, 24)) || '/'
@@ -224,7 +225,7 @@ Deno.test({ name: 'release as postgres: preflight absent -> MVP_INSTALL -> W0 in
   let p = await preflight();
   assert.equal(p.verdict, 'PASS phase=absent warnings=0', p.lines.join('\n'));
   assert.deepEqual(p.lines.filter((l) => !l.startsWith('VERDICT')).map((l) => l.split(' ').slice(0, 2).join(' ')),
-    ['PF_OWNER PASS', 'PF_P1 PASS', 'PF_P3 PASS', 'PF_OWNER_AUTH PASS', 'PF_AUTH PASS', 'PF_ROLE_GRAPH PASS', 'PF_AUTHENTICATOR PASS', 'PF_DEFAULT_ACL PASS', 'PF_PHASE PASS', 'PF_W0 PASS', 'PF_DATA PASS']);
+    ['PF_OWNER PASS', 'PF_P1 PASS', 'PF_P3 PASS', 'PF_APP_READ PASS', 'PF_BRANDS PASS', 'PF_OWNER_AUTH PASS', 'PF_AUTH PASS', 'PF_ROLE_GRAPH PASS', 'PF_AUTHENTICATOR PASS', 'PF_DEFAULT_ACL PASS', 'PF_PHASE PASS', 'PF_W0 PASS', 'PF_DATA PASS']);
   assert.match(p.line('PF_W0'), /absent/u);
   await refuses('MVP_W0_INSTALL.sql', /W0_PRECONDITION_GATE private\.postona_personal_session\(\)/u);
   assert.equal(await catalog(), PRE.catalog, 'the preflight and a refused install change nothing');
@@ -422,6 +423,232 @@ Deno.test({ name: 'not adopted, not repaired: a foreign brand under the derived 
   } finally {
     await sql(SUPER, 'drop trigger g5ls_test_intruder on public.brands; drop function public.g5ls_test_intruder()');
   }
+});
+
+// ---- G5-02 #2: G1 #592's first run reads the personal workspace's kind (brands.code_profile_key) with the person's own JWT -----------------
+const G1B = Deno.env.get('G5LS_G1B') ?? '';
+// the relation ACL / row security the snapshot reads through, as the catalog has it now
+const readAcl = () => sql(SUPER, `select string_agg(x, ' ' order by x) from (
+  select c.relname || ':rls=' || c.relrowsecurity || ':force=' || c.relforcerowsecurity x from pg_class c where c.oid in ('public.brands'::regclass, 'public.brand_memberships'::regclass)
+  union all select c.relname || ':acl=' || coalesce((select string_agg(a::text, ',' order by a::text) from unnest(c.relacl) a), '-') from pg_class c where c.oid in ('public.brands'::regclass, 'public.brand_memberships'::regclass)
+  union all select 'col:' || attrelid::regclass::text || '.' || attname || ':' || coalesce(attacl::text, '-') from pg_attribute where attrelid in ('public.brands'::regclass, 'public.brand_memberships'::regclass) and attnum > 0 and attacl is not null
+  union all select 'policy:' || polrelid::regclass::text || ':' || polname || ':' || polcmd::text || ':' || polpermissive || ':' || array_to_string(array(select coalesce(r.rolname, 'public') from unnest(polroles) u left join pg_roles r on r.oid = u), ',')
+    || ':' || coalesce(pg_get_expr(polqual, polrelid), '-') from pg_policy where polrelid in ('public.brands'::regclass, 'public.brand_memberships'::regclass)) s`);
+// can <role> SELECT these columns (table or column privilege)
+const canRead = (role: string) => sql(SUPER, `select string_agg(t || '.' || c || ':' || has_column_privilege('${role}', t, c, 'SELECT'), ' ' order by t, c) from (values
+  ('public.brands', 'id'), ('public.brands', 'display_name'), ('public.brands', 'is_active'), ('public.brands', 'publish_mode'), ('public.brands', 'code_profile_key'),
+  ('public.brand_memberships', 'brand_id'), ('public.brand_memberships', 'role'), ('public.brand_memberships', 'user_id')) v(t, c)`);
+// G1 #592's first run, as PersonalWorkspaceProvider + usePostAssistEnv decide it: W0 through G1's own call (one bounded retry on
+// OWN_WORKSPACE_CONFLICT) -> G1's own snapshot read -> 'ready' only when the snapshot's personal workspace is W0's -> one press of
+// AIで下書き through G1's own gate (the composer's brand is the snapshot's workspace). functions.invoke goes to G6's localtest twin.
+async function firstRun(p: Person, o: { brandId?: string } = {}) {
+  const ws = await import(`${G1B}/domain/personal-workspace.ts`);
+  const { SupabaseSocialRepository } = await import(`${G1B}/data/supabase-repository.ts`);
+  const assist = await import(`${G1B}/features/schedule/post-assist.ts`);
+  const client = new Proxy(p.client, {
+    get(t, k) {
+      if (k === 'functions') return { invoke: (_name: string, o2: unknown) => t.functions.invoke(LOCALTEST, o2 as never) };
+      const v = Reflect.get(t, k);
+      return typeof v === 'function' ? v.bind(t) : v;
+    },
+  });
+  const decided = await ws.ensurePersonalWorkspace(ws.createPersonalWorkspaceCall({ url: API, apiKey: PUBLISHABLE, accessToken: p.token }), new AbortController().signal);
+  const snap = await new SupabaseSocialRepository(client).readSnapshot();
+  const personal: string | null = snap.data.personalWorkspaceId ?? null;
+  const view: string = decided.kind === 'ready' ? (personal === decided.workspaceId ? 'ready' : 'unconfirmed') : decided.kind;
+  const e = {
+    client, accessToken: p.token, userId: p.id, brandId: o.brandId ?? snap.data.workspace?.id ?? '', workspaceId: view === 'ready' ? decided.workspaceId : null,
+    platform: 'x', preview: false, loginRefused: view === 'relogin', workspaceSetup: view === 'relogin' ? 'idle' : view, retryWorkspaceSetup: null,
+  };
+  const request = assist.newAssistRequest(e, () => crypto.randomUUID(), 'row-1', 'draft', '', { notes: 'いちごタルト 週末限定', instruction: '' });
+  const outcome = request === null ? `NOT_SENT:${assist.assistBlock(e)}` : String((await assist.sendAssist(e, request))?.kind);
+  return { w0: decided.kind === 'ready' ? `ready:${decided.created ? 'created' : 'existing'}` : String(decided.kind), snapshot: String(snap.state), personal, view, outcome };
+}
+
+// what anon / authenticated may write on brands (table privileges)
+const brandWrites = () => sql(SUPER, `select coalesce(string_agg(r || ':' || k, ' ' order by r, k), '-') from unnest(array['anon', 'authenticated']) r,
+  unnest(array['INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) k where has_table_privilege(r, 'public.brands', k)`);
+const code = (r: { error: { code?: string } | null; status: number }) => `${r.status}:${r.error?.code ?? '-'}`;
+
+Deno.test({ name: 'G5-02 #2 G1 #592 on the real JWT: the person reads their own brand\'s kind (code_profile_key) -> ready -> candidates; another person, no login, a signed-out login, an ended service, a second membership and a repeated W0 conflict never become ready and send nothing', ...opts }, async () => {
+  // read-back of the world the suite runs on (the runner's stand-in for the brands owner's hardening; the world as built is the next test)
+  assert.doesNotMatch(await canRead('authenticated'), /:false/u, 'the person may read every snapshot column, code_profile_key included');
+  assert.doesNotMatch(await canRead('anon'), /:true/u);
+  assert.equal(await brandWrites(), '-', 'no API write on brands');
+  assert.match(await readAcl(), /brand_memberships:rls=true:force=false .*brands:rls=true:force=false/u);
+  const pf = await preflight();
+  assert.match(pf.verdict, /^PASS phase=granted /u, pf.lines.join('\n'));
+  assert.match(pf.line('PF_APP_READ'), /^PF_APP_READ PASS/u);
+  assert.match(pf.line('PF_BRANDS'), /^PF_BRANDS PASS/u);
+  assert.equal(pf.line('PF_BRANDS_POLICIES'), '-');
+
+  // the person: W0 creates, G1's snapshot shows the same id by its kind, G1's gate sends; again: existing, the same
+  const P = await signUp('P');
+  const pws = await derived(P.id);
+  const calls = provider.calls;
+  assert.deepEqual(await firstRun(P), { w0: 'ready:created', snapshot: 'ready', personal: pws, view: 'ready', outcome: 'candidates' });
+  assert.deepEqual(await firstRun(P), { w0: 'ready:existing', snapshot: 'ready', personal: pws, view: 'ready', outcome: 'candidates' });
+  assert.equal(provider.calls, calls + 2);
+  assert.deepEqual((await P.client.from('brands').select('id,code_profile_key')).data, [{ id: pws, code_profile_key: 'social_mobile_user_v1' }], 'P\'s JWT reads its own brand only');
+
+  // another person: their own workspace only; P's brand is neither visible nor writable; G1's gate refuses P's id
+  const Q = await signUp('Q');
+  const qws = await derived(Q.id);
+  assert.deepEqual(await firstRun(Q), { w0: 'ready:created', snapshot: 'ready', personal: qws, view: 'ready', outcome: 'candidates' });
+  assert.deepEqual((await Q.client.from('brands').select('id').eq('id', pws)).data, []);
+  assert.deepEqual((await Q.client.from('brands').select('id')).data, [{ id: qws }]);
+  assert.equal(code(await Q.client.from('brands').update({ is_active: true, publish_mode: 'live' }).eq('id', pws)), '403:42501');
+  assert.equal(code(await Q.client.from('brands').insert({ id: `g5ls_q_${n}`, display_name: 'Q', code_profile_key: 'social_mobile_user_v1' })), '403:42501');
+  assert.equal(code(await Q.client.from('brands').delete().eq('id', pws)), '403:42501');
+  const anon = newClient();
+  assert.equal(code(await anon.from('brands').select('id')), '401:42501');
+  assert.equal(code(await anon.from('brands').insert({ id: `g5ls_anon_${n}`, display_name: 'anon' })), '401:42501');
+  assert.equal(await rows(P.id), PERSONAL, 'P\'s workspace is untouched');
+  const sent = provider.calls;
+  assert.equal((await firstRun(Q, { brandId: pws })).outcome, 'NOT_SENT:other_workspace');
+
+  // no login: G1's snapshot is blocked and its gate sends nothing
+  const none = await (async () => {
+    const { SupabaseSocialRepository } = await import(`${G1B}/data/supabase-repository.ts`);
+    return (await new SupabaseSocialRepository(newClient()).readSnapshot()).state;
+  })();
+  assert.equal(none, 'blocked');
+
+  // a signed-out login (its JWT still within exp): W0 SESSION_REVOKED -> relogin; nothing sent
+  const C = await signUp('C2');
+  await C.client.auth.signOut();
+  const c = await firstRun(C);
+  assert.deepEqual([c.w0, c.view, c.outcome], ['relogin', 'relogin', 'NOT_SENT:relogin']);
+  assert.equal(await rows(C.id), '0/0/-');
+
+  // an ended service: W0 SERVICE_NOT_ACTIVE -> service_inactive; nothing sent, the workspace stays
+  const E = await signUp('E2');
+  assert.equal((await firstRun(E)).view, 'ready');
+  const sentE = provider.calls;
+  await sql(SUPER, `update public.service_entitlements set status = 'ended', ended_at = now() where user_id = '${E.id}' and service_key = 'x_autopost'`);
+  const e = await firstRun(E);
+  assert.deepEqual([e.w0, e.view, e.outcome], ['service_inactive', 'service_inactive', 'NOT_SENT:workspace_service_inactive']);
+  assert.equal(provider.calls, sentE);
+  assert.equal(await rows(E.id), PERSONAL);
+
+  // a second membership (a shared brand): S2-3 still answers own for the sole personal workspace (G5-51), and G1 finds that one by its kind
+  // among the person's brands -> ready on the personal workspace only
+  const M = await signUp('M');
+  const mws = await derived(M.id);
+  assert.equal((await firstRun(M)).view, 'ready');
+  await sql(SUPER, `insert into public.brands (id, display_name, code_profile_key) values ('g5ls_m2_${n}', 'Shared', 'shared_v1');
+    insert into public.brand_memberships (brand_id, user_id, role) values ('g5ls_m2_${n}', '${M.id}', 'member')`);
+  assert.deepEqual(await firstRun(M), { w0: 'ready:existing', snapshot: 'ready', personal: mws, view: 'ready', outcome: 'candidates' });
+  assert.equal((await firstRun(M, { brandId: `g5ls_m2_${n}` })).outcome, 'NOT_SENT:other_workspace', 'the shared brand is never sent');
+  // a second brand of the personal kind owned: G1 names neither (nothing is guessed), W0 refuses (support), nothing sent
+  await sql(SUPER, `insert into public.brands (id, display_name, code_profile_key) values ('g5ls_m3_${n}', 'Second', 'social_mobile_user_v1');
+    insert into public.brand_memberships (brand_id, user_id, role) values ('g5ls_m3_${n}', '${M.id}', 'owner')`);
+  const sentM = provider.calls;
+  const m2 = await firstRun(M);
+  assert.deepEqual([m2.w0, m2.personal, m2.view, m2.outcome], ['support', null, 'support', 'NOT_SENT:workspace_support']);
+  assert.equal(provider.calls, sentM);
+
+  // W0 conflict on both of G1's calls (a test-only concurrent writer adds a member on every insert): G1 asks once more, then support
+  const J = await signUp('J2');
+  const K = await signUp('K2', false);
+  await sql(SUPER, `create function public.g5ls_test_intruder() returns trigger language plpgsql as $f$ begin
+      insert into public.brand_memberships (brand_id, user_id, role) values (new.id, '${K.id}', 'member'); return null; end $f$;
+    create trigger g5ls_test_intruder after insert on public.brands for each row when (new.id = '${await derived(J.id)}') execute function public.g5ls_test_intruder()`);
+  try {
+    const j = await firstRun(J);
+    assert.deepEqual([j.w0, j.personal, j.view, j.outcome], ['support', null, 'support', 'NOT_SENT:workspace_support']);
+    assert.equal(await rows(J.id), '0/0/-', 'both refusals wrote nothing');
+  } finally {
+    await sql(SUPER, 'drop trigger g5ls_test_intruder on public.brands; drop function public.g5ls_test_intruder()');
+  }
+  assert.equal(provider.calls, sent + 3, 'after P and Q only the three ready runs (E2, M, M with a shared membership) reached the provider');
+});
+
+Deno.test({ name: 'G5-02 #2 brands ACL: the world as built (row security off, the image\'s default write grants) lets a person read and change another workspace and anon insert -- PF_BRANDS FAIL; code_profile_key not granted -> G1 unconfirmed, nothing sent, PF_APP_READ FAIL; restored', ...opts }, async () => {
+  const base = { catalog: await catalog(), acl: await readAcl() };
+  const R = await signUp('R');
+  const S = await signUp('S');
+  const rws = await derived(R.id);
+  const sws = await derived(S.id);
+  assert.equal((await firstRun(R)).view, 'ready');
+  assert.equal((await firstRun(S)).view, 'ready');
+
+  // the world exactly as G5's world + 20260918120000 build it on the Supabase image (measured before the runner's stand-in)
+  await sql(SUPER, 'alter table public.brands disable row level security; grant insert, update, delete, truncate, references, trigger, maintain on public.brands to anon, authenticated');
+  try {
+    assert.equal(await brandWrites(), 'anon:DELETE anon:INSERT anon:REFERENCES anon:TRIGGER anon:TRUNCATE anon:UPDATE authenticated:DELETE authenticated:INSERT authenticated:REFERENCES authenticated:TRIGGER authenticated:TRUNCATE authenticated:UPDATE');
+    const p = await preflight();
+    assert.equal(p.verdict, 'FAIL PF_BRANDS', p.lines.join('\n'));
+    assert.match(p.line('PF_BRANDS'), /^PF_BRANDS FAIL row security off on brands; brands writable by anon, authenticated: /u);
+    assert.match(p.line('PF_APP_READ'), /^PF_APP_READ PASS/u);
+    // what that lets S's JWT do to R's workspace, through PostgREST
+    assert.ok(((await S.client.from('brands').select('id')).data ?? []).some((r) => r.id === rws), 'S reads R\'s brand');
+    assert.deepEqual((await S.client.from('brands').update({ is_active: true, publish_mode: 'live' }).eq('id', rws).select('id')).data, [{ id: rws }], 'S sets R\'s workspace active / live');
+    assert.equal(await rows(R.id), '1/1/social_mobile_user_v1,My Workspace,true,live');
+    assert.equal(code(await newClient().from('brands').insert({ id: `g5ls_anon_${n}`, display_name: 'anon' })), '201:-', 'anon inserts a brand');
+    // G1 itself still names only the person's own (its reads are bounded by the person's memberships)
+    assert.equal((await firstRun(S)).personal, sws);
+  } finally {
+    await sql(SUPER, `alter table public.brands enable row level security; revoke all on public.brands from anon;
+      revoke insert, update, delete, truncate, references, trigger, maintain on public.brands from authenticated;
+      update public.brands set is_active = false, publish_mode = 'disabled' where id = '${rws}'; delete from public.brands where id = 'g5ls_anon_${n}'`);
+  }
+  assert.equal(await rows(R.id), PERSONAL);
+  assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
+
+  // each part alone is a FAIL (or, for another policy, a WARN); the preflight changes nothing
+  const cases: Array<[string, string, string, RegExp]> = [
+    ['row security off on brands', 'alter table public.brands disable row level security', 'alter table public.brands enable row level security', /^PF_BRANDS FAIL row security off on brands: /u],
+    ['row security off on brand_memberships', 'alter table public.brand_memberships disable row level security', 'alter table public.brand_memberships enable row level security', /^PF_BRANDS FAIL row security off on brand_memberships: /u],
+    ['an UPDATE grant on brands', 'grant update on public.brands to authenticated', 'revoke update on public.brands from authenticated', /^PF_BRANDS FAIL brands writable by authenticated: /u],
+    ['an INSERT grant to anon', 'grant insert on public.brands to anon', 'revoke insert on public.brands from anon', /^PF_BRANDS FAIL brands writable by anon: /u],
+    ['the member read policy on brands dropped', 'alter policy social_mobile_member_select_brands on public.brands rename to g5ls_renamed',
+      'alter policy g5ls_renamed on public.brands rename to social_mobile_member_select_brands', /^PF_BRANDS FAIL a member read policy \(20260918120000\) is missing or not for authenticated only: /u],
+    ['the member read policy widened to anon', 'alter policy social_mobile_membership_self_select on public.brand_memberships to anon, authenticated',
+      'alter policy social_mobile_membership_self_select on public.brand_memberships to authenticated', /^PF_BRANDS FAIL a member read policy \(20260918120000\) is missing or not for authenticated only: /u],
+    ['the kind not granted', 'revoke select on public.brands from authenticated; grant select (id, display_name, is_active, publish_mode) on public.brands to authenticated',
+      'revoke select (id, display_name, is_active, publish_mode) on public.brands from authenticated; grant select on public.brands to authenticated',
+      /^PF_APP_READ FAIL authenticated cannot read brands\.code_profile_key: /u],
+    ['the membership role not granted', 'revoke select on public.brand_memberships from authenticated; grant select (brand_id, user_id) on public.brand_memberships to authenticated',
+      'revoke select (brand_id, user_id) on public.brand_memberships from authenticated; grant select, maintain on public.brand_memberships to authenticated',
+      /^PF_APP_READ FAIL authenticated cannot read brand_memberships\.role: /u],
+  ];
+  for (const [label, drift, restore, want] of cases) {
+    await sql(SUPER, drift);
+    try {
+      const during = await catalog();
+      const p = await preflight();
+      const id = want.source.slice(1).split(' ')[0];
+      assert.equal(p.verdict, `FAIL ${id}`, `${label}\n${p.lines.join('\n')}`);
+      assert.match(p.line(id), want, label);
+      assert.equal(await catalog(), during, `${label}: the preflight changed nothing`);
+    } finally {
+      await sql(SUPER, restore);
+    }
+  }
+  await sql(SUPER, `create policy g5ls_extra on public.brands for select to authenticated using (true)`);
+  try {
+    const p = await preflight();
+    assert.match(p.verdict, /^PASS /u);
+    assert.match(p.line('PF_BRANDS_POLICIES'), /^PF_BRANDS_POLICIES WARN 1 /u);
+    assert.ok(((await S.client.from('brands').select('id')).data ?? []).some((r) => r.id === rws), 'why it is reported: an extra permissive policy widens what S reads');
+  } finally {
+    await sql(SUPER, 'drop policy g5ls_extra on public.brands');
+  }
+  assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
+
+  // the kind not granted, through the app: W0 is ready but G1 cannot confirm the workspace -> unconfirmed, nothing sent (the product blocker)
+  const sent = provider.calls;
+  await sql(SUPER, cases[6][1]);
+  try {
+    assert.deepEqual(await firstRun(R), { w0: 'ready:existing', snapshot: 'ready', personal: null, view: 'unconfirmed', outcome: 'NOT_SENT:no_workspace' });
+    assert.equal(provider.calls, sent);
+  } finally {
+    await sql(SUPER, cases[6][2]);
+  }
+  assert.deepEqual([await catalog(), await readAcl()], [base.catalog, base.acl], 'restored');
+  assert.deepEqual(await firstRun(R), { w0: 'ready:existing', snapshot: 'ready', personal: rws, view: 'ready', outcome: 'candidates' });
+  assert.equal(provider.calls, sent + 1);
 });
 
 // ---- mutants of W0's body (each must change an answer above) -------------------------------------------------------------------------
