@@ -94,7 +94,7 @@ class TestAdapterFixed(unittest.TestCase):
         # TASK 19: GO で固定した CLI の `auth status --json`（モデルを呼ばない）だけを追加で起動する
         self.assertIn('AUTH_ARGS = ("auth", "status", "--json")', real)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", real),
-                         ["[cli_realpath] + list(AUTH_ARGS)", "[GIT"])
+                         ["[cli_realpath] + list(AUTH_ARGS)", "[GIT", "[GIT"])  # 2つ目の [GIT = BundleSourcePreparer（§14.9 指摘1）
         rel = texts["release.py"]  # TASK 22: 起動するのは固定の /usr/bin/git だけ
         self.assertIn('GIT = "/usr/bin/git"', rel)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", rel), ["[GIT] + args"])

@@ -158,6 +158,38 @@ class GitSourcePreparer:
             raise RealClaudeError("checked out commit differs from base_sha")
 
 
+class BundleSourcePreparer:
+    """作業フォルダ: handoff に置かれた git bundle からクローンし base_sha で detached checkout（§14.9 指摘1）。
+    yuya 本人の repo を一切読まない（--shared を使わない。bundle は yuya 側が用意して handoff/in に置く自己完結ファイル）。"""
+
+    def __init__(self, bundle_path):
+        self.bundle_path = bundle_path
+
+    def _git(self, args, cwd=None):
+        env = {"PATH": "/usr/bin:/bin", "LANG": "C", "GIT_CONFIG_NOSYSTEM": "1", "GIT_TERMINAL_PROMPT": "0",
+               "HOME": "/nonexistent", "GIT_ALLOW_PROTOCOL": "file"}
+        r = subprocess.run([GIT, "-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never",
+                            "-c", "protocol.file.allow=always"] + args,
+                           cwd=cwd, env=env, capture_output=True, timeout=300)
+        if r.returncode != 0:
+            raise RealClaudeError("git %s failed" % args[0])
+        return r.stdout.decode("utf-8", "replace").strip()
+
+    def prepare(self, work_dir, base_ref, base_sha):
+        if not re.fullmatch(r"[0-9a-f]{40}", str(base_sha)):
+            raise RealClaudeError("base_sha must be a full commit id")
+        if not (os.path.isabs(self.bundle_path) and os.path.isfile(self.bundle_path)
+                and not os.path.islink(self.bundle_path)):
+            raise RealClaudeError("source bundle must be a real absolute file")
+        if os.path.exists(work_dir):
+            raise RealClaudeError("work dir already exists")
+        # bundle は自己完結ファイルなので --shared を使わない（yuya の repo を参照しない）
+        self._git(["clone", "--quiet", "--no-checkout", self.bundle_path, work_dir])
+        self._git(["checkout", "--quiet", "--detach", base_sha], cwd=work_dir)
+        if self._git(["rev-parse", "HEAD"], cwd=work_dir) != base_sha:
+            raise RealClaudeError("checked out commit differs from base_sha")
+
+
 class RealClaudeAdapter:
     """実 Claude CLI のアダプタ（GO 1件につき1回）。get_adapter からだけ作る。"""
     name = "claude_cli"
