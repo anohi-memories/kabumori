@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
 import type { AssistEnv } from '@/features/schedule/post-assist';
@@ -10,16 +11,21 @@ import type { AssistEnv } from '@/features/schedule/post-assist';
  */
 export function usePostAssistEnv(owner: { brandId: string; platform: 'x' }, refusedToken: string | null): AssistEnv {
   const { session } = useAuth();
-  const { status, snapshot } = useDataStatus();
+  const { status } = useDataStatus();
+  const { view, retry } = usePersonalWorkspace();
   return {
     client: supabase,
     accessToken: session?.access_token ?? null,
     userId: session?.user?.id ?? null,
     brandId: owner.brandId,
-    // Only the person's own personal workspace, as the snapshot pinned it down -- never the first brand they happen to see.
-    workspaceId: snapshot?.personalWorkspaceId ?? null,
+    // Only the person's own personal workspace: W0 answered it and the snapshot read after it shows it -- never the first
+    // brand they happen to see.
+    workspaceId: view.kind === 'ready' ? view.workspaceId : null,
     platform: owner.platform,
     preview: status === 'mock_preview',
-    loginRefused: refusedToken !== null && refusedToken === (session?.access_token ?? null),
+    // A 401 from the assist for this token, or W0 refusing this token's login.
+    loginRefused: (refusedToken !== null && refusedToken === (session?.access_token ?? null)) || view.kind === 'relogin',
+    workspaceSetup: view.kind === 'relogin' ? 'idle' : view.kind,
+    retryWorkspaceSetup: view.kind === 'unavailable' ? retry : null,
   };
 }
