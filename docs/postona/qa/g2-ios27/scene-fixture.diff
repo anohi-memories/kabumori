@@ -1,0 +1,62 @@
+--- a/AppDelegate.swift	2026-10-19 22:08:30
++++ b/SocialOperations/AppDelegate.swift	2026-10-19 22:08:30
+@@ -3,7 +3,7 @@
+ import ReactAppDependencyProvider
+ 
+ @main
+-class AppDelegate: ExpoAppDelegate {
++class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
+   var window: UIWindow?
+ 
+   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
+@@ -20,13 +20,8 @@
+     reactNativeDelegate = delegate
+     reactNativeFactory = factory
+ 
+-#if os(iOS) || os(tvOS)
+-    window = UIWindow(frame: UIScreen.main.bounds)
+-    factory.startReactNative(
+-      withModuleName: "main",
+-      in: window,
+-      launchOptions: launchOptions)
+-#endif
++    // G2 DIAG FIXTURE (not product): the window is created and React Native is started by
++    // SceneDelegate under the scene-based life cycle that the iOS 27 SDK requires (as in the SDK 58 template).
+ 
+     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+   }
+@@ -67,3 +62,8 @@
+ #endif
+   }
+ }
++
++// G2 DIAG FIXTURE (not product): same as expo-template-bare-minimum@58 SceneDelegate.swift.
++@objc(SceneDelegate)
++class SceneDelegate: ExpoAppSceneDelegate {
++}
+--- a/Info.plist	2026-10-19 22:08:30
++++ b/SocialOperations/Info.plist	2026-10-19 22:08:30
+@@ -55,6 +55,23 @@
+ 	<string>$(RCT_METRO_PORT)</string>
+ 	<key>RCTNewArchEnabled</key>
+ 	<true/>
++	<key>UIApplicationSceneManifest</key>
++	<dict>
++		<key>UIApplicationSupportsMultipleScenes</key>
++		<false/>
++		<key>UISceneConfigurations</key>
++		<dict>
++			<key>UIWindowSceneSessionRoleApplication</key>
++			<array>
++				<dict>
++					<key>UISceneConfigurationName</key>
++					<string>Default Configuration</string>
++					<key>UISceneDelegateClassName</key>
++					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
++				</dict>
++			</array>
++		</dict>
++	</dict>
+ 	<key>UILaunchStoryboardName</key>
+ 	<string>SplashScreen</string>
+ 	<key>UIRequiredDeviceCapabilities</key>
