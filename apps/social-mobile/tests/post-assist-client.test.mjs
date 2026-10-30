@@ -1,5 +1,5 @@
 // G1 TASK 26: the app's copy of G6's post assist reference client (src/data/post-assist-client.ts). The copy is pinned to the
-// reference at PR #566 79300d05 byte for byte (below its own header), and run here through a stand-in of supabase-js
+// reference at PR #582 1a567ea8 byte for byte (below its own header), and run here through a stand-in of supabase-js
 // functions.invoke: the person's token as Bearer, one Idempotency-Key per request, and every non-contract answer refused.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,9 +7,9 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import * as client from '../src/data/post-assist-client.ts';
 
-// sha256 of supabase/tests/postona_post_assist_client_reference.ts at 79300d0539e6ff1657726bdddd129634745bc5cd, from the line
+// sha256 of supabase/tests/postona_post_assist_client_reference.ts at 1a567ea8facd36f20a767c999bd36f59db5d8740, from the line
 // "/** The slice of the Supabase client this needs" to the end.
-const REFERENCE_BODY_SHA256 = '413c1b9fe17d770073d4f0d7019b0c3eeb10c0b4e0ab4556fcf327825730332d';
+const REFERENCE_BODY_SHA256 = '1606c6ec0791bfd9fe7685d1ddc399daa05ad18ed39e04f2cb90f41d53a63a7f';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const saved = new Map();
@@ -29,6 +29,7 @@ test.after(() => {
 });
 
 /** supabase-js FunctionsClient.invoke: 2xx -> { data }, otherwise { error } whose context is the Response. */
+const EMPTY = Symbol('empty body');
 function fakeFunctions(status, body) {
   const calls = [];
   return {
@@ -39,7 +40,9 @@ function fakeFunctions(status, body) {
         if (status === 'throw') throw new Error('network down');
         if (status === 200) return { data: body, error: null };
         if (status === 'no-context') return { data: null, error: new Error('relay error') };
-        return { data: null, error: { name: 'FunctionsHttpError', context: new Response(typeof body === 'string' ? body : JSON.stringify(body), { status }) } };
+        if (status === 'fetch-error') return { data: null, error: { name: 'FunctionsFetchError', context: new TypeError('Network request failed') } };
+        const text = body === EMPTY ? '' : typeof body === 'string' ? body : JSON.stringify(body);
+        return { data: null, error: { name: 'FunctionsHttpError', context: new Response(text, { status }) } };
       },
     },
   };
@@ -48,7 +51,7 @@ const KEY = 'pa-00000000-0000-4000-8000-000000000001';
 const DRAFT = Object.freeze({ brandId: 'u_abc', mode: 'draft', platform: 'x', notes: '新しい店の告知' });
 const candidate = (over = {}) => ({ platform: 'x', text: '新しいお店を開きました。', hashtags: ['#開店'], length: 30, limit: 280, editable: true, requiresUserConfirmation: true, ...over });
 
-test('the copy is the G6 reference byte for byte below its header (PR #566 79300d05)', async () => {
+test('the copy is the G6 reference byte for byte below its header (PR #582 1a567ea8)', async () => {
   const source = await readFile(new URL('../src/data/post-assist-client.ts', import.meta.url), 'utf8');
   const body = source.slice(source.indexOf('/** The slice of the Supabase client this needs'));
   assert.equal(createHash('sha256').update(body).digest('hex'), REFERENCE_BODY_SHA256);
@@ -104,4 +107,38 @@ test('every answer maps to one screen state; anything off-contract is "unavailab
     const state = await client.requestPostAssist(fakeFunctions(status, body), 'jwt', KEY, DRAFT);
     assert.equal(state.kind, kind, `${status} ${JSON.stringify(body)}`);
   }
+});
+
+// G1 TASK 28 (G6-26 F1): Supabase's gateway (verify_jwt, the deploy default) answers an invalid / expired / missing token itself,
+// before the endpoint runs, with its own body. Every 401 -- whatever its body -- must ask the person to sign in again, not say
+// "unavailable"; and no other answer may turn into "relogin".
+test('every 401 is "relogin": the gateway {code,message,msg}, an expired JWT, an empty or non-JSON body, and the endpoint\'s own 401', async () => {
+  const cases = [
+    ['local runtime gateway (G6-26)', { code: 'UNAUTHORIZED_INVALID_JWT_FORMAT', message: 'Invalid JWT format', msg: 'Invalid JWT format' }],
+    ['expired JWT at the gateway', { code: 'UNAUTHORIZED_INVALID_JWT', message: 'JWT expired', msg: 'JWT expired' }],
+    ['missing authorization at the gateway', { code: 401, message: 'Missing authorization header' }],
+    ['empty body', EMPTY],
+    ['JSON null', null],
+    ['non-JSON body', '<html>401 Unauthorized</html>'],
+    ['the endpoint\'s own 401', { error: 'POST_ASSIST_AUTH_REQUIRED', retry_same_key: false }],
+    ['an unknown error code with 401', { error: 'SOMETHING_ELSE', retry_same_key: true }],
+  ];
+  for (const [label, body] of cases) {
+    const fake = fakeFunctions(401, body);
+    assert.deepEqual({ ...(await client.requestPostAssist(fake, 'jwt-expired', KEY, DRAFT)) }, { kind: 'relogin' }, label);
+    assert.equal(fake.calls.length, 1, `${label}: one request, no retry of its own`);
+  }
+  assert.deepEqual({ ...client.postAssistStateOf(401, undefined, 'x') }, { kind: 'relogin' });
+});
+
+test('no regression around 401: the same gateway body on another status stays off-contract; network errors stay "unavailable"', async () => {
+  const gateway = { code: 'UNAUTHORIZED_INVALID_JWT_FORMAT', message: 'Invalid JWT format', msg: 'Invalid JWT format' };
+  for (const status of [400, 403, 500, 502, 503]) {
+    assert.equal((await client.requestPostAssist(fakeFunctions(status, gateway), 'jwt', KEY, DRAFT)).kind, 'unavailable', `${status}`);
+    assert.equal((await client.requestPostAssist(fakeFunctions(status, EMPTY), 'jwt', KEY, DRAFT)).kind, 'unavailable', `${status} empty`);
+  }
+  assert.equal((await client.requestPostAssist(fakeFunctions('fetch-error'), 'jwt', KEY, DRAFT)).kind, 'unavailable', 'FunctionsFetchError');
+  assert.equal((await client.requestPostAssist(fakeFunctions(403, { error: 'POST_ASSIST_NOT_ENTITLED', retry_same_key: false }), 'jwt', KEY, DRAFT)).kind, 'not_available');
+  assert.equal((await client.requestPostAssist(fakeFunctions(409, { error: 'POST_ASSIST_IN_PROGRESS', retry_same_key: true }), 'jwt', KEY, DRAFT)).kind, 'retry_same_key');
+  assert.equal((await client.requestPostAssist(fakeFunctions(429, { error: 'POST_ASSIST_QUOTA_EXCEEDED', retry_same_key: false }), 'jwt', KEY, DRAFT)).kind, 'quota');
 });

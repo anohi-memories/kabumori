@@ -64,7 +64,7 @@ async function mount({ status = 'ready', workspaceId = 'u_1', brandId = 'u_1', s
       if (changed) pendingEffects.push({ i, effect, deps });
     },
   };
-  const world = { status, workspaceId, userId: signedIn ? 'user-1' : null, token: signedIn ? 'jwt-1' : null };
+  const world = { status, workspaceId, shownWorkspaceId: workspaceId, userId: signedIn ? 'user-1' : null, token: signedIn ? 'jwt-1' : null };
   const invokes = [];
   const queue = [];
   const held = [];
@@ -92,7 +92,8 @@ async function mount({ status = 'ready', workspaceId = 'u_1', brandId = 'u_1', s
     '@/features/schedule/post-assist': assistModule,
     '@/lib/supabase': { supabase: client ? { functions } : null },
     '@/providers/auth-provider': { useAuth: () => ({ session: world.token ? { access_token: world.token, user: { id: world.userId } } : null }) },
-    '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, snapshot: world.workspaceId ? { workspace: { id: world.workspaceId } } : { workspace: null } }) },
+    // The snapshot pins the person's personal workspace (personalWorkspaceId); `workspace` is only what the app shows.
+    '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, snapshot: { workspace: world.shownWorkspaceId ? { id: world.shownWorkspaceId } : null, personalWorkspaceId: world.workspaceId } }) },
     '@/domain/schedule-planner': planner,
   };
   // Both real files: the composer and its only way to the backend (use-post-assist-env.ts).
@@ -257,7 +258,7 @@ test('relogin / quota / invalid input end without a retry button; a request that
   assert.ok(has(h.render(), 'AIへのメモを入力してください'));
   assert.equal(h.invokes.length, 0);
   type(h, 'AIへのメモ', 'メモ');
-  for (const [answer, words] of [[fail(401, 'POST_ASSIST_AUTH_REQUIRED'), 'ログインし直して'], [fail(429, 'POST_ASSIST_QUOTA_EXCEEDED'), '利用上限'], [fail(400, 'POST_ASSIST_REQUEST_INVALID'), '見直してください']]) {
+  for (const [answer, words] of [[fail(429, 'POST_ASSIST_QUOTA_EXCEEDED'), '利用上限'], [fail(400, 'POST_ASSIST_REQUEST_INVALID'), '見直してください'], [fail(401, 'POST_ASSIST_AUTH_REQUIRED'), 'ログインし直す']]) {
     h.queue.push(answer);
     press(h, 'AIに依頼する');
     await settle();
@@ -474,4 +475,83 @@ test('boundary: the composer reaches the backend only through use-post-assist-en
   assert.equal((client.match(/functions\.invoke\(/gu) ?? []).length, 1);
   assert.match(client, /export const POST_ASSIST_FUNCTION = "postona-post-assist";/u);
   assert.doesNotMatch(composer + hook + decisions, /functions\.invoke|requestPostAssist\(client|Authorization/u);
+});
+
+// G1 TASK 28 (G6-26 F1): a 401 -- from Supabase's gateway or the endpoint -- asks the person to sign in again. Until they have (a new
+// access token), nothing more is sent, for any row; the typed text and the manual preview are untouched; the request's key is never
+// re-sent. A new token (refresh or a new sign-in) opens it again with a new key. Another person's token is never refused for it.
+const GATEWAY_401 = { status: 401, body: { code: 'UNAUTHORIZED_INVALID_JWT_FORMAT', message: 'Invalid JWT format', msg: 'Invalid JWT format' } };
+
+test('gateway 401: "sign in again", no request until a new token, text and manual preview kept, no key re-used', async () => {
+  const h = await mount();
+  type(h, '1件目の本文', '手で書いた本文');
+  openWith(h, 'ハッシュタグ案');
+  h.queue.push(GATEWAY_401);
+  press(h, 'AIに依頼する');
+  await settle();
+  let tree = h.render();
+  assert.ok(has(tree, 'ログインし直すまでAIには依頼できません'), 'the relogin guidance, not "unavailable"');
+  assert.ok(!has(tree, 'いまはAIを使えません'));
+  assert.equal(small(tree, 'AIに依頼する').length + small(tree, '再試行').length + small(tree, 'もう一度依頼').length, 0, 'no way to send again');
+  assert.equal(h.rowText(), '手で書いた本文', 'the typed text is kept');
+  // Closing and reopening the panel, or another row, does not send either.
+  press(h, 'AIアシストを閉じる');
+  press(h, '＋ 本文を追加');
+  press(h, 'AIアシスト', 1);
+  tree = h.render();
+  assert.ok(has(tree, 'ログインし直すまでAIには依頼できません'));
+  assert.equal(small(tree, 'AIに依頼する').length, 0);
+  assert.equal(h.invokes.length, 1);
+  // The manual flow goes on.
+  type(h, '2件目の本文', '二件目');
+  { let time; walk(h.render(), (n) => { if (n.type === 'Field' && n.props.label === '時刻') time = n.props; }); time.onChange('12:00'); } // row 2: not too close to row 1
+  action(h.render(), 'プレビューを作成').onPress();
+  assert.equal(h.planned.length, 1);
+  assert.deepEqual(h.planned[0].drafts.map((d) => d.text), ['手で書いた本文', '二件目']);
+  // After signing in again (a new token for the same person) it can ask again -- with a new key and the new token.
+  h.world.token = 'jwt-1-renewed';
+  tree = h.render();
+  assert.ok(!has(tree, 'ログインし直すまでAIには依頼できません'));
+  choice(h.render(), 'ハッシュタグ案').onPress();
+  h.queue.push(ok(candidate('二件目', ['#ok'])));
+  press(h, 'AIに依頼する');
+  await settle();
+  assert.equal(h.invokes.length, 2);
+  assert.equal(h.invokes[1].headers.Authorization, 'Bearer jwt-1-renewed');
+  assert.notEqual(h.invokes[1].headers['Idempotency-Key'], h.invokes[0].headers['Idempotency-Key']);
+  assert.ok(has(h.render(), 'ハッシュタグ: #ok'));
+});
+
+test('every 401 body form blocks the same way (empty, non-JSON, expired JWT); a 401 for an earlier token never blocks the current one', async () => {
+  for (const body of ['', '<html>401</html>', { code: 'UNAUTHORIZED_INVALID_JWT', message: 'JWT expired', msg: 'JWT expired' }]) {
+    const h = await mount();
+    type(h, '1件目の本文', '本文');
+    openWith(h, 'ハッシュタグ案');
+    h.queue.push({ status: 401, body });
+    press(h, 'AIに依頼する');
+    await settle();
+    assert.ok(has(h.render(), 'ログインし直すまでAIには依頼できません'), JSON.stringify(body));
+  }
+  // The token changes while the request is in flight (a refresh): the late 401 is about the old token only.
+  const g = await mount();
+  type(g, '1件目の本文', '本文');
+  openWith(g, 'ハッシュタグ案');
+  g.queue.push({ ...GATEWAY_401, hold: true });
+  press(g, 'AIに依頼する');
+  g.world.token = 'jwt-1-refreshed';
+  g.render();
+  await g.release();
+  const tree = g.render();
+  assert.ok(!has(tree, 'ログインし直すまでAIには依頼できません'), 'the refreshed token is not refused');
+  assert.equal(small(tree, 'AIに依頼する').length, 1);
+});
+
+test('the AI asks only for the pinned personal workspace: a shown (first-read) workspace that equals the brand is not enough', async () => {
+  const h = await mount({ workspaceId: null });
+  h.world.shownWorkspaceId = 'u_1'; // what the app shows matches the account's brand, but no personal workspace was pinned
+  openWith(h);
+  const tree = h.render();
+  assert.ok(has(tree, 'ご自身の個人ワークスペースを確認できない'));
+  assert.equal(small(tree, 'AIに依頼する').length, 0);
+  assert.equal(h.invokes.length, 0);
 });

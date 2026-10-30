@@ -101,7 +101,9 @@ export function ScheduleComposer({
   const [issues, setIssues] = useState<PlanIssue[]>([]);
 
   // AI post assist: asked with the person's own session for their own workspace only; see post-assist.ts.
-  const env: AssistEnv = usePostAssistEnv(context.owner);
+  // The access token a 401 answered (Supabase's gateway or the endpoint): AI requests stay off until the person signs in again.
+  const [refusedToken, setRefusedToken] = useState<string | null>(null);
+  const env: AssistEnv = usePostAssistEnv(context.owner, refusedToken);
   const block = assistBlock(env);
   const scope = assistScope(env);
   const [assistState, setAssist] = useState<AssistPanel | null>(null);
@@ -169,6 +171,7 @@ export function ScheduleComposer({
     live.current.awaiting = request;
     setAssist({ ...assist, phase: "running", request, outcome: null, edits: [], issue: null });
     void answer.then((outcome) => {
+      if (outcome.kind === "relogin") setRefusedToken(env.accessToken); // the token this request was sent with (this render)
       // Shown only if this request is still the panel's own: not after a cancel, close (also by removing the row or
       // switching to AI自動予約) or a newer request; one of another session / workspace is hidden above.
       if (live.current.awaiting === request) live.current.awaiting = null;

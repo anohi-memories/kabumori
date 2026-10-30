@@ -1,7 +1,8 @@
 // POSTONA AI post assist client (G1 TASK 26): POST /functions/v1/postona-post-assist, used by the schedule composer.
 // Copied verbatim (from the line below this header) from G6's reference client
-// supabase/tests/postona_post_assist_client_reference.ts at PR #566 79300d0539e6ff1657726bdddd129634745bc5cd, which G6's
-// contract test runs against the real Edge entry; tests/post-assist-client.test.mjs pins the copy. Change it only together with G6.
+// supabase/tests/postona_post_assist_client_reference.ts at PR #582 1a567ea8facd36f20a767c999bd36f59db5d8740 (G6-26: any 401,
+// including Supabase's gateway answer {code,message,msg}, means "sign in again"), which G6's contract and local-runtime tests run against
+// the real Edge entry; tests/post-assist-client.test.mjs pins the copy. Change it only together with G6.
 //
 // What the screen may rely on:
 //   * candidates are only ever shown for editing: every one is editable and must be confirmed by the person; nothing is
@@ -34,7 +35,7 @@ export type PostAssistCandidate = Readonly<{
 /** What the screen shows. `retry_same_key` is the only state in which the same Idempotency-Key may be sent again. */
 export type PostAssistUiState =
   | Readonly<{ kind: "candidates"; candidates: readonly PostAssistCandidate[]; notice: string }>
-  | Readonly<{ kind: "relogin" }> // 401: sign in again
+  | Readonly<{ kind: "relogin" }> // 401 (the endpoint's or Supabase's gateway's): sign in again
   | Readonly<{ kind: "not_available" }> // 403: not signed in / expired / another workspace / no plan / stopped (a new key after refreshing the session)
   | Readonly<{ kind: "retry_same_key" }> // 409 IN_PROGRESS, or 503 with retry_same_key: wait a little, same key
   | Readonly<{ kind: "new_key_needed"; code: string }> // 409 OPERATION_REUSED, 502: the result is stored for that key; a retry needs a new key
@@ -77,11 +78,13 @@ export function postAssistStateOf(status: number, body: unknown, platform: PostA
     if (candidates.length === 0 || candidates.some((c) => c === null)) return { kind: "unavailable" };
     return Object.freeze({ kind: "candidates", candidates: Object.freeze(candidates as PostAssistCandidate[]), notice: body.notice });
   }
+  // G6-26: a 401 means "sign in again" whoever answered it. With verify_jwt on (the deploy default), Supabase's gateway answers an expired
+  // or broken token itself, with its own body ({code,message,msg}), before the endpoint runs.
+  if (status === 401) return { kind: "relogin" };
   if (!isRecord(body) || Object.keys(body).sort().join(",") !== "error,retry_same_key" || typeof body.error !== "string" || typeof body.retry_same_key !== "boolean") {
     return { kind: "unavailable" };
   }
   const code = body.error;
-  if (status === 401 && code === "POST_ASSIST_AUTH_REQUIRED") return { kind: "relogin" };
   if (status === 403 && code === "POST_ASSIST_NOT_ENTITLED") return { kind: "not_available" };
   if (status === 409 && code === "POST_ASSIST_IN_PROGRESS" && body.retry_same_key) return { kind: "retry_same_key" };
   if (status === 503 && body.retry_same_key) return { kind: "retry_same_key" };

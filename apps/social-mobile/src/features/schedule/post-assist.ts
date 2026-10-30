@@ -30,19 +30,22 @@ export type AssistEnv = {
   userId: string | null;
   /** The brand the composer plans for (the selected account's brand). */
   brandId: string | null;
-  /** The signed-in person's workspace as the app knows it (snapshot.workspace.id). */
+  /** The signed-in person's own personal workspace (snapshot.personalWorkspaceId); null when it is not known for sure. */
   workspaceId: string | null;
   platform: PostAssistPlatform;
   /** Sample data: there is no backend to ask. */
   preview: boolean;
+  /** This very access token was answered 401: nothing is sent until the person has signed in again (a new token). */
+  loginRefused: boolean;
 };
 
-export type AssistBlock = 'preview' | 'signed_out' | 'no_workspace' | 'other_workspace';
+export type AssistBlock = 'preview' | 'signed_out' | 'relogin' | 'no_workspace' | 'other_workspace';
 
 export const ASSIST_BLOCK_TEXT: Record<AssistBlock, string> = {
   preview: 'サンプル表示では、AI投稿アシストは使えません。本文は手で書いて続けられます。',
   signed_out: 'ログインが確認できないため、AI投稿アシストは使えません。ログインし直してください。',
-  no_workspace: 'ワークスペースを確認できないため、AI投稿アシストは使えません。',
+  relogin: 'ログインの有効期限が切れたため、ログインし直すまでAIには依頼できません（設定画面からログアウトして、もう一度ログインしてください）。本文はこのまま手で書いて続けられます。',
+  no_workspace: 'ご自身の個人ワークスペースを確認できないため、AI投稿アシストは使えません。本文は手で書いて続けられます。',
   other_workspace: 'このアカウントのワークスペースでは、AI投稿アシストは使えません（ご自身のワークスペースだけで使えます）。',
 };
 
@@ -50,6 +53,7 @@ export const ASSIST_BLOCK_TEXT: Record<AssistBlock, string> = {
 export function assistBlock(env: AssistEnv): AssistBlock | null {
   if (env.preview || !env.client) return 'preview';
   if (!env.accessToken || !env.userId) return 'signed_out';
+  if (env.loginRefused) return 'relogin';
   if (!env.brandId || !env.workspaceId) return 'no_workspace';
   // The person's own workspace only: a brand they merely see (another account's workspace) is never sent.
   if (env.brandId !== env.workspaceId) return 'other_workspace';
