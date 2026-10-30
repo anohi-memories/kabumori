@@ -2,8 +2,11 @@
 # G3 SOURCE CANDIDATE (2026-10-30, Issue #318 G3-51): the POSTONA X + Threads reservation rollout for the PERSONAL MVP profile, in one
 # runner. NOT run against anything but a THROW-AWAY LOCAL PostgreSQL: the host must be a /tmp socket directory, or 127.0.0.1 (G3-02 #1: the
 # local Supabase stack's database is reached only through its loopback TCP port). There is no managed / production mode (PRODUCTION_NO_GO);
-# a real rollout needs the reviewed plan, G4 / G5 adoption and the user's approval first. A loopback tunnel to another server cannot be
-# told apart from a local one: never point 127.0.0.1 at anything but a throw-away local stack.
+# a real rollout needs the reviewed plan, G4 / G5 adoption and the user's approval first.
+# G3-02 #4 (H4-16 P2): a host name proves nothing (127.0.0.1 or a socket may be forwarded to another server). Whoever creates the
+# throw-away database marks it with a random attestation, `alter database <db> set g3ro.throwaway_attestation = 'g3ro-throwaway-<32 hex>'`,
+# and the operator passes the same value in G3RO_DB_ATTESTATION. The runner reads it back before anything else, and EVERY later session
+# re-checks it as its first statement: a missing or different value stops before any change (G3_ROLLOUT_ATTESTATION_*).
 #   rollout.sh preflight  manifest sha256 + preflight.sql (mode install): prerequisites and a fresh G3 state; changes nothing.
 #   rollout.sh install    preflight, then every `install` step of MANIFEST.tsv in order (each file is its own transaction). If a step
 #                         fails, the steps already applied are rolled back in the manifest's rollback order and the G3 catalog
@@ -16,7 +19,8 @@
 #                         stops at that step (each step is atomic; the steps before it stay rolled back).
 # Environment: G3RO_PGHOST (a /tmp socket dir, or 127.0.0.1; a password comes from the caller's PGPASSWORD / .pgpass), G3RO_PGPORT, G3RO_DB, G3RO_OWNER (the non-superuser lifecycle owner G3's objects
 # belong to; G5 / G4 objects must belong to it too). rollback only: G3RO_X_DISCARD_ROWS ('<reservations>:<batches>:<audit>', 001),
-# G3RO_THREADS_DISCARD_ROWS ('<reservations>:<audit>'), G3RO_ACK_CONSUMERS (001's consumer list, empty when none). Optional:
+# G3RO_THREADS_DISCARD_ROWS ('<reservations>:<audit>'), G3RO_ACK_CONSUMERS (001's consumer list, empty when none),
+# G3RO_ACK_THREADS_CONSUMERS (functions outside G3's schemas naming postona_threads_resv, empty when none). Always: G3RO_DB_ATTESTATION. Optional:
 # G3RO_MANIFEST (another manifest; paths may be absolute).
 # After an install the Edge entries stay closed: release gates OFF in source, G4's X token read / Threads credential statement
 # NOT_CONNECTED (deny), Threads publish-disabled by U8. This runner never opens them. Nothing is logged but codes and counts.
@@ -32,10 +36,14 @@ case "$host" in
   /private/tmp/*|/tmp/*|127.0.0.1) ;;
   *) echo "G3_ROLLOUT_REFUSED_HOST: local /tmp socket or 127.0.0.1 only (PRODUCTION_NO_GO: no managed / production mode)" >&2; exit 2 ;;
 esac
+att="${G3RO_DB_ATTESTATION:-}"
+[[ "$att" =~ ^g3ro-throwaway-[0-9a-f]{32}$ ]] || { echo "G3_ROLLOUT_ATTESTATION_REQUIRED: G3RO_DB_ATTESTATION='g3ro-throwaway-<32 hex>' of the throw-away database" >&2; exit 2; }
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 manifest="${G3RO_MANIFEST:-$here/MANIFEST.tsv}"
-P=(psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db")
+P0=(psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db")
+# every session's first statement: still the attested throw-away database (the value is checked against the pattern above)
+P=("${P0[@]}" -c "do \$g3ro\$ begin if pg_catalog.current_setting('g3ro.throwaway_attestation', true) is distinct from '$att' then raise exception 'G3_ROLLOUT_ATTESTATION_MISMATCH'; end if; end \$g3ro\$")
 die() { echo "$*" >&2; exit 1; }
 path_of() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$root" "$1" ;; esac; }
 
@@ -50,6 +58,11 @@ while IFS="$(printf '\t')" read -r kind step rel sha; do
 done < "$manifest"
 [ "$n_install" -gt 0 ] && [ "$n_install" = "$n_rollback" ] || die "G3_ROLLOUT_MANIFEST_SHAPE: $n_install install / $n_rollback rollback"
 steps_of() { awk -F '\t' -v k="$1" '$1 == k { print $2 "\t" $3 }' "$manifest"; }
+
+# --- the target: the attested throw-away database, before anything else is read or changed -----------------------------------------
+seen="$("${P0[@]}" -c "select coalesce(pg_catalog.current_setting('g3ro.throwaway_attestation', true), '')" 2>/dev/null)" || die "G3_ROLLOUT_ATTESTATION_UNREADABLE (nothing changed)"
+[ -n "$seen" ] || die "G3_ROLLOUT_ATTESTATION_MISSING: the target is not a marked throw-away database (nothing changed)"
+[ "$seen" = "$att" ] || die "G3_ROLLOUT_ATTESTATION_MISMATCH: the target is another database (nothing changed)"
 
 preflight() {
   local out
@@ -127,6 +140,9 @@ rollback)
   consumers="$("${P[@]}" -c "select coalesce(string_agg(p.oid::regprocedure::text, ',' order by p.oid::regprocedure::text), '') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname not in ('postona_x_resv', 'postona_threads_resv') and n.nspname !~ '^(pg_catalog|information_schema|pg_toast|pg_temp_|pg_toast_temp_)' and p.prosrc ~* 'postona_x_resv'")"
   [ "$consumers" = "${G3RO_ACK_CONSUMERS:-}" ] || die "G3_ROLLOUT_ROLLBACK_CONSUMERS_NOT_STATED: G3RO_ACK_CONSUMERS must be '$consumers' (nothing changed)"
+  tconsumers="$("${P[@]}" -c "select coalesce(string_agg(p.oid::regprocedure::text, ',' order by p.oid::regprocedure::text), '') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname not in ('postona_x_resv', 'postona_threads_resv') and n.nspname !~ '^(pg_catalog|information_schema|pg_toast|pg_temp_|pg_toast_temp_)' and p.prosrc ~* 'postona_threads_resv'")"
+  [ "$tconsumers" = "${G3RO_ACK_THREADS_CONSUMERS:-}" ] || die "G3_ROLLOUT_ROLLBACK_THREADS_CONSUMERS_NOT_STATED: G3RO_ACK_THREADS_CONSUMERS must be '$tconsumers' (nothing changed)"
   # 002's rollback refuses a member of the API role (and drops it only when the owner's implicit ADMIN-only membership is the sole one); the
   # worker role is held to the same rule here, so a live login is detached by the operator before anything is rolled back
   members="$("${P[@]}" -c "select coalesce(string_agg(pg_get_userbyid(m.roleid) || '>' || pg_get_userbyid(m.member), ',' order by 1), '') from pg_auth_members m

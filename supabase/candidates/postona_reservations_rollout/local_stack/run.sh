@@ -169,11 +169,19 @@ done
 echo "OK G5 W0 (PR #590 ${G5W0:0:8}) installed and given to authenticated, as G5's files do"
 
 # ---- G3: the rollout bundle over 127.0.0.1 ----------------------------------------------------------------------------------------------
-ro() { env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=postgres G3RO_OWNER=postgres "$@" bash "$RO_SH" "$mode"; }
+# G3-02 #4 (H4-16 P2): this throw-away stack's database is marked by its creator (the image's superuser supabase_admin, the same fixed
+# development password); rollout.sh refuses any target without exactly this mark, whatever answers on 127.0.0.1
+ATT="g3ro-throwaway-$(openssl rand -hex 16)"
+psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$DB_PORT" -U supabase_admin -d postgres -c "alter database postgres set g3ro.throwaway_attestation = '$ATT'" >/dev/null \
+  || fail "the throw-away database could not be marked"
+mode=preflight; o="$(env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=postgres G3RO_OWNER=postgres G3RO_DB_ATTESTATION="g3ro-throwaway-$(openssl rand -hex 16)" bash "$RO_SH" preflight 2>&1)" \
+  && fail "a different attestation was accepted"
+grep -q G3_ROLLOUT_ATTESTATION_MISMATCH <<<"$o" || fail "attestation mismatch: $o"
+ro() { env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=postgres G3RO_OWNER=postgres G3RO_DB_ATTESTATION="$ATT" "$@" bash "$RO_SH" "$mode"; }
 mode=preflight; o="$(ro 2>&1)" || fail "preflight: $o"; grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=15$' <<<"$o" || fail "preflight: $o"
 mode=install; o="$(ro 2>&1)" || fail "install: $o"; grep -q '^G3_ROLLOUT_INSTALLED steps=15 ' <<<"$o" || fail "install: $o"
 mode=install; o="$(ro 2>&1)" && fail "a second install succeeded"; grep -q G3_ROLLOUT_PREFLIGHT_REFUSED <<<"$o" || fail "second install: $o"
-echo "OK G3 rollout.sh preflight + install (15 steps + postcheck) on the real local stack; a second install refused"
+echo "OK G3 rollout.sh preflight + install (15 steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
 
 # the test's LOGIN members (stand-ins for the separately approved rollout step): random passwords, never printed, 0600 file only
 API_PW="$(openssl rand -hex 24)"; WORKER_PW="$(openssl rand -hex 24)"; WORKER_SECRET="$(openssl rand -hex 24)"
