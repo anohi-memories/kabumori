@@ -2,7 +2,7 @@
 
 G3-51, Issue #318. **Not applied anywhere, not deployed, PRODUCTION_NO_GO.** This bundle gathers G3's reservation SQL into one ordered, pinned, fail-closed install and rollback. It is for the personal MVP profile: G5's personal MVP plus G4's verified credential verdicts.
 
-The runner refuses every host except a local `/tmp` socket directory. It has no managed or production mode. A real rollout needs, first:
+The runner refuses every host except a local `/tmp` socket directory and `127.0.0.1` (G3-02 #1: the local Supabase stack's database is reached only through its loopback TCP port; the password comes from the caller's `PGPASSWORD` / `.pgpass`). It has no managed or production mode. A loopback tunnel to another server cannot be told apart from a local one, so never point `127.0.0.1` at anything but a throw-away local stack. A real rollout needs, first:
 - the reviewed plan;
 - G4's and G5's adoption;
 - the one batch security review;
@@ -15,6 +15,7 @@ The runner refuses every host except a local `/tmp` socket directory. It has no 
 | `preflight.sql` | Read-only checks, ending in `ROLLBACK`. Modes: `install` / `rollback` / `postcheck`. |
 | `rollout.sh` | `preflight`, `install` (all-or-nothing) and `rollback` (pre-checked before any change). |
 | `rollout_test_run.sh`, `smoke.sql` | Tests on G4's own personal world (local PG17, fake data). |
+| `local_stack/` | G3-02 #1: the same bundle and the real Edge handlers on the real local Supabase runtime (`run.sh`; see below). Test only. |
 
 ## Install order (each file is its own transaction)
 X 001 → 002 → 003 → 004 → 005 → 006 → 008 → 010 → 012, then Threads 007 → 009 → 011 → 013, then X 014 → 015.
@@ -86,6 +87,13 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
   - 503 `NOT_AVAILABLE` (gate OFF) / `AUTH_UNAVAILABLE` / `PERMISSION_UNAVAILABLE` / `STORE_UNAVAILABLE`
   - 500 `INTERNAL`
 - Safe defaults: treat every 503 as "not available now", never as success. Never retry a create blindly; the client request id makes a repeat idempotent.
+- **401 comes from two places.** The gateway answers a missing apikey or a malformed JWT with its own body, `{code, message}`, not `{ok, code}`. The handler answers `AUTH_REQUIRED` for:
+  - no bearer token;
+  - an anonymous sign-in;
+  - a signed-out session.
+
+  Treat both as "sign in again".
+- An unexpected database error is 500 `INTERNAL`. It is never a result.
 
 ### X reservations (`postona-x-reservations`)
 - Actions: `create`, `list`, `get`, `reschedule`, `reconfirm`, `cancel`.
@@ -98,6 +106,9 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
   - `uncertain`: may have been sent and is never re-sent. Show "check X".
   - `cancelled` / `expired`
 - A stale `revision` → 409. Re-read, then retry the cancel with the new revision.
+- A row that is already final (`cancelled`, `uncertain`, …) → 409 `POSTONA_RESV_ALREADY_FINAL`. Show the row; never retry.
+- `list` for an account that is not the caller's answers 200 with an empty list. `get` / `cancel` of another person's row answers 404 `POSTONA_RESV_NOT_FOUND`.
+- A person whose service has ended can still read and cancel their own planned rows.
 
 ### Threads reservations (`postona-threads-reservations`)
 - Actions: `create`, `cancel`, `receipt`.
@@ -109,5 +120,17 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
 - One manual post, bound to the generation at begin and re-checked before send.
 - An outcome that cannot be read → `uncertain`, never re-sent.
 
+## On the real local Supabase runtime (G3-02 #1, `local_stack/run.sh`)
+A throw-away local project (`supabase start`, project id `g3ls`, ports 559xx; never pulls images) runs:
+- G4's personal world, as G4's runner builds it at c6df19cc, applied as `postgres` (the image's own non-superuser owner);
+- `rollout.sh preflight` and `install` over `127.0.0.1`;
+- the real Edge handlers behind the real Kong / GoTrue, through test-only twins under `local_stack/`. A twin passes the release gate as enabled and swaps only the local transport (Auth via `kong:8000`, the `db` container without TLS). Its permission ports and the X credential source are not overridden (deny);
+- `local_test.ts` (real user JWTs), then `rollout.sh rollback`.
+
+What it showed, for the operator:
+- **Owner role.** The owner (`postgres`, PG 17) cannot `SET ROLE` to the API or worker role: since PG 16 the creator holds an ADMIN-only membership. The Edge entries need a LOGIN role that is a member with `SET` (and `INHERIT FALSE`). That is a separate, approved rollout step that this bundle does not do.
+- **Rollback.** A rollback refuses while such a member exists (`G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS`). Drop or revoke the logins first.
+- **Unreachable database.** When the API login cannot connect, the entry answers 503 `STORE_UNAVAILABLE`.
+
 ## Not verified here
-The managed project, real GoTrue / Auth / RLS / Edge runtime, a real scheduler, G4's real token custody / Vault, real X / Threads, and the app / Simulator.
+The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.
