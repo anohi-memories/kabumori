@@ -155,6 +155,9 @@ Deno.test("the screen mapping covers every documented answer, and anything off-c
     [400, e("POST_ASSIST_REQUEST_INVALID"), "invalid_input"],
     [400, e("POST_ASSIST_IDEMPOTENCY_KEY_REQUIRED"), "invalid_input"],
     [401, e("POST_ASSIST_AUTH_REQUIRED"), "relogin"],
+    // G6-26: Supabase's gateway (verify_jwt) answers a broken / expired / missing token itself, with its own body (seen on the local runtime)
+    [401, { code: "UNAUTHORIZED_INVALID_JWT_FORMAT", message: "Invalid JWT format", msg: "Invalid JWT format" }, "relogin"],
+    [401, null, "relogin"],
     [403, e("POST_ASSIST_NOT_ENTITLED"), "not_available"],
     [403, e("POST_ASSIST_ORIGIN_REFUSED"), "unavailable"],
     [405, e("POST_ASSIST_REQUEST_INVALID"), "invalid_input"],
