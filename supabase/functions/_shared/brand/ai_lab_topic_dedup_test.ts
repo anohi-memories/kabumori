@@ -350,7 +350,7 @@ test("only the AI Lab dispatcher/entry wire the new guard; Kabumori and other br
     const body = await readFile(new URL(name, dir), "utf8");
     if (/ai_lab_theme_guard\.ts/u.test(body)) importers.push(name);
   }
-  assert.deepEqual(importers.sort(), ["ai_lab_dev_diary_context.ts", "ai_lab_scheduled_brand_post.ts"]);
+  assert.deepEqual(importers.sort(), ["ai_lab_dev_diary_context.ts", "ai_lab_engagement.ts", "ai_lab_scheduled_brand_post.ts"]);
   const generator = await readFile(new URL("brand_post_generator.ts", dir), "utf8");
   assert.doesNotMatch(generator, /ai_salaryman_lab|ai_lab_theme_guard/u);
 });
