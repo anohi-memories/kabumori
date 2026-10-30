@@ -4,8 +4,9 @@
 //   a real Request / Response through the REAL postona-threads-reservations/http.ts (gate forced on here only)
 //   -> the REAL threads_api.ts -> the REAL threads_postgres_db.ts + driver, as a login role that is a member of postona_resv_api
 //   -> 007's create_reservation / cancel_reservation / receipt, with G5's real S2-2 person-session gate (live auth.sessions rows).
-// MOCK_ONLY: GoTrue (fetch) answers by token; the permission port is the PRODUCTION default (deny) except where a test says otherwise; G4
-// is G3's TEST DOUBLE list (t_threads.verified). Nothing here proves the real Auth, G5 or G4 boundary. The entry never calls Threads:
+// MOCK_ONLY: GoTrue (fetch) answers by token; the permission port is the PRODUCTION default, THREADS_PERMISSIONS_DECIDED_IN_DATABASE
+// (G3-02 #2: 007's create decides; no TS allow anywhere in this file); G4 is G3's TEST DOUBLE list (t_threads.verified). This world has no
+// U8 CHECK (local_stack/ and G3-51's smoke run with it). Nothing here proves the real Auth, G5 or G4 boundary. The entry never calls Threads:
 // every fetch must be the Auth endpoint.
 import assert from "node:assert/strict";
 import { createHttpHandler } from "../../../functions/postona-threads-reservations/http.ts";
@@ -60,10 +61,8 @@ const ENV = new Map([["SUPABASE_URL", "https://project.example.invalid"], ["SUPA
 const realConnect = createDriverConnect({ databaseUrl: DB_URL, allowInsecureLoopback: true });
 let connects = 0;
 const connect: PgConnect = () => { connects += 1; return realConnect(); };
-// the production defaults except the gate: no `permissions` override -> THREADS_PERMISSIONS_NOT_CONNECTED (deny)
+// the production defaults except the gate: no `permissions` override -> THREADS_PERMISSIONS_DECIDED_IN_DATABASE
 const handler = createHttpHandler({ get: (n) => ENV.get(n) }, { enabled: true, fetch: fakeAuth, connect });
-// MOCK_ONLY: a permission port that allows create, so the DATABASE (007's fence, the G4 TEST DOUBLE) is what decides
-const allowHandler = createHttpHandler({ get: (n) => ENV.get(n) }, { enabled: true, fetch: fakeAuth, connect, permissions: { threadsPublishAllowed: () => Promise.resolve(true) } });
 const post = async (alias: string, call: unknown, h = handler) => {
   const response = await h(new Request("http://localhost/functions/v1/postona-threads-reservations", {
     method: "POST", headers: { authorization: `Bearer ${tokenOf(alias)}`, "content-type": "application/json" }, body: JSON.stringify(call),
@@ -83,33 +82,44 @@ Deno.test("HT1 the person's receipt reads their own row (pending)", async () => 
   assert.deepEqual(r.body, { ok: true, receipt: { reservationId: ids.h1, state: "pending", providerPostId: null, outcomeCode: null, afterFreeze: false, simulated: true } });
 });
 
-Deno.test("HT2 create: 403 before the database with the production default; through the database: idempotent on clientRequestId, a changed body 409, an unverified account 403", async () => {
+Deno.test("HT2 G3-02 #3: create is decided in the database with the production default (no TS allow): idempotent on clientRequestId, a changed body 409, a wrong hash 422; publish disabled, an unverified account and another person's account refused with nothing written", async () => {
   const c0 = connects;
   const call = await createCall(H.account, crypto.randomUUID(), "G3-46 本文 new", 540);
-  assert.deepEqual(await post("h", call), { status: 403, body: { ok: false, code: "POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE" } });
-  assert.equal(connects, c0, "the default port stopped it before the database");
-  const first = await post("h", call, allowHandler);
-  assert.equal(first.status, 200);
+  const first = await post("h", call);
+  assert.equal(first.status, 200, JSON.stringify(first));
   assert.equal(first.body.reservation.created, true);
   assert.equal(first.body.reservation.status, "planned");
-  const again = await post("h", call, allowHandler);
+  assert.ok(connects > c0, "decided in the database (THREADS_PERMISSIONS_DECIDED_IN_DATABASE)");
+  const again = await post("h", call);
   assert.deepEqual(again, { status: 200, body: { ok: true, reservation: { reservationId: first.body.reservation.reservationId, status: "planned", created: false } } });
   const changed = { ...call, payload: { ...call.payload, text: "G3-46 本文 changed", contentSha256: await sha("G3-46 本文 changed") } };
-  assert.deepEqual(await post("h", changed, allowHandler), { status: 409, body: { ok: false, code: "POSTONA_THREADS_RESV_IDEMPOTENCY_CONFLICT" } });
-  assert.deepEqual(await post("h", { ...call, payload: { ...call.payload, contentSha256: "0".repeat(64) } }, allowHandler),
+  assert.deepEqual(await post("h", changed), { status: 409, body: { ok: false, code: "POSTONA_THREADS_RESV_IDEMPOTENCY_CONFLICT" } });
+  assert.deepEqual(await post("h", { ...call, payload: { ...call.payload, contentSha256: "0".repeat(64) } }),
     { status: 422, body: { ok: false, code: "POSTONA_THREADS_RESV_CONSENT_REQUIRED" } });
-  // G4 (TEST DOUBLE) no longer lists H's account: the database refuses even when the TS port allows; nothing written
+  const count = async () => Number((await owner<[bigint]>("select count(*) from postona_threads_resv.reservations"))[0][0]);
+  const n0 = await count();
+  // the account publish-disabled (the column G4's U8 CHECK pins to false; this world has no U8): 007's fence refuses
+  await owner("update public.social_accounts set publish_enabled = false where id = $1", [H.account]);
+  try {
+    assert.deepEqual(await post("h", await createCall(H.account, crypto.randomUUID(), "G3-46 本文 disabled", 542)),
+      { status: 403, body: { ok: false, code: "POSTONA_THREADS_RESV_PUBLISH_DISABLED" } });
+  } finally {
+    await owner("update public.social_accounts set publish_enabled = true where id = $1", [H.account]);
+  }
+  // G4 (TEST DOUBLE) no longer lists H's account: refused; the receipt still reads
   await owner("delete from t_threads.verified where social_account_id = $1", [H.account]);
   try {
-    const n0 = Number((await owner<[bigint]>("select count(*) from postona_threads_resv.reservations"))[0][0]);
-    assert.deepEqual(await post("h", await createCall(H.account, crypto.randomUUID(), "G3-46 本文 unverified", 545), allowHandler),
+    assert.deepEqual(await post("h", await createCall(H.account, crypto.randomUUID(), "G3-46 本文 unverified", 545)),
       { status: 403, body: { ok: false, code: "POSTONA_THREADS_RESV_ACCOUNT_NOT_VERIFIED" } });
-    assert.equal(Number((await owner<[bigint]>("select count(*) from postona_threads_resv.reservations"))[0][0]), n0);
     assert.deepEqual(await receipt("h", "h1"), { status: 200, body: { ok: true, receipt: { reservationId: ids.h1, state: "pending", providerPostId: null, outcomeCode: null, afterFreeze: false, simulated: true } } },
       "the receipt still reads with the account unverified");
   } finally {
     await owner("insert into t_threads.verified values ($1)", [H.account]);
   }
+  // another person on H's account: one answer, no oracle
+  assert.deepEqual(await post("i", await createCall(H.account, crypto.randomUUID(), "G3-46 本文 I on H", 548)),
+    { status: 404, body: { ok: false, code: "POSTONA_THREADS_RESV_ACCOUNT_NOT_FOUND" } });
+  assert.equal(await count(), n0, "no refusal wrote a row");
   // the extra row is cancelled again so the rollback phases see only the rows they expect
   assert.equal((await post("h", { action: "cancel", payload: { reservationId: first.body.reservation.reservationId } })).status, 200);
 });
@@ -135,7 +145,7 @@ Deno.test("HT5 anonymous, unknown anonymity, no session, another subject, an unk
   for (const alias of ["h_anon", "h_unknown", "h_no_session", "h_as_i", "nobody"]) {
     for (const call of [{ action: "receipt", payload: { socialAccountId: H.account, clientRequestId: crid.h2 } }, { action: "cancel", payload: { reservationId: ids.h2 } },
                         await createCall(H.account, crypto.randomUUID(), "G3-46 本文 anon", 550)]) {
-      assert.deepEqual(await post(alias, call, allowHandler), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, `${alias} ${call.action}`);
+      assert.deepEqual(await post(alias, call), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, `${alias} ${call.action}`);
     }
   }
   assert.equal(connects, c0, "none of them reached the database");
@@ -157,7 +167,7 @@ Deno.test("HT6 the uncertain row: receipt uncertain, cancel 409, never claimed a
   assert.deepEqual(await rowOf("h3"), ["uncertain", "LEASE_EXPIRED", null]);
 });
 
-Deno.test("HT7 after H's service-end saga begins: create 403 (database, even with the TS port allowing); H reads and cancels h2; h4 receipt still reads", async () => {
+Deno.test("HT7 after H's service-end saga begins: create 403 (decided in the database, production default); H reads and cancels h2; h4 receipt still reads", async () => {
   // as G5's end saga starts it (service_role), on one owner connection
   const client = new Client(OWNER_URL);
   await client.connect();
@@ -167,7 +177,7 @@ Deno.test("HT7 after H's service-end saga begins: create 403 (database, even wit
   } finally {
     await client.end();
   }
-  const refused = await post("h", await createCall(H.account, crypto.randomUUID(), "G3-46 本文 after end", 560), allowHandler);
+  const refused = await post("h", await createCall(H.account, crypto.randomUUID(), "G3-46 本文 after end", 560));
   assert.equal(refused.status, 403, JSON.stringify(refused));
   assert.equal((await receipt("h", "h2")).body.receipt.state, "pending");
   assert.deepEqual(await cancel("h", "h2"), { status: 200, body: { ok: true, reservation: { reservationId: ids.h2, status: "cancelled" } } });
