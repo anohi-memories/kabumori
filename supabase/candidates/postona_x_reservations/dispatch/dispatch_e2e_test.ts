@@ -1,13 +1,15 @@
 // POSTONA X reservations — the whole F3 chain on a disposable LOCAL PostgreSQL (run through dispatch_run.sh only):
 //   app remote store -> postona-x-reservations http.ts -> Auth (fake GoTrue) -> real driver -> postona_resv_api -> SQL
-//   postona-x-reservation-worker http.ts -> real driver -> postona_resv_worker -> SQL (004) -> x_publisher -> fake X
+//   004 delivery (worker.ts, driven directly since G3-50) -> real driver -> postona_resv_worker -> SQL (004) -> x_publisher -> fake X
 // with the REAL G5 decision (003 on G5's candidate SQL). MOCK_ONLY: Auth answers, the G4 verified-account predicate
 // (allow list), the X credential source and X itself. Real Supabase Auth, G4, X tokens and X are NOT proven here.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { Client } from "jsr:@db/postgres@0.19.5";
 import { createHttpHandler } from "../../../functions/postona-x-reservations/http.ts";
-import { createWorkerHandler } from "../../../functions/postona-x-reservation-worker/http.ts";
+import { runReservationDelivery } from "../../../functions/_shared/postona_reservations/worker.ts";
+import { createPostgresDeliveryStore } from "../../../functions/_shared/postona_reservations/postgres_delivery_store.ts";
+import { createXReservationPublisher } from "../../../functions/_shared/postona_reservations/x_publisher.ts";
 import { createDriverConnect } from "../../../functions/_shared/postona_reservations/postgres_driver.ts";
 import { createRemoteReservationStore } from "../../../../apps/social-mobile/src/features/schedule/remote-reservation-store.ts";
 import { buildSaveRequest, confirmPost } from "../../../../apps/social-mobile/src/domain/reservation-flow.ts";
@@ -87,10 +89,17 @@ const fakeX = async (_url: string, init?: RequestInit) => {
 const X_TOKENS: Record<string, string> = { [accountOf(A)]: "fake-x-token-of-a-0123456789", [accountOf(B)]: "fake-x-token-of-b-0123456789" };
 const credentials = { available: true, accessTokenFor: (account: string) => Promise.resolve(X_TOKENS[account] ?? null) };
 const SECRET = "worker-secret-0123456789abcdef-0123456789";
-const workerHandler = (overrides: { runBudgetMs?: number } = {}) => createWorkerHandler(
-  { get: (n) => ({ POSTONA_RESV_WORKER_SECRET: SECRET, POSTONA_RESV_WORKER_DATABASE_URL: WORKER_URL } as Record<string, string>)[n] },
-  { enabled: true, connect: workerConnect, credentials, fetch: fakeX, ...overrides },
-);
+// G3-50: the product worker entry (postona-x-reservation-worker/http.ts) now runs the GENERATION-BOUND delivery (x_bound_delivery.ts
+// + 015), which needs 014 and G4's real verdict: that entry is proven in g4_verdict_run.sh (phase VH). This world has 001-004 only, so
+// the 004 delivery path is driven directly (worker.ts, unchanged) with the old entry's store, publisher and graceful-stop budget.
+const workerHandler = (overrides: { runBudgetMs?: number } = {}) => async (_request: Request) => {
+  const deadline = Date.now() + (overrides.runBudgetMs ?? 45_000);
+  const report = await runReservationDelivery({
+    store: createPostgresDeliveryStore(workerConnect), publisher: createXReservationPublisher({ credentials, fetch: fakeX }),
+    worker: "postona-x-worker", shouldStop: () => Date.now() >= deadline,
+  });
+  return Response.json({ ok: true, report });
+};
 const runWorker = async (overrides: { runBudgetMs?: number } = {}) => {
   const response = await workerHandler(overrides)(new Request("http://localhost/functions/v1/postona-x-reservation-worker", {
     method: "POST", headers: { "x-postona-worker-secret": SECRET },
