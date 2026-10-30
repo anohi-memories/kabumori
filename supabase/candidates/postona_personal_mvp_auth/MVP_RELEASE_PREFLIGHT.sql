@@ -188,7 +188,7 @@ begin
   if v_w0 is null then
     v_lines := v_lines || 'PF_W0 PASS absent (optional: MVP_W0_INSTALL.sql after the profile)'::text;
   elsif not exists (select 1 from pg_catalog.pg_proc p where p.oid = v_w0 and p.proowner = v_owner and p.prosecdef and p.provolatile = 'v'
-                     and p.proconfig = array['search_path=""', 'row_security=off'] and pg_catalog.md5(p.prosrc) = '6ea93e3c13d28b8e7aa7520217642f1b') then
+                     and p.proconfig = array['search_path=""', 'row_security=off'] and pg_catalog.md5(p.prosrc) = '3b3cc024c7816fa5e86a65e71f90060c') then
     v_lines := v_lines || 'PF_W0 FAIL W0 is not the reviewed body / owner / config: run MVP_W0_EXECUTE_REVOKE.sql'::text; v_fail := v_fail || 'PF_W0'::text;
   else
     v_acl := (select pg_catalog.array_to_string(p.proacl::text[], ',') from pg_catalog.pg_proc p where p.oid = v_w0);
