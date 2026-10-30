@@ -2303,6 +2303,17 @@ Deno.serve(async (req) => {
     const collectionDiagnostics = buildCollectionRunDiagnostics({
       marketMacroProviders: marketMacroProviderDiagnostics,
       breakingMarketQueries: breakingMarketDiagnostics,
+      jpOfficial: {
+        enabled: jpOfficial.enabled,
+        signalsRead: jpOfficial.signalsRead,
+        selected: jpOfficial.selected,
+        alreadyKnown: jpOfficial.alreadyKnown,
+        inserted: jpOfficial.inserted,
+        deferred: jpOfficial.deferred,
+        enrichedPages: jpOfficial.enrichedPages,
+        skipped: jpOfficial.skipped,
+        drops: jpOfficial.drops,
+      },
       headlineTrigger: headlineTrigger
         ? {
           lane: headlineTrigger.diagnostics,
