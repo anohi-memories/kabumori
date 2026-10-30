@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   createThreadsReservationApi,
   POSTONA_THREADS_RESERVATION_API_ENABLED,
+  THREADS_PERMISSIONS_DECIDED_IN_DATABASE,
   THREADS_PERMISSIONS_NOT_CONNECTED,
   type ThreadsDbFunction,
   type ThreadsDbResult,
@@ -99,7 +100,7 @@ test("Auth: no / malformed bearer, rejected token, a token without the same subj
   assert.equal(calls.length, 0);
 });
 
-test("create: the production default permission port denies (403) before the database; a failing or non-literal-true source never allows", async () => {
+test("create: the api's own default permission port (no source given) denies (403) before the database; a failing or non-literal-true source never allows", async () => {
   const { db, calls } = recordingDb({ ok: true, rows: [{ reservation_id: RID, status: "planned", created: true }] });
   const prod = createThreadsReservationApi({ enabled: true, db, auth: verifier });
   assert.deepEqual(await prod(req(createP())), { status: 403, body: { ok: false, code: "POSTONA_THREADS_RESV_SERVICE_NOT_ACTIVE" } });
@@ -114,6 +115,21 @@ test("create: the production default permission port denies (403) before the dat
   assert.deepEqual(await allowed(req(createP())), { status: 200, body: { ok: true, reservation: { reservationId: RID, status: "planned", created: true } } });
   assert.deepEqual(askedFor, [USER, "th_a"]);
   assert.deepEqual(calls.map((c) => [c.fn, c.args, c.subject]), [["create_reservation", ["th_a", CRID, "本文", SHA, "2026-11-01T00:30:00.000Z"], { userId: USER, sessionId: SESSION, isAnonymous: false }]]);
+});
+
+test("G3-02 #2: THREADS_PERMISSIONS_DECIDED_IN_DATABASE -- create reaches create_reservation as the verified subject (no TS pre-check); U8 / G4 / G5 refusals map to fixed statuses", async () => {
+  const { db, calls } = recordingDb({ ok: true, rows: [{ reservation_id: RID, status: "planned", created: true }] });
+  const api = createThreadsReservationApi({ enabled: true, db, auth: verifier, permissions: THREADS_PERMISSIONS_DECIDED_IN_DATABASE });
+  assert.equal((await api(req(createP()))).status, 200);
+  assert.deepEqual(calls.map((c) => [c.fn, c.subject]), [["create_reservation", { userId: USER, sessionId: SESSION, isAnonymous: false }]]);
+  for (const [code, status] of [["POSTONA_THREADS_RESV_PUBLISH_DISABLED", 403], ["POSTONA_THREADS_RESV_ACCOUNT_NOT_VERIFIED", 403], ["POSTONA_RESV_SERVICE_NOT_ACTIVE", 403],
+    ["POSTONA_THREADS_RESV_ACCOUNT_NOT_FOUND", 404], ["POSTONA_THREADS_RESV_IDEMPOTENCY_CONFLICT", 409]] as const) {
+    const refused = createThreadsReservationApi({ enabled: true, db: recordingDb({ ok: false, code }).db, auth: verifier, permissions: THREADS_PERMISSIONS_DECIDED_IN_DATABASE });
+    assert.deepEqual(await refused(req(createP())), { status, body: { ok: false, code } }, code);
+  }
+  const lookAlike = createThreadsReservationApi({ enabled: true, db: recordingDb().db, auth: verifier, permissions: { ...THREADS_PERMISSIONS_DECIDED_IN_DATABASE } });
+  assert.equal((await lookAlike(req(createP()))).status, 403, "a look-alike object is an ordinary (denying) source");
+  assert.equal(await THREADS_PERMISSIONS_DECIDED_IN_DATABASE.threadsPublishAllowed(USER, "th_a"), false, "asked directly, it denies");
 });
 
 test("cancel and receipt: no permission pre-gate (the SQL decides with the person session and row ownership); the verified subject is passed", async () => {

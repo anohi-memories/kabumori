@@ -5,6 +5,8 @@ import {
   type AuthVerifier,
   createReservationApi,
   type PermissionSources,
+  PERMISSIONS_DECIDED_IN_DATABASE,
+  PERMISSIONS_NOT_CONNECTED,
   POSTONA_RESERVATION_API_ENABLED,
   type ReservationDb,
   type ReservationRow,
@@ -253,6 +255,31 @@ test("database codes map to fixed statuses; unknown codes and exceptions never l
   }
   const throwing = createReservationApi({ enabled: true, auth: verifier, permissions: allow, db: recordingDb(() => { throw new Error("x"); }).db });
   assert.deepEqual(await throwing(req(createPayload())), { status: 503, body: { ok: false, code: "STORE_UNAVAILABLE" } });
+});
+
+test("G3-02 #2: PERMISSIONS_DECIDED_IN_DATABASE -- create / reschedule / reconfirm reach the owner function as the verified subject (no TS pre-check), its G5 / G4 refusals map to fixed statuses", async () => {
+  const { db, calls } = recordingDb();
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: PERMISSIONS_DECIDED_IN_DATABASE, db });
+  assert.equal((await api(req(createPayload()))).status, 200);
+  assert.equal((await api(req({ action: "reschedule", payload: { reservationId: RID, expectedRevision: 1, scheduledAt: "2026-10-21T00:30:00.000Z" } }))).status, 200);
+  assert.equal((await api(req({ action: "reconfirm", payload: { reservationId: RID, expectedRevision: 2, contentSha256: SHA } }))).status, 200);
+  assert.deepEqual(calls.map((c) => c.fn), ["create_batch", "reschedule", "reconfirm"]);
+  for (const c of calls) assert.deepEqual(c.subject, { userId: USER, sessionId: SESSION, isAnonymous: false });
+  for (const [code, status] of [["POSTONA_RESV_SERVICE_NOT_ACTIVE", 403], ["POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED", 403], ["POSTONA_RESV_BRAND_NOT_ELIGIBLE", 403],
+    ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404], ["POSTONA_RESV_AUTH_REQUIRED", 401], ["POSTONA_RESV_IDEMPOTENCY_CONFLICT", 409], ["POSTONA_RESV_SERVICE_BUSY", 503]] as const) {
+    const refused = createReservationApi({ enabled: true, auth: verifier, permissions: PERMISSIONS_DECIDED_IN_DATABASE, db: recordingDb({ ok: false, code }).db });
+    assert.deepEqual(await refused(req(createPayload())), { status, body: { ok: false, code } }, code);
+  }
+  // the identity matters, not the shape: a look-alike object is an ordinary (denying) source, and Auth still comes first
+  const lookAlike = createReservationApi({ enabled: true, auth: verifier, permissions: { ...PERMISSIONS_DECIDED_IN_DATABASE }, db: recordingDb().db });
+  assert.equal(codeOf(await lookAlike(req(createPayload()))), "POSTONA_RESV_SERVICE_NOT_ACTIVE");
+  const noAuth = recordingDb();
+  const unauthenticated = createReservationApi({ enabled: true, auth: verifier, permissions: PERMISSIONS_DECIDED_IN_DATABASE, db: noAuth.db });
+  assert.equal(codeOf(await unauthenticated(req(createPayload(), { authorization: null }))), "AUTH_REQUIRED");
+  assert.equal(noAuth.calls.length, 0);
+  assert.notEqual(PERMISSIONS_DECIDED_IN_DATABASE, PERMISSIONS_NOT_CONNECTED);
+  assert.equal(await PERMISSIONS_DECIDED_IN_DATABASE.xAutopostAllowed(USER), false, "asked directly, it denies");
+  assert.equal(await PERMISSIONS_DECIDED_IN_DATABASE.xAccountVerified(USER, "x_a"), false);
 });
 
 test("source: the API module has no imports, no Deno.env, no service-role key, no direct provider or table access", async () => {

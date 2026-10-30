@@ -1,5 +1,5 @@
 #!/bin/bash
-# G3-02 #1 (Issue #589): X / Threads reservations on the REAL local Supabase runtime (no managed project, no SNS, no paid provider,
+# G3-02 #1 / #2 (Issue #589): X / Threads reservations on the REAL local Supabase runtime (no managed project, no SNS, no paid provider,
 # nothing deployed). A throw-away local Supabase project (`supabase start`, project id g3ls, ports 559xx) runs the real containers:
 # Postgres 17.6.1.165 with the real auth / vault / storage schemas, GoTrue (real ES256 user JWTs with session_id / is_anonymous), Kong
 # (verify_jwt) and the Edge runtime.
@@ -11,10 +11,10 @@
 #           rollout.sh rollback (the test's login members revoked first, rows stated exactly); G3's schemas and roles must be gone.
 #   Edge    the real entries (release gates OFF: 503) and their localtest twins (gate passed as enabled; permission ports and the X
 #           credential source NOT overridden: deny), behind the real Kong / GoTrue.
-#   test    local_test.ts (phases L0-L11, real HTTP; the rows the HTTP API cannot create today are written through the API role's own
-#           SQL path by the test login member, labelled).
-# Test-world stand-ins (not G3's to decide; labelled in the test): G5's first-run workspace (W0, G5 #320 TASK 51 in progress) = G5's
-# start_x_autopost_service() under the person's real claims; a service end = the entitlement row as G5's end leaves it; a Threads
+#   G5 W0   G5's accepted first-run workspace (PR #590 2c8087fc: MVP_W0_INSTALL + MVP_W0_EXECUTE_GRANT, blob-pinned, unchanged), so the
+#           person starts the service and gets the workspace over PostgREST with their own JWT.
+#   test    local_test.ts (phases L0-L12, real HTTP; G3-02 #2: create / reschedule / reconfirm decided in the database).
+# Test-world stand-ins (not G3's to decide; labelled in the test): a service end = the entitlement row as G5's end leaves it; a Threads
 # connection = G4's binding_row shape (as smoke.sql); the API / worker LOGIN members (a separately approved rollout step) = two
 # throw-away login roles with random passwords, kept only in a 0600 file inside the work dir.
 # Needs: supabase CLI 2.116.0, a running Docker-API engine (podman) with the images below already present (never pulls; refuses
@@ -28,6 +28,7 @@ G4=c6df19cc612ad586126e80b009589ef3456b215f      # G4 PR #580 HEAD (personal X +
 PR178=83334a091ded5571cf595fd99d7a035627564735   # G5 write guard chain, as G4's runner overlays it
 G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982   # G5 MVP_INSTALL (blob eebaabf2, as G4's runner pins it)
 G5CHAIN=21a5cad4b71de63265db8517da93c6efc60cdde8 # G5 lifecycle chain (MVP P1)
+G5W0=2c8087fc71d56b133dc3f6be21ea665cc8d44663    # G5 PR #590 HEAD (G5-02 #1, accepted): W0 install + grant
 ENGINE="${G3LS_ENGINE:-podman}"
 API_PORT=55921 DB_PORT=55922
 fail() { echo "FAIL $*" >&2; exit 1; }
@@ -36,7 +37,7 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 for image in postgres:17.6.1.165 gotrue:v2.196.0 postgrest:v16.1 kong:2.8.1 edge-runtime:v1.74.3 storage-api:v1.70.3; do
   "$ENGINE" image exists "public.ecr.aws/supabase/$image" || { echo "G3LS_IMAGE_MISSING: $image (this script does not pull)"; exit 2; }
 done
-for commit in "$G4" "$PR178" "$G5MVP" "$G5CHAIN"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G3LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
+for commit in "$G4" "$PR178" "$G5MVP" "$G5CHAIN" "$G5W0"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G3LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
 [ "$(git -C "$REPO" rev-parse "$G5MVP:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] || fail "G5 MVP_INSTALL blob moved"
 if lsof -nP -iTCP:"$API_PORT" -iTCP:"$DB_PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "G3LS_PORTS_BUSY: $API_PORT / $DB_PORT (another stack?)"; exit 2; fi
 
@@ -95,7 +96,8 @@ case "${G3LS_MUTANT:-}" in
   "") ;;
   host_any) mutate "$WORK/bundle/rollout.sh" '/private/tmp/*|/tmp/*|127.0.0.1) ;;' '*) ;;' ;;
   no_session_claim) mutate "$fns/_shared/postona_reservations/postgres_db.ts" 'session_id: subject.sessionId, ' '' ;;
-  create_owner_only) mutate "$fns/_shared/postona_reservations/api.ts" '"list_reservations"]);' '"list_reservations", "create_batch"]);' ;;
+  x_default_lookalike) mutate "$fns/postona-x-reservations/http.ts" 'overrides.permissions ?? PERMISSIONS_DECIDED_IN_DATABASE' 'overrides.permissions ?? { ...PERMISSIONS_DECIDED_IN_DATABASE }' ;;
+  threads_default_lookalike) mutate "$fns/postona-threads-reservations/http.ts" 'overrides.permissions ?? THREADS_PERMISSIONS_DECIDED_IN_DATABASE' 'overrides.permissions ?? { ...THREADS_PERMISSIONS_DECIDED_IN_DATABASE }' ;;
   no_set_role) mutate "$fns/_shared/postona_reservations/postgres_db.ts" 'await client.queryArray({ text: `SET LOCAL ROLE ${API_ROLE}` });' '' ;;
   *) fail "unknown G3LS_MUTANT" ;;
 esac
@@ -107,6 +109,8 @@ done
 
 (cd "$WORK/p" && supabase start -x studio,imgproxy,vector,supavisor,mailpit,realtime,logflare,postgres-meta >/dev/null 2>&1) || { echo "G3LS_START_FAILED"; exit 2; }
 PUBLISHABLE="$(cd "$WORK/p" && supabase status -o env 2>/dev/null | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/\1/p')"
+JWT_SECRET="$(cd "$WORK/p" && supabase status -o env 2>/dev/null | sed -n 's/^JWT_SECRET="\(.*\)"$/\1/p')"   # this throw-away stack's own; only mints an EXPIRED token (L2)
+[ -n "$JWT_SECRET" ] || { echo "G3LS_KEYS_UNEXPECTED"; exit 2; }
 case "$PUBLISHABLE" in sb_publishable_*) ;; *) echo "G3LS_KEYS_UNEXPECTED"; exit 2 ;; esac
 echo "OK local stack g3ls (ports $API_PORT / $DB_PORT)"
 
@@ -156,6 +160,13 @@ for f in "$WORK"/t/g5chain_20261013140000_common_account_service_reconciliation_
   need "$f"
 done
 echo "OK world: G4's personal world at ${G4:0:8} on the real local schema (as postgres)"
+w0dir=supabase/candidates/postona_personal_mvp_auth
+for pair in MVP_W0_INSTALL.sql:f68bc61f35b3041e2147f216da7ceb56c822105d MVP_W0_EXECUTE_GRANT.sql:c7c20852ce951fd1cdfe5eda538038232b1da85c; do
+  [ "$(git -C "$REPO" rev-parse "$G5W0:$w0dir/${pair%%:*}")" = "${pair#*:}" ] || fail "G5 ${pair%%:*} blob moved"
+  git -C "$REPO" show "$G5W0:$w0dir/${pair%%:*}" > "$WORK/t/${pair%%:*}"
+  need "$WORK/t/${pair%%:*}"
+done
+echo "OK G5 W0 (PR #590 ${G5W0:0:8}) installed and given to authenticated, as G5's files do"
 
 # ---- G3: the rollout bundle over 127.0.0.1 ----------------------------------------------------------------------------------------------
 ro() { env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=postgres G3RO_OWNER=postgres "$@" bash "$RO_SH" "$mode"; }
@@ -189,9 +200,9 @@ done
 [ -n "$ready" ] || { tail -5 "$WORK/serve.log"; fail "functions serve not ready"; }
 
 env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLISHABLE" G3LS_DB_PORT="$DB_PORT" \
-    G3LS_API_PW="$API_PW" G3LS_WORKER_PW="$WORKER_PW" G3LS_WORKER_SECRET="$WORKER_SECRET" \
+    G3LS_API_PW="$API_PW" G3LS_WORKER_PW="$WORKER_PW" G3LS_WORKER_SECRET="$WORKER_SECRET" G3LS_JWT_SECRET="$JWT_SECRET" \
   deno test --no-config --no-check --cached-only \
-    --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_API_PW,G3LS_WORKER_PW,G3LS_WORKER_SECRET \
+    --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_API_PW,G3LS_WORKER_PW,G3LS_WORKER_SECRET,G3LS_JWT_SECRET \
     --allow-net="127.0.0.1:$API_PORT" --allow-run=psql "$here/local_test.ts"
 
 # ---- RB: rollback on the real stack: each refusal before any change, then the full rollback -----------------------------------------

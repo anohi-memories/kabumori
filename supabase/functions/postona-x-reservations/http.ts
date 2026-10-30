@@ -5,14 +5,16 @@
 //   Auth : GET /auth/v1/user with the CALLER'S token + the public anon key (live, every request)
 //   DB   : one transaction per request as a login role that is a member of postona_resv_api (see
 //          _shared/postona_reservations/postgres_db.ts); its connection string is a server-side secret
-//   G5/G4: decided inside the database (G5 binding candidate 003; G4 still DENY). The TS permission port stays
-//          PERMISSIONS_NOT_CONNECTED (deny) until the owners deliver reviewed decisions.
+//   G5/G4: decided inside the database, in the write's own transaction (G3-02 #2): PERMISSIONS_DECIDED_IN_DATABASE -- G5's person
+//          session (S2-2), the brand owner + personal profile, G5's x_autopost service state and G4's account verdict
+//          (assert_account_access for create / reschedule / reconfirm); no TS pre-check, no mock. X is never called from here: the
+//          worker's credential source stays NOT_CONNECTED, so nothing created here is sent.
 // This file holds no service-role key, never reads one, never logs, and never calls X.
 import {
   type ApiRequest,
   createReservationApi,
   type PermissionSources,
-  PERMISSIONS_NOT_CONNECTED,
+  PERMISSIONS_DECIDED_IN_DATABASE,
   POSTONA_RESERVATION_API_ENABLED,
 } from "../_shared/postona_reservations/api.ts";
 import { createPostgresReservationDb, type PgConnect } from "../_shared/postona_reservations/postgres_db.ts";
@@ -60,7 +62,7 @@ export type HttpOverrides = {
   fetch?: FetchLike;
   /** Tests only: a connection factory (production builds it from POSTONA_RESV_DATABASE_URL). */
   connect?: PgConnect;
-  /** Tests only (MOCK_ONLY). Production: PERMISSIONS_NOT_CONNECTED until G5 / G4 deliver. */
+  /** Tests only (MOCK_ONLY). Production: PERMISSIONS_DECIDED_IN_DATABASE (the owner functions decide with G5 / G4). */
   permissions?: PermissionSources;
   createConnect?: (databaseUrl: string) => PgConnect;
 };
@@ -88,7 +90,7 @@ export function createHttpHandler(env: { get(name: string): string | undefined }
     const api = createReservationApi({
       enabled: true,
       auth,
-      permissions: overrides.permissions ?? PERMISSIONS_NOT_CONNECTED,
+      permissions: overrides.permissions ?? PERMISSIONS_DECIDED_IN_DATABASE,
       db: createPostgresReservationDb(connect),
     });
     const answer = await api(apiRequest);
