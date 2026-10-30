@@ -44,6 +44,7 @@ type G5Answer = Record<string, unknown> | Response | Error;
 function world(env: Record<string, string | undefined> = ENV) {
   const model = new OwnerHeldModel();
   const g5 = { calls: 0, jwts: [] as string[], script: [] as Array<G5Answer | undefined> };
+  const store = { claimFault: null as Response | Error | null, claims: 0, redirects: [] as string[] };
   const replies: unknown[] = [];
   const envReads: string[] = [];
   const provider = recordingFetch(() => {
@@ -52,11 +53,17 @@ function world(env: Record<string, string | undefined> = ENV) {
   });
   const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = String(input);
+    if (url.startsWith(SUPABASE)) store.redirects.push(String(init?.redirect));
     if (url === `${SUPABASE}/rest/v1/rpc/${G5_VERDICT_RPC}`) {
       g5.jwts.push(String(new Headers(init?.headers).get("Authorization")));
       const a = g5.script[g5.calls++] ?? mvp();
       if (a instanceof Error) throw a;
       return a instanceof Response ? a : jsonResponse(200, a);
+    }
+    if (url === `${SUPABASE}/rest/v1/rpc/ai_calls_claim` && store.claimFault) {
+      store.claims++;
+      if (store.claimFault instanceof Error) throw store.claimFault;
+      return store.claimFault.clone();
     }
     if (url.startsWith(SUPABASE)) return await model.fetchFor("app")(input, init);
     return await provider.fetch(input, init);
@@ -84,7 +91,7 @@ function world(env: Record<string, string | undefined> = ENV) {
     return { status: res.status, headers: res.headers, body: (raw ? JSON.parse(raw) : null) as Record<string, unknown> | null };
   };
   const nothing = () => [g5.calls, model.log.length, provider.calls.length];
-  return { model, g5, replies, provider, send, nothing, bodies, envReads };
+  return { model, g5, store, replies, provider, send, nothing, bodies, envReads };
 }
 const cands = (r: { body: Record<string, unknown> | null }) =>
   r.body!.candidates as Array<{ text: string; hashtags: string[]; editable: boolean; requiresUserConfirmation: boolean }>;
@@ -204,7 +211,7 @@ Deno.test("configuration from the Edge environment: anything missing or invalid 
   assert.throws(() => createPostonaPostAssistEdgeHandler({} as never), /POST_ASSIST_EDGE_CONFIG_INVALID:read_env/u);
 });
 
-Deno.test("G5 / session / generation / entitlement over HTTP are fail-closed: anonymous, expired or revoked session, another workspace, a second member, suspended, the R1-MVP ACL not granted (403, BLOCKED_G5_AUTH_EXECUTE), not applied (404), G5 down; a changed generation between the verdict and the recheck releases the hold; none sends or charges", async () => {
+Deno.test("G5 / session / generation / entitlement over HTTP are fail-closed: anonymous, expired or revoked session, another workspace, a second member, suspended, the R1-MVP ACL not granted (403, BLOCKED_G5_AUTH_EXECUTE), not applied (404 PGRST202: G6-27 not available, not a same-key retry), PostgREST refusing the call (300 / 400 / a redirect), G5 down or busy (5xx / 429 / network: the same key may be asked again); a changed generation between the verdict and the recheck releases the hold; none sends or charges", async () => {
   const cases: Array<[string, G5Answer[], number, string, string[]]> = [
     ["anonymous", [deny("AUTH_REQUIRED")], 403, "POST_ASSIST_NOT_ENTITLED", []],
     ["session expired", [deny("SESSION_EXPIRED")], 403, "POST_ASSIST_NOT_ENTITLED", []],
@@ -217,8 +224,13 @@ Deno.test("G5 / session / generation / entitlement over HTTP are fail-closed: an
     ["full-profile token (pinned)", [mvp({ owner_epoch: "g5oe:7:4" })], 403, "POST_ASSIST_NOT_ENTITLED", []],
     ["R1-MVP ACL not granted (403)", [jsonResponse(403, { code: "42501" })], 403, "POST_ASSIST_NOT_ENTITLED", []],
     ["JWT refused (401)", [jsonResponse(401, { code: "PGRST301" })], 403, "POST_ASSIST_NOT_ENTITLED", []],
-    ["R1-MVP not applied (404)", [jsonResponse(404, { code: "PGRST202" })], 503, "POST_ASSIST_AUTH_UNAVAILABLE", []],
+    ["R1-MVP not applied (404 PGRST202)", [jsonResponse(404, { code: "PGRST202" })], 403, "POST_ASSIST_NOT_ENTITLED", []],
+    ["R1-MVP ambiguous (300 PGRST203)", [jsonResponse(300, { code: "PGRST203" })], 403, "POST_ASSIST_NOT_ENTITLED", []],
+    ["R1-MVP raised (400 P0001)", [jsonResponse(400, { code: "P0001" })], 403, "POST_ASSIST_NOT_ENTITLED", []],
+    ["a redirect with an allow-shaped body (not followed)", [new Response(JSON.stringify(mvp()), { status: 307, headers: { Location: "https://elsewhere.example/" } })], 403, "POST_ASSIST_NOT_ENTITLED", []],
     ["G5 down", [new TypeError("down")], 503, "POST_ASSIST_AUTH_UNAVAILABLE", []],
+    ["G5 503 PGRST001", [jsonResponse(503, { code: "PGRST001" })], 503, "POST_ASSIST_AUTH_UNAVAILABLE", []],
+    ["G5 429", [jsonResponse(429, {})], 503, "POST_ASSIST_AUTH_UNAVAILABLE", []],
     ["generation +1 at the recheck", [mvp(), mvp({ owner_epoch: "g5pv:8" })], 403, "POST_ASSIST_NOT_ENTITLED", ["released"]],
     ["session ended at the recheck", [mvp(), deny("SESSION_EXPIRED")], 403, "POST_ASSIST_NOT_ENTITLED", ["released"]],
   ];
@@ -227,7 +239,33 @@ Deno.test("G5 / session / generation / entitlement over HTTP are fail-closed: an
     w.g5.script = script;
     const r = await w.send();
     assert.deepEqual([r.status, r.body?.error, w.provider.calls.length, w.model.statuses()], [status, error, 0, statuses], label);
+    assert.equal(r.body?.retry_same_key, error === "POST_ASSIST_AUTH_UNAVAILABLE", `${label}: only a maybe-transient G5 answer may be asked again with the same key`);
   }
+});
+
+Deno.test("G6-27: G6's own call store refusing the claim (ai_calls_claim 404 PGRST202 = G6's SQL not adopted, 401 / 403 = the service key not accepted, 400, a redirect) -> 503 POST_ASSIST_NOT_SENT without a same-key retry; a claim that may be transient (5xx, 429, network) stays 503 POST_ASSIST_UNAVAILABLE with retry_same_key; nothing is reserved or sent either way, and no Supabase call follows a redirect", async () => {
+  const cases: Array<[string, Response | Error, string, boolean]> = [
+    ["404 PGRST202", jsonResponse(404, { code: "PGRST202" }), "POST_ASSIST_NOT_SENT", false],
+    ["401", jsonResponse(401, { code: "PGRST301" }), "POST_ASSIST_NOT_SENT", false],
+    ["403 42501", jsonResponse(403, { code: "42501" }), "POST_ASSIST_NOT_SENT", false],
+    ["400 P0001", jsonResponse(400, { code: "P0001" }), "POST_ASSIST_NOT_SENT", false],
+    ["302", new Response(null, { status: 302, headers: { Location: "https://elsewhere.example/" } }), "POST_ASSIST_NOT_SENT", false],
+    ["500", jsonResponse(500, { code: "XX000" }), "POST_ASSIST_UNAVAILABLE", true],
+    ["503 PGRST001", jsonResponse(503, { code: "PGRST001" }), "POST_ASSIST_UNAVAILABLE", true],
+    ["429", jsonResponse(429, {}), "POST_ASSIST_UNAVAILABLE", true],
+    ["network", new TypeError("down"), "POST_ASSIST_UNAVAILABLE", true],
+  ];
+  for (const [label, fault, error, retry] of cases) {
+    const w = world();
+    w.store.claimFault = fault;
+    const r = await w.send();
+    assert.deepEqual([r.status, r.body?.error, r.body?.retry_same_key, w.store.claims, w.provider.calls.length, w.model.log.length], [503, error, retry, 1, 0, 0], label);
+    assert.ok(w.store.redirects.length > 0 && w.store.redirects.every((x) => x === "manual"), label);
+  }
+  // with the store healthy, every Supabase call of a full request (G5 x2, claim, reserve, mark sent, settle, complete) refuses redirects
+  const ok = world();
+  assert.equal((await ok.send()).status, 200);
+  assert.ok(ok.store.redirects.length >= 7 && ok.store.redirects.every((x) => x === "manual"), ok.store.redirects.join(","));
 });
 
 Deno.test("the same request is charged once: a replay with the same Idempotency-Key answers the stored result (one send); a concurrent duplicate is IN_PROGRESS (retry_same_key) or the replay, never a second send; OpenAI 429 is stored for that key and never resent; a new key is a new request", async () => {

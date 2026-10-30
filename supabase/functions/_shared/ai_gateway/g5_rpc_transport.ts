@@ -7,13 +7,17 @@
 //   200 -> the section-4 wire WITHOUT times (exactly 8 keys); the Edge (this transport) adds issued_at_ms / expires_at_ms:
 //          an allow lives G5's 60 s, a refusal expires at once.
 //   401 / 403 (PostgREST: the JWT is not accepted) -> a deny wire (AUTH_REQUIRED), built here; it can only refuse.
-//   anything else (404 = RPC not deployed, 5xx, network, a body that is not the expected shape) -> throws, which the port
-//   turns into AUTH_UNAVAILABLE (nothing claimed, nothing sent).
+//   G6-27: any other refusal by PostgREST itself (definiteRefusal: 3xx, never followed; 4xx but 408 / 429) -> a deny wire too:
+//          404 / 300 (PGRST202: the RPC is not in the schema cache = not adopted or not reloaded; PGRST203: ambiguous) as
+//          G5_RPC_NOT_ADOPTED, the rest as G5_RPC_REFUSED. Asking again with the same key cannot help until G5's RPC changes,
+//          so the person sees "not available" (403), never "retry the same key" (G6-26 and before: AUTH_UNAVAILABLE, 503).
+//   anything else (5xx, 408, 429, network, a body that is not the expected shape) -> throws, which the port turns into
+//   AUTH_UNAVAILABLE (nothing claimed, nothing sent; it may be transient, so the same key may be asked again).
 // The JWT goes into the Authorization header only: never into the body, a log, an error or the generation.
 import type { FetchLike } from "../ai_provider/adapter.ts";
 import { safeToken } from "../ai_provider/redact.ts";
 import { G5_ALLOW_TTL_MS, type G5Transport, type VerdictScope } from "./authority_port.ts";
-import { supabaseUrlAllowed } from "./ai_calls_store.ts";
+import { definiteRefusal, supabaseUrlAllowed } from "./ai_calls_store.ts";
 
 export const G5_VERDICT_RPC = "common_account_authorization_verdict";
 const RPC_WIRE_KEYS = "decision,entitlements,owner_epoch,reason,scope,session,subject,v";
@@ -54,6 +58,7 @@ export function createG5RpcTransport(options: G5RpcTransportOptions): G5Transpor
         method: "POST",
         headers: { "apikey": options.publishableKey, "Authorization": `Bearer ${credential}`, "Content-Type": "application/json" },
         body: JSON.stringify({ p_app: scope.app, p_feature: scope.feature, p_brand_id: scope.brand ? scope.brand.slug : null }),
+        redirect: "manual", // the person's JWT is in the headers: a redirect is a refusal, never followed
       });
     } catch {
       throw new G5RpcError(null, null);
@@ -66,13 +71,14 @@ export function createG5RpcTransport(options: G5RpcTransportOptions): G5Transpor
       body = null;
     }
     const issued = now();
-    if (response.status === 401 || response.status === 403) {
-      // The JWT itself was not accepted: refuse (never allow) without guessing more.
-      return {
-        v: 1, decision: "deny", reason: "AUTH_REQUIRED", scope: { app: scope.app, feature: scope.feature, brand_slug: scope.brand ? scope.brand.slug : null },
-        subject: { kind: "system" }, session: null, owner_epoch: null, entitlements: [], issued_at_ms: issued, expires_at_ms: issued,
-      };
-    }
+    const deny = (reason: string) => ({
+      v: 1, decision: "deny", reason, scope: { app: scope.app, feature: scope.feature, brand_slug: scope.brand ? scope.brand.slug : null },
+      subject: { kind: "system" }, session: null, owner_epoch: null, entitlements: [], issued_at_ms: issued, expires_at_ms: issued,
+    });
+    // The JWT itself was not accepted: refuse (never allow) without guessing more.
+    if (response.status === 401 || response.status === 403) return deny("AUTH_REQUIRED");
+    // G6-27: PostgREST refused the call itself (see the header): a refusal, not a retry.
+    if (definiteRefusal(response.status)) return deny(response.status === 404 || response.status === 300 ? "G5_RPC_NOT_ADOPTED" : "G5_RPC_REFUSED");
     if (!response.ok) throw new G5RpcError(response.status, isRecord(body) ? safeToken(body.code) : null);
     // G5 returns the wire without times (section 6); a body with times or other keys is not that RPC's answer.
     if (!isRecord(body) || Object.keys(body).sort().join(",") !== RPC_WIRE_KEYS) throw new G5RpcError(response.status, "BAD_BODY");

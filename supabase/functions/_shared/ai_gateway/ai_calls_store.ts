@@ -8,10 +8,13 @@
 // Any other answer, an HTTP error or a lost connection throws: the gateway then answers STORE_UNAVAILABLE before
 // anything is sent (claim) or UNKNOWN without resending (complete). Errors carry the RPC name, the HTTP status and a
 // sanitised PostgREST code, never a body, a key or a payload. The key is a SecretValue revealed only into headers.
+// G6-27: a claim that PostgREST refused itself (definiteRefusal: the RPC not adopted = 404 PGRST202, not permitted, a shape
+// it does not take) throws AiCallsClaimRefused, which the gateway answers as not sent without a same-key retry. A redirect is
+// never followed (the service key is in the headers): it is such a refusal.
 import type { FetchLike } from "../ai_provider/adapter.ts";
 import { safeToken } from "../ai_provider/redact.ts";
 import type { SecretValue } from "../ai_provider/secrets.ts";
-import type { CallClaim, CallIdentity, CallStore, ClaimContext, StoredOutcome } from "./gateway.ts";
+import { type CallClaim, type CallIdentity, type CallStore, CallStoreRefusedError, type ClaimContext, type StoredOutcome } from "./gateway.ts";
 
 export type AiCallsStoreOptions = Readonly<{
   /** The project URL, e.g. https://<ref>.supabase.co (http only for a local loopback test server). */
@@ -23,15 +26,32 @@ export type AiCallsStoreOptions = Readonly<{
   rpcTimeoutMs?: number;
 }>;
 
+const rpcFailed = (rpc: string, status: number | null, code: string | null) => `AI_CALLS_RPC_FAILED:${rpc}:${status ?? "network"}${code ? `:${code}` : ""}`;
+
 export class AiCallsRpcError extends Error {
   readonly rpc: string;
   readonly status: number | null;
   constructor(rpc: string, status: number | null, code: string | null) {
-    super(`AI_CALLS_RPC_FAILED:${rpc}:${status ?? "network"}${code ? `:${code}` : ""}`);
+    super(rpcFailed(rpc, status, code));
     this.rpc = rpc;
     this.status = status;
   }
 }
+/** G6-27: ai_calls_claim refused by PostgREST itself (definiteRefusal): nothing was claimed; the same key cannot succeed. */
+export class AiCallsClaimRefused extends CallStoreRefusedError {
+  readonly status: number;
+  constructor(status: number, code: string | null) {
+    super(rpcFailed("ai_calls_claim", status, code));
+    this.status = status;
+  }
+}
+
+/**
+ * G6-27: PostgREST answered and refused the call itself: 3xx (never followed) or 4xx other than 408 / 429. The RPC is not adopted
+ * (404 PGRST202: not in the schema cache), not permitted, or does not take this shape; an RPC that raised was rolled back. Nothing
+ * ran, and asking again unchanged cannot succeed. 5xx, 408, 429 and no answer may be transient.
+ */
+export const definiteRefusal = (status: number): boolean => status >= 300 && status < 500 && status !== 408 && status !== 429;
 
 const OWNER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const FINGERPRINT = /^[0-9a-f]{64}$/u;
@@ -79,6 +99,7 @@ export class SupabaseAiCallsStore implements CallStore {
         },
         body: JSON.stringify({ p }),
         signal: AbortSignal.timeout(this.#timeoutMs),
+        redirect: "manual",
       });
     } catch {
       throw new AiCallsRpcError(name, null, null);
@@ -90,7 +111,11 @@ export class SupabaseAiCallsStore implements CallStore {
     } catch {
       body = null;
     }
-    if (!response.ok) throw new AiCallsRpcError(name, response.status, isRecord(body) ? safeToken(body.code) : null);
+    if (!response.ok) {
+      const code = isRecord(body) ? safeToken(body.code) : null;
+      if (name === "ai_calls_claim" && definiteRefusal(response.status)) throw new AiCallsClaimRefused(response.status, code);
+      throw new AiCallsRpcError(name, response.status, code);
+    }
     if (!isRecord(body)) throw new AiCallsRpcError(name, response.status, "BAD_BODY");
     return body;
   }

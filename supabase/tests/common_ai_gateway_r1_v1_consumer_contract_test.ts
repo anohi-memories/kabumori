@@ -244,12 +244,12 @@ Deno.test("who the person is stays G5's decision: no principal, 401 / 403, delet
   assert.deepEqual([w.g5.calls.length, ...w.untouched()], [0, 0, 0]);
 });
 
-Deno.test("G5 lost or slow at the verdict (network, 404 = not deployed, 5xx, a hang past the timeout) -> AUTH_UNAVAILABLE, nothing claimed, reserved or sent; a later retry of the same operation sends exactly once", async () => {
-  for (const [label, answer] of [["network", new TypeError("down")], ["404", jsonResponse(404, { code: "PGRST202" })], ["500", jsonResponse(500, {})],
-    ["502", jsonResponse(502, {})], ["hang", "hang"]] as Array<[string, Answer]>) {
+Deno.test("G5 lost or slow at the verdict (network, 5xx, a hang past the timeout) -> AUTH_UNAVAILABLE; not deployed (404 PGRST202, G6-27) -> AUTH_DENIED; nothing claimed, reserved or sent; a later retry of the same operation sends exactly once", async () => {
+  for (const [label, answer, expected] of [["network", new TypeError("down"), "AUTH_UNAVAILABLE"], ["404", jsonResponse(404, { code: "PGRST202" }), "AUTH_DENIED"],
+    ["500", jsonResponse(500, {}), "AUTH_UNAVAILABLE"], ["502", jsonResponse(502, {}), "AUTH_UNAVAILABLE"], ["hang", "hang", "AUTH_UNAVAILABLE"]] as Array<[string, Answer, string]>) {
     const w = world();
     w.g5.script = [answer];
-    assert.equal(code(await w.run(JWT_A)), "AUTH_UNAVAILABLE", label);
+    assert.equal(code(await w.run(JWT_A)), expected, label);
     assert.deepEqual(w.untouched(), [0, 0], label);
     // Nothing was claimed, so the same operation id runs normally afterwards (verdict + recheck), and sends once.
     assert.equal(code(await w.run(JWT_A)), "OK", `${label}: retry`);
