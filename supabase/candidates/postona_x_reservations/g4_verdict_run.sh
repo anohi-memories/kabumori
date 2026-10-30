@@ -9,10 +9,14 @@
 #   VB  behaviour (g4_verdict/behavior.sql): X through G4's real connect / disconnect, Threads on G4's binding shape; claim pins, the
 #       pre-send check re-verifies, A->B->A / disconnect / refresh / service end / another person never send;
 #   VR  rollback refusals (superuser, half applied, a widened ACL), rollback = 001 / 006 / 007 byte for byte (DENY again), twice refused;
-#       re-apply.
+#       re-apply;
+#   VW  (G3-49) 015 refusals (014 not applied, superuser, also the owner itself), apply, re-apply refused; the generation-bound X
+#       worker (g4_verdict/bound_worker_e2e_test.ts) through the real bound store + driver + x_publisher (fake fetch) on G4's real
+#       verdict; 015 rollback refusals (superuser, also the owner itself, another body, a widened ACL), rollback, twice refused, re-apply.
 # No network, no credential, no managed project; no OAuth, token, Vault, SNS or paid call. Roles are cluster-wide: run alone. Usage:
 #   RESV_PGHOST=/private/tmp/<socket-dir> RESV_PGPORT=<port> RESV_PGSUPER=<local superuser> g4_verdict_run.sh
-# The cluster must listen on 127.0.0.1 too (G4's runner). Optional: G3V_013 / G3V_014 / G3V_013_RB / G3V_014_RB (mutation runs).
+# The cluster must listen on 127.0.0.1 too (G4's runner). Optional: G3V_013 / G3V_014 / G3V_015 / G3V_013_RB / G3V_014_RB / G3V_015_RB
+# (mutation runs).
 set -euo pipefail
 export LC_ALL=C PGTZ=UTC PGOPTIONS='-c client_min_messages=warning'
 host="${RESV_PGHOST:?RESV_PGHOST (local socket dir) required}"
@@ -26,6 +30,7 @@ g4head=c6df19cc612ad586126e80b009589ef3456b215f
 g4runner=supabase/tests/postona_g4_threads_person_session_run.sh
 x013="${G3V_013:-$th/013_postona_threads_resv_g4_verdict.sql}"; x013rb="${G3V_013_RB:-$th/013_postona_threads_resv_g4_verdict_rollback.sql}"
 x014="${G3V_014:-$here/014_postona_x_resv_g4_verdict.sql}"; x014rb="${G3V_014_RB:-$here/014_postona_x_resv_g4_verdict_rollback.sql}"
+x015="${G3V_015:-$here/015_postona_x_resv_bound_pre_publish.sql}"; x015rb="${G3V_015_RB:-$here/015_postona_x_resv_bound_pre_publish_rollback.sql}"
 fail() { echo "FAIL $*" >&2; exit 1; }
 git -C "$repo" cat-file -e "${g4head}^{commit}" 2>/dev/null || { echo "RUN_NOT_AVAILABLE: G4 head $g4head missing; git fetch origin $g4head" >&2; exit 3; }
 [ "$(git -C "$repo" rev-parse "${g4head}:${g4runner}")" = 3030b21cc45e42d86288b422ba2cabb3c3d13868 ] || fail "G4 runner is not the pinned blob"
@@ -191,8 +196,55 @@ own -f "$x013rb" >/dev/null || fail "VR4 013 rollback"
   || fail "VR4 not DENY again"
 expect_err "VR5 013 rollback twice" G3_THREADS_VERDICT_ROLLBACK_NOT_APPLIED own -f "$x013rb"
 expect_err "VR5 014 rollback twice" G3_X_VERDICT_ROLLBACK_NOT_APPLIED own -f "$x014rb"
+expect_refused "VW0 015 before 014" G3_X_BOUND_BASE_UNKNOWN own -f "$x015"
 own -f "$x013" >/dev/null || fail "VR6 013 re-apply"
 own -f "$x014" >/dev/null || fail "VR6 014 re-apply"
 [ "$(catalog)" = "$applied" ] || fail "VR6 the re-applied catalog is not the first apply"
 echo "OK VR: rollback refusals (superuser, also the owner itself, half applied, a widened ACL), rollback = 001 / 006 / 007 byte for byte (DENY again, no column / trigger), twice refused, re-apply = first apply"
+
+# --- VW (G3-49) -----------------------------------------------------------------------------------------------------------------------
+c_vw="$(catalog)"
+expect_refused "VW1 015 as a superuser" G3_X_BOUND_OWNER sval -f "$x015"
+sval -c "alter role $owner superuser" >/dev/null
+expect_err "VW1b 015, the owner is a superuser" G3_X_BOUND_OWNER own -f "$x015"
+sval -c "alter role $owner nosuperuser" >/dev/null
+[ "$(catalog)" = "$c_vw" ] || fail "VW1: a refusal changed the catalog"
+own -f "$x015" >/dev/null || fail "VW2 015 apply"
+c_015="$(catalog)"
+expect_refused "VW2 015 re-apply" G3_X_BOUND_BASE_UNKNOWN own -f "$x015"
+[ "$(sval -c "select string_agg(a.grantee::regrole::text || '=' || a.privilege_type, ',' order by a.grantee::regrole::text) from pg_proc p, aclexplode(p.proacl) a
+  where p.oid = 'postona_x_resv.pre_publish_check_bound(uuid,uuid)'::regprocedure")" = "$owner=EXECUTE,postona_resv_worker=EXECUTE" ] || fail "VW2 015 ACL not owner + worker"
+[ "$(val -c "select g48.as_role('postona_resv_worker', null, 'select verdict || ''/'' || coalesce(credential_generation, ''null'') from postona_x_resv.pre_publish_check_bound(gen_random_uuid(), gen_random_uuid())')")" = "LEASE_LOST/null" ] \
+  || fail "VW3 unknown row not LEASE_LOST/null"
+val -c "select g48.as_role('postona_resv_api', null, 'select verdict from postona_x_resv.pre_publish_check_bound(gen_random_uuid(), gen_random_uuid())')" | grep -q '^ERR:permission denied' || fail "VW3 the API role reached 015"
+# Rollout simulation (TEST WORLD only): the worker login is a member of postona_resv_worker, nothing else
+wlogin="kb_tb_w49_${suffix}"
+"${S[@]}" -d "$db" -c "create role $wlogin login noinherit" -c "grant postona_resv_worker to $wlogin" >/dev/null
+vw_out="$work/bound_worker_e2e.out"
+if ! RESV_LIVE_DB_URL="postgres://$wlogin@127.0.0.1:$port/$db" RESV_LIVE_OWNER_URL="postgres://$owner@127.0.0.1:$port/$db" \
+  DENO_NO_PACKAGE_JSON=1 deno run --no-config --no-check --allow-net=127.0.0.1:"$port" --allow-read \
+  --allow-env=RESV_LIVE_DB_URL,RESV_LIVE_OWNER_URL "$here/g4_verdict/bound_worker_e2e_test.ts" >"$vw_out" 2>&1; then
+  sed 's/\x1b\[[0-9;]*m//g' "$vw_out" | grep -vE '^ok ' | head -30 >&2
+  fail "VW worker e2e"
+fi
+grep -q '^G3_BOUND_WORKER_E2E_PASS ' "$vw_out" || fail "VW: no PASS line"
+vw_res="$(grep '^G3_BOUND_WORKER_E2E_PASS ' "$vw_out")"
+"${S[@]}" -d "$db" -c "drop owned by $wlogin" -c "drop role $wlogin" >/dev/null
+echo "OK VW worker: ${vw_res#G3_BOUND_WORKER_E2E_PASS } -- TS derivation == DB (X, Threads); pinned == token generation -> one send with that token; disconnect / A->B->A / refresh after the token read -> NOT_PUBLISHABLE; stale token generation -> CREDENTIAL_GENERATION_CHANGED; lease too short -> RELEASED then one send; unknown -> uncertain, never re-sent; the worker login cannot call G4"
+expect_err "VW5 015 rollback as a superuser" G3_X_BOUND_ROLLBACK_OWNER sval -f "$x015rb"
+sval -c "alter role $owner superuser" >/dev/null
+expect_err "VW5b 015 rollback, the owner is a superuser" G3_X_BOUND_ROLLBACK_OWNER own -f "$x015rb"
+sval -c "alter role $owner nosuperuser" >/dev/null
+expect_err "VW6 015 rollback, another body" G3_X_BOUND_ROLLBACK_UNKNOWN own -c "begin" -c "create or replace function postona_x_resv.pre_publish_check_bound(p_reservation_id uuid, p_lease_token uuid)
+  returns table (verdict text, credential_generation text) language sql security definer set search_path = '' as \$\$ select 'OK'::text, null::text \$\$" -f "$x015rb"
+sed "s|^drop function postona_x_resv.pre_publish_check_bound(uuid, uuid);\$|grant execute on function postona_x_resv.pre_publish_check(uuid, uuid) to postona_resv_api;\\n&|" "$x015rb" > "$work/rb_acl_015.sql"
+grep -q '^grant execute on function postona_x_resv.pre_publish_check(uuid, uuid) to postona_resv_api;$' "$work/rb_acl_015.sql" || fail "VW7 probe not built"
+expect_err "VW7 015 rollback with a widened ACL" "G3_X_BOUND_ROLLBACK_POSTCONDITION: an owner or ACL changed" own -f "$work/rb_acl_015.sql"
+[ "$(catalog)" = "$c_015" ] || fail "VW5-VW7: a refusal changed the catalog"
+own -f "$x015rb" >/dev/null || fail "VW8 015 rollback"
+[ "$(catalog)" = "$c_vw" ] || fail "VW8 rollback is not the catalog before 015"
+expect_err "VW8 015 rollback twice" G3_X_BOUND_ROLLBACK_NOT_APPLIED own -f "$x015rb"
+own -f "$x015" >/dev/null || fail "VW9 015 re-apply"
+[ "$(catalog)" = "$c_015" ] || fail "VW9 the re-applied catalog is not the first apply"
+echo "OK VW: 015 refusals (014 not applied, superuser, also the owner itself), apply = owner + worker EXECUTE only, re-apply refused, unknown row LEASE_LOST/null, API role denied; rollback refusals (superuser, also the owner itself, another body, a widened ACL), rollback = the catalog before 015, twice refused, re-apply = first apply"
 echo G3_G4_VERDICT_PASS
