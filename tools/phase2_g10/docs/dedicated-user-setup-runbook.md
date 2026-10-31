@@ -52,29 +52,33 @@ mkdir -p ~/clirun && cp -R /Users/yuya/.local/share/claude/versions/2.1.305 ~/cl
 再起動後はログインキーチェーンが閉じるので、_kaburun に再ログイン（ファストユーザースイッチ）が必要。
 
 ## A3. ACL（向きを固定した）受け渡しフォルダを作る ▶GO（2つのセッションで実行）
-置き場：両ユーザーが通れる共有の場所。`/Users/Shared/g10-handoff` を使う。
-向き：in・flags は yuya=書き／_kaburun=読み、out・claims は _kaburun=書き／yuya=読み。
-POSIX の 0755＋所有者だけ書き込み、で向きは成り立つ（group/other は書けない＝コードの安全確認も通る）。
+置き場：両ユーザーが通れる共有の場所 `/Users/Shared`（sticky 1777）。向きを保つため、**所有者ごとに別の親**にする
+（共有の親を片方が所有すると、もう片方がその中に作れない／触れてしまうため）。
+- in・flags は **yuya 所有**の `/Users/Shared/g10-handoff/` の下（yuya=書き・_kaburun=読み）。
+- out・claims は **_kaburun 所有**の `/Users/Shared/g10-kaburun/` の下（_kaburun=書き・yuya=読み）。
+POSIX 0755＋所有者だけ書き込みで向きは成立（group/other は書けない＝コードの安全確認も通る）。sticky なので互いの親は触れない。
 
 まず **yuya のセッション**で:
 
 ```
-mkdir -p /Users/Shared/g10-handoff && chmod 0755 /Users/Shared/g10-handoff && mkdir -p /Users/Shared/g10-handoff/in /Users/Shared/g10-handoff/flags && chmod 0755 /Users/Shared/g10-handoff/in /Users/Shared/g10-handoff/flags
+mkdir -p /Users/Shared/g10-handoff/in /Users/Shared/g10-handoff/flags && chmod 0755 /Users/Shared/g10-handoff /Users/Shared/g10-handoff/in /Users/Shared/g10-handoff/flags
 ```
 
 次に **_kaburun のセッション**で:
 
 ```
-mkdir -p /Users/Shared/g10-handoff/out /Users/Shared/g10-handoff/claims && chmod 0755 /Users/Shared/g10-handoff/out && chmod 0700 /Users/Shared/g10-handoff/claims
+mkdir -p /Users/Shared/g10-kaburun/out /Users/Shared/g10-kaburun/claims && chmod 0755 /Users/Shared/g10-kaburun /Users/Shared/g10-kaburun/out && chmod 0700 /Users/Shared/g10-kaburun/claims
 ```
 
-検証（所有者と権限。in/flags=yuya、out/claims=_kaburun、どれも group/other に w が無いこと）:
+検証（in/flags=yuya、out/claims=_kaburun、どれも group/other に w が無いこと）:
 
 ```
-ls -lde /Users/Shared/g10-handoff/in /Users/Shared/g10-handoff/flags /Users/Shared/g10-handoff/out /Users/Shared/g10-handoff/claims
+ls -lde /Users/Shared/g10-handoff/in /Users/Shared/g10-handoff/flags /Users/Shared/g10-kaburun/out /Users/Shared/g10-kaburun/claims
 ```
 
-（任意の追加硬化：明示 ACL を足すなら、例えば in に `chmod +a "_kaburun allow read,execute,list,search,readattr,readextattr" /Users/Shared/g10-handoff/in`。POSIX だけでも向きは成立するので必須ではない。）
+→ 以後のパス: in=`/Users/Shared/g10-handoff/in`、flags=`/Users/Shared/g10-handoff/flags`、
+out=`/Users/Shared/g10-kaburun/out`、claims=`/Users/Shared/g10-kaburun/claims`。
+（2026-10-31 に Part A を実機で実行・検証済み: 固定版CLI /Users/_kaburun/clirun/2.1.305・loggedIn true・上記4フォルダ作成。）
 
 ---
 # Part B — 実機結線に、先に必要な小さなコード（非特権・私が次に作る）
@@ -117,6 +121,6 @@ yuya が ingest+finalize → REPORT。
 ---
 ## 撤去（やめる場合・管理者）
 - LaunchAgent: `launchctl bootout gui/503/com.g10.jobrunner`（_kaburun）。
-- フォルダ・固定版 CLI: 各所有者が rm。
+- フォルダ・固定版 CLI: 各所有者が rm（/Users/Shared/g10-handoff は yuya、/Users/Shared/g10-kaburun と ~/clirun は _kaburun）。
 - ユーザーごとやめる: `sudo sysadminctl -deleteUser _kaburun`。
 - 既存の同一ユーザー自動実行（f998feb5）は独立なので影響しない。
