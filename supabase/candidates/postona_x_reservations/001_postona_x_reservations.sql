@@ -499,14 +499,16 @@ begin
   return v_row;
 end $$;
 
-/** Explicit owner reschedule. A manual post's consent is invalidated until reconfirmed. */
+/** Explicit owner reschedule. A manual post's consent is invalidated until reconfirmed. A "send now" row (005: draft
+ *  `single:...`) is never a reservation, even when handed back to 'planned' before any send: moving it would make it the
+ *  delivery worker's (G3-02 #7); it stays with its own retry (post_now_begin). */
 create function postona_x_resv.reschedule(p_reservation_id uuid, p_expected_revision integer, p_new_at timestamptz)
 returns setof postona_x_resv.reservation_view
 language plpgsql volatile security definer set search_path = '' as $$
 declare v_row postona_x_resv.reservations%rowtype; v_band jsonb;
 begin
   v_row := postona_x_resv.lock_own(p_reservation_id, p_expected_revision);
-  if v_row.status <> 'planned' then raise exception 'POSTONA_RESV_NOT_PLANNED' using errcode = 'P0001'; end if;
+  if v_row.status <> 'planned' or v_row.draft_id ~ '^single:' then raise exception 'POSTONA_RESV_NOT_PLANNED' using errcode = 'P0001'; end if;
   if p_new_at is null or p_new_at < pg_catalog.now() + interval '5 minutes' or p_new_at > pg_catalog.now() + interval '90 days' then
     raise exception 'POSTONA_RESV_TIME_OUT_OF_RANGE' using errcode = 'P0001';
   end if;

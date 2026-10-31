@@ -436,4 +436,18 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await pair(), before, "the existing pair is left as it was");
     assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations where draft_id = 'g3app_g4'"), 0, "the refused save wrote nothing");
   });
+
+  await t.step("L17 a send now handed back before any send (SYNTHETIC shape) is not a reservation: the app store's reschedule -> NOT_PLANNED (final)", async () => {
+    const s = appX(a.token);
+    const made = await s.save(await saveRequest(a, "sn", at(50)));
+    assert.ok(made.kind === "saved", JSON.stringify(made));
+    const id = made.reservations[0].reservationId;
+    // SYNTHETIC: the row as 005 / 006 leave a released send now -- draft `single:...`, planned, due, expires_at = its own time
+    await owner("update postona_x_resv.reservations set draft_id = 'single:' || replace(id::text, '-', ''), scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute', expires_at = now() - interval '1 minute' where id = :'i'", { i: id });
+    const state = () => owner("select concat_ws('/', status, revision, consent_state, scheduled_at::text, expires_at::text) from postona_x_resv.reservations where id = :'i'", { i: id });
+    const before = await state();
+    const moved = await s.reschedule(id, made.reservations[0].revision, at(51));
+    assert.deepStrictEqual([moved, reservationErrorAction(moved.ok ? "" : moved.code)], [{ ok: false, code: "POSTONA_RESV_NOT_PLANNED" }, "final"]);
+    assert.deepStrictEqual(await state(), before, "the row is unchanged");
+  });
 });

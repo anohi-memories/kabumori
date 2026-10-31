@@ -1,7 +1,7 @@
 # G3 POSTONA reservations rollout manifest (G3-51, Issue #318). kind<TAB>step<TAB>path (relative to supabase/candidates)<TAB>sha256
 # install: applied top to bottom, each file in its own transaction. rollback: the verified reverse order (G3-41 install_rollback_run.sh,
 # G3-48 / G3-49 g4_verdict_run.sh): 015, 014, 013 first; Threads 009, 011, 007; X 008, 006, 005, 004, 003; 012 before 002; 010 before 001.
-install	x001	postona_x_reservations/001_postona_x_reservations.sql	fc7c645ec7bbd498974aaee896102798fc7362feee5088167924175d082a58c2
+install	x001	postona_x_reservations/001_postona_x_reservations.sql	86f02bbf2d0b744d7086d320b2729541b326a638e9931bc07ddfb1a50352e8bf
 install	x002	postona_x_reservations/002_postona_x_resv_api_role.sql	7d62fd1113221012f0baf1e4ec1852f3f8ca93012afffc7f66808c7bb213bedd
 install	x003	postona_x_reservations/003_postona_x_resv_g5_binding.sql	0e709731c24fbfb5cec820178a26e835444f7c894692e443f3a690471de96d19
 install	x004	postona_x_reservations/004_postona_x_resv_dispatch.sql	b803cb58212d6a6cd9c9f189c6faf1f36f3ce53fca08ae6d12541e0435930061

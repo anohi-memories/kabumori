@@ -224,4 +224,44 @@ rollback;
 select pg_temp.expect((select md5(prosrc) from pg_proc where oid = 'public.common_account_brand_service_state(text,text)'::regprocedure) = :'l8src', 'L8 F5 function restored');
 select 'L8_OWNER_CHECK_DEFENCE_IN_DEPTH_PASS' as result;
 
+-- L10 (G3-02 #7): "send now" next to reservations on one account.
+-- Measured as it is today (a product decision is pending, nothing changed): a send now is not held to the reservations'
+-- 60-minute gap (005 inserts it without the check), while a NEW reservation near an active send now is refused.
+create function pg_temp.resv(p_n integer, p_at timestamptz, p_draft text) returns text language sql as $$
+  select format('select reservation_id || ''/'' || status from postona_x_resv.create_batch(%L, gen_random_uuid(), 1, ''manual_exact'', null, jsonb_build_array(jsonb_build_object(''draft_id'', %L, ''scheduled_at'', %L::timestamptz, ''body'', %L, ''consent'', jsonb_build_object(''confirmed'', true, ''content_sha256'', %L))))',
+    pg_temp.account(p_n), p_draft, p_at, 'resv ' || p_draft, encode(sha256(convert_to('resv ' || p_draft, 'UTF8')), 'hex')) $$;
+select pg_temp.session(pg_temp.person(92)) as s92, pg_temp.session(pg_temp.person(96)) as s96 \gset
+select pg_temp.api(pg_temp.resv(92, now() + interval '30 minutes', 'l10r'), pg_temp.person(92), :'s92') as l10r \gset
+select pg_temp.expect(:'l10r' like '%/planned', 'L10 a reservation 30 minutes ahead: ' || :'l10r');
+select gen_random_uuid() as req10 \gset
+select pg_temp.api(pg_temp.begin_sp(pg_temp.account(92), :'req10', 'send now next to a reservation'), pg_temp.person(92), :'s92') as b10 \gset
+select pg_temp.expect(:'b10' like 'claimed/%', 'L10 measured: a send now 30 minutes before a reservation is accepted: ' || :'b10');
+select pg_temp.api(pg_temp.begin_sp(pg_temp.account(96), gen_random_uuid(), 'send now first'), pg_temp.person(96), :'s96') as b10b \gset
+select pg_temp.expect(:'b10b' like 'claimed/%', 'L10 setup: a send now for 96');
+select pg_temp.expect(pg_temp.api(pg_temp.resv(96, now() + interval '30 minutes', 'l10n'), pg_temp.person(96), :'s96') = 'ERR:POSTONA_RESV_SLOT_CONFLICT', 'L10 measured: a reservation 30 minutes after an active send now is refused');
+select pg_temp.expect(pg_temp.api(pg_temp.resv(96, now() + interval '61 minutes', 'l10f'), pg_temp.person(96), :'s96') like '%/planned', 'L10 61 minutes after it is accepted');
+-- Fixed: a send now handed back before any send ('planned', never sent) is not a reservation -- the reservation API cannot move
+-- it (before: rescheduled, reconfirmed, then claimed by the delivery worker, against 005's contract).
+select split_part(:'b10', '/', 2) as l10lease, split_part(:'b10', '/', 3) as l10id \gset
+select pg_temp.expect(postona_x_resv.release_claim(:'l10id', :'l10lease', 'SERVICE_BUSY'), 'L10 setup release');
+create function pg_temp.single_state(p_rid text) returns text language sql as $$
+  select concat_ws('/', status, revision, consent_state, scheduled_at = consent_scheduled_at, expires_at = scheduled_at, coalesce(claimed_by, '-'))
+  from postona_x_resv.reservations where id = p_rid::uuid $$;
+select pg_temp.single_state(:'l10id') as l10before \gset
+select pg_temp.expect(:'l10before' = 'planned/1/confirmed/t/t/-', 'L10 released: ' || :'l10before');
+select pg_temp.expect(pg_temp.api(format('select status from postona_x_resv.reschedule(%L, 1, now() + interval ''3 hours'')', :'l10id'), pg_temp.person(92), :'s92') = 'ERR:POSTONA_RESV_NOT_PLANNED', 'L10 a released send now is not rescheduled');
+select pg_temp.expect(pg_temp.single_state(:'l10id') = :'l10before', 'L10 the row is unchanged');
+begin;
+set local role postona_resv_worker;
+select coalesce(array_agg(c.reservation_id), '{}')::text as l10claimed from postona_x_resv.claim_due('w1', 120, 50) c \gset
+commit;
+select pg_temp.expect(not (:'l10id'::uuid = any (:'l10claimed'::uuid[])), 'L10 the delivery worker does not claim it');
+select pg_temp.expect(pg_temp.row_of(:'l10id') = 'expired/-', 'L10 the sweep closes it as never sent: ' || pg_temp.row_of(:'l10id'));
+-- its own retry still re-arms it (the same id), and the reservation next to it keeps its own reschedule / cancel
+select pg_temp.api(pg_temp.begin_sp(pg_temp.account(92), :'req10', 'send now next to a reservation'), pg_temp.person(92), :'s92') as b10c \gset
+select pg_temp.expect(:'b10c' like 'claimed/%' and split_part(:'b10c', '/', 3) = :'l10id', 'L10 retry re-arms: ' || :'b10c');
+select pg_temp.expect(pg_temp.api(format('select status || ''/'' || revision || ''/'' || consent_state from postona_x_resv.reschedule(%L, 1, now() + interval ''4 hours'')', split_part(:'l10r', '/', 1)), pg_temp.person(92), :'s92') = 'planned/2/needs_reconfirm', 'L10 a reservation still reschedules');
+select pg_temp.expect(pg_temp.api(format('select status from postona_x_resv.cancel(%L, 2)', split_part(:'l10r', '/', 1)), pg_temp.person(92), :'s92') = 'cancelled', 'L10 and cancels');
+select 'L10_SEND_NOW_NEXT_TO_RESERVATIONS_PASS' as result;
+
 select 'POSTONA_X_SINGLE_POST_LIVE_FENCE_BEHAVIOR_PASS' as result;
