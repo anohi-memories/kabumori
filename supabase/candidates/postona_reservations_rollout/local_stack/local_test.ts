@@ -464,4 +464,120 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const lookAlike = await s.save(await withDraft("x_single:1", at(56)));
     assert.deepStrictEqual(lookAlike.kind, "saved", JSON.stringify(lookAlike));
   });
+
+  // ---- G3-02 #9: one throw-away runtime end to end -- a person's HTTP create -> the delivery worker over HTTP -> claim (014's generation
+  // pin) -> ONE TEST_ONLY credentialFor -> 015's bound pre-send check -> the fake X -> finish -> the person's read-back. The fake snapshot
+  // and the fake X are the e2e twin's (TEST_ONLY); the production worker entry keeps NOT_CONNECTED. Nothing reaches the real X.
+  const WK2 = "postona-x-reservation-worker-e2etest";
+  const FAKE_TOKEN = "g3ls-FAKE-x-access-token-0001";
+  const deliver = async (secret = WORKER_SECRET) => {
+    const answer = await http(WK2, {}, undefined, { "x-postona-worker-secret": secret });
+    return { status: answer.status, report: answer.body.report as Record<string, number | boolean> | undefined, code: answer.body.code };
+  };
+  const xCalls = () => countOf("select count(*) from g3ls_test.x_calls");
+  const generationOf = (account: string) => owner("select postona_x_resv.x_credential_generation(:'a')", { a: account });
+  const snapshot = (account: string, generation: string) =>
+    owner("insert into g3ls_test.x_token_snapshot values (:'a', :'t', :'g') on conflict (social_account_id) do update set token = excluded.token, generation = excluded.generation", { a: account, t: FAKE_TOKEN, g: generation });
+  const xMode = (mode: string) => owner("update g3ls_test.x_mode set mode = :'m'", { m: mode });
+  // SYNTHETIC clock: the row is due now (its consent instant moves with it, as a confirmed reschedule would leave it)
+  const makeDue = (id: string) => owner("update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute', expires_at = now() + interval '6 hours' where id = :'i'", { i: id });
+  const saved = async (name: string, days: number) => {
+    const made = await appX(a.token).save(await saveRequest(a, name, at(days)));
+    assert.ok(made.kind === "saved", JSON.stringify(made));
+    return made.reservations[0].reservationId;
+  };
+  const outcome = (id: string) => owner("select status || '/' || coalesce(outcome_code, '-') || '/' || coalesce(provider_post_id, '-') from postona_x_resv.reservations where id = :'i'", { i: id });
+  const zero = { claimed: 0, sends: 0, published: 0, failedBeforeSend: 0, uncertain: 0 };
+  const counts = (r: Record<string, number | boolean> | undefined) => r && { claimed: r.claimed, sends: r.sends, published: r.published, failedBeforeSend: r.failedBeforeSend, uncertain: r.uncertain };
+
+  await t.step("L19 E2E one send: HTTP create -> due -> worker HTTP -> generation-bound claim / pre-send -> fake X once -> published; read back; never again", async () => {
+    // SYNTHETIC housekeeping: earlier steps' due rows leave the run (expired by the sweep), so each step below counts only its own rows
+    await owner("update postona_x_resv.reservations set expires_at = now() - interval '1 second' where status = 'planned' and scheduled_at <= now()");
+    const id = await saved("e1", 60);
+    await makeDue(id);
+    // the production worker entry (NOT_CONNECTED) still claims nothing, even with a due row
+    const prod = await http(WK, {}, undefined, { "x-postona-worker-secret": WORKER_SECRET });
+    assert.deepStrictEqual([prod.status, (prod.body.report as Record<string, unknown>).claimed, (prod.body.report as Record<string, unknown>).notAvailable], [200, 0, true]);
+    // the e2e twin: no / wrong secret -> 401 before anything
+    assert.deepStrictEqual((await deliver("w".repeat(48))).status, 401);
+    assert.deepStrictEqual([await xCalls(), await rowState(id)], [0, "planned/1/-"]);
+    await snapshot(a.account!, await generationOf(a.account!));
+    const run = await deliver();
+    assert.deepStrictEqual([run.status, counts(run.report)], [200, { ...zero, claimed: 1, sends: 1, published: 1 }], JSON.stringify(run));
+    assert.deepStrictEqual(await xCalls(), 1);
+    assert.deepStrictEqual(await owner("select bearer_sha256 = encode(sha256(convert_to(:'b', 'UTF8')), 'hex') and text = 'G3-02 app e1' from g3ls_test.x_calls", { b: `Bearer ${FAKE_TOKEN}` }), "t", "the fake X got the snapshot's token and the stored text");
+    assert.match(await outcome(id), /^published\/PUBLISHED\/9[0-9]{9}$/u);
+    const back = await appX(a.token).get(id);
+    assert.ok(back.ok && back.value.status === "published", JSON.stringify(back));
+    const other = await appX(b.token).get(id);
+    assert.deepStrictEqual(other, { ok: false, code: "POSTONA_RESV_NOT_FOUND" });
+    const again = await deliver();
+    assert.deepStrictEqual([counts(again.report), await xCalls()], [zero, 1], "a second run sends nothing");
+  });
+
+  await t.step("L20 E2E reconnect between snapshot and claim (generation changed): claimed, NOT sent (CREDENTIAL_GENERATION_CHANGED)", async () => {
+    const id = await saved("e2", 61);
+    await makeDue(id);
+    const g0 = await generationOf(a.account!);
+    await snapshot(a.account!, g0);   // the source's snapshot, taken before the reconnect
+    assert.deepStrictEqual(await xDisconnect(a), "done");
+    assert.deepStrictEqual(await xConnect(a, "a4", "62001"), a.account);
+    const g1 = await generationOf(a.account!);
+    assert.notDeepStrictEqual(g1, g0, "a reconnect changes the generation");
+    const run = await deliver();
+    assert.deepStrictEqual(counts(run.report), { ...zero, claimed: 1, failedBeforeSend: 1 }, JSON.stringify(run));
+    assert.deepStrictEqual([await outcome(id), await xCalls()], ["failed/CREDENTIAL_GENERATION_CHANGED/-", 1]);
+    await snapshot(a.account!, g1);
+  });
+
+  await t.step("L21 E2E no claim while disconnected or after the service ended; a cancel before the run is never sent", async () => {
+    const id = await saved("e3", 62);
+    await makeDue(id);
+    assert.deepStrictEqual(await xDisconnect(a), "done");
+    assert.deepStrictEqual([counts((await deliver()).report), await rowState(id)], [zero, "planned/1/-"]);
+    assert.deepStrictEqual(await xConnect(a, "a5", "62001"), a.account);
+    await snapshot(a.account!, await generationOf(a.account!));
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: a.userId });   // SYNTHETIC end
+    const ended = await deliver();
+    await owner("update public.service_entitlements set status = 'active', ended_at = null where user_id = :'u' and service_key = 'x_autopost'", { u: a.userId });
+    assert.deepStrictEqual([counts(ended.report), await rowState(id)], [zero, "planned/1/-"]);
+    const cancelled = await appX(a.token).cancel(id, 1);
+    assert.ok(cancelled.ok && cancelled.value.status === "cancelled", JSON.stringify(cancelled));
+    assert.deepStrictEqual([counts((await deliver()).report), await xCalls()], [zero, 1]);
+  });
+
+  await t.step("L22 E2E an unknown X answer -> uncertain, never re-sent, not cancellable (final)", async () => {
+    const id = await saved("e4", 63);
+    await makeDue(id);
+    await xMode("unknown");
+    const run = await deliver();
+    await xMode("ok");
+    assert.deepStrictEqual(counts(run.report), { ...zero, claimed: 1, sends: 1, uncertain: 1 }, JSON.stringify(run));
+    assert.deepStrictEqual([await outcome(id), await xCalls()], ["uncertain/X_TRANSPORT_UNKNOWN/-", 2]);
+    assert.deepStrictEqual([counts((await deliver()).report), await xCalls()], [zero, 2], "never re-sent");
+    const cancel = await appX(a.token).cancel(id, 1);
+    assert.deepStrictEqual([cancel, reservationErrorAction(cancel.ok ? "" : cancel.code)], [{ ok: false, code: "POSTONA_RESV_ALREADY_FINAL" }, "final"]);
+  });
+
+  await t.step("L23 E2E X refuses (401) -> recorded failed before send (X_REJECTED_401), never retried", async () => {
+    const id = await saved("e5", 64);
+    await makeDue(id);
+    await xMode("reject_401");
+    const run = await deliver();
+    await xMode("ok");
+    assert.deepStrictEqual(counts(run.report), { ...zero, claimed: 1, sends: 1, failedBeforeSend: 1 }, JSON.stringify(run));
+    assert.deepStrictEqual([await outcome(id), await xCalls()], ["failed/X_REJECTED_401/-", 3]);
+    assert.deepStrictEqual([counts((await deliver()).report), await xCalls()], [zero, 3]);
+  });
+
+  await t.step("L24 E2E two workers at once: each due row is claimed and sent exactly once", async () => {
+    const ids = [await saved("e6", 65), await saved("e7", 66), await saved("e8", 67)];
+    for (const id of ids) await makeDue(id);
+    const runs = await Promise.all([deliver(), deliver()]);
+    const sum = (k: string) => runs.reduce((n, r) => n + Number(r.report?.[k] ?? 0), 0);
+    assert.deepStrictEqual([sum("claimed"), sum("sends"), sum("published")], [3, 3, 3], JSON.stringify(runs));
+    assert.deepStrictEqual(await xCalls(), 6);
+    assert.deepStrictEqual(await owner("select count(distinct text) || '/' || count(*) from g3ls_test.x_calls where text in ('G3-02 app e6', 'G3-02 app e7', 'G3-02 app e8')"), "3/3");
+    for (const id of ids) assert.match(await outcome(id), /^published\/PUBLISHED\/9[0-9]{9}$/u);
+  });
 });
