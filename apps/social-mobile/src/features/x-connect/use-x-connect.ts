@@ -103,6 +103,7 @@ export function useXConnect(onConnected?: () => void) {
     setVerifiedHandle(null);
     let rawState: string | null = null;
     let codeVerifier: string | null = null;
+    let exchangeOwner: ConnectOwner | null = null;
     try {
       if (!supabase || !session?.access_token) throw new Error('AUTH_SESSION_UNAVAILABLE');
       const startSession = await currentSession();
@@ -160,6 +161,7 @@ export function useXConnect(onConnected?: () => void) {
         setState('session_changed');
         return;
       }
+      exchangeOwner = owner;
       const { data: callbackData, error: callbackError } = await supabase.functions.invoke<{ success?: unknown; handle?: unknown }>(
         'x-oauth-connect-user/callback',
         {
@@ -181,7 +183,13 @@ export function useXConnect(onConnected?: () => void) {
       setState('connected');
       onConnected?.();
     } catch (error) {
-      setState(FAILURE_STATE[classifyXConnectFailure(error)]);
+      const failure = classifyXConnectFailure(error);
+      setState(FAILURE_STATE[failure]);
+      // G4-02 #6: the code was sent and the answer is unknown (network / 5xx): the connect may have landed. Re-read the shared
+      // data (never claiming either outcome), for the same person and session only. A definite refusal changes nothing.
+      if (exchangeOwner && failure === 'retryable' && isConnectOwner(exchangeOwner, await currentSession().catch(() => null))) {
+        onConnected?.();
+      }
     } finally {
       rawState = null;
       codeVerifier = null;

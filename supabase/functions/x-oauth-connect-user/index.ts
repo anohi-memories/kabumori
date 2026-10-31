@@ -8,6 +8,8 @@ import {
   completeConnection,
   resolveConnectingUser,
   startConnection,
+  X_AUTH_PROFILE_ENV,
+  xAuthProfilePinned,
   type CallbackRequest,
   type StartRequest,
 } from "./oauth_logic.ts";
@@ -18,6 +20,8 @@ function json(body: Record<string, unknown>, status = 200) {
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  if (!xAuthProfilePinned(Deno.env.get(X_AUTH_PROFILE_ENV))) return json({ error: "X_CONNECT_PROFILE_UNAVAILABLE" }, 503);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");

@@ -82,7 +82,8 @@ function x(url) {
 }
 
 // ---- the REAL Edge handler, run in Node with a minimal Deno stand-in --------------------------------------------------------
-const EDGE_ENV = { SUPABASE_URL, SUPABASE_ANON_KEY: ANON_KEY, X_CLIENT_ID: 'flow-x-client', X_CLIENT_SECRET: 'flow-x-secret' };
+const EDGE_ENV = { SUPABASE_URL, SUPABASE_ANON_KEY: ANON_KEY, X_CLIENT_ID: 'flow-x-client', X_CLIENT_SECRET: 'flow-x-secret', POSTONA_X_AUTH_PROFILE: 'personal' };
+let loseCallbackAnswer = false;  // the Edge runs, its answer never reaches the app (an unknown outcome)
 let edge = null;
 globalThis.Deno = { serve: (handler) => { edge = handler; }, env: { get: (k) => EDGE_ENV[k] } };
 const requests = [];
@@ -92,7 +93,9 @@ const route = async (input, init = {}) => {
   const bodyText = init.body === undefined ? undefined : String(init.body);
   requests.push({ url, authorization: headers.get('Authorization') });
   if (url.startsWith(`${SUPABASE_URL}/functions/v1/x-oauth-connect-user`)) {
-    return edge(new Request(url, { method: init.method ?? 'POST', headers, body: bodyText }));
+    const answer = await edge(new Request(url, { method: init.method ?? 'POST', headers, body: bodyText }));
+    if (loseCallbackAnswer && url.endsWith('/callback')) throw new TypeError('the connection was lost');
+    return answer;
   }
   if (url.startsWith(`${SUPABASE_URL}/rest/v1/rpc/`)) {
     return postgrest(url.slice(`${SUPABASE_URL}/rest/v1/rpc/`.length).split('?')[0], bodyText ? JSON.parse(bodyText) : {}, headers.get('Authorization'));
@@ -242,6 +245,36 @@ test(`[${MODE}] A disconnects: ${G4 ? 'unconnected, one reload; then reconnects'
   } else {
     assert.equal(a.render().state, 'terminal_error');
     assert.equal(account(A), 'identity_verified/x_g4ta');
+  }
+});
+
+test(`[${MODE}] the callback's answer is lost after the server ran it: retry state, the accounts are re-read (G4-02 #6)`, async () => {
+  const a = app({ ui: SESSION_A, script: [SESSION_A] });
+  loseCallbackAnswer = true;
+  try {
+    await a.render().connect();
+  } finally {
+    loseCallbackAnswer = false;
+  }
+  assert.equal(a.render().state, 'retryable_error', a.render().stateText);
+  assert.equal(a.reloads(), 1, 'the outcome is unknown: re-read, never claim either');
+});
+
+test(`[${MODE}] the Edge has no pinned personal profile (unset / full): 503 before Auth, the database or X; nothing reloaded (G4-02 #6)`, async () => {
+  const pinned = EDGE_ENV.POSTONA_X_AUTH_PROFILE;
+  try {
+    for (const value of [undefined, 'full']) {
+      EDGE_ENV.POSTONA_X_AUTH_PROFILE = value;
+      const before = requests.length;
+      const a = app({ ui: SESSION_A, script: [SESSION_A] });
+      await a.render().connect();
+      assert.equal(a.render().state, 'retryable_error', a.render().stateText);
+      assert.equal(a.reloads(), 0);
+      // (the app's own retry rule may repeat the start; nothing else is ever called)
+      assert.deepEqual([...new Set(requests.slice(before).map((r) => r.url))], [`${SUPABASE_URL}/functions/v1/x-oauth-connect-user`]);
+    }
+  } finally {
+    EDGE_ENV.POSTONA_X_AUTH_PROFILE = pinned;
   }
 });
 
