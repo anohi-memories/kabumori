@@ -16,6 +16,7 @@
 #   test    local_test.ts (phases L0-L12, real HTTP; G3-02 #2: create / reschedule / reconfirm decided in the database).
 #   e2e     G3-02 #9: a TEST ONLY worker twin (postona-x-reservation-worker-e2etest) with a FAKE credential snapshot and a fake X in a
 #           g3ls_test schema (a throw-away login reaches only that schema; both dropped before RB); L19-L24.
+#   g1      G3-02 #13: g1_screen_integration.test.mjs: G1's real screen (PR #606, pinned, read only) over G3's real stores on this runtime.
 #   tick    G3-02 #10 / #11: 016 (worker tick: a signed one-use ticket, the target pinned to a project ref) + pg_net / pg_cron on this
 #           stack only, a TEST ONLY target (g3ls_test.tick_target: this stack's kong entries) and Vault key; L25-L31, then the real
 #           pg_cron job, an alias job and a superuser's job refusing 016's rollback (G3-02 #12), the administrator's read-back, the
@@ -116,6 +117,7 @@ case "${G3LS_MUTANT:-}" in
   tick_no_lock) mutate16 "  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:worker_tick', 0)) then" "  if false then" ;;
   tick_short_secret) mutate16 " or pg_catalog.length(v_key) < 32 then" " then" ;;
   tick_key_in_header) mutate16 "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json'," "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json', 'x-postona-worker-secret', v_key," ;;
+  g1_writes_stay_on|g1_write_resent) ;;   # applied below, to the extracted G1 copy
   *) fail "unknown G3LS_MUTANT" ;;
 esac
 RO_SH="$bundle/rollout.sh"; [ "${G3LS_MUTANT:-}" = host_any ] && RO_SH="$WORK/bundle/rollout.sh"
@@ -263,6 +265,19 @@ env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLI
   deno test --no-config --no-check --cached-only \
     --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_API_PW,G3LS_WORKER_PW,G3LS_WORKER_SECRET,G3LS_JWT_SECRET \
     --allow-net="127.0.0.1:$API_PORT" --allow-run=psql "$here/local_test.ts"
+
+# ---- G3-02 #13: G1's real reservations screen (PR #606, pinned, read only) over G3's real stores and this runtime -----------------------
+G1PIN=f0c5148d20e7e54654375b93591539eb8f99bf9c
+mkdir -p "$WORK/g1"
+git -C "$REPO" archive "$G1PIN" apps/social-mobile/src/app/reservations apps/social-mobile/src/features/reservations apps/social-mobile/src/domain/service-enrollment.ts | tar -x -C "$WORK/g1" \
+  || fail "G1 pin $G1PIN is not available locally (git fetch origin claude/g1-postona-reservations-screen-20261031)"
+case "${G3LS_MUTANT:-}" in   # mutation runs only: the extracted copy of G1's screen, never G1's source
+  g1_writes_stay_on) mutate "$WORK/g1/apps/social-mobile/src/app/reservations/index.tsx" 'if (view.blocks) setBlockedScope(mine);' '' ;;
+  g1_write_resent) mutate "$WORK/g1/apps/social-mobile/src/app/reservations/index.tsx" "        fail(result.code, mine, sentToken, rereadX);" "        fail(result.code, mine, sentToken, rereadX); await op();" ;;
+esac
+env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLISHABLE" G3LS_DB_PORT="$DB_PORT" G3LS_JWT_SECRET="$JWT_SECRET" G3LS_G1_DIR="$WORK/g1" \
+  node --test "$here/g1_screen_integration.test.mjs" || fail "G1 screen integration"
+echo "OK G1 SCREEN: G1's real screen (PR #606 $G1PIN) over G3's real stores and the real GoTrue / Kong / Edge / Postgres"
 
 # ---- G3-02 #10: the real pg_cron job calls the worker on its own; then the job, then 016 roll back (each refusal checked) -------------
 if own -f "$X16/016_postona_x_resv_worker_tick_schedule_rollback.sql" >/dev/null 2>&1; then fail "unschedule without a job"; fi
