@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from g10runner import autorun, code_edit, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, registry, release, signing, wiring  # noqa: E402
 from g10runner.control import Control, GoReuseError  # noqa: E402
 from g10runner.fsutil import sha256_hex  # noqa: E402
-from g10runner.layout import Layout  # noqa: E402
+from g10runner.layout import Layout, SplitLayout  # noqa: E402
 
 # 初回の監督付き1回のためのポリシー（認証なしの REST の 60回/時×0.5 に収まる間隔・1時間に1回だけの起動）
 FIRST_RUN_TIMING = {"issue_monitor_interval": 300.0}
@@ -258,6 +258,51 @@ def cmd_jobrunner_plist(a):
     return 0 if lint_ok else 1
 
 
+def cmd_watchdog_plist(a):
+    """（B1d）exec プレーンの S2 見張り役（g10_watchdog.py）の LaunchAgent（gui/503）の plist を作って検査するだけ。
+    固定版の中の g10_first_run.py からのみ。登録しない。exec は pub の symlink で制御状態を読むので --control-pub は要らない。"""
+    manifest = release.package_manifest(PACKAGE)
+    if manifest is None:
+        raise SystemExit("run watchdog-plist from an installed release (bin/g10_first_run.py install first)")
+    digest = manifest.get("digest", "")
+    problems = release.verify(PACKAGE, digest)
+    if problems:
+        raise SystemExit("release verification failed: %s" % "; ".join(problems[:3]))
+    root = os.path.realpath(a.root)
+    out_dir = os.path.realpath(a.plans or os.path.join(root, "launchd-plans"))
+    os.makedirs(out_dir, 0o700, exist_ok=True)
+    os.makedirs(os.path.join(root, "logs"), 0o700, exist_ok=True)
+    plan = launchd_plan.user_agent_plan("watchdog", "/usr/bin/python3", root, a.interval, digest, package_root=PACKAGE)
+    path = os.path.join(out_dir, plan["Label"] + ".plist")
+    with open(path, "wb") as f:
+        f.write(launchd_plan.render_validated_agent(plan, PACKAGE))
+    lint_ok = launchd_plan.lint(path)
+    print(json.dumps({"release_digest": digest, "kind": "watchdog", "path": path, "lint_ok": lint_ok,
+                      "registered": False, "commands_not_run": launchd_plan.agent_commands(plan["Label"], path)},
+                     ensure_ascii=False, indent=1))
+    return 0 if lint_ok else 1
+
+
+def cmd_exec_init(a):
+    """（B1c）exec プレーンの wiring.json を yuya の wiring（雛形）から組み立て、ディレクトリと pub→control_pub の
+    symlink を作って検証する。鍵（agent.key・witness.key・4つの .pub）は --keys-dir に置かれている前提（B1b）。
+    runner・human の秘密鍵は入れない（exec_wiring_doc が {agent,witness} だけにする）。クロちゃんは特権操作をしない。"""
+    exec_root = os.path.realpath(a.root)
+    with open(a.from_wiring, encoding="utf-8") as f:
+        template = json.load(f)
+    doc = wiring.exec_wiring_doc(template, os.path.realpath(a.keys_dir))
+    os.makedirs(exec_root, exist_ok=True)
+    wiring.write(exec_root, doc)  # validate + key_fingerprints（鍵が公開鍵と一致すること）+ 0600
+    SplitLayout(exec_root, os.path.realpath(a.control_pub)).ensure()  # agent-out/work/requests + pub symlink
+    signer, _verifier = wiring.agent_side(exec_root)  # agent 鍵が実際に使えること
+    authority = [r for r in ("runner", "human") if r in doc["private_keys"]]
+    print(json.dumps({"exec_root": exec_root, "wiring": "written (0600)",
+                      "private_roles": sorted(doc["private_keys"]), "authority_private_keys": authority,
+                      "pub_symlink": os.readlink(os.path.join(exec_root, "pub")),
+                      "agent_can_sign": signer.can_sign("agent")}, ensure_ascii=False, indent=1))
+    return 0 if not authority and signer.can_sign("agent") else 1
+
+
 def cmd_auth_check(a):
     missing = [n for n in a.with_env if n not in os.environ]
     if missing:
@@ -303,6 +348,15 @@ def main(argv=None):
     c = sub.add_parser("auth-check")
     c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
+    wp = sub.add_parser("watchdog-plist")
+    wp.add_argument("--root", required=True, help="exec_root（_kaburun 所有）")
+    wp.add_argument("--interval", type=float, default=60.0)
+    wp.add_argument("--plans", help="plist の出力先（既定はルートの launchd-plans/）")
+    ei = sub.add_parser("exec-init")
+    ei.add_argument("--root", required=True, help="exec_root（_kaburun 所有）")
+    ei.add_argument("--control-pub", required=True, help="制御の公開状態の yuya 所有・読み取り専用ディレクトリ")
+    ei.add_argument("--keys-dir", required=True, help="agent.key・witness.key・4つの .pub がある _kaburun 所有の鍵ディレクトリ")
+    ei.add_argument("--from-wiring", required=True, help="yuya の wiring.json（雛形。issue_source・ledger・version・mode を写す）")
     jp = sub.add_parser("jobrunner-plist")
     jp.add_argument("--root", required=True, help="exec プレーンの初期化済みルート")
     jp.add_argument("--in", dest="in_dir", required=True, help="handoff/in（yuya 所有）")
@@ -317,7 +371,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt, "unhalt": cmd_unhalt,
             "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check,
-            "jobrunner-plist": cmd_jobrunner_plist,
+            "jobrunner-plist": cmd_jobrunner_plist, "watchdog-plist": cmd_watchdog_plist, "exec-init": cmd_exec_init,
             "code-edit-policy": cmd_code_edit_policy}[a.cmd](a)
 
 

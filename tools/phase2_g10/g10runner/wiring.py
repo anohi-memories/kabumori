@@ -288,6 +288,21 @@ def agent_side(root):
     return signer(root, cfg, "agent"), verifier(root, cfg)
 
 
+def exec_wiring_doc(template, keys_dir):
+    """B0-3/B1c: control 側の wiring（template）を雛形に、exec プレーン用の wiring を作る。
+
+    public_keys=4役割の .pub（keys_dir）、private_keys は **{agent, witness} だけ**（keys_dir の .key）。
+    issue_source・ledger・version・mode は template のまま写す。**runner・human の秘密鍵は決して入れない**
+    （これがあると制御・GO・CLAIM を偽造できる）。ecdsa（実 Claude）専用。"""
+    if template.get("mode") == "hmac":
+        raise WiringError("exec wiring is for ecdsa mode (real Claude), not hmac")
+    keys_dir = os.path.abspath(keys_dir)
+    pub = {role: os.path.join(keys_dir, role + ".pub") for role in signing.ROLES}
+    priv = {role: os.path.join(keys_dir, role + ".key") for role in EXECUTION_SIDE_PRIVATE_ROLES}
+    return {"version": template["version"], "mode": template["mode"], "public_keys": pub,
+            "private_keys": priv, "issue_source": template["issue_source"], "ledger": template.get("ledger")}
+
+
 # --- 回数台帳 ---
 def ledger_allowance(policy, watchdog_interval, phase1_per_hour=None, safety=rb.DEFAULT_SAFETY, mode="token",
                      api="graphql"):

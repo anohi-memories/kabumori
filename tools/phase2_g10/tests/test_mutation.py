@@ -75,6 +75,11 @@ MUTANTS = [
      'self.requests = os.path.join(self.agent_out, "requests")',
      'self.requests = os.path.join(self.pub, "requests")',
      "test_task42_control_state_split.SplitLayoutPaths.test_control_paths_in_pub_and_exec_writes_in_root"),
+    # --- B1c: exec 側 wiring の秘密鍵を {agent,witness} に限る wiring.py ---
+    ("exec wiring includes authority private keys", "g10runner/wiring.py",
+     'priv = {role: os.path.join(keys_dir, role + ".key") for role in EXECUTION_SIDE_PRIVATE_ROLES}',
+     'priv = {role: os.path.join(keys_dir, role + ".key") for role in signing.ROLES}',
+     "test_task43_exec_setup.ExecWiringDoc.test_private_keys_are_agent_and_witness_only"),
     # --- TASK 35: 専用ユーザー方式のジョブ受け口 handoff.py ---
     ("handoff signature not verified", "g10runner/handoff.py",
      'if not isinstance(doc.get("sig"), str) or not verifier.verify(role, canonical(body), doc["sig"]):\n        raise HandoffError("job signature does not verify")',

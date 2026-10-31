@@ -151,33 +151,31 @@ sudo chown _kaburun /Users/_kaburun/g10-exec/keys/* && sudo chmod 0600 /Users/_k
 witness.key・4つの .pub が _kaburun 所有・.key は 0600）。runner.key・human.key が無いこと。
 
 ### B1c. exec プレーンの組み立て（wiring・ディレクトリ・pub symlink）▶GO（_kaburun のセッション）
-exec_root の wiring.json（issue_source・ledger は yuya の wiring.json に合わせる。public_keys=4役割の .pub、
-private_keys={agent,witness} を上の _kaburun 所有の鍵に向ける）を置き、agent-out/work/requests を作り、`pub` を control_pub への
-symlink にする（実体ディレクトリにしない）:
+wiring.json の手書きは誤りやすいので、`g10_first_run.py exec-init` が **yuya の wiring.json を雛形に**組み立てる
+（issue_source・ledger・version・mode は雛形のまま写し、public_keys=4役割の .pub、private_keys は **{agent,witness} だけ**を
+`--keys-dir` の鍵に向ける。runner/human の秘密鍵は決して入れない）。agent-out/work/requests を作り、`pub` を control_pub への
+symlink にし、`wiring.load` と `wiring.agent_side` で検証する（鍵の指紋一致・runner/human 秘密鍵が無いこと・agent 鍵が使えること）:
 
 ```
-ln -s /Users/Shared/g10-control-pub /Users/_kaburun/g10-exec/pub
-mkdir -p /Users/_kaburun/g10-exec/agent-out/requests /Users/_kaburun/g10-exec/work
+/usr/bin/python3 -I <固定版>/bin/g10_first_run.py exec-init --root /Users/_kaburun/g10-exec \
+  --control-pub /Users/Shared/g10-control-pub --keys-dir /Users/_kaburun/g10-exec/keys \
+  --from-wiring ~/g10-control/wiring.json   # ← yuya の wiring.json を _kaburun が読める形で渡す（雛形。秘密は含まない）
 ```
 
-wiring.json の形（_kaburun 所有 0600。鍵パスは exec_root/keys を指す。issue_source・ledger は yuya のものと同じ値にする）:
-
-```
-{"version": <yuya と同じ>, "mode": "ecdsa",
- "public_keys": {"runner":".../keys/runner.pub","human":".../keys/human.pub","agent":".../keys/agent.pub","witness":".../keys/witness.pub"},
- "private_keys": {"agent":".../keys/agent.key","witness":".../keys/witness.key"},
- "issue_source": {"kind":"github_rest_anonymous"},
- "ledger": <yuya と同じ・または null>}
-```
-
-検証（_kaburun のセッション・固定版から）: `python3 -I -c "from g10runner import wiring; print(wiring.load('/Users/_kaburun/g10-exec') is not None)"`
-が True（鍵の指紋・公開鍵との一致・runner/human 秘密鍵が無いことを wiring.load が確かめる）。`readlink /Users/_kaburun/g10-exec/pub`
-が control_pub を指すこと。
+出力の `authority_private_keys` が空・`agent_can_sign` が true・`pub_symlink` が control_pub を指すこと。
+（exec-init は非特権。クロちゃんではなく _kaburun のセッションで実行する。）
 
 ### B1d. exec の S2 見張り役（watchdog）▶GO（_kaburun のセッション）
 起動直前の判定は新鮮な S2 心拍を要求する（無いと `supervisor_unavailable` で起動しない）。_kaburun の watchdog を
-`~/g10-exec/agent-out/s2_heartbeat.json` に心拍を書くよう常駐させる（B2 と同じく gui/503 の LaunchAgent。別 plist）。
-（watchdog の plist 生成はまだ用意していない＝次段の小さな非特権コードの候補。それまでは B3 の検証でも手動で心拍を置く。）
+gui/503 の LaunchAgent として常駐させる。plist は固定版から作る（作って lint するだけ・登録しない）:
+
+```
+/usr/bin/python3 -I <固定版>/bin/g10_first_run.py watchdog-plist --root /Users/_kaburun/g10-exec
+```
+
+出力の `path`（既定は `~/g10-exec/launchd-plans/com.kabumori.g10.phase2.agent.watchdog.plist`）を `~/Library/LaunchAgents/` に
+置き、`launchctl bootstrap gui/503 ~/Library/LaunchAgents/com.kabumori.g10.phase2.agent.watchdog.plist`。watchdog は
+`Layout(exec_root)` で pub の symlink を通じて制御状態を読むので `--control-pub` は要らない。恒久停止は同ラベルの bootout。
 
 → B1 が済んだら、下の B2（登録）→ B3（隔離検証）→ B4（実 -p ドライラン）→ B5（本番1回）に進む（各別途 GO）。
 
