@@ -32,6 +32,8 @@ from .fsutil import is_finite_number, sha256_hex
 GIT = "/usr/bin/git"
 GO_FIELDS = {"go_id", "approval_id", "task_sha256", "body_sha256", "cli_realpath", "cli_version", "home",
              "max_turns", "source_repo", "expires_at", "max_runs"}
+# source_bundle: 専用ユーザー方式の任意欄（§14.9 指摘1）。あれば handoff の bundle から用意し、yuya の repo を読まない
+OPTIONAL_GO_FIELDS = {"source_bundle"}
 READ_TOOLS = ("Read", "Glob", "Grep")
 DENIED_TOOLS = ("Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task")
 _SHA = re.compile(r"[0-9a-f]{64}")
@@ -92,7 +94,9 @@ def auth_status(cli_realpath, home, extra_env=None, timeout=AUTH_TIMEOUT):
 
 def go_problem(payload):
     """REAL_CLAUDE_GO の形の検査（state.derive が使う）。問題があれば理由、なければ None。"""
-    if not isinstance(payload, dict) or set(payload) != GO_FIELDS:
+    if not isinstance(payload, dict):
+        return "real claude GO fields invalid"
+    if not (GO_FIELDS <= set(payload)) or (set(payload) - GO_FIELDS) - OPTIONAL_GO_FIELDS:
         return "real claude GO fields invalid"
     p = payload
     if not all(isinstance(p[k], str) and p[k] for k in ("go_id", "approval_id")):
@@ -101,6 +105,8 @@ def go_problem(payload):
         return "real claude GO hashes invalid"
     if not all(isinstance(p[k], str) and os.path.isabs(p[k]) for k in ("cli_realpath", "home", "source_repo")):
         return "real claude GO paths must be absolute"
+    if "source_bundle" in p and not (isinstance(p["source_bundle"], str) and os.path.isabs(p["source_bundle"])):
+        return "real claude GO source_bundle must be an absolute path"
     if not (isinstance(p["cli_version"], str) and _VERSION.fullmatch(p["cli_version"])
             and os.path.basename(p["cli_realpath"]) == p["cli_version"]):
         return "real claude GO cli version invalid"
@@ -222,6 +228,10 @@ class RealClaudeAdapter:
         return env
 
     def source_preparer(self):
+        # 専用ユーザー方式: source_bundle があれば handoff の bundle から用意（yuya の repo を読まない。§14.9 指摘1）
+        bundle = self.go.get("source_bundle")
+        if bundle:
+            return BundleSourcePreparer(bundle)
         return GitSourcePreparer(self.go["source_repo"])
 
     def prelaunch(self, request, prompt_path, settings_path, used_states, now=None, edit=None):

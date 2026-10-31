@@ -78,3 +78,38 @@ class BundleSource(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GoSourceBundleWiring(unittest.TestCase):
+    """GO の任意欄 source_bundle: go_problem の検査と、アダプタが Bundle/Git を選ぶこと（§14.9 指摘1 の配線）。"""
+
+    def _go(self, **over):
+        import time
+        go = {"go_id": "g", "approval_id": "a", "task_sha256": "a" * 64, "body_sha256": "b" * 64,
+              "cli_realpath": "/opt/claude/2.1.305", "cli_version": "2.1.305", "home": "/Users/x",
+              "max_turns": 10, "source_repo": "/r", "expires_at": time.time() + 60, "max_runs": 1}
+        go.update(over)
+        return go
+
+    def test_go_without_source_bundle_still_valid(self):
+        from g10runner import real_claude
+        self.assertIsNone(real_claude.go_problem(self._go()))
+
+    def test_absolute_source_bundle_is_accepted(self):
+        from g10runner import real_claude
+        self.assertIsNone(real_claude.go_problem(self._go(source_bundle="/h/in/src.bundle")))
+
+    def test_relative_source_bundle_is_refused(self):
+        from g10runner import real_claude
+        self.assertIsNotNone(real_claude.go_problem(self._go(source_bundle="src.bundle")))
+
+    def test_unknown_extra_field_still_refused(self):
+        from g10runner import real_claude
+        self.assertIsNotNone(real_claude.go_problem(self._go(bogus=1)))
+
+    def test_adapter_selects_bundle_when_source_bundle_present(self):
+        from g10runner.real_claude import RealClaudeAdapter, BundleSourcePreparer, GitSourcePreparer
+        with_bundle = RealClaudeAdapter(self._go(source_bundle="/h/in/src.bundle"))
+        self.assertIsInstance(with_bundle.source_preparer(), BundleSourcePreparer)
+        without = RealClaudeAdapter(self._go())
+        self.assertIsInstance(without.source_preparer(), GitSourcePreparer)

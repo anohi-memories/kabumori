@@ -184,3 +184,30 @@ _kaburun 作成（済）／ジョブ実行エージェント登録（gui/503）�
   - 最低限、yuya の world/グループ可読ファイルに秘密を置かない。
 - **指摘2（contained）: 対応済み** — `~/.claude/.config.json` を HOME_DENY_LITERALS に追加（テスト・変異つき）。deny-list は本質的に whack-a-mole なので、指摘3のドライラン後に tight allow-list への移行を再検討。
 - **指摘3（liveness・要GO）**: 実 `-p` 限定編集の1回ドライランで、CLI が許可集合（~/.claude の許可部分）だけで動くか確認。その結果で ~/.claude の許可/拒否を最終確定。
+
+### 14.10 ジョブ実行エージェントの受け口（実装・TASK 35）
+14.8 の手順2「ジョブ実行エージェントの最小実装」の、**検証と CLAIM の中核**を実装した（起動は別段）。
+
+- **GO への source_bundle 配線（指摘1のコード側）**: REAL_CLAUDE_GO に任意欄 `source_bundle`（絶対パス）を追加。
+  あれば `RealClaudeAdapter.source_preparer()` が `BundleSourcePreparer` を選び、yuya の repo を一切読まずに
+  handoff の自己完結 bundle からソースを用意する。無ければ従来どおり `GitSourcePreparer`（同一ユーザー方式）。
+  `go_problem` は `source_bundle` だけを任意の追加欄として許し、それ以外の未知欄は従来どおり拒否する。
+- **handoff.py（_kaburun 側の受け口）**: `HandoffInbox(in_dir, claims_dir, verifier)` が `accept(filename)` で
+  ジョブ1件を fail-closed に受理する。
+  - **信頼の土台は署名**。ジョブは JSON 1ファイルで、`sig` を除いた canonical バイトに人（human）の鍵で署名
+    （chainlog と同じ canonical）。`role` は検証に使う鍵を選ぶので load-bearing（許可する役割は human のみ）。
+    handoff/in のファイルは yuya 所有なので uid 所有では信用しない。
+  - **多層目の構造チェック**: in は正規の絶対パスのフォルダでグループ／他人が書けないこと、ジョブファイルは
+    O_NOFOLLOW・通常ファイル・ハードリンクなし・他者書き込み不可、ファイル名は basename のみ、1 MiB 上限。
+    in は ACL で yuya=書き／_kaburun=読みに固定する前提（_kaburun は in に書けない＝自分で仕込めない）。
+  - **GO と要求の一致**: approval_id・task_sha256・本文ハッシュ（body_sha256＝prompt の SHA-256）が一致すること、
+    ジョブと GO の両方が期限内であること。
+  - **CLAIM（at-most-once）**: _kaburun 所有の claims フォルダに `claims/<job_id>.claim` を
+    `O_CREAT|O_EXCL|O_NOFOLLOW` で作る。成功＝今 CLAIM。既にあれば二重＝受けない（O_EXCL が直列化点・GO の
+    max_runs=1 と対）。**検証を通してから CLAIM**し、一度 CLAIM したら以降が失敗しても再実行しない。
+  - 起動はしない。受理結果（GO・要求・ソースの選び方 bundle/git）を返すだけ。実 CLI の起動は GO ゲートの別段。
+- テスト: test_task35_handoff（正常系3・拒否系18）、test_task34 の GO 配線5。変異7件（署名・役割・一致・期限・
+  CLAIM・source_bundle 検査・アダプタ選択）すべて正しい理由で fail。
+- **残り（別段・要GO）**: ① stub/agent 側を source preparer 選択に実結線し、bundle を使うラン全体の E2E（代役で）。
+  ② gui/503 の LaunchAgent から HandoffInbox を回す常駐ループ（in を監視・受理したら既存のスタブ起動に渡す）。
+  ③ 実 `-p` の1回ドライラン（指摘3）。②③は一度きりの特権作業・実機のため各別途GO。
