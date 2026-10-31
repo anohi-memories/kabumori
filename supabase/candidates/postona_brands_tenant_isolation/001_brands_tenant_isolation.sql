@@ -24,11 +24,14 @@
 --   BRANDS_ISOLATION_SUPERUSER             run by a superuser (run it as the owner of public.brands)
 --   BRANDS_ISOLATION_NOT_OWNER             the caller cannot act as the owner of public.brands
 --   BRANDS_FORCE_ROW_SECURITY              brands forces row security (the definer writers owned by the table owner would be filtered)
---   BRANDS_MEMBERSHIPS_NOT_ISOLATED        brand_memberships: row security off, its self read policy missing / changed, or an API write on it
+--   BRANDS_POLICY_UNVERIFIABLE             not PostgreSQL 17: the two member policies' conditions are pinned as PostgreSQL 17 prints them
+--   BRANDS_MEMBERSHIPS_NOT_ISOLATED        brand_memberships: row security off, its self read policy missing / changed (its whole condition is
+--                                          compared), or an API write on it
 --   BRANDS_MEMBER_POLICY                   the member read policy of brands is missing or is not 20260918120000's (authenticated, SELECT,
---                                          permissive, own memberships by auth.uid())
+--                                          permissive, and its WHOLE condition: the brand correlation and the person's own user_id, nothing else)
 --   BRANDS_UNREVIEWED_POLICY               another permissive policy on brands reaches PUBLIC / anon / authenticated (it would widen reads)
---   BRANDS_VIEW_BYPASS                     a view / materialized view reads brands as its owner and anon / authenticated may select it
+--   BRANDS_VIEW_BYPASS                     an owner-run view / a materialized view reads brands directly and anon / authenticated reach it
+--                                          (at any depth of a view chain, named by the chain's first view); a chain deeper than 32 views too
 --   BRANDS_INVOKER_WRITER                  a SECURITY INVOKER function anon / authenticated may execute writes brands (it would break)
 --   BRANDS_DEFINER_FILTERED                a SECURITY DEFINER function naming brands is owned by a role row security would filter
 --   BRANDS_MEMBER_READ_MISSING             authenticated cannot read the columns G1's snapshot reads (granting them is not this file's job)
@@ -71,11 +74,19 @@ begin
     raise exception 'BRANDS_FORCE_ROW_SECURITY: public.brands forces row security; the definer writers owned by its owner would be filtered';
   end if;
 
+  -- (G5-02 #4, H1 F1) the two member policies are compared by their WHOLE condition as PostgreSQL 17 prints it with an empty search_path
+  -- (whitespace collapsed); another major version may print them differently: refused rather than guessed
+  if pg_catalog.current_setting('server_version_num')::int not between 170000 and 179999 then
+    raise exception 'BRANDS_POLICY_UNVERIFIABLE: the member policies are pinned as PostgreSQL 17 prints them (this is %)', pg_catalog.current_setting('server_version');
+  end if;
+
   -- the membership rows the brands policy trusts: row security on, the self read policy as 20260918120000 made it, no API row write
   select pg_catalog.concat_ws('; ',
     case when not (select c.relrowsecurity from pg_catalog.pg_class c where c.oid = v_members) then 'row security off' end,
     case when not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = v_members and p.polname = 'social_mobile_membership_self_select'
-                            and p.polcmd = 'r' and p.polpermissive and p.polroles = array[v_auth]) then 'social_mobile_membership_self_select missing or changed' end,
+                            and p.polcmd = 'r' and p.polpermissive and p.polroles = array[v_auth] and p.polwithcheck is null
+                            and pg_catalog.regexp_replace(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '\s+', ' ', 'g')
+                                = '(( SELECT auth.uid() AS uid) = user_id)') then 'social_mobile_membership_self_select missing or changed' end,
     (select 'writable by ' || pg_catalog.string_agg(distinct x.rolname || ':' || k, ', ' order by x.rolname || ':' || k)
        from pg_catalog.pg_roles x, pg_catalog.unnest(array['INSERT', 'UPDATE', 'DELETE']) k
       where (pg_catalog.pg_has_role(v_anon, x.oid, 'MEMBER') or pg_catalog.pg_has_role(v_auth, x.oid, 'MEMBER'))
@@ -85,12 +96,13 @@ begin
     raise exception 'BRANDS_MEMBERSHIPS_NOT_ISOLATED: brand_memberships %', v_txt;
   end if;
 
-  -- the member read policy of brands, exactly 20260918120000's (by name, command, role, and a condition on the person's own memberships)
+  -- the member read policy of brands, exactly 20260918120000's: name, command, role and the whole condition (the brand correlation AND the
+  -- person's own user_id; a missing correlation, an added OR or any other change is refused)
   if not exists (select 1 from pg_catalog.pg_policy p
                   where p.polrelid = v_brands and p.polname = 'social_mobile_member_select_brands' and p.polcmd = 'r' and p.polpermissive
                     and p.polroles = array[v_auth] and p.polwithcheck is null
-                    and pg_catalog.pg_get_expr(p.polqual, p.polrelid) ~ 'public\.brand_memberships'
-                    and pg_catalog.pg_get_expr(p.polqual, p.polrelid) ~ 'bm\.user_id = \( SELECT auth\.uid\(\)')
+                    and pg_catalog.regexp_replace(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '\s+', ' ', 'g')
+                        = '(EXISTS ( SELECT 1 FROM public.brand_memberships bm WHERE ((bm.brand_id = brands.id) AND (bm.user_id = ( SELECT auth.uid() AS uid)))))')
   then
     raise exception 'BRANDS_MEMBER_POLICY: social_mobile_member_select_brands on public.brands is missing or is not 20260918120000''s';
   end if;
@@ -104,15 +116,32 @@ begin
     raise exception 'BRANDS_UNREVIEWED_POLICY: %', v_txt;
   end if;
 
-  -- a view runs as its owner (unless security_invoker), so row security on brands would not bind a person reading it
-  select pg_catalog.string_agg(distinct v.oid::regclass::text, ', ') into v_txt
-    from pg_catalog.pg_depend d
-    join pg_catalog.pg_rewrite w on d.classid = 'pg_catalog.pg_rewrite'::regclass and d.objid = w.oid
-    join pg_catalog.pg_class v on v.oid = w.ev_class
-   where d.refclassid = 'pg_catalog.pg_class'::regclass and d.refobjid = v_brands and v.oid <> v_brands
-     and (v.relkind = 'm' or (v.relkind = 'v' and not exists (select 1 from pg_catalog.unnest(v.reloptions) o
-                                                               where pg_catalog.lower(o) in ('security_invoker=true', 'security_invoker=on', 'security_invoker=1', 'security_invoker=yes'))))
-     and (pg_catalog.has_any_column_privilege(v_anon, v.oid, 'SELECT') or pg_catalog.has_any_column_privilege(v_auth, v.oid, 'SELECT'));
+  -- (G5-02 #4, H1 F2) the relations an owner-run view reads are read as its owner (row security on brands then binds the owner, not the
+  -- person); an invoker view's are read as the person even inside an owner-run view (measured: an owner-run view over an invoker view over
+  -- brands shows only the person's own); a materialized view holds rows read by whoever refreshed it. So a bypass is an owner-run view or a
+  -- materialized view that reads brands directly and that an API role reaches: by SELECT on the first view of a chain, then through an
+  -- owner-run view (its owner's privileges apply) or through an invoker view the API role may also SELECT the next one. Any depth;
+  -- a chain deeper than 32 views is not decided: refused.
+  with recursive edge(parent, child) as (
+    select distinct w.ev_class, d.refobjid
+      from pg_catalog.pg_depend d join pg_catalog.pg_rewrite w on d.classid = 'pg_catalog.pg_rewrite'::regclass and d.objid = w.oid
+     where d.refclassid = 'pg_catalog.pg_class'::regclass and d.refobjid <> w.ev_class),
+  kind(oid, invoker) as (
+    select c.oid, c.relkind = 'v' and exists (select 1 from pg_catalog.unnest(c.reloptions) o
+                                                where pg_catalog.lower(o) in ('security_invoker=true', 'security_invoker=on', 'security_invoker=1', 'security_invoker=yes'))
+      from pg_catalog.pg_class c where c.relkind in ('v', 'm')),
+  walk(top, api, rel, invoker, depth) as (
+    select k.oid, a.r, k.oid, k.invoker, 1
+      from kind k, pg_catalog.unnest(array[v_anon, v_auth]) a(r)
+     where pg_catalog.has_any_column_privilege(a.r, k.oid, 'SELECT')
+    union all
+    select w.top, w.api, e.child, k.invoker, w.depth + 1
+      from walk w join edge e on e.parent = w.rel join kind k on k.oid = e.child
+     where w.depth < 32 and (not w.invoker or pg_catalog.has_any_column_privilege(w.api, e.child, 'SELECT')))
+  select pg_catalog.string_agg(distinct w.top::regclass::text, ', ' order by w.top::regclass::text) into v_txt
+    from walk w
+   where (not w.invoker and exists (select 1 from edge e where e.parent = w.rel and e.child = v_brands))
+      or (w.depth >= 32 and exists (select 1 from edge e join kind k on k.oid = e.child where e.parent = w.rel));
   if v_txt is not null then
     raise exception 'BRANDS_VIEW_BYPASS: %', v_txt;
   end if;

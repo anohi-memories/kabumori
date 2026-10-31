@@ -22,6 +22,7 @@ G6=1a567ea8facd36f20a767c999bd36f59db5d8740    # G6 PR #582 HEAD
 G1=8d95307c7001a6456719c6a829ef41a83ab703c3    # G1 PR #576 HEAD
 G1B=eb8f5e983d2a2a7d4e3716368cf3c20f2ca76370   # G1 PR #592 HEAD (G1-29: service start -> W0 -> snapshot -> AI)
 W0_585=04a239074eb7e575f772a545f9e6755a2a59f070 # G5 PR #585 HEAD: W0 before the H1 P2 F1 fix (the F1 test reproduces the defect on it)
+PR600=38727529d9af0108bb08bef6171d57ddb3813d18  # G5 PR #600 HEAD: the brands fix before H1 F1 / F2 (G5-02 #4 reproduces both on it)
 ENGINE="${G5LS_ENGINE:-podman}"
 API_PORT=55721 DB_PORT=55722 FAKE_PORT=55799
 
@@ -29,7 +30,7 @@ API_PORT=55721 DB_PORT=55722 FAKE_PORT=55799
 for image in postgres:17.6.1.165 gotrue:v2.196.0 postgrest:v16.1 kong:2.8.1 edge-runtime:v1.74.3 storage-api:v1.70.3; do
   "$ENGINE" image exists "public.ecr.aws/supabase/$image" || { echo "G5LS_IMAGE_MISSING: $image (this script does not pull)"; exit 2; }
 done
-for commit in "$G5W" "$G6" "$G1" "$G1B" "$W0_585"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G5LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
+for commit in "$G5W" "$G6" "$G1" "$G1B" "$W0_585" "$PR600"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G5LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/g5ls.XXXXXX")"
 SERVE_PID=""
@@ -47,6 +48,9 @@ git -C "$REPO" archive "$G5W" supabase/migrations supabase/tests | tar -x -C "$W
 git -C "$REPO" archive "$G6" supabase/functions/postona-post-assist supabase/functions/_shared supabase/tests/fixtures/g6_26_local_edge \
   supabase/migrations supabase/candidates/common_ai_g6 | tar -x -C "$WORK/g6"
 git -C "$REPO" show "$W0_585:supabase/candidates/postona_personal_mvp_auth/MVP_W0_INSTALL.sql" > "$WORK/w0_585.sql"
+mkdir -p "$WORK/pr600"
+git -C "$REPO" show "$PR600:supabase/candidates/postona_brands_tenant_isolation/001_brands_tenant_isolation.sql" > "$WORK/pr600/001_brands_tenant_isolation.sql"
+git -C "$REPO" show "$PR600:supabase/candidates/postona_personal_mvp_auth/MVP_RELEASE_PREFLIGHT.sql" > "$WORK/pr600/MVP_RELEASE_PREFLIGHT.sql"
 git -C "$REPO" archive "$G1" apps/social-mobile/src/data apps/social-mobile/src/features/schedule apps/social-mobile/src/domain | tar -x -C "$WORK/g1"
 git -C "$REPO" archive "$G1B" apps/social-mobile/src/data apps/social-mobile/src/features/schedule apps/social-mobile/src/domain | tar -x -C "$WORK/g1b"
 for pair in "$G6:supabase/functions/postona-post-assist/index.ts:g6" "$G6:supabase/tests/fixtures/g6_26_local_edge/postona-post-assist-localtest/index.ts:g6" \
@@ -163,8 +167,8 @@ done
 
 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u OPENAI_API_KEY \
     G5LS_API="http://127.0.0.1:$API_PORT" G5LS_PUBLISHABLE="$PUBLISHABLE" G5LS_DB_PORT="$DB_PORT" G5LS_FAKE_PORT="$FAKE_PORT" \
-    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_BRANDS_FIX="$REPO/supabase/candidates/postona_brands_tenant_isolation" G5LS_SECRET="$SECRET" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
+    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_BRANDS_FIX="$REPO/supabase/candidates/postona_brands_tenant_isolation" G5LS_SECRET="$SECRET" G5LS_PR600="$WORK/pr600" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
   deno test --no-config --no-check --cached-only \
-    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
+    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_PR600,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
     --allow-net="127.0.0.1:$API_PORT,127.0.0.1:$FAKE_PORT" --allow-read="$WORK,$REPO" --allow-run=psql ${G5LS_FILTER:+--filter "$G5LS_FILTER"} \
     "$REPO/supabase/tests/postona_personal_workspace_local_test.ts"

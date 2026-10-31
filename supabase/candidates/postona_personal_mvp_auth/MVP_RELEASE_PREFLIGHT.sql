@@ -18,10 +18,14 @@
 -- G5-02 #3 makes PF_BRANDS see through roles an API role reaches, column grants and PUBLIC; adds anon reading brands, another permissive
 -- policy on brands and a view reading brands as its owner as FAILs (brand_memberships' other policies stay a WARN). The fix it checks for:
 -- supabase/candidates/postona_brands_tenant_isolation/001_brands_tenant_isolation.sql.
+-- G5-02 #4 (H1 F1 / F2 on PR #600): PF_BRANDS compares the two member policies by their WHOLE condition (as PostgreSQL 17 prints it; another
+-- major version is a FAIL, not a guess) and walks view chains (an owner-run view at any depth that an API role reaches), as the install does.
+-- The transaction pins search_path to empty, so every name the catalog prints is schema-qualified.
 -- Production NO_GO: running it on a managed project is a read-only connection that still needs the owner's explicit approval.
 begin transaction isolation level repeatable read read only;
 
 set local lock_timeout = '5s';
+set local search_path = '';
 
 do $$
 declare
@@ -99,9 +103,9 @@ begin
   -- active / live and deleted it (its membership went with it), and anon inserted brands. The candidate fix is G5's (G5-02 #3,
   -- supabase/candidates/postona_brands_tenant_isolation). Privileges are read through every role anon / authenticated can reach (membership,
   -- PUBLIC) and at column level too (a column UPDATE grant writes brands as well as a table one). The member policies are checked by name,
-  -- command and role, not by their condition (its text differs between versions; the fix's install checks it); the local suite shows what
-  -- they let a person read. Another permissive policy on brands reaching an API role, or a view reading brands as its owner that an API role
-  -- may select, defeats row security on brands: a FAIL.
+  -- command, role and (G5-02 #4) their whole condition: a dropped brand correlation, an added OR or a membership policy reading every row is
+  -- a FAIL. Another permissive policy on brands reaching an API role, or an owner-run (or materialized) view reading brands directly that an
+  -- API role reaches through a view chain of any depth (as the install walks it), defeats row security on brands: a FAIL.
   if pg_catalog.to_regrole('anon') is null or pg_catalog.to_regrole('authenticated') is null
      or pg_catalog.to_regclass('public.brands') is null or pg_catalog.to_regclass('public.brand_memberships') is null then
     v_lines := v_lines || 'PF_BRANDS FAIL anon, authenticated, public.brands or public.brand_memberships is missing'::text; v_fail := v_fail || 'PF_BRANDS'::text;
@@ -109,11 +113,16 @@ begin
     v_txt := pg_catalog.concat_ws('; ',
       (select 'row security off on ' || pg_catalog.string_agg(c.relname::text, ', ' order by c.relname) from pg_catalog.pg_class c
         where c.oid in ('public.brands'::regclass, 'public.brand_memberships'::regclass) and not c.relrowsecurity),
-      case when not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.brands'::regclass and p.polname = 'social_mobile_member_select_brands'
-                              and p.polcmd = 'r' and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid])
+      case when pg_catalog.current_setting('server_version_num')::int not between 170000 and 179999
+           then 'the member read policies are pinned as PostgreSQL 17 prints them (this is ' || pg_catalog.current_setting('server_version') || ')'
+           when not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.brands'::regclass and p.polname = 'social_mobile_member_select_brands'
+                              and p.polcmd = 'r' and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid] and p.polwithcheck is null
+                              and pg_catalog.regexp_replace(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '\s+', ' ', 'g')
+                                  = '(EXISTS ( SELECT 1 FROM public.brand_memberships bm WHERE ((bm.brand_id = brands.id) AND (bm.user_id = ( SELECT auth.uid() AS uid)))))')
                 or not exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.brand_memberships'::regclass and p.polname = 'social_mobile_membership_self_select'
-                              and p.polcmd = 'r' and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid])
-           then 'a member read policy (20260918120000) is missing or not for authenticated only' end,
+                              and p.polcmd = 'r' and p.polpermissive and p.polroles = array[pg_catalog.to_regrole('authenticated')::oid] and p.polwithcheck is null
+                              and pg_catalog.regexp_replace(pg_catalog.pg_get_expr(p.polqual, p.polrelid), '\s+', ' ', 'g') = '(( SELECT auth.uid() AS uid) = user_id)')
+           then 'a member read policy (20260918120000) is missing or changed (name, command, role or condition)' end,
       (select 'brands writable by ' || pg_catalog.string_agg(distinct r.rolname::text, ', ' order by r.rolname::text) from pg_catalog.pg_roles r,
               pg_catalog.unnest(v_brand_writes) k
         where (pg_catalog.pg_has_role(pg_catalog.to_regrole('anon'), r.oid, 'MEMBER') or pg_catalog.pg_has_role(pg_catalog.to_regrole('authenticated'), r.oid, 'MEMBER'))
@@ -125,15 +134,26 @@ begin
         where p.polrelid = 'public.brands'::regclass and p.polpermissive and p.polname <> 'social_mobile_member_select_brands'
           and exists (select 1 from pg_catalog.unnest(p.polroles) u where u = 0 or pg_catalog.pg_has_role(pg_catalog.to_regrole('anon'), u, 'MEMBER')
                                                                        or pg_catalog.pg_has_role(pg_catalog.to_regrole('authenticated'), u, 'MEMBER'))),
-      (select 'a view reads brands as its owner (' || pg_catalog.string_agg(distinct v.oid::regclass::text, ', ' order by v.oid::regclass::text) || ')'
-         from pg_catalog.pg_depend d
-         join pg_catalog.pg_rewrite w on d.classid = 'pg_catalog.pg_rewrite'::regclass and d.objid = w.oid
-         join pg_catalog.pg_class v on v.oid = w.ev_class
-        where d.refclassid = 'pg_catalog.pg_class'::regclass and d.refobjid = 'public.brands'::regclass and v.oid <> 'public.brands'::regclass
-          and (v.relkind = 'm' or (v.relkind = 'v' and not exists (select 1 from pg_catalog.unnest(v.reloptions) o
-                                                                    where pg_catalog.lower(o) in ('security_invoker=true', 'security_invoker=on', 'security_invoker=1', 'security_invoker=yes'))))
-          and (pg_catalog.has_any_column_privilege(pg_catalog.to_regrole('anon'), v.oid, 'SELECT')
-               or pg_catalog.has_any_column_privilege(pg_catalog.to_regrole('authenticated'), v.oid, 'SELECT'))));
+      (with recursive edge(parent, child) as (
+         select distinct w.ev_class, d.refobjid
+           from pg_catalog.pg_depend d join pg_catalog.pg_rewrite w on d.classid = 'pg_catalog.pg_rewrite'::regclass and d.objid = w.oid
+          where d.refclassid = 'pg_catalog.pg_class'::regclass and d.refobjid <> w.ev_class),
+       kind(oid, invoker) as (
+         select c.oid, c.relkind = 'v' and exists (select 1 from pg_catalog.unnest(c.reloptions) o
+                                                     where pg_catalog.lower(o) in ('security_invoker=true', 'security_invoker=on', 'security_invoker=1', 'security_invoker=yes'))
+           from pg_catalog.pg_class c where c.relkind in ('v', 'm')),
+       walk(top, api, rel, invoker, depth) as (
+         select k.oid, a.r, k.oid, k.invoker, 1
+           from kind k, pg_catalog.unnest(array[pg_catalog.to_regrole('anon')::oid, pg_catalog.to_regrole('authenticated')::oid]) a(r)
+          where pg_catalog.has_any_column_privilege(a.r, k.oid, 'SELECT')
+         union all
+         select w.top, w.api, e.child, k.invoker, w.depth + 1
+           from walk w join edge e on e.parent = w.rel join kind k on k.oid = e.child
+          where w.depth < 32 and (not w.invoker or pg_catalog.has_any_column_privilege(w.api, e.child, 'SELECT')))
+       select 'a view reads brands as its owner (' || pg_catalog.string_agg(distinct w.top::regclass::text, ', ' order by w.top::regclass::text) || ')'
+         from walk w
+        where (not w.invoker and exists (select 1 from edge e where e.parent = w.rel and e.child = 'public.brands'::regclass))
+           or (w.depth >= 32 and exists (select 1 from edge e join kind k on k.oid = e.child where e.parent = w.rel))));
     if v_txt <> '' then
       v_lines := v_lines || ('PF_BRANDS FAIL ' || v_txt || ': a person could read or change another workspace (install 001_brands_tenant_isolation.sql first)');
       v_fail := v_fail || 'PF_BRANDS'::text;
