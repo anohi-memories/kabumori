@@ -46,6 +46,15 @@ MUTANTS = [
      'if auth.get("logged_in") is not True:',
      "if False:",
      "test_task37_resident.FailClosed.test_not_logged_in_does_not_claim"),
+    # --- B0-1: 常駐 driver（jobrunner）と固定版ゲート（resident） ---
+    ("resident does not block on release verification failure", "g10runner/resident.py",
+     '            problems = self.release_check()\n            if problems:\n                return self._record({"decision": "wait", "reason": "release verification failed"})',
+     "            problems = self.release_check()\n            if False:\n                pass",
+     "test_task40_jobrunner.ReleaseGate.test_release_verification_failure_blocks_the_cycle_before_claim"),
+    ("jobrunner does not export the result bundle", "g10runner/jobrunner.py",
+     '            result_handoff.export_result(self.layout, run_id, self.out_dir, self.signer, now=self.now)\n            return dict(result, exported=True)',
+     "            return result",
+     "test_task40_jobrunner.BuildLoopE2E.test_run_auto_exports_a_bundle_yuya_can_finalize"),
     # --- TASK 35: 専用ユーザー方式のジョブ受け口 handoff.py ---
     ("handoff signature not verified", "g10runner/handoff.py",
      'if not isinstance(doc.get("sig"), str) or not verifier.verify(role, canonical(body), doc["sig"]):\n        raise HandoffError("job signature does not verify")',

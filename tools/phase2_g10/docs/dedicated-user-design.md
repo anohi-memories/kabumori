@@ -353,3 +353,27 @@ Q2 の「finalize を handoff/out 経由にする」を、**finalize を変え�
 - 残り: 一度きりの特権 setup（ACL 受け渡し・LaunchAgent 登録・固定版CLI配置、各別途GO）、実 -p の1回ドライラン
   （指摘3・要GO）。常駐から export→（yuya 側の取り込み・finalize は autorun 相当の制御ループで）という常駐どうしの
   往復の結線は、特権 setup 後の実機結線で詰める。
+
+### §15.11 常駐 driver（B0-1）— 1本に組む
+
+§15.8〜§15.10 の部品を、初期化済みの exec プレーンのルート（鍵・wiring.json・公開ポリシー）から1つの常駐ループに
+組み立てる driver を足した（g10runner/jobrunner.py・入口 bin/g10_jobrunner.py）。これが LaunchAgent が回す実体になる
+（登録は B2・人の GO の後）。
+
+- `build_loop(root, in, claims, out, flags, cli_realpath, home, ...)`: `wiring.agent_side(root)` から **agent 署名器**と
+  **4役割の公開鍵の検証器**を取り、`Agent`・`HandoffInbox`・`Dispatcher`・`ExportingDispatcher` を組んで `ResidentLoop`
+  を返す。handoff の **human 署名**も request の **runner 署名**も、この1つの wiring 検証器（exec プレーンが持つ公開鍵）で
+  検証する。exec 側が持つ秘密鍵は **agent だけ**なので、human/runner の署名は偽造できない（B0-3 の鍵の配り方の前提＝
+  yuya の公開物をどう exec に渡すかは別段。ここでは「exec は wiring の公開鍵で検証する」という形を確定した）。
+- `ExportingDispatcher`: 内側の `Dispatcher` で終端まで回した後、結果の束を handoff/out へ **agent 署名つき**で自動 export
+  （§15.10）。run は既に起きている（CLAIM 消費・CLI 起動済み）ので、export の失敗で run を失敗扱いにしない — 例外は
+  投げず disposition 用の結果に注記するだけ。未受理・timeout・dispatch 失敗（成果物が欠ける終端）は export しない。
+- `ResidentLoop` に **固定版の検証フック** `release_check` を足した（周期の頭・HALT の後・auth の前で fail-closed）。
+  固定版が改変されていれば、その周期は auth も accept もせず止まる（CLAIM しない＝承認を消費しない）。HALT は常に先なので、
+  改変時でもいつでも止められる。入口は固定版から動くとき `--release-digest` 必須で、開始時と各周期で検証する。
+- テスト: test_task40_jobrunner。build_loop が1件を通して結果の束を out へ自動 export し、実行プレーンの成果物を消しても
+  out の束だけで既存 finalize が緑になる E2E・固定版の検証失敗で CLAIM 前に止まる・wiring に無い鍵の human 署名を拒否。
+  変異2件（固定版の検証で止めない・結果の束を export しない）を追加し killed。
+- 残り（B0 の前提コード）: B0-2 その LaunchAgent plist 生成（gui/503・Background・KeepAlive・固定版の検証つき）、
+  B0-3 鍵と制御状態の配り方の確定（exec の Agent が参照する yuya の公開物＝pub の control_events・policy・wiring・GO 本文を
+  handoff で配るか pub を ACL 共有にするか）。これが入ってから B1 以降（各特権・各GO）。

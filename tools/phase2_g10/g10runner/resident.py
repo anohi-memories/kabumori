@@ -28,7 +28,7 @@ DEFAULT_INTERVAL = 300.0  # autorun の MIN_LIVE_INTERVAL 相当
 
 class ResidentLoop:
     def __init__(self, inbox, flags_dir, out_dir, cli_realpath, home, dispatch,
-                 auth_check=real_claude.auth_status, now=time.time, log_path=None):
+                 auth_check=real_claude.auth_status, now=time.time, log_path=None, release_check=None):
         if not isinstance(inbox, handoff.HandoffInbox):
             raise handoff.HandoffError("inbox must be a HandoffInbox")
         handoff._safe_source_dir(flags_dir)   # yuya=書き／_kaburun=読み（group/other 書き込み不可）
@@ -46,6 +46,7 @@ class ResidentLoop:
         self.auth_check = auth_check
         self.now = now
         self.log_path = log_path
+        self.release_check = release_check  # 固定版の検証（問題の一覧を返す）。周期の頭・auth の前で fail-closed
 
     # --- フラグ（UID をまたぐので signal ではなくファイル。存在＝止める＝fail-safe） ---
     def _flag_present(self, name):
@@ -93,6 +94,11 @@ class ResidentLoop:
         reason = self.halt_reason()
         if reason:
             return self._record({"decision": "wait", "reason": reason})
+        if self.release_check is not None:
+            # 固定版が改変されていたら、auth も accept もせずに止める（HALT は常に先＝いつでも止められる）
+            problems = self.release_check()
+            if problems:
+                return self._record({"decision": "wait", "reason": "release verification failed"})
         auth = self._auth()
         if auth.get("logged_in") is not True:
             # 承認を消費しない: accept の前で止める。yuya 側は out/ ではなくこのログ＋通知で気づく

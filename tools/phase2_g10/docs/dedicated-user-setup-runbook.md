@@ -86,8 +86,10 @@ out=`/Users/Shared/g10-kaburun/out`、claims=`/Users/Shared/g10-kaburun/claims`�
 Part B の「LaunchAgent 登録」より前に、**常駐ループの起動スクリプトと plist 生成が未実装**。登録対象の実体が要る。
 次の非特権コードを私が作る（別TASK・特権なし）:
 
-- B0-1. 常駐ループの bin ドライバ（_kaburun 側）: 固定版 CLI・home・handoff の in/out/claims/flags・exec レイアウトを与えて
-  `resident.ResidentLoop`（検証＋auth 前チェック＋dispatch）を回し、ラン後に `result_handoff.export_result` で out へ書く、までを1本にした実行ファイル。
+- B0-1.（実装済み 2026-10-31）常駐ループの bin ドライバ（_kaburun 側）: 固定版 CLI・home・handoff の in/out/claims/flags・
+  exec ルートを与えて `resident.ResidentLoop`（HALT/STOP → 固定版の検証 → auth 前チェック → accept → dispatch）を回し、
+  ラン後に `result_handoff.export_result` で out へ書く、までを1本にした `g10runner/jobrunner.build_loop` と入口
+  `bin/g10_jobrunner.py`。固定版から動くときは `--release-digest` 必須（開始時と各周期で検証）。代役で E2E 済み。
 - B0-2. その LaunchAgent plist 生成（gui/503・ProcessType=Background・KeepAlive・固定版の検証つき）。
 - B0-3. 鍵と制御状態の配り方の確定（Q の延長）: exec プレーンの Agent は request 封筒の runner 署名検証・Issue 結合・
   認可のために、yuya 側の**公開物**（pub の control_events・policy・wiring・GO 本文）を**読み取り専用**で参照する必要がある。
