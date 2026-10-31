@@ -151,6 +151,44 @@ test('fetch transport: HTTPS only, bearer token, JSON, no redirects, a hard time
   await assert.rejects(hanging({ action: 'list', payload: {} }, 't'), /aborted/u);
 });
 
+test('G3-02 #5: gateway 401 / 429 and the pre-write 503s are definite (nothing written, no read-back); STORE_UNAVAILABLE / 500 stay unknown', async () => {
+  for (const [response, outcome] of [
+    [{ status: 401, body: { code: 401, message: 'Invalid JWT' } }, { kind: 'failed', code: 'AUTH_REQUIRED' }],
+    [{ status: 401, body: null }, { kind: 'failed', code: 'AUTH_REQUIRED' }],
+    [{ status: 429, body: { message: 'rate limited' } }, { kind: 'failed', code: 'RATE_LIMITED' }],
+    [refused(503, 'NOT_AVAILABLE'), { kind: 'not_available' }],
+    [refused(503, 'AUTH_UNAVAILABLE'), { kind: 'failed', code: 'AUTH_UNAVAILABLE' }],
+    [refused(503, 'POSTONA_RESV_SERVICE_BUSY'), { kind: 'failed', code: 'POSTONA_RESV_SERVICE_BUSY' }],
+  ]) {
+    const { transport, calls } = scripted({ create: response });
+    assert.deepEqual(await store(transport).save(REQUEST), outcome, JSON.stringify(response));
+    assert.deepEqual(calls.map((c) => c.action), ['create'], 'no read-back after a definite refusal');
+  }
+  for (const response of [refused(503, 'STORE_UNAVAILABLE'), refused(500, 'INTERNAL'), { status: 503, body: { message: 'x' } }]) {
+    const { transport, calls } = scripted({ create: response, list: ok([]) });
+    assert.deepEqual(await store(transport).save(REQUEST), { kind: 'uncertain', code: UNCERTAIN });
+    assert.deepEqual(calls.map((c) => c.action), ['create', 'list']);
+  }
+});
+
+test('G3-02 #5 fetch transport: the PUBLIC key goes in apikey; any other key is refused; http only for 127.0.0.1 / localhost with the explicit test flag', async () => {
+  const seen = [];
+  const fakeFetch = async (url, init) => { seen.push({ url, init }); return { status: 200, json: async () => ({ ok: true, reservations: [] }) }; };
+  const pub = 'sb_publishable_FAKE_test_only_0000';
+  await createFetchTransport({ url: 'https://example.invalid/x', fetch: fakeFetch, apiKey: pub })({ action: 'list', payload: {} }, 'tok');
+  assert.equal(seen[0].init.headers.apikey, pub);
+  await createFetchTransport({ url: 'https://example.invalid/x', fetch: fakeFetch })({ action: 'list', payload: {} }, 'tok');
+  assert.equal('apikey' in seen[1].init.headers, false, 'no key given: no apikey header');
+  const jwt = (claims) => `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.sig0123456789`;
+  assert.doesNotThrow(() => createFetchTransport({ url: 'https://example.invalid/x', fetch: fakeFetch, apiKey: jwt({ role: 'anon' }) }));
+  for (const key of ['sb_secret_FAKE_test_only_0000', jwt({ role: 'service' + '_role' }), jwt({ role: 'authenticated' }), 'plain-key-0123456789abcdef', '']) {
+    assert.throws(() => createFetchTransport({ url: 'https://example.invalid/x', fetch: fakeFetch, apiKey: key }), /MUST_BE_PUBLIC/u, key.slice(0, 12));
+  }
+  assert.throws(() => createFetchTransport({ url: 'http://127.0.0.1:55921/x', fetch: fakeFetch }), /HTTPS/u, 'loopback http needs the flag');
+  assert.throws(() => createFetchTransport({ url: 'http://example.invalid/x', fetch: fakeFetch, allowLoopbackHttpForTests: true }), /HTTPS/u, 'the flag never opens a remote http URL');
+  assert.doesNotThrow(() => createFetchTransport({ url: 'http://127.0.0.1:55921/x', fetch: fakeFetch, allowLoopbackHttpForTests: true }));
+});
+
 test('source: the remote store has no Supabase client, storage or service key; the gate constant is a literal false', async () => {
   const source = await readFile(new URL('../src/features/schedule/remote-reservation-store.ts', import.meta.url), 'utf8');
   const code = source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/\/\/.*$/gmu, '');
