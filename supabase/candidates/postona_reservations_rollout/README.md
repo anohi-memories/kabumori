@@ -226,5 +226,36 @@ What it showed, for the operator:
   - an owner change A → B → A (PG17 EP / W1);
   - the hosted gateway, Cron.
 
+**Scheduler call** (G3-02 #10; `postona_x_reservations/016_*`; candidates NOT in this bundle's MANIFEST: a later, separately approved step):
+- **What it is**:
+  - `016_postona_x_resv_worker_tick.sql`: `tick_delivery_worker()` reads the worker URL and secret from Vault by name (`postona_resv_worker_url`, `postona_resv_worker_secret`) and makes one `net.http_post` to the worker entry with `x-postona-worker-secret`. Every tick leaves one row in `worker_ticks` (no secret, no URL).
+  - `worker_tick_health(since)` reads what the calls answered from pg_net.
+  - `016_postona_x_resv_worker_tick_schedule.sql`: the every-minute pg_cron job. Each file has its rollback.
+- **No call when**:
+  - `TICK_BUSY`: another tick holds the lock;
+  - `PREVIOUS_IN_FLIGHT`: the previous call has no answer yet and is younger than 70 s;
+  - `NOT_CONFIGURED`: a Vault entry is missing, or the secret is shorter than 32 characters;
+  - `URL_REFUSED`: the URL is not exactly `https://<20-char ref>.supabase.co/functions/v1/postona-x-reservation-worker`.
+  - Re-sending is never the tick's business: the worker claims due rows under row locks and never re-sends an uncertain row.
+- **Privileges**: owner only. No EXECUTE / table privilege for PUBLIC, anon, authenticated, service_role or the API / worker roles; no SECURITY DEFINER.
+- **Proof** (`local_stack/` L25-L31, then run.sh's cron step; the URL rule is replaced TEST ONLY on that stack by one admitting its kong worker entries):
+  - no call when not configured / the secret is short / the URL is not a worker (L25);
+  - the production entry (release gate OFF) → 503 `NOT_AVAILABLE`, nothing claimed (L26);
+  - a wrong secret → 401 `WORKER_AUTH_REQUIRED` (L27);
+  - the e2e worker → the due row sent once, a future row not, the next tick sends nothing, the health read shows the report (L28);
+  - unknown → uncertain, the next tick never re-sends (L29);
+  - `PREVIOUS_IN_FLIGHT` / `TICK_BUSY` make no call (L30);
+  - an unreachable host → `TRANSPORT_ERROR` in the health read (L31);
+  - the real local pg_cron job runs the tick on its own and the worker answers 200; unschedule, then 016's rollback (refused while the job exists).
+- **Measured**: a call without a user JWT to a function deployed with `verify_jwt = true` is stopped by the gateway with 401 `UNAUTHORIZED_NO_AUTH_HEADER` (L26). The worker must be deployed with JWT verification off; it checks its own secret.
+- **Production steps** (each only after its own approval; none done here):
+  1. the worker's release gate and G4's generation-bound credential source (a reviewed change);
+  2. deploy `postona-x-reservation-worker` with `--no-verify-jwt` and the secrets `POSTONA_RESV_WORKER_SECRET` (≥ 32) / `POSTONA_RESV_WORKER_DATABASE_URL` (a login member of `postona_resv_worker`, never service_role);
+  3. Vault: `postona_resv_worker_url` (the project's https worker URL) and `postona_resv_worker_secret` (the same secret);
+  4. apply 016 as the schema owner; call `select postona_x_resv.tick_delivery_worker()` once by hand and read `worker_tick_health()`;
+  5. apply the schedule and watch `worker_tick_health()`;
+  6. to stop: the schedule's rollback (no new ticks), then 016's rollback.
+- **NOT_VERIFIED**: hosted pg_net / pg_cron / Vault behaviour and permissions, pg_net's hosted response retention, the hosted gateway, the real X and G4 source.
+
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.
