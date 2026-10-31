@@ -244,6 +244,18 @@ G1 PR #592 (`eb8f5e98`) shows the AI post assist only when W0 answered `ready` *
   - in-suite mutants: 45 / 45 (install 23, rollback 5, `PF_BRANDS` / `PF_APP_READ` 17);
   - G6 #595's own runner (`d68830bf`) with the candidate installed in a scratch copy: 7 / 7.
 
+## 5d. G5-02 task 4: H1 F1 / F2 on PR #600 fixed
+
+H1 found that PR #600 passed two kinds of world it should refuse.
+- **F1:** the member policies were checked by name and two partial patterns. A dropped brand correlation, an added `OR true`, or a membership policy `using (true)` was accepted. Through the real JWT, another person's brands or memberships became readable.
+- **F2:** the view check looked one level deep. An API-selectable owner-run view over a private owner-run view over `brands` was accepted, and it showed every brand.
+
+The fix, in the install and the preflight alike:
+- **F1:** the whole condition of both policies is compared with PostgreSQL 17's printed text. Another major version is refused.
+- **F2:** view chains are walked to any depth with PostgreSQL's rules (measured); the README of the candidate has the rule. A chain deeper than 32 views is refused.
+
+The local suite reproduces each case on PR #600's own files (accepted, `PF_BRANDS PASS`, the leak through PostgREST), then shows that this tree refuses and fails it. Three safe chains still pass.
+
 ## 6. Handoffs (G5 changed none of these)
 
 - **`public.brands` (G5 since G5-02 #3, §5c):** before the personal MVP is released, `PF_BRANDS` must PASS in production. The candidate does it; applying it needs, in order:

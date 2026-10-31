@@ -64,10 +64,11 @@ Install:
 | `BRANDS_ISOLATION_SUPERUSER` | the caller is a superuser |
 | `BRANDS_ISOLATION_NOT_OWNER` | the caller is not the owner of `brands` |
 | `BRANDS_FORCE_ROW_SECURITY` | row security is forced: the definer writers would be filtered |
-| `BRANDS_MEMBERSHIPS_NOT_ISOLATED` | `brand_memberships` row security is off, its self policy changed, or an API row write on it (table or column) |
-| `BRANDS_MEMBER_POLICY` | the member read policy is missing or not `20260918120000`'s |
+| `BRANDS_POLICY_UNVERIFIABLE` | not PostgreSQL 17: the two member policies' conditions are pinned as PostgreSQL 17 prints them (G5-02 #4) |
+| `BRANDS_MEMBERSHIPS_NOT_ISOLATED` | `brand_memberships` row security is off, its self policy changed (its whole condition is compared, G5-02 #4), or an API row write on it (table or column) |
+| `BRANDS_MEMBER_POLICY` | the member read policy is missing or not `20260918120000`'s: name, command, role and its whole condition (G5-02 #4: a dropped brand correlation, an added `OR`, any other change) |
 | `BRANDS_UNREVIEWED_POLICY` | another permissive policy on `brands` reaches PUBLIC / `anon` / `authenticated` |
-| `BRANDS_VIEW_BYPASS` | a view or materialized view reads `brands` as its owner and an API role may select it |
+| `BRANDS_VIEW_BYPASS` | an owner-run view or a materialized view reads `brands` directly and an API role reaches it, at any depth of a view chain (G5-02 #4); a chain deeper than 32 views is refused, fail closed |
 | `BRANDS_INVOKER_WRITER` | an invoker function an API role may execute writes `brands` (it would break) |
 | `BRANDS_DEFINER_FILTERED` | a definer function naming `brands` is owned by a role row security filters |
 | `BRANDS_MEMBER_READ_MISSING` | `authenticated` cannot read the snapshot columns |
@@ -76,6 +77,28 @@ Install:
 Rollback:
 - `BRANDS_ISOLATION_NOT_INSTALLED`: there is no record.
 - `BRANDS_ROLLBACK_POSTCONDITION`: privileges were changed after the install.
+
+## How the two G5-02 #4 checks decide (H1 F1 / F2 on PR #600)
+
+**Policies.** The two member policies are compared by their whole condition: `pg_get_expr` with an empty `search_path`, whitespace collapsed. The pinned texts are:
+- `brands`: `(EXISTS ( SELECT 1 FROM public.brand_memberships bm WHERE ((bm.brand_id = brands.id) AND (bm.user_id = ( SELECT auth.uid() AS uid)))))`
+- `brand_memberships`: `(( SELECT auth.uid() AS uid) = user_id)`
+
+Both were measured on PostgreSQL 17.6 (the Supabase image) and 17.11. Another major version may print them differently, so it is refused instead of guessed. The preflight pins its own `search_path` to empty for the same comparison.
+
+**Views.** These are PostgreSQL's rules, measured on the local stack:
+- An owner-run view reads its relations as its owner.
+- An invoker view reads them as the person, even inside an owner-run view.
+- A materialized view holds rows read at refresh.
+
+So the bypass is an owner-run view (or a materialized view) that reads `brands` directly and that an API role reaches. The walk starts at every view an API role may `SELECT`. It goes on through an owner-run view freely (the owner's privileges apply), and through an invoker view only to a view the API role may also `SELECT`.
+
+Not refused:
+- invoker over invoker;
+- owner-run over a private invoker view (the person still reads only their own);
+- invoker over a private owner-run view (the person is refused at the inner view).
+
+Views calling functions are not followed. A definer function that reads `brands` is a different path, and only its owner's filtering is checked.
 
 ## Not this candidate's
 
