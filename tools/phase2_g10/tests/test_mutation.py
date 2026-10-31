@@ -67,6 +67,14 @@ MUTANTS = [
      '        if not os.path.isabs(args[i]):\n            raise PlanError("%s must be an absolute path" % _JOBRUNNER_FLAGS[i - 1])',
      '        if False:\n            raise PlanError("%s must be an absolute path" % _JOBRUNNER_FLAGS[i - 1])',
      "test_task41_jobrunner_plist.JobRunnerPlist.test_release_jobrunner_plist_and_rules"),
+    # --- B0-3: 鍵と制御状態の配り方（分割レイアウト） jobrunner.py / layout.py ---
+    ("split build does not check control_pub is read-only", "g10runner/jobrunner.py",
+     "handoff._safe_source_dir(control_pub)", "control_pub",
+     "test_task42_control_state_split.WritableControlPubRefused.test_group_or_other_writable_control_pub_is_refused"),
+    ("split layout writes requests into read-only pub", "g10runner/layout.py",
+     'self.requests = os.path.join(self.agent_out, "requests")',
+     'self.requests = os.path.join(self.pub, "requests")',
+     "test_task42_control_state_split.SplitLayoutPaths.test_control_paths_in_pub_and_exec_writes_in_root"),
     # --- TASK 35: 専用ユーザー方式のジョブ受け口 handoff.py ---
     ("handoff signature not verified", "g10runner/handoff.py",
      'if not isinstance(doc.get("sig"), str) or not verifier.verify(role, canonical(body), doc["sig"]):\n        raise HandoffError("job signature does not verify")',

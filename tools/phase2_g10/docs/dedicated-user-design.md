@@ -400,3 +400,29 @@ B0-1 の driver（bin/g10_jobrunner.py）を _kaburun の gui セッションで
   間隔の下限撤去・絶対パス未要求）を追加し killed。
 - 残り（B0 の前提コード）: B0-3 鍵と制御状態の配り方の確定（exec の Agent が参照する yuya の公開物をどう渡すか）。
   これが入れば B1 以降（各特権・各GO）へ。
+
+### §15.13 鍵と制御状態の配り方（B0-3）— 分割レイアウト
+
+exec プレーンの Agent は、request の runner 署名の検証・Issue 結合・認可のために、yuya 側の制御の公開状態を読む必要が
+ある。レイアウトはもともと control（priv/pub）と execution（agent-out/work）に分かれているので、その pub を**別の所有者の
+別ルートに ACL で分ける**ことで実現した（g10runner/layout.SplitLayout）。
+
+- **control_pub（yuya 所有・読み取り専用・exec_root の外）**: control_events.log・policy.json・HALT/STOP・halt.lock。
+  Agent/stub/reaper はここを**読むだけ**。ジョブ発行後に yuya が置く HALT・取消・承認の取消も、Agent は毎回ここを読むので
+  そのまま効く（凍結した写しではなく常に最新）。公開物の真正性は chainlog の署名（runner/human/witness 鍵。exec は
+  **agent 鍵しか持たない**＝偽造不可）と、巻き戻り検知（control_seen は exec 側）で守る。
+- **exec_root（_kaburun 所有）**: agent-out・work と、Dispatcher が request を置く requests。exec が**書く**のはここだけ。
+- **仕組み**: `exec_root/pub` を control_pub への **symlink** にする（SplitLayout.ensure）。こうすると、実行側のどの
+  サブプロセス（stub・reaper・watchdog）が `--root exec_root` から素の `Layout(exec_root)` を組み直しても、制御の公開状態を
+  control_pub から読む（引数で配り回す必要がない）。実行側が書く requests だけは pub から外して agent-out の下に置く。
+- **配線**: `jobrunner.build_loop(..., control_pub=...)` が与えられたとき SplitLayout を使い、`handoff._safe_source_dir` で
+  control_pub が _kaburun から書けない（group/other 書き込み不可）ことを確かめる。入口 `bin/g10_jobrunner.py --control-pub`
+  と、plist（§15.12）にも `--control-pub` を加えた（実運用の plist は常に分割）。exec 側のポリシーは公開ポリシー
+  （control_pub/policy.json）を信用する（正本は yuya 側）。agent 鍵は exec 側、runner/human 鍵は yuya 側。
+- **脅威境界**: この分割は「非管理者で隔離され、固定版コードで動く exec」を守る（OS 所有権＋署名＋巻き戻り検知）。root を
+  奪われた exec には対抗しない（symlink の貼り替え等）。固定版コード（release_check 済み）は control_pub を貼り替えない。
+- テスト: test_task42_control_state_split。分割の経路（制御は control_pub から読み、書き込みは exec_root に隔離、out 経由で
+  yuya が ingest→finalize 緑）・**ジョブ発行後に pub へ置いた HALT が exec の Agent を止める（最新を読む証拠）**・
+  書ける control_pub は拒否・SplitLayout のパスと symlink。変異2件（control_pub の読み取り専用チェック撤去・requests を
+  読み取り専用 pub に書く）を追加し killed。
+- **これで B0 の前提コードは出そろった**（B0-1 driver・B0-2 plist・B0-3 split）。残りは特権の B1〜B5（各別途GO）。

@@ -228,21 +228,24 @@ JOBRUNNER_SCRIPT = "g10_jobrunner.py"
 JOBRUNNER_LABEL = "%s.agent.jobrunner" % LABEL_PREFIX
 # ProgramArguments の形（実行先・実行のしかたを変えられないよう、完全一致で検査する）
 _JOBRUNNER_SHAPE = ("[python, -I, g10_jobrunner.py, --root, ROOT, --in, IN, --claims, CLAIMS, --out, OUT, "
-                    "--flags, FLAGS, --cli, CLI, --home, HOME, --interval, SECONDS, --release-digest, DIGEST]")
+                    "--flags, FLAGS, --cli, CLI, --home, HOME, --interval, SECONDS, --release-digest, DIGEST, "
+                    "--control-pub, CONTROL_PUB]")
 _JOBRUNNER_FLAGS = {3: "--root", 5: "--in", 7: "--claims", 9: "--out", 11: "--flags",
-                    13: "--cli", 15: "--home", 17: "--interval", 19: "--release-digest"}
-_JOBRUNNER_PATH_ARGS = (4, 6, 8, 10, 12, 14, 16)  # root/in/claims/out/flags/cli/home はすべて絶対パス
+                    13: "--cli", 15: "--home", 17: "--interval", 19: "--release-digest", 21: "--control-pub"}
+# root/in/claims/out/flags/cli/home と control_pub（B0-3）はすべて絶対パス
+_JOBRUNNER_PATH_ARGS = (4, 6, 8, 10, 12, 14, 16, 22)
 
 
 def job_runner_agent_plan(python, root, in_dir, claims, out_dir, flags, cli, home, interval, release_digest,
-                          package_root=PACKAGE_ROOT):
+                          control_pub, package_root=PACKAGE_ROOT):
     """固定版（package_root）の bin/g10_jobrunner.py を、そのマニフェストのハッシュ付きで _kaburun の gui で回す計画。
-    handoff の向きは呼び出し側が固定したパスで渡す（in・flags=yuya 所有／out・claims=_kaburun 所有）。"""
+    handoff の向きは呼び出し側が固定したパスで渡す（in・flags=yuya 所有／out・claims=_kaburun 所有）。
+    control_pub（B0-3）: 制御の公開状態が置かれた yuya 所有の読み取り専用ディレクトリ（SplitLayout で分割する）。"""
     script = os.path.join(package_root, "bin", JOBRUNNER_SCRIPT)
     logs = os.path.join(root, "logs")
     args = [python, "-I", script, "--root", root, "--in", in_dir, "--claims", claims, "--out", out_dir,
             "--flags", flags, "--cli", cli, "--home", home, "--interval", str(float(interval)),
-            "--release-digest", release_digest]
+            "--release-digest", release_digest, "--control-pub", control_pub]
     return {
         "Label": JOBRUNNER_LABEL,
         "ProgramArguments": args,
@@ -265,7 +268,7 @@ def validate_job_runner_plan(plan, package_root=PACKAGE_ROOT):
     if plan.get("Label") != JOBRUNNER_LABEL:
         raise PlanError("unexpected label")
     args = plan.get("ProgramArguments")
-    if not (isinstance(args, list) and len(args) == 21 and all(isinstance(a, str) for a in args)):
+    if not (isinstance(args, list) and len(args) == 23 and all(isinstance(a, str) for a in args)):
         raise PlanError("ProgramArguments must be " + _JOBRUNNER_SHAPE)
     if args[0] not in ALLOWED_PYTHONS or args[1] != "-I":
         raise PlanError("python must be one of %s run with -I" % (ALLOWED_PYTHONS,))

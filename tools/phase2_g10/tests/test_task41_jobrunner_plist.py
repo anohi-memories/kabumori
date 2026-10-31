@@ -22,12 +22,14 @@ class JobRunnerPlist(ReleaseBase):
         self.flags = os.path.join(self.env.real, "g10-handoff", "flags")
         self.cli = "/Users/_kaburun/clirun/2.1.305"
         self.home = "/Users/_kaburun"
+        self.control_pub = os.path.join(self.env.real, "g10-handoff", "pub")  # 制御の公開状態（B0-3）
         self.plans = os.path.join(self.env.real, "plans")
 
     def generate(self):
         return self.run_release(
             "g10_first_run.py", "jobrunner-plist", "--root", self.root, "--in", self.hin, "--claims", self.claims,
-            "--out", self.hout, "--flags", self.flags, "--cli", self.cli, "--home", self.home, "--plans", self.plans)
+            "--out", self.hout, "--flags", self.flags, "--cli", self.cli, "--home", self.home,
+            "--control-pub", self.control_pub, "--plans", self.plans)
 
     def test_release_jobrunner_plist_and_rules(self):
         code, stdout, err = self.generate()
@@ -41,21 +43,22 @@ class JobRunnerPlist(ReleaseBase):
         plan = plistlib.loads(open(doc["path"], "rb").read())
         args = plan["ProgramArguments"]
         self.assertEqual(args[2], os.path.join(self.rel, "bin", "g10_jobrunner.py"))  # 固定版の中のものだけ
-        self.assertEqual(args[-2:], ["--release-digest", self.digest])
+        self.assertEqual(args[19:21], ["--release-digest", self.digest])
+        self.assertEqual(args[-2:], ["--control-pub", self.control_pub])  # B0-3: 制御の公開状態を指す
         self.assertEqual(plan["Label"], launchd_plan.JOBRUNNER_LABEL)
         self.assertNotIn("--once", args)  # 常駐（--once は付けない）
         self.assertTrue(launchd_plan.validate_job_runner_plan(plan, self.rel))
 
         # 規則: 開発 worktree を指す計画・ハッシュ違い・余分なキー・短い間隔・相対パス・API キーは不可
         dev = launchd_plan.job_runner_agent_plan("/usr/bin/python3", self.root, self.hin, self.claims, self.hout,
-                                                 self.flags, self.cli, self.home, 300, self.digest)
-        wrong_digest = dict(plan, ProgramArguments=args[:20] + ["b" * 64])
+                                                 self.flags, self.cli, self.home, 300, self.digest, self.control_pub)
+        wrong_digest = dict(plan, ProgramArguments=args[:20] + ["b" * 64] + args[21:])
         fast = launchd_plan.job_runner_agent_plan("/usr/bin/python3", self.root, self.hin, self.claims, self.hout,
-                                                  self.flags, self.cli, self.home, 60, self.digest,
+                                                  self.flags, self.cli, self.home, 60, self.digest, self.control_pub,
                                                   package_root=self.rel)
         rel_path = launchd_plan.job_runner_agent_plan("/usr/bin/python3", self.root, "relative/in", self.claims,
                                                       self.hout, self.flags, self.cli, self.home, 300, self.digest,
-                                                      package_root=self.rel)
+                                                      self.control_pub, package_root=self.rel)
         for plan_, pkg in ((dev, PKG), (wrong_digest, self.rel), (fast, self.rel), (rel_path, self.rel),
                            (dict(plan, Program="/bin/sh"), self.rel),
                            (dict(plan, EnvironmentVariables={"PATH": "/usr/bin", "ANTHROPIC_API_KEY": "x"}), self.rel)):
@@ -66,7 +69,8 @@ class JobRunnerPlist(ReleaseBase):
         fr = load_first_run()  # 開発 worktree の g10_first_run.py（固定版ではない）
         with self.assertRaises(SystemExit):
             fr.main(["jobrunner-plist", "--root", self.root, "--in", self.hin, "--claims", self.claims,
-                     "--out", self.hout, "--flags", self.flags, "--cli", self.cli, "--home", self.home])
+                     "--out", self.hout, "--flags", self.flags, "--cli", self.cli, "--home", self.home,
+                     "--control-pub", self.control_pub])
 
 
 if __name__ == "__main__":

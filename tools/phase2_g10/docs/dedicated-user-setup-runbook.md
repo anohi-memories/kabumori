@@ -93,14 +93,20 @@ Part B の「LaunchAgent 登録」より前に、**常駐ループの起動ス�
 - B0-2.（実装済み 2026-10-31）その LaunchAgent plist 生成（gui/503・ProcessType=Background・KeepAlive・固定版の検証つき）。
   `g10runner/launchd_plan.job_runner_agent_plan`／`validate_job_runner_plan` と入口 `bin/g10_first_run.py jobrunner-plist`
   （固定版からのみ・作って lint するだけ・登録しない）。ラベルは `com.kabumori.g10.phase2.agent.jobrunner`。
-- B0-3. 鍵と制御状態の配り方の確定（Q の延長）: exec プレーンの Agent は request 封筒の runner 署名検証・Issue 結合・
-  認可のために、yuya 側の**公開物**（pub の control_events・policy・wiring・GO 本文）を**読み取り専用**で参照する必要がある。
-  これを handoff で配るか、pub を ACL 共有（yuya=書き／_kaburun=読み）にするかを決める。agent 鍵は exec 側、runner/human 鍵は yuya 側。
+- B0-3.（実装済み 2026-10-31）鍵と制御状態の配り方: **pub を ACL 共有（yuya=書き／_kaburun=読み）に分ける**方に決めた
+  （`g10runner/layout.SplitLayout`）。control_pub（yuya 所有・読み取り専用・exec_root の外）に control_events・policy・
+  HALT/STOP・halt.lock を置き、`exec_root/pub` をそこへの symlink にする（stub/reaper も `Layout(exec_root)` で最新の制御
+  状態を読む）。exec が書くのは agent-out・work・requests だけ。`jobrunner.build_loop(..., control_pub=...)`・
+  `bin/g10_jobrunner.py --control-pub`・plist の `--control-pub` で配線。agent 鍵は exec 側、runner/human 鍵は yuya 側。
+  ジョブ発行後に yuya が置く HALT・取消も最新として効く。root を奪われた exec には対抗しない（固定版コードが前提）。
 
-これが入ってから、下の B1 以降（各特権・各GO）に進む。
+これで B0 の前提コードは出そろった。下の B1 以降（各特権・各GO）に進む。
 
 ## B1. exec プレーンの first-run（_kaburun のレイアウト初期化）▶GO（後日）
-`/Users/_kaburun/g10-exec` を root に、exec 側の鍵（agent）とポリシー公開物を置く。鍵の生成は要 GO。
+`/Users/_kaburun/g10-exec` を root に、exec 側の鍵（agent）を置く（鍵の生成は要 GO）。**制御の公開状態は exec_root の中には
+置かず**、yuya 所有の読み取り専用 control_pub（例: `/Users/Shared/g10-control-pub`。yuya がそこに control_events・policy・
+HALT/STOP・halt.lock を公開する）に置く。exec_root 側は `pub` を control_pub への symlink にする（SplitLayout.ensure 相当）。
+したがって exec_root/pub は実体のディレクトリにしない（symlink のみ）。
 
 ## B2. LaunchAgent を gui/503 に登録 ▶GO（_kaburun のセッションで実行・後日）
 まず固定版の中の g10_first_run.py で plist を作る（作って lint するだけ・登録しない。B1 で root と鍵・ポリシーができてから）:
@@ -109,7 +115,8 @@ Part B の「LaunchAgent 登録」より前に、**常駐ループの起動ス�
 /usr/bin/python3 -I <固定版>/bin/g10_first_run.py jobrunner-plist --root /Users/_kaburun/g10-exec \
   --in /Users/Shared/g10-handoff/in --claims /Users/Shared/g10-kaburun/claims \
   --out /Users/Shared/g10-kaburun/out --flags /Users/Shared/g10-handoff/flags \
-  --cli /Users/_kaburun/clirun/2.1.305 --home /Users/_kaburun
+  --cli /Users/_kaburun/clirun/2.1.305 --home /Users/_kaburun \
+  --control-pub /Users/Shared/g10-control-pub
 ```
 
 出力の `path`（既定は `/Users/_kaburun/g10-exec/launchd-plans/com.kabumori.g10.phase2.agent.jobrunner.plist`）を _kaburun の

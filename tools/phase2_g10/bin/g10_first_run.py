@@ -247,7 +247,7 @@ def cmd_jobrunner_plist(a):
     plan = launchd_plan.job_runner_agent_plan(
         "/usr/bin/python3", root, os.path.realpath(a.in_dir), os.path.realpath(a.claims), os.path.realpath(a.out),
         os.path.realpath(a.flags), os.path.realpath(a.cli), os.path.realpath(a.home), a.interval, digest,
-        package_root=PACKAGE)
+        os.path.realpath(a.control_pub), package_root=PACKAGE)
     path = os.path.join(out_dir, plan["Label"] + ".plist")
     with open(path, "wb") as f:
         f.write(launchd_plan.render_validated_job_runner(plan, PACKAGE))
@@ -311,6 +311,7 @@ def main(argv=None):
     jp.add_argument("--flags", required=True, help="handoff/flags（yuya 所有・HALT/STOP）")
     jp.add_argument("--cli", required=True, help="_kaburun の固定版 CLI の実体（版の名前のファイル）")
     jp.add_argument("--home", required=True, help="_kaburun の HOME")
+    jp.add_argument("--control-pub", required=True, help="制御の公開状態の yuya 所有・読み取り専用ディレクトリ（B0-3）")
     jp.add_argument("--interval", type=float, default=300.0)
     jp.add_argument("--plans", help="plist の出力先（既定はルートの launchd-plans/）")
     a = p.parse_args(argv)

@@ -39,6 +39,8 @@ def main(argv=None):
     p.add_argument("--once", action="store_true", help="1周期だけ回して戻る")
     p.add_argument("--wait", type=float, default=600.0, help="1ランの終端を待つ上限（秒）")
     p.add_argument("--release-digest", help="固定版のマニフェストのハッシュ（固定版から動くときは必須）")
+    p.add_argument("--control-pub", help="制御の公開状態（control_events・policy・HALT/STOP）の yuya 所有・読み取り専用"
+                   "ディレクトリ。与えると SplitLayout で分割する（専用ユーザー方式）")
     p.add_argument("--dev", action="store_true", help="開発 worktree からの実行を許す（試験用。plist には使えない）")
     a = p.parse_args(argv)
 
@@ -66,10 +68,11 @@ def main(argv=None):
     with FileLock(lock_path, "ex", timeout=0) as lock:
         if not lock.acquired:
             raise SystemExit("another jobrunner is already running for this out directory")
+        control_pub = os.path.realpath(a.control_pub) if a.control_pub else None
         loop = jobrunner.build_loop(a.root, os.path.realpath(a.in_dir), os.path.realpath(a.claims), out,
                                     os.path.realpath(a.flags), os.path.realpath(a.cli), os.path.realpath(a.home),
                                     wait_seconds=a.wait, log_path=os.path.join(out, ".jobrunner.log"),
-                                    release_check=release_check)
+                                    release_check=release_check, control_pub=control_pub)
         max_cycles = 1 if a.once else None
         count = 0
         while max_cycles is None or count < max_cycles:

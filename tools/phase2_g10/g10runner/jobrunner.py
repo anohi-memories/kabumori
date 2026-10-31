@@ -18,7 +18,7 @@ import time
 
 from . import handoff, policy as policy_mod, resident, result_handoff, wiring
 from .agent import Agent
-from .layout import Layout
+from .layout import Layout, SplitLayout
 
 
 class ExportingDispatcher:
@@ -56,16 +56,25 @@ class ExportingDispatcher:
 
 
 def build_loop(root, in_dir, claims_dir, out_dir, flags_dir, cli_realpath, home,
-               wait_seconds=600, log_path=None, now=time.time, release_check=None):
-    """_kaburun 側の常駐ループを1本に組む（B0-1）。
+               wait_seconds=600, log_path=None, now=time.time, release_check=None, control_pub=None):
+    """_kaburun 側の常駐ループを1本に組む（B0-1／B0-3）。
 
-    root: exec プレーンの初期化済みルート（keys/・wiring.json・公開ポリシー）。bin/g10_first_run.py init 相当で作る。
+    root: exec プレーンの初期化済みルート（keys/・wiring.json）。bin/g10_first_run.py init 相当で作る。
     in/claims/out/flags: handoff の受け渡しフォルダ（in・flags=yuya 所有／out・claims=_kaburun 所有）。
     cli_realpath/home: _kaburun の固定版 CLI（版の名前のファイル）と HOME。ログイン前チェックと実起動に使う。
+    control_pub（B0-3）: 制御の公開状態（control_events・policy・HALT/STOP・halt.lock）が置かれた yuya 所有の
+      読み取り専用ディレクトリ。与えると SplitLayout で制御状態はそこから読み、実行プレーンの書き込みは root の下だけに
+      分ける。与えなければ従来どおり単一ルート（B0-1）。
     """
     root = os.path.realpath(root)
-    layout = Layout(root)
-    policy = policy_mod.load_current(layout)   # 正本と公開用が一致しなければ開かない（TASK 28）
+    if control_pub is not None:
+        control_pub = os.path.realpath(control_pub)
+        handoff._safe_source_dir(control_pub)  # yuya 所有・_kaburun から書けない（group/other 書き込み不可）
+        layout = SplitLayout(root, control_pub).ensure()
+        policy = policy_mod.load(layout.policy_pub)  # exec 側は公開ポリシーを信用する（正本は yuya 側）
+    else:
+        layout = Layout(root)
+        policy = policy_mod.load_current(layout)   # 正本と公開用が一致しなければ開かない（TASK 28）
     signer, verifier = wiring.agent_side(root)  # 署名は agent のみ・検証は4役割の公開鍵
     agent = Agent(layout, signer, verifier, policy)
     inbox = handoff.HandoffInbox(in_dir, claims_dir, verifier, now=now)
