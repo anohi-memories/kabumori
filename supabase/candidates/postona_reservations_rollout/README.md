@@ -120,7 +120,7 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
   - 403 `POSTONA_RESV_SERVICE_NOT_ACTIVE`: the service ended or never started.
   - 403 `POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED`: X is disconnected. Offer reconnect; after the reconnect, create works again.
   - 409 `POSTONA_RESV_IDEMPOTENCY_CONFLICT`: the same `clientBatchId` with another body. The same id with the same body answers the same rows, so a retry is safe.
-  - 409 `POSTONA_RESV_SLOT_CONFLICT`: within 60 minutes of another row.
+  - 409 `POSTONA_RESV_SLOT_CONFLICT`: one of the operation's times is within 60 minutes of another active row, or of another time in the same batch. Two existing rows close to each other never block an operation that is clear of both (G3-02 #6).
   - 409 `POSTONA_RESV_NOT_PLANNED`: reschedule of a row that is no longer planned (for example `uncertain`).
   - 422 `POSTONA_RESV_CONSENT_REQUIRED`: a reconfirm hash that does not match the body.
 - After `reschedule`, `consentState` is `needs_reconfirm`. Send `reconfirm` with the body's SHA-256 before the row can be sent.
@@ -188,7 +188,12 @@ What it showed, for the operator:
 
 **Proof**: `local_stack/` L13 / L14 run these stores over the real runtime.
 
-**Observation** (G3 SQL, not changed here): the 60-minute slot rule compares every pair of an account's active rows. Two existing rows closer than that (only a SYNTHETIC clock move made them) make every later create on that account answer `SLOT_CONFLICT`.
+**Gap scope** (fixed in G3-02 #6; the G3-02 #5 observation):
+- **Before**: the 60-minute rule compared every pair of an account's active rows. Two existing rows closer than 60 minutes made every later create / reschedule on that account answer `SLOT_CONFLICT`, however far away it was.
+- **How such a pair arises**: a "post now" (005 / 006 insert it without the gap check) next to a planned reservation. Published rows stay in the check, so the account stayed blocked for good.
+- **Now** (`assert_slots_free`, 001): only the operation's own times are checked, each against every other active row and against each other.
+- **Unchanged**: the 60-minute gap (exactly 60 is fine), the day / month caps, the active states, the row's own exclusion on reschedule, the per-account advisory lock.
+- **Proof**: PG17 `postona_x_reservations/run.sh` M7 (+ C1-C3 races); `local_stack/` L16 over the real runtime and the app store.
 
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.

@@ -246,6 +246,50 @@ delete from postona_x_resv.batches where id in (select batch_id from m6) or id i
 select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m6')::bigint, 'M6 cleaned up');
 select 'M6_INTERVAL_CADENCE_SERVER_CHECK_PASS' as result;
 
+-- M7. Gap scope (G3-02 #6): an operation is compared with the account's other active rows and with its own items, never two
+--     existing rows with each other. SYNTHETIC: two active rows 20 minutes apart -- what a "post now" (005 / 006 insert it
+--     without the gap check) next to a planned reservation leaves behind; published rows stay in the check for good.
+select set_config('rt.before_m7', pg_temp.count_resv()::text, false);
+create temp table m7 as
+select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_e1', pg_temp.jst(72, '10:00'), 'e1'), pg_temp.item('m7_e2', pg_temp.jst(72, '12:00'), 'e2'),
+                    pg_temp.item('m7_r', pg_temp.jst(74, '10:00'), 'r')));
+update postona_x_resv.reservations set scheduled_at = pg_temp.jst(72, '10:20'), status = 'published', provider_post_id = '7'
+where id = (select reservation_id from m7 where draft_id = 'm7_e2');  -- SYNTHETIC near pair
+-- A post far from every row is accepted (before G3-02 #6: POSTONA_RESV_SLOT_CONFLICT from the existing pair alone).
+select pg_temp.check((select count(*) from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_far', pg_temp.jst(76, '10:00'), 'far')))) = 1, 'a far post is not blocked by an existing near pair');
+-- Near an existing row is still refused: exactly 60 minutes is fine, 59 minutes on either side and between the pair are not.
+select pg_temp.check((select count(*) from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_60', pg_temp.jst(72, '11:20'), 'sixty')))) = 1, '60 minutes after the published row');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_a', pg_temp.jst(72, '12:19'), 'a')))$q$, 'POSTONA_RESV_SLOT_CONFLICT');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_b', pg_temp.jst(72, '09:01'), 'b')))$q$, 'POSTONA_RESV_SLOT_CONFLICT');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_m', pg_temp.jst(72, '10:10'), 'm')))$q$, 'POSTONA_RESV_SLOT_CONFLICT');
+-- An uncertain row still holds its slot.
+update postona_x_resv.reservations set status = 'uncertain', outcome_code = 'LEASE_EXPIRED' where draft_id = 'm7_far';  -- SYNTHETIC
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_u', pg_temp.jst(76, '10:30'), 'u')))$q$, 'POSTONA_RESV_SLOT_CONFLICT');
+-- A batch keeps its own items 60 minutes apart, and one near item refuses the whole batch.
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_p1', pg_temp.jst(78, '10:00'), 'p1'), pg_temp.item('m7_p2', pg_temp.jst(78, '10:30'), 'p2')))$q$, 'POSTONA_RESV_SLOT_CONFLICT');
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m7_q1', pg_temp.jst(78, '10:00'), 'q1'), pg_temp.item('m7_q2', pg_temp.jst(72, '10:40'), 'q2')))$q$, 'POSTONA_RESV_SLOT_CONFLICT');
+-- Reschedule: a far move is accepted (before: SLOT_CONFLICT), next to its own old time too (it is excluded), near another row not.
+select set_config('rt.m7r', (select reservation_id::text from m7 where draft_id = 'm7_r'), false);
+select pg_temp.check((select revision = 2 from postona_x_resv.reschedule(current_setting('rt.m7r')::uuid, 1, pg_temp.jst(74, '15:00'))), 'far reschedule');
+select pg_temp.check((select revision = 3 from postona_x_resv.reschedule(current_setting('rt.m7r')::uuid, 2, pg_temp.jst(74, '15:30'))), 'reschedule next to itself');
+select pg_temp.expect_error(format($q$select * from postona_x_resv.reschedule(%L, 3, pg_temp.jst(72, '10:40'))$q$, current_setting('rt.m7r')), 'POSTONA_RESV_SLOT_CONFLICT');
+-- Nothing refused was stored, and the existing pair is left exactly as it was.
+select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m7')::bigint + 5, 'm7: 3 + far + sixty stored, nothing else');
+select pg_temp.check((select array_agg(status || '@' || to_char(scheduled_at at time zone 'Asia/Tokyo', 'HH24:MI') order by draft_id)
+  from postona_x_resv.reservations where draft_id in ('m7_e1', 'm7_e2')) = array['planned@10:00', 'published@10:20'], 'existing pair untouched');
+delete from postona_x_resv.batches where id in (select batch_id from postona_x_resv.reservations where draft_id like 'm7\_%');
+select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m7')::bigint, 'M7 cleaned up');
+select 'M7_GAP_SCOPE_EXISTING_PAIR_PASS' as result;
+
 -- W1. Worker: claim only due, consented, publishable manual rows; one lease; finish; replay; lease expiry.
 -- Make three rows due (test-only time travel keeps consent bound to the new time).
 update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute',
