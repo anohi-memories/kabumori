@@ -211,3 +211,77 @@ _kaburun 作成（済）／ジョブ実行エージェント登録（gui/503）�
 - **残り（別段・要GO）**: ① stub/agent 側を source preparer 選択に実結線し、bundle を使うラン全体の E2E（代役で）。
   ② gui/503 の LaunchAgent から HandoffInbox を回す常駐ループ（in を監視・受理したら既存のスタブ起動に渡す）。
   ③ 実 `-p` の1回ドライラン（指摘3）。②③は一度きりの特権作業・実機のため各別途GO。
+
+## 15. ジョブ実行エージェントの常駐ループ（設計・TASK 36）
+§14.8 手順2 の残り「gui/503 の常駐ループ」の設計。中核（検証・CLAIM = handoff.py、ソース準備 = BundleSourcePreparer、
+実行プレーン = agent.Agent / stub）は実装・テスト済み。本節は、それらを _kaburun の GUI セッションで回す常駐の形と、
+yuya（制御）と _kaburun（実行）の役割分担・受け渡し・HALT・認証・障害時の扱いを決める。実装は別TASK、特権作業は各別途GO。
+
+### 15.1 方式の確定（Variant B＝実行プレーンの分離）
+2つの案があった。**(A)** CLI の子だけ _kaburun、スタブ・監視・finalize は yuya。**(B)** 受理・スタブ起動・監視まで
+_kaburun の実行プレーンで回し、yuya とは署名付きジョブ＋ACL 受け渡しだけでつながる。
+- 既存コードは (B) を前提に積んである（agent.py の冒頭「実行プレーン（専用ユーザー側）」、handoff.py の受け口、
+  BundleSourcePreparer の bundle 受け渡し）。(B) の方が隔離が強い（yuya の資産に実行プレーンが触れない）。**(B) を採る。**
+- 役割分担:
+  - **yuya（制御プレーン・本人UID）**: Issue #323 の読取り、Phase2 TASK の検証、人の REAL_CLAUDE_GO の承認、
+    base_sha のソースを bundle 化、**署名付きジョブ**（GO＋request＋human 署名）を handoff/in に置く、
+    実行後の out/ を回収して finalize・REPORT 生成・通知。GitHub 認証と human 鍵は yuya 側だけが持つ。
+  - **_kaburun（実行プレーン・専用UID）**: handoff/in を監視し、handoff.HandoffInbox.accept で検証＋at-most-once
+    CLAIM、CLI のログイン前チェック、実行プレーン Agent でスタブを起動（スタブが bundle から作業フォルダを用意し、
+    sandbox-exec で CLI を1回起動・監視）、結果（diff・テスト結果・端末状態）を handoff/out に書く。実 CLI の
+    ログインキーチェーンは _kaburun の GUI セッションのものを使う。
+
+### 15.2 受け渡しフォルダ（ACL で向きを固定）
+`handoff/`（setup で作る。一度きり・要GO）:
+- `in/`   : yuya=書き／_kaburun=読み。署名付きジョブ（§14.10 の形）と、その bundle。
+- `out/`  : _kaburun=書き／yuya=読み。ラン結果（diff・テスト結果・端末状態・ローカル REPORT 下書き）。
+- `claims/`: _kaburun 所有。at-most-once の claim マーカー（handoff.py）。
+- `flags/`: yuya=書き／_kaburun=読み。HALT・STOP の合図（UID をまたぐので signal ではなくフラグ）。
+ACL は `chmod +a` で付け、POSIX ビットは group/other 不可。_kaburun は in/ に書けない＝ジョブを自作できない。
+in/ のファイルは yuya 所有なので、信頼の土台は**署名**（handoff.py はファイル所有では信用しない）。
+
+### 15.3 常駐の形（LaunchAgent gui/503）
+- _kaburun の `~/Library/LaunchAgents/` に plist を置き、`launchctl bootstrap gui/503`（_kaburun の GUI セッション）で
+  登録。`ProcessType=Background`、`KeepAlive`（異常終了のみ再起動）、`RunAtLoad`。固定版（release.py）から起動し、
+  起動直前ごとに固定版を検証（autorun の release_check と同じ。合わなければハードHALT）。
+- GUI ログインが前提（ログインキーチェーンが開く条件。A1・ゲートで実測済み）。再起動後は _kaburun の再ログインが要る
+  （ファストユーザースイッチ）。ログインしていなければ CLI は「Not logged in」で止まる＝害なく止まる側。
+- 1周期 = flags 確認 → in/ を走査 → 1件受理できたら実行 → out/ へ結果 → 記録。同時に動くランは1本まで
+  （実行中は新規受理しない。既存の registry.non_terminal で判定）。周期間隔は autorun の MIN_LIVE_INTERVAL 相当。
+
+### 15.4 1周期の処理（loop.step 相当・fail-closed）
+1. **HALT/STOP**: flags/ の HALT・STOP、実行プレーンの HALT_AGENT のいずれかがあれば、受理も起動もしない。
+2. **受理**: in/ の候補1件を `HandoffInbox.accept(filename)`。ok でなければ記録して次へ（CLAIM しない）。
+   ok なら at-most-once CLAIM 済み（二重起動しない）。
+3. **ログイン前チェック**: `real_claude.auth_status(go.cli_realpath, go.home)` がログイン済みか（モデルを呼ばない）。
+   未ログインなら起動せず、out/ に「login 切れ」を書いて停止し、yuya 側の通知役に知らせる（§6）。承認は消費済み
+   （CLAIM 済み）だが実行はしない＝再実行もしない（fail-closed）。※ここは「CLAIM 前にログイン確認」に変える案も要検討
+   （承認を無駄に消費しないため。15.7 の open question）。
+4. **起動**: 実行プレーン Agent にジョブの request を渡してスタブを起動（agent.handle_request_file 相当）。スタブが
+   bundle から作業フォルダを用意（source_bundle→BundleSourcePreparer）、sandbox-exec で CLI を1回起動し監視。
+5. **終了待ち・結果**: 端末状態・diff・テスト結果・ローカル REPORT 下書きを out/ に書く（本文・秘密・メール不可）。
+6. **記録**: autorun.log と同じ方針で、決定・理由・run_id・status だけを _kaburun 側ログに1行JSONで残す。
+
+### 15.5 HALT を UID 越しに効かせる
+yuya は _kaburun のプロセスに直接シグナルを送れない。so:
+- yuya が `flags/HALT`（署名付き）を置く → 常駐は周期の頭と起動直前に読む → あれば起動しない／実行中なら既存の
+  ハードHALT 経路（S1/S2 の監視が期限・HALT で子を止める）に委ねる。
+- 緊急停止は二重: ①flags/HALT（次の周期・起動直前で効く）②`launchctl bootout gui/503/<label>`（yuya は不可、_kaburun
+  か管理者。即時だが実行中の子は S1/S2 が別途止める）。実行中の子そのものは sandbox＋S1/S2 の期限で必ず止まる。
+
+### 15.6 非特権 vs 一度きりの特権（GO）
+- **非特権（別TASKで実装・テスト可）**: 常駐ループ本体（flags確認→accept→auth前チェック→Agent起動→out記録）。
+  スタブ起動は代役で差し替え可能にして E2E テストする（実 CLI もログインキーチェーンも使わない）。
+- **一度きりの特権（各別途GO・yuya/管理者が実行）**: handoff/ の作成と ACL 付与、LaunchAgent の登録（bootstrap）、
+  _kaburun への固定版 CLI の配置と初回ログイン。sudoers 変更なし・_kaburun は非管理者のまま。
+
+### 15.7 未解決（実装前に決める）
+1. **request の署名境界**: Agent は request を runner/agent 鍵で独立検証する。ジョブに載せる request を誰がどの鍵で
+   署名するか（yuya 側 control.try_claim で署名して渡す／_kaburun 側 runner 鍵で作る）を決める。control 側 CLAIM
+   （ledger）と handoff 側 claim マーカーの二重 CLAIM の関係も整理する。
+2. **共有する状態の所有権**: registry・logs（署名チェーン）を _kaburun が書くなら、その置き場の所有権と、yuya が
+   finalize で読む経路を決める（out/ 経由にするか、ACL 共有にするか）。finalize は human/runner 鍵＝yuya 側なので、
+   実行プレーンが書いた端末状態を yuya がどう受け取り署名するかが要点。
+3. **auth 前チェックの位置**（15.4-3 の CLAIM 前／後）。
+4. **ログイン維持**（再起動後の再ログイン・自動再ログインの可否）はセキュリティと両睨みで要検討。
+5. 実 -p の1回ドライラン（指摘3）後に、~/.claude の許可/拒否を最終確定。
