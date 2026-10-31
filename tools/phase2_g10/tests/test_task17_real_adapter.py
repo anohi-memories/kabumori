@@ -171,6 +171,48 @@ class RealAdapterPath(RealAdapterBase):
         self.assertIn("prelaunch check failed", e.get("abort_reason", ""))
 
 
+class BundleAdapterPath(RealAdapterBase):
+    """§14.10 結線: GO が source_bundle を持つと、作業フォルダは yuya の repo ではなく handoff の bundle から
+    用意される。元 repo を消してからでもラン全体（claim→スタブ→ソース準備→代役CLI→監督→finalize）が通ることで、
+    yuya の repo を読まずに完走できることを E2E で示す。実 Claude は使わない。"""
+
+    def make_bundle(self, delete_repo=False):
+        bundle = os.path.join(self.env.real, "src.bundle")
+        git(["bundle", "create", bundle, "--all"], self.repo)
+        if delete_repo:
+            import shutil
+            shutil.rmtree(self.repo)  # yuya の repo を消す: 以後 bundle だけが頼り
+        return bundle
+
+    def test_bundle_source_run_completes_without_reading_the_repo(self):
+        bundle = self.make_bundle(delete_repo=True)
+        self.go(source_bundle=bundle)
+        run_id = self.run_once()
+        entry = self.wait_terminal(run_id, 60)
+        status, end = self.env.control.finalize(run_id, current_body=self.body)
+        self.assertEqual(status, "ended_checks_passed",
+                         (end["payload"], {k: entry.get(k) for k in ("state", "stop_reason", "stop_by", "abort_reason")}))
+        calls = self.calls()
+        self.assertEqual(len(calls), 1)  # 代役CLIはちょうど1回
+        self.assertTrue(calls[0]["cwd_has_marker"])  # 作業フォルダは bundle から base_sha で checkout された
+
+    def test_adapter_for_bundle_go_uses_bundle_source_preparer(self):
+        self.go(source_bundle=os.path.join(self.env.real, "unused.bundle"))
+        st = self.env.control.read_state()
+        req = {"approval_id": "g10-p2-test-0001", "task_sha256": issue_mod.norm.compute_hash(self.body),
+               "prompt": self.body}
+        a = adapter.get_adapter(self.env.policy, st, req)
+        self.assertIsInstance(a.source_preparer(), real_claude.BundleSourcePreparer)
+
+    def test_missing_bundle_aborts_the_run_without_launch(self):
+        self.go(source_bundle=os.path.join(self.env.real, "does-not-exist.bundle"))
+        run_id = self.run_once()
+        self.assertNotIn("SPAWNED", self.env.agent.used_state(run_id))
+        self.assertEqual(self.calls(), [])
+        e = self.wait_terminal(run_id, 30)
+        self.assertIn("work dir preparation failed", e.get("abort_reason", ""))
+
+
 class GoRules(RealAdapterBase):
     def test_invalid_go_documents_are_refused(self):
         good = {"go_id": "g", "approval_id": "a", "task_sha256": "a" * 64, "body_sha256": "b" * 64,
