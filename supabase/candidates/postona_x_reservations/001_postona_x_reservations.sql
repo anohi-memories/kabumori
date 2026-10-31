@@ -414,6 +414,10 @@ begin
     if jsonb_typeof(v_item) <> 'object' or (v_item ->> 'draft_id') is null or (v_item ->> 'scheduled_at') is null then
       raise exception 'POSTONA_RESV_ITEM_INVALID' using errcode = 'P0001';
     end if;
+    -- G3-02 #8: `single:` is the "send now" rows' namespace (005 / 006 write it themselves); a reservation never claims it.
+    if (v_item ->> 'draft_id') ~ '^single:' then
+      raise exception 'POSTONA_RESV_ITEM_INVALID' using errcode = 'P0001';
+    end if;
     v_at := (v_item ->> 'scheduled_at')::timestamptz;
     if v_at < pg_catalog.now() + interval '5 minutes' or v_at > pg_catalog.now() + interval '90 days' then
       raise exception 'POSTONA_RESV_TIME_OUT_OF_RANGE' using errcode = 'P0001';

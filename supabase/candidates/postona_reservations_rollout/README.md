@@ -123,6 +123,7 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
   - 409 `POSTONA_RESV_SLOT_CONFLICT`: one of the operation's times is within 60 minutes of another active row, or of another time in the same batch. Two existing rows close to each other never block an operation that is clear of both (G3-02 #6).
   - 409 `POSTONA_RESV_NOT_PLANNED`: reschedule of a row that is no longer planned (for example `uncertain`), or of a "send now" row (G3-02 #7).
   - 422 `POSTONA_RESV_CONSENT_REQUIRED`: a reconfirm hash that does not match the body.
+  - 422 `POSTONA_RESV_ITEM_INVALID`: an item without a draft id / time, or a draft id in the reserved `single:` namespace (G3-02 #8).
 - After `reschedule`, `consentState` is `needs_reconfirm`. Send `reconfirm` with the body's SHA-256 before the row can be sent.
 - A row's `status`:
   - `planned`: waiting, or handed back unsent.
@@ -202,6 +203,7 @@ What it showed, for the operator:
   - a send now is not held to the 60-minute gap (a send now 30 minutes before a reservation is accepted);
   - a NEW reservation within 60 minutes of an active send now (claimed / published / uncertain) is refused `SLOT_CONFLICT`.
 - **Proof**: PG17 `single_post_live_fence_run.sh` L10; `local_stack/` L17 (the app store's reschedule → `final`).
+- **Reserved namespace** (G3-02 #8): a reservation draft id starting `single:` is refused `POSTONA_RESV_ITEM_INVALID` (422 → `fix_input`; the whole batch, nothing written), so no client can make a reservation look like a send now. Only the exact, case-sensitive prefix is reserved (`x_single:1`, `Single:2`, `single_3` are ordinary). The check runs on new items only: a batch stored earlier still replays as itself, and no row is changed. Proof: PG17 `run.sh` M8; `local_stack/` L18.
 
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.
