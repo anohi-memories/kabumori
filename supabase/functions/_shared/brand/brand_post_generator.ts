@@ -50,6 +50,16 @@ export type BrandPostDraft = {
   characterCount: number;
 };
 
+/** Server-selected port; the default path below remains OpenAI and receives no new fields. */
+export type BrandPostTextProvider = (request: {
+  brandId: string;
+  postType: string;
+  instructions: string;
+  input: string;
+  maxOutputTokens: number;
+  outputSchema?: { name: string; schema: Record<string, unknown> };
+}) => Promise<Pick<BrandPostDraft, "text" | "model" | "inputTokens" | "outputTokens" | "apiCostUsd">>;
+
 // Local, brand-agnostic copies of the same three mechanical helpers x-test-post/index.ts defines for its
 // own (Kabumori-only) generators. Duplicated rather than imported so this module has zero dependency on
 // index.ts -- there is no import path by which a future change to Kabumori's dispatcher could alter this
@@ -102,6 +112,7 @@ export async function generateBrandPost({
   contentSettings,
   extraInstructions = [],
   outputSchema,
+  textProvider,
   fetchImpl = fetch,
 }: {
   openAiApiKey: string;
@@ -117,6 +128,7 @@ export async function generateBrandPost({
   extraInstructions?: readonly string[];
   /** Optional structured output. Omission preserves the existing text request and prompt. */
   outputSchema?: { name: string; schema: Record<string, unknown> };
+  textProvider?: BrandPostTextProvider;
   fetchImpl?: typeof fetch;
 }): Promise<BrandPostDraft> {
   // Generation is allowed for dry_run and live (same rule as buildBrandDryRunPreview) -- only a
@@ -172,6 +184,28 @@ export async function generateBrandPost({
     DEFAULT_TOPIC_SEED;
 
   const unlimitedLength = lengthPolicy?.mode === "unlimited";
+
+  if (textProvider) {
+    const draft = await textProvider({
+      brandId: context.brand.id,
+      postType,
+      instructions,
+      input: `今日のテーマ: ${topic}`,
+      maxOutputTokens: unlimitedLength ? UNLIMITED_LENGTH_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
+      ...(outputSchema ? { outputSchema } : {}),
+    });
+    const text = draft.text.trim();
+    if (!text) throw new BrandContextError("BRAND_POST_EMPTY_OUTPUT");
+    let characterCount = postCharacterCount(text);
+    if (lengthPolicy) {
+      try {
+        characterCount = assertPostWithinLengthPolicy(lengthPolicy, text);
+      } catch {
+        throw new BrandContextError("BRAND_POST_LENGTH_LIMIT_EXCEEDED");
+      }
+    }
+    return { ...draft, text, brandId: context.brand.id, postType, characterCount };
+  }
 
   const response = await fetchImpl(OPENAI_RESPONSES_URL, {
     method: "POST",
