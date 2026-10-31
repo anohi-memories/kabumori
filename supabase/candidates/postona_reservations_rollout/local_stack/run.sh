@@ -16,8 +16,9 @@
 #   test    local_test.ts (phases L0-L12, real HTTP; G3-02 #2: create / reschedule / reconfirm decided in the database).
 #   e2e     G3-02 #9: a TEST ONLY worker twin (postona-x-reservation-worker-e2etest) with a FAKE credential snapshot and a fake X in a
 #           g3ls_test schema (a throw-away login reaches only that schema; both dropped before RB); L19-L24.
-#   tick    G3-02 #10: 016 (worker tick) + pg_net / pg_cron on this stack only, a TEST ONLY URL rule for its kong entries, Vault entries;
-#           L25-L31, then the real pg_cron job, the unschedule and 016's rollback before RB.
+#   tick    G3-02 #10 / #11: 016 (worker tick: a signed one-use ticket, the target pinned to a project ref) + pg_net / pg_cron on this
+#           stack only, a TEST ONLY target (g3ls_test.tick_target: this stack's kong entries) and Vault key; L25-L31, then the real
+#           pg_cron job, an alias job refusing 016's rollback, the unschedule and 016's rollback before RB.
 # Test-world stand-ins (not G3's to decide; labelled in the test): a service end = the entitlement row as G5's end leaves it; a Threads
 # connection = G4's binding_row shape (as smoke.sql); the API / worker LOGIN members (a separately approved rollout step) = two
 # throw-away login roles with random passwords, kept only in a 0600 file inside the work dir.
@@ -112,8 +113,8 @@ case "${G3LS_MUTANT:-}" in
   unknown_as_rejected) mutate "$fns/_shared/postona_reservations/x_publisher.ts" 'return { kind: "unknown", code: controller.signal.aborted ? "X_TIMEOUT" : "X_TRANSPORT_UNKNOWN" };' 'return { kind: "rejected_before_send", code: "X_TRANSPORT_UNKNOWN" };' ;;
   tick_no_in_flight) mutate16 "  if found and v_last.ticked_at > pg_catalog.now() - interval '70 seconds'" "  if false and v_last.ticked_at > pg_catalog.now() - interval '70 seconds'" ;;
   tick_no_lock) mutate16 "  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:worker_tick', 0)) then" "  if false then" ;;
-  tick_short_secret) mutate16 " or pg_catalog.length(v_secret) < 32 then" " then" ;;
-  tick_url_any) mutate16 "  select coalesce(p_url ~ '^https://[a-z0-9]{20}\\.supabase\\.co/functions/v1/postona-x-reservation-worker\$', false)" "  select true" ;;
+  tick_short_secret) mutate16 " or pg_catalog.length(v_key) < 32 then" " then" ;;
+  tick_key_in_header) mutate16 "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json'," "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json', 'x-postona-worker-secret', v_key," ;;
   *) fail "unknown G3LS_MUTANT" ;;
 esac
 RO_SH="$bundle/rollout.sh"; [ "${G3LS_MUTANT:-}" = host_any ] && RO_SH="$WORK/bundle/rollout.sh"
@@ -201,19 +202,19 @@ sa -c "create extension if not exists pg_net" -c "create extension if not exists
 own -f "$T16" >/dev/null || fail "016"
 if own -f "$T16" >"$WORK/o16" 2>&1; then fail "016 re-applied"; fi
 grep -q POSTONA_X_WORKER_TICK_ALREADY_APPLIED "$WORK/o16" || fail "016 re-apply: $(tail -1 "$WORK/o16")"
-[ "$(own -A -t -c "select string_agg(postona_x_resv.worker_url_allowed(u)::text, ',' order by o) from unnest(array[
-  'https://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservation-worker', 'http://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservation-worker',
-  'https://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservations', 'https://evil.example/functions/v1/postona-x-reservation-worker',
-  'http://kong:8000/functions/v1/postona-x-reservation-worker', null]) with ordinality as x(u, o)")" = "true,false,false,false,false,false" ] || fail "016 URL rule"
-# TEST ONLY (this stack): the URL rule also admits this stack's own kong worker entries and one unreachable host; production stays https only
+[ "$(own -A -t -c "select coalesce(postona_x_resv.worker_url('abcdefghij0123456789'), '-') || '|' || coalesce(postona_x_resv.worker_url('Abc.evil/x'), '-') || '|' || coalesce(postona_x_resv.worker_url(null), '-')")" \
+  = "https://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservation-worker|-|-" ] || fail "016 target rule"
+# TEST ONLY (this stack has no https://<ref>.supabase.co): the target is read from g3ls_test.tick_target (this stack's kong entries,
+# one unreachable host), and only while a ref is pinned; production builds it from the pinned ref
 own >/dev/null <<'SQL'
-create or replace function postona_x_resv.worker_url_allowed(p_url text) returns boolean
-language sql immutable set search_path = '' as $$
-  select coalesce(p_url ~ '^http://kong:8000/functions/v1/postona-x-reservation-worker(-localtest|-e2etest)?$'
-                  or p_url = 'http://g3ls-unreachable.invalid/functions/v1/postona-x-reservation-worker', false)
-$$;
+create or replace function postona_x_resv.worker_url(p_ref text) returns text
+language plpgsql stable set search_path = '' as $$
+begin
+  if p_ref is null or p_ref !~ '^[a-z0-9]{20}$' then return null; end if;
+  return (select t.url from g3ls_test.tick_target t);
+end $$;
 SQL
-echo "OK 016 worker tick installed (pg_net + Vault; re-apply refused; production URL rule https-only measured); TEST ONLY URL rule: this stack's kong"
+echo "OK 016 worker tick installed (pg_net + Vault + pgcrypto; re-apply refused; production target rule measured); TEST ONLY target: this stack's kong"
 mode=install; o="$(ro 2>&1)" && fail "a second install succeeded"; grep -q G3_ROLLOUT_PREFLIGHT_REFUSED <<<"$o" || fail "second install: $o"
 echo "OK G3 rollout.sh preflight + install (15 steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
 
@@ -233,6 +234,7 @@ create table g3ls_test.x_token_snapshot (social_account_id text primary key, tok
 create table g3ls_test.x_calls (id bigint generated always as identity primary key, bearer_sha256 text not null, text text not null, at timestamptz not null default now());
 create table g3ls_test.x_mode (one boolean primary key default true check (one), mode text not null check (mode in ('ok', 'reject_401', 'unknown')));
 insert into g3ls_test.x_mode (mode) values ('ok');
+create table g3ls_test.tick_target (one boolean primary key default true check (one), url text not null);
 create role g3ls_test_login login noinherit password :'t';
 grant usage on schema g3ls_test to g3ls_test_login;
 grant select on g3ls_test.x_token_snapshot, g3ls_test.x_mode to g3ls_test_login;
@@ -267,7 +269,7 @@ since="$(own -A -t -c "select now()")"
 own -f "$X16/016_postona_x_resv_worker_tick_schedule.sql" >/dev/null || fail "schedule"
 if own -f "$X16/016_postona_x_resv_worker_tick_schedule.sql" >/dev/null 2>&1; then fail "a second schedule"; fi
 if own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >"$WORK/o16r" 2>&1; then fail "016 rolled back under its job"; fi
-grep -q POSTONA_X_WORKER_TICK_ROLLBACK_SCHEDULE_PRESENT "$WORK/o16r" || fail "016 rollback: $(tail -1 "$WORK/o16r")"
+grep -q "POSTONA_X_WORKER_TICK_ROLLBACK_SCHEDULE_PRESENT: postona-x-reservation-worker-tick" "$WORK/o16r" || fail "016 rollback: $(tail -1 "$WORK/o16r")"
 cron_ok=""
 for _ in $(seq 1 45); do
   st="$(own -A -t -c "select coalesce((select r.status_code::text from postona_x_resv.worker_ticks t join net._http_response r on r.id = t.request_id where t.ticked_at > '$since'::timestamptz and t.outcome = 'INVOKED' order by t.id desc limit 1), '')")"
@@ -278,10 +280,16 @@ done
 runs="$(sa -A -t -c "select count(*) from cron.job_run_details d join cron.job j on j.jobid = d.jobid where j.jobname = 'postona-x-reservation-worker-tick' and d.status = 'succeeded'")"
 [ "$runs" -ge 1 ] || fail "no succeeded cron run"
 own -f "$X16/016_postona_x_resv_worker_tick_schedule_rollback.sql" >/dev/null || fail "unschedule"
+# H4-17 P2 on the real pg_cron: a job under another name (never due) still calls the tick -> 016's rollback refuses and drops nothing
+own -c "select cron.schedule('g3ls-alias-tick', '0 0 1 1 *', 'SELECT POSTONA_X_RESV.\"tick_delivery_worker\"()')" >/dev/null || fail "alias job"
+if own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >"$WORK/o16a" 2>&1; then fail "016 rolled back under an alias job"; fi
+grep -q "POSTONA_X_WORKER_TICK_ROLLBACK_SCHEDULE_PRESENT: g3ls-alias-tick" "$WORK/o16a" || fail "alias rollback: $(tail -1 "$WORK/o16a")"
+[ "$(own -A -t -c "select to_regprocedure('postona_x_resv.tick_delivery_worker()') is not null and exists (select 1 from cron.job where jobname = 'g3ls-alias-tick')")" = t ] || fail "alias refusal changed something"
+own -c "select cron.unschedule('g3ls-alias-tick')" >/dev/null   # the operator removes it knowingly
 own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >/dev/null || fail "016 rollback"
 [ "$(own -A -t -c "select to_regclass('postona_x_resv.worker_ticks') is null and to_regprocedure('postona_x_resv.tick_delivery_worker()') is null and not exists (select 1 from cron.job where jobname = 'postona-x-reservation-worker-tick')")" = t ] || fail "016 left behind"
-sa -c "delete from vault.secrets where name in ('postona_resv_worker_url', 'postona_resv_worker_secret')" >/dev/null
-echo "OK CRON pg_cron ran the tick on its own ($runs succeeded run(s)) and the worker answered 200; unschedule / 016 rollback refusals checked; job + 016 rolled back; Vault entries removed"
+sa -c "delete from vault.secrets where name = 'postona_resv_worker_secret'" >/dev/null
+echo "OK CRON pg_cron ran the tick on its own ($runs succeeded run(s)) and the worker answered 200 to its ticket; unschedule / canonical + alias-job rollback refusals checked; job + 016 rolled back; Vault key removed"
 
 own -c "drop schema g3ls_test cascade" -c "drop role g3ls_test_login" >/dev/null   # G3-02 #9 test-only objects, before RB
 
