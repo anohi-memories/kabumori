@@ -581,20 +581,27 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     for (const id of ids) assert.match(await outcome(id), /^published\/PUBLISHED\/9[0-9]{9}$/u);
   });
 
-  // ---- G3-02 #10: the scheduler's call (016 tick: Vault URL + secret by name -> pg_net -> the worker entry), on this stack's real pg_net.
-  // run.sh installed 016 and the TEST ONLY URL rule (this stack's kong worker entries + one unreachable host); the real pg_cron job is
-  // run.sh's own step after these. The Vault entries are this stack's only.
+  // ---- G3-02 #10 / #11: the scheduler's call (016 tick: the pinned project ref + the Vault key -> a signed one-use ticket -> pg_net -> the
+  // worker entry), on this stack's real pg_net. run.sh installed 016 and the TEST ONLY target (g3ls_test.tick_target: this stack's kong
+  // entries, used only while a ref is pinned); the real pg_cron job is run.sh's own step after these. The Vault key is this stack's only.
   const admin = (script: string, vars: Record<string, string> = {}) => psql("supabase_admin", "postgres", script, vars);
-  const setVault = async (name: string, value: string | null) => {
-    await admin("delete from vault.secrets where name = :'n'", { n: name });
-    if (value !== null) assert.doesNotMatch(await admin("select vault.create_secret(:'v', :'n')", { v: value, n: name }), /^ERR:/u);
+  const setKey = async (value: string | null) => {
+    await admin("delete from vault.secrets where name = 'postona_resv_worker_secret'");
+    if (value !== null) assert.doesNotMatch(await admin("select vault.create_secret(:'v', 'postona_resv_worker_secret')", { v: value }), /^ERR:/u);
   };
-  const configure = async (url: string | null, secret: string | null) => {
-    await setVault("postona_resv_worker_url", url);
-    await setVault("postona_resv_worker_secret", secret);
+  const REF = "g3lslocalref00000000";   // the e2e twin's TEST ref
+  const pin = async (ref: string | null) => {
+    await owner("delete from postona_x_resv.worker_target");
+    if (ref !== null) assert.doesNotMatch(await owner("insert into postona_x_resv.worker_target (project_ref) values (:'r')", { r: ref }), /^ERR:/u);
   };
   const KONG_FN = "http://kong:8000/functions/v1";
+  const target = (url: string) => owner("insert into g3ls_test.tick_target (url) values (:'u') on conflict (one) do update set url = excluded.url", { u: url });
   const tick = () => owner("select postona_x_resv.tick_delivery_worker()");
+  /** One tick, committed, with the header pg_net queued for it (read inside the tick's own transaction, before pg_net sends it). */
+  const tickSeen = async () => {
+    const out = (await owner("begin; select postona_x_resv.tick_delivery_worker(); select url || '|' || headers::text from net.http_request_queue order by id desc limit 1; commit;")).split("\n");
+    return { outcome: out[0], queued: out[out.length - 1] };
+  };
   const invoked = () => countOf("select count(*) from postona_x_resv.worker_ticks where outcome = 'INVOKED'");
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
   /** The last call's answer as pg_net recorded it: "<status>|<body>", "error|<message>" or "timeout|". */
@@ -608,28 +615,46 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     return "none|";
   };
   const reportOf = (answer: string) => (JSON.parse(answer.slice(answer.indexOf("|") + 1)) as { report: Record<string, number | boolean> }).report;
+  const ticketOf = (queued: string) => (JSON.parse(queued.slice(queued.indexOf("|") + 1)) as Record<string, string>)["x-postona-worker-tick"];
+  const hmacHex = async (key: string, message: string) => {
+    const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    return Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(message))), (b) => b.toString(16).padStart(2, "0")).join("");
+  };
+  const forged = async (o: { ref?: string; at?: number; nonce?: string } = {}) => {
+    const message = `v1.${o.ref ?? REF}.${o.at ?? Math.floor(Date.now() / 1000)}.${o.nonce ?? "cd".repeat(32)}`;
+    return `${message}.${await hmacHex(WORKER_SECRET, message)}`;
+  };
+  const byTicket = (value: string) => http(WK2, {}, undefined, { "x-postona-worker-tick": value });
 
-  await t.step("L25 tick: nothing is called when Vault has no URL / secret, the secret is short, or the URL is not a worker entry", async () => {
-    await configure(null, null);
-    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED");
-    await configure(`${KONG_FN}/${WK2}`, "short-secret");
-    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED");
-    await configure(`${KONG_FN}/${X}`, WORKER_SECRET);   // the reservations entry, not the worker
-    assert.deepStrictEqual(await tick(), "URL_REFUSED");
+  await t.step("L25 tick: nothing is called without a pinned ref, without / with a short Vault key, or when the ref yields no target", async () => {
+    await pin(null);
+    await setKey(WORKER_SECRET);
+    await target(`${KONG_FN}/${WK2}`);
+    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED", "no pinned ref");
+    await pin(REF);
+    await setKey(null);
+    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED", "no key");
+    await setKey("short-secret");
+    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED", "short key");
+    assert.match(await owner("insert into postona_x_resv.worker_target (project_ref) values ('Not.A.Ref')"), /^ERR:/u, "a malformed ref cannot be pinned");
     assert.deepStrictEqual(await invoked(), 0, "no HTTP call was made");
-    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.worker_ticks where request_id is not null"), "0");
   });
 
-  await t.step("L26 tick -> the production worker entry (release gate OFF): 503 NOT_AVAILABLE, nothing claimed or sent; verify_jwt measured", async () => {
+  await t.step("L26 tick -> the production worker entry (release gate OFF): 503, nothing claimed; the real queue holds the ticket, never the key", async () => {
     const id = await saved("t1", 70);
     await makeDue(id);
     const calls = await xCalls();
-    await configure(`${KONG_FN}/postona-x-reservation-worker`, WORKER_SECRET);
-    assert.deepStrictEqual(await tick(), "INVOKED");
+    await setKey(WORKER_SECRET);
+    await target(`${KONG_FN}/postona-x-reservation-worker`);
+    const seen = await tickSeen();
+    assert.deepStrictEqual(seen.outcome, "INVOKED");
+    assert.ok(!seen.queued.includes(WORKER_SECRET), "H4-17 P1: no key in pg_net's queue");
+    assert.ok(!seen.queued.includes("x-postona-worker-secret"), "no secret header");
+    assert.match(ticketOf(seen.queued), new RegExp(`^v1\\.${REF}\\.[0-9]{10}\\.[0-9a-f]{64}\\.[0-9a-f]{64}$`, "u"));
     assert.deepStrictEqual(await lastAnswer(), '503|{"ok":false,"code":"NOT_AVAILABLE"}');
     assert.deepStrictEqual([await rowState(id), await xCalls()], ["planned/1/-", calls]);
     // measured, not assumed: a worker entry left at verify_jwt = true (the localtest twin) against a call without a user JWT
-    await configure(`${KONG_FN}/postona-x-reservation-worker-localtest`, WORKER_SECRET);
+    await target(`${KONG_FN}/postona-x-reservation-worker-localtest`);
     assert.deepStrictEqual(await tick(), "INVOKED");
     const gated = await lastAnswer();
     console.log(`G3LS_TICK_VERIFY_JWT_TRUE ${gated.slice(0, 80)}`);
@@ -637,26 +662,40 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await rowState(id), "planned/1/-");
   });
 
-  await t.step("L27 tick with a wrong secret -> the worker's 401 WORKER_AUTH_REQUIRED, nothing claimed or sent", async () => {
+  await t.step("L27 tick signed with another key / pinned to another project -> the worker's 401, nothing claimed or sent", async () => {
     const calls = await xCalls();
-    await configure(`${KONG_FN}/${WK2}`, "w".repeat(48));
+    await target(`${KONG_FN}/${WK2}`);
+    await setKey("w".repeat(48));
     assert.deepStrictEqual(await tick(), "INVOKED");
     assert.deepStrictEqual(await lastAnswer(), '401|{"ok":false,"code":"WORKER_AUTH_REQUIRED"}');
-    assert.deepStrictEqual(await xCalls(), calls);
+    await setKey(WORKER_SECRET);
+    await pin("otherprojectref00001");   // H4-17 P2: a ticket for another project is refused by this one
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    assert.deepStrictEqual(await lastAnswer(), '401|{"ok":false,"code":"WORKER_AUTH_REQUIRED"}');
+    await pin(REF);
+    assert.deepStrictEqual([await xCalls(), await rowState(await owner("select id from postona_x_resv.reservations where draft_id = 'g3app_t1'"))], [calls, "planned/1/-"]);
   });
 
-  await t.step("L28 tick -> the e2e worker: the due row sent once, a future row not; the next tick sends nothing; health shows the report", async () => {
+  await t.step("L28 tick -> the e2e worker: the due row sent once, a future row not; the ticket is one-use; forged / stale / foreign tickets refused", async () => {
     await snapshot(a.account!, await generationOf(a.account!));
     const due = await owner("select id from postona_x_resv.reservations where draft_id = 'g3app_t1'");
     const future = await saved("t2", 71);
     const calls = await xCalls();
-    await configure(`${KONG_FN}/${WK2}`, WORKER_SECRET);
-    assert.deepStrictEqual(await tick(), "INVOKED");
+    const seen = await tickSeen();
+    assert.deepStrictEqual(seen.outcome, "INVOKED");
     const first = await lastAnswer();
     assert.match(first, /^200\|/u, first);
     assert.deepStrictEqual([reportOf(first).claimed, reportOf(first).sends, reportOf(first).published], [1, 1, 1], first);
     assert.match(await outcome(due), /^published\/PUBLISHED\/9[0-9]{9}$/u);
     assert.deepStrictEqual([await rowState(future), await xCalls()], ["planned/1/-", calls + 1]);
+    // whoever read the queue holds at most that one ticket: already used -> refused, nothing claimed
+    const used = ticketOf(seen.queued);
+    assert.deepStrictEqual(code(await byTicket(used)), "401 WORKER_TICK_REJECTED");
+    assert.deepStrictEqual(code(await byTicket(used.slice(0, -1) + (used.endsWith("0") ? "1" : "0"))), "401 WORKER_AUTH_REQUIRED");
+    assert.deepStrictEqual(code(await byTicket(await forged())), "401 WORKER_TICK_REJECTED", "validly signed but never issued by a tick");
+    assert.deepStrictEqual(code(await byTicket(await forged({ at: Math.floor(Date.now() / 1000) - 300 }))), "401 WORKER_AUTH_REQUIRED");
+    assert.deepStrictEqual(code(await byTicket(await forged({ ref: "otherprojectref00001" }))), "401 WORKER_AUTH_REQUIRED");
+    assert.deepStrictEqual(await xCalls(), calls + 1);
     assert.deepStrictEqual(await tick(), "INVOKED");
     const second = await lastAnswer();
     assert.deepStrictEqual([second.split("|")[0], reportOf(second).claimed, await xCalls()], ["200", 0, calls + 1], "the next tick re-sends nothing");
@@ -680,7 +719,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
   await t.step("L30 tick never stacks: a previous call still without an answer -> PREVIOUS_IN_FLIGHT; a tick already running -> TICK_BUSY", async () => {
     const before = await invoked();
     // SYNTHETIC: a call pg_net has not answered yet (request id -1 never gets a response)
-    await owner("insert into postona_x_resv.worker_ticks (outcome, request_id) values ('INVOKED', -1)");
+    await owner("insert into postona_x_resv.worker_ticks (outcome, request_id, nonce_sha256) values ('INVOKED', -1, repeat('0', 64))");
     assert.deepStrictEqual(await tick(), "PREVIOUS_IN_FLIGHT");
     await owner("delete from postona_x_resv.worker_ticks where request_id = -1");
     const holder = owner("begin; select pg_advisory_xact_lock(hashtextextended('postona_x_resv:worker_tick', 0)); select pg_sleep(4); commit;");
@@ -691,13 +730,13 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
   });
 
   await t.step("L31 tick to an unreachable host: pg_net's failure shows in the health read (TRANSPORT_ERROR), nothing claimed", async () => {
-    await configure("http://g3ls-unreachable.invalid/functions/v1/postona-x-reservation-worker", WORKER_SECRET);
+    await target("http://g3ls-unreachable.invalid/functions/v1/postona-x-reservation-worker");
     assert.deepStrictEqual(await tick(), "INVOKED");
     const answer = await lastAnswer();
     assert.match(answer, /^(error|timeout)\|/u, answer);
     const outcomes = await owner("select string_agg(outcome || coalesce('/' || http_status, ''), ',' order by outcome, http_status) from postona_x_resv.worker_tick_health()");
-    for (const o of ["NOT_CONFIGURED", "URL_REFUSED", "HTTP/503", "HTTP/401", "HTTP/200", "PREVIOUS_IN_FLIGHT", "TICK_BUSY"]) assert.ok(outcomes.split(",").includes(o), `${o} in ${outcomes}`);
+    for (const o of ["NOT_CONFIGURED", "HTTP/503", "HTTP/401", "HTTP/200", "PREVIOUS_IN_FLIGHT", "TICK_BUSY"]) assert.ok(outcomes.split(",").includes(o), `${o} in ${outcomes}`);
     assert.ok(outcomes.includes("TRANSPORT_ERROR") || outcomes.includes("TIMED_OUT"), outcomes);
-    await configure(`${KONG_FN}/${WK2}`, WORKER_SECRET);   // left for run.sh's pg_cron step
+    await target(`${KONG_FN}/${WK2}`);   // left for run.sh's pg_cron step
   });
 });
