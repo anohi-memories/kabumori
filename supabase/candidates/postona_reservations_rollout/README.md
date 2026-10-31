@@ -226,6 +226,25 @@ What it showed, for the operator:
   - an owner change A → B → A (PG17 EP / W1);
   - the hosted gateway, Cron.
 
+**The reservations screen on this runtime** (G3-02 #13; `local_stack/g1_screen_integration.test.mjs`):
+- **Real here**: G1's screen and view rules (PR #606, pinned, read only), G3's stores and error actions, GoTrue JWTs, Kong, the Edge handlers, Postgres, G5 W0, G4's connect / disconnect SQL and verdict.
+- **Reached, pressed in order**:
+  - X: list → change the time → 「再確認が必要」 → reconfirm → 「予約済み」 → cancel (asked twice);
+  - 409 stale: re-read, never re-sent; 422 and slot conflict: the form stays;
+  - an expired token and a signed-out session: sign in; another person: nothing shown, a spoofed account refused by the server, a foreign workspace refused before any request;
+  - service ended: writes off with the way out, back after a read; G4 disconnect → reconnect the same way;
+  - 503 store: "check", one attempt; the gate-OFF real entry: not available; an uncertain row: "check X", no edit;
+  - a released send-now row: listed, its reschedule refused as final;
+  - Threads: U8 → not available, 0 rows, writes off.
+- **Not real**:
+  - React / RN are stubs, as in G1's harness (no device, no layout);
+  - the composer is not rendered (rows are saved through the store it uses);
+  - the localtest twins pass the gates as enabled;
+  - 429 is INJECTED at the fetch boundary;
+  - the service end and the Threads binding are SYNTHETIC.
+  - This is not a finished product link: G1's `use-reservation-ports.ts` is still the disabled ports, and both stacks are unmerged.
+- **G1 + G3 together** (scratch merge, not pushed): one import line conflicts in `schedule-composer.tsx` (keep G1's line). The wiring proposed to G1 type-checks. The app suite passes, 774 / 774 before the wiring; after it, G1's boundary test fails by design.
+
 **Scheduler call** (G3-02 #10, repaired in #11 after H4-17; `postona_x_reservations/016_*`; candidates NOT in this bundle's MANIFEST: a later, separately approved step):
 - **What it is**:
   - `tick_delivery_worker()` makes one `net.http_post` to the worker entry and leaves one `worker_ticks` row (outcome, request id, nonce hash; no secret, no URL).
