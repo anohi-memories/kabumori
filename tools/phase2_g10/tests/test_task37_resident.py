@@ -67,9 +67,10 @@ class LoopBase(unittest.TestCase):
                                      now=lambda: self.now[0], log_path=self.log)
 
     def write_job(self, filename, job_id, prompt="do it", role="human", sign_role=None, sig=None, go_over=None):
+        req = {"approval_id": "appr-1", "task_sha256": "a" * 64, "prompt": prompt,
+               "base_ref": "refs/heads/main", "base_sha": "b" * 40}
         body = {"job_id": job_id, "go": make_go(prompt, **(go_over or {})),
-                "request": {"approval_id": "appr-1", "task_sha256": "a" * 64, "prompt": prompt,
-                            "base_ref": "refs/heads/main", "base_sha": "b" * 40},
+                "request_doc": {"request": req, "sig": "runner-sig-opaque"},
                 "issued_at": self.now[0], "expires_at": self.now[0] + 300, "role": role}
         signature = sig if sig is not None else self.signer.sign(sign_role or role, canonical(body))
         with open(os.path.join(self.in_dir, filename), "w", encoding="utf-8") as f:

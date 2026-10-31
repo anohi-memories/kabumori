@@ -18,7 +18,7 @@ import os
 import stat
 import time
 
-from . import handoff, real_claude
+from . import handoff, real_claude, registry
 from .fsutil import atomic_write_json
 
 HALT_FLAG = "HALT"
@@ -127,3 +127,39 @@ class ResidentLoop:
                 break
             sleep(interval)
         return records
+
+
+class Dispatcher:
+    """dispatch シームの実結線（§15.7 Q1）。handoff が運んだ runner 署名つき request 封筒を、実行プレーンの
+    request_file に置き、agent.handle_request_file でスタブを起動して終端まで待つ。
+
+    - request の runner 署名・承認済みTASK／ポリシーとの結合・Issue 結合・権限・期限は Agent が独立に検証する
+      （handoff の human 署名とは別の層）。CLAIM も3層: 制御側 ledger（try_claim）・handoff の claim マーカー・
+      Agent の used ログ（ACCEPTED）。それぞれ別の再送面を塞ぐ。
+    - Q2（_kaburun が書く registry/logs の所有権と yuya の finalize への受け渡し）は handoff/out 経由にするのが方針。
+      ここでは終端状態を返すだけ（finalize は yuya 側＝human/runner 鍵）。
+    """
+
+    def __init__(self, agent, layout, wait_seconds=600, now=time.time, sleep=time.sleep):
+        self.agent = agent
+        self.layout = layout
+        self.wait_seconds = wait_seconds
+        self.now = now
+        self.sleep = sleep
+
+    def __call__(self, decision):
+        req = decision.request
+        run_id = req["run_id"]
+        # handoff が運んだ封筒をそのまま実行プレーンの request_file に置く（runner 署名はバイト一致で保たれる）
+        atomic_write_json(self.layout.request_file(run_id), decision.request_doc)
+        stub, reason = self.agent.handle_request_file(self.layout.request_file(run_id))
+        if stub is None:
+            return {"run_id": run_id, "status": "not_accepted", "reason": reason}
+        stub.wait()
+        deadline = self.now() + self.wait_seconds
+        while self.now() < deadline:
+            entry = registry.load(self.layout, run_id)
+            if entry and entry["state"] not in registry.NON_TERMINAL:
+                return {"run_id": run_id, "status": entry["state"], "used_states": self.agent.used_state(run_id)}
+            self.sleep(1)
+        return {"run_id": run_id, "status": "timeout"}

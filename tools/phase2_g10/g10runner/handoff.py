@@ -24,7 +24,7 @@ from . import real_claude
 from .fsutil import canonical, loads_strict, sha256_hex
 
 # 署名の対象（sig を除く）。chainlog と同じく「sig 以外の全キーの canonical」に署名する
-JOB_FIELDS = {"job_id", "go", "request", "issued_at", "expires_at", "role"}
+JOB_FIELDS = {"job_id", "go", "request_doc", "issued_at", "expires_at", "role"}
 REQUEST_FIELDS = {"approval_id", "task_sha256", "prompt", "base_ref", "base_sha"}
 ALLOWED_JOB_ROLES = ("human",)  # ジョブを承認できる役割はこれだけ（人の承認）。role は検証する鍵を選ぶので load-bearing
 _JOB_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
@@ -39,12 +39,13 @@ class HandoffError(ValueError):
 class Decision:
     """受理の結果（fail-closed）。ok が False のときは reason に理由（起動しない）。"""
 
-    def __init__(self, ok, reason=None, job=None, go=None, request=None, source_kind=None):
+    def __init__(self, ok, reason=None, job=None, go=None, request=None, request_doc=None, source_kind=None):
         self.ok = ok
         self.reason = reason
         self.job = job
         self.go = go
-        self.request = request
+        self.request = request          # runner 署名つき封筒の中身（検証済みの要求フィールド）
+        self.request_doc = request_doc  # {"request":..., "sig":<runner>} そのまま（Agent に渡す）
         self.source_kind = source_kind  # "bundle" または "git"
 
     def __repr__(self):
@@ -125,8 +126,14 @@ def _verify_job(raw, verifier, now):
     go = doc.get("go")
     if not isinstance(go, dict) or real_claude.go_problem(go) is not None:
         raise HandoffError("job GO is not a valid REAL_CLAUDE_GO")
-    # 要求（実行に要る最小の項目）
-    req = doc.get("request")
+    # 要求: control.try_claim が作った runner 署名つきの封筒 {"request":..., "sig":...} をそのまま運ぶ。
+    # 封筒の中身（runner 署名・結合・権限）は実行プレーンの Agent が独立に検証する。handoff はジョブ全体の
+    # human 署名で封筒の改ざんを防ぎ、GO との一致だけを見る。
+    rdoc = doc.get("request_doc")
+    if not (isinstance(rdoc, dict) and set(rdoc) == {"request", "sig"}
+            and isinstance(rdoc.get("sig"), str) and rdoc["sig"]):
+        raise HandoffError("job request_doc must be a signed request envelope")
+    req = rdoc["request"]
     if not isinstance(req, dict) or not (REQUEST_FIELDS <= set(req)):
         raise HandoffError("job request is missing required fields")
     if not (isinstance(req["approval_id"], str) and req["approval_id"]):
@@ -194,4 +201,5 @@ class HandoffInbox:
         if not claimed:
             return Decision(False, reason="job already claimed (at-most-once)")
         source_kind = "bundle" if doc["go"].get("source_bundle") else "git"
-        return Decision(True, job=doc, go=doc["go"], request=doc["request"], source_kind=source_kind)
+        return Decision(True, job=doc, go=doc["go"], request=doc["request_doc"]["request"],
+                        request_doc=doc["request_doc"], source_kind=source_kind)

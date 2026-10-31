@@ -51,7 +51,7 @@ class HandoffBase(unittest.TestCase):
         body = {
             "job_id": job_id,
             "go": make_go(prompt, **(go_over or {})),
-            "request": make_request(prompt, **(req_over or {})),
+            "request_doc": {"request": make_request(prompt, **(req_over or {})), "sig": "runner-sig-opaque"},
             "issued_at": issued_at if issued_at is not None else self.now[0],
             "expires_at": expires_at if expires_at is not None else self.now[0] + 300,
             "role": role,
@@ -119,7 +119,7 @@ class Rejections(HandoffBase):
         fn = self.write_job()
         path = os.path.join(self.in_dir, fn)
         doc = json.load(open(path))
-        doc["request"]["prompt"] = "something else"
+        doc["request_doc"]["request"]["prompt"] = "something else"
         open(path, "w").write(json.dumps(doc))
         self._assert_rejected(fn, "signature")
 
@@ -145,7 +145,7 @@ class Rejections(HandoffBase):
         self._assert_rejected(fn, "expired")
 
     def test_missing_request_field_is_refused(self):
-        fn = self.write_job(tamper=lambda b: b["request"].pop("base_sha"))
+        fn = self.write_job(tamper=lambda b: b["request_doc"]["request"].pop("base_sha"))
         self._assert_rejected(fn)
 
     def test_bad_base_sha_is_refused(self):
@@ -155,6 +155,10 @@ class Rejections(HandoffBase):
     def test_extra_top_level_field_is_refused(self):
         fn = self.write_job(tamper=lambda b: b.__setitem__("extra", 1))
         self._assert_rejected(fn)
+
+    def test_request_doc_with_empty_sig_is_refused(self):
+        fn = self.write_job(tamper=lambda b: b["request_doc"].__setitem__("sig", ""))
+        self._assert_rejected(fn, "signed request envelope")
 
     def test_bad_job_id_is_refused(self):
         fn = self.write_job(job_id="../escape")

@@ -302,3 +302,32 @@ yuya は _kaburun のプロセスに直接シグナルを送れない。so:
 - テスト: test_task37_resident（12）。変異2件（HALT が起動を止めない／未ログインでも起動する）を追加しすべて killed。
 - 残り（次段）: `dispatch` の実結線＝ジョブの request を実行プレーン Agent が検証できる形にして
   agent.handle_request_file → スタブ起動 → 終端待ちにつなぐ（Q1/Q2 をここで決める）。その後に一度きりの特権 setup。
+
+### 15.9 dispatch の実結線（TASK 38）＋ Q1/Q2 の決定
+§15.8 の `dispatch` シームを実行プレーンに結線した（g10runner/resident.Dispatcher）。
+
+- **Q1（request の署名境界・二重CLAIM）決定**:
+  - yuya（制御）が `control.try_claim` を回し、runner 署名つきの request 封筒 `{"request":..., "sig":<runner>}` と
+    ledger CLAIM を作る（GitHub 取得・witness・CONFIRM/ENVELOPE・policy・runner 鍵は yuya 側だけ）。
+  - その封筒を handoff ジョブの `request_doc` に載せ、ジョブ全体を human 署名して in/ に置く（handoff.py を更新:
+    ジョブは `request` でなく `request_doc`＝封筒を運ぶ。handoff は封筒を不透明に運び、改ざんはジョブの human 署名で
+    防ぎ、GO との一致だけ見る。封筒の中身＝runner 署名・結合・権限は Agent が独立検証）。
+  - _kaburun（実行）の Dispatcher は封筒をそのまま実行プレーンの request_file に置き、`agent.handle_request_file`
+    でスタブを起動して終端まで待つ。
+  - **CLAIM は3層で、それぞれ別の再送面を塞ぐ（冗長ではない）**: ①制御 ledger（approval ごと・try_claim）
+    ②handoff の claim マーカー（受け取りごと・_kaburun）③Agent の used ログ ACCEPTED（request/approval/run ごと）。
+- **Q2（共有状態の所有権・finalize への受け渡し）決定（方針。finalize 改修は次段）**:
+  - 実行プレーンの used ログ・registry・run_dir は _kaburun が所有する場所に置く。結果（端末状態・diff・ローカル
+    REPORT 下書き）は handoff/out に出す。
+  - yuya の `finalize`（human/runner 鍵）は out/ から終端を受け取って署名・REPORT 化する。**この finalize の out/
+    経由への改修は次段**（本TASKの E2E はモックの同一レイアウトで、Dispatcher が終端状態を返し、yuya 側 finalize が
+    同じレイアウトを読む形で ended_checks_passed を確認している）。
+- **Dispatcher**: `Dispatcher(agent, layout, wait_seconds)(decision)` = 封筒を request_file に atomic 書き込み →
+  handle_request_file → stub.wait → registry が終端になるまで待ち、`{run_id, status, used_states}` を返す。
+  not_accepted（署名・結合・権限・CLAIM で弾かれ）も status で返す。
+- テスト: test_task38_dispatch（3・E2E）: ①human 署名ジョブ＋runner 署名 request＋source_bundle で、**元 repo を消しても**
+  ResidentLoop→Dispatcher→Agent→スタブ→代役CLI→終端 ended_checks_passed・CLI 1回・out/ 記録、②配送中に request を
+  改ざん→handoff の human 署名で skip（起動せず CLAIM せず）、③同じジョブは claim 済みで再実行しない。
+  handoff の request_doc 封筒チェックに変異1件（envelope 未検証）を追加し killed。
+- 残り: Q2 の finalize を out/ 経由にする改修、その後に一度きりの特権 setup（ACL・LaunchAgent・固定版CLI、各別途GO）、
+  実 -p の1回ドライラン（指摘3・要GO）。
