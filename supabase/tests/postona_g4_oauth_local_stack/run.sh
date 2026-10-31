@@ -85,6 +85,8 @@ done
 
 (cd "$WORK/p" && supabase start -x studio,imgproxy,vector,supavisor,mailpit,realtime,logflare,postgres-meta >"$WORK/start.log" 2>&1) || { tail -5 "$WORK/start.log"; echo "G4LS_START_FAILED"; exit 2; }
 PUBLISHABLE="$(cd "$WORK/p" && supabase status -o env 2>/dev/null | sed -n 's/^PUBLISHABLE_KEY="\(.*\)"$/\1/p')"
+SERVICE_KEY="$(cd "$WORK/p" && supabase status -o env 2>/dev/null | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')"
+[ -n "$SERVICE_KEY" ] || { echo "G4LS_KEYS_UNEXPECTED"; exit 2; }
 case "$PUBLISHABLE" in sb_publishable_*) ;; *) echo "G4LS_KEYS_UNEXPECTED"; exit 2 ;; esac
 echo "OK local stack g4ls (ports $API_PORT / $DB_PORT)"
 
@@ -123,10 +125,14 @@ for f in "$WORK"/t/g5chain_20261013140000_common_account_service_reconciliation_
          "$c/postona_threads_disconnect/threads_disconnect_candidate.sql" "$c/postona_g4_credential_verdict/001_threads_publish_credential_verdict.sql" \
          "$c/postona_g4_x_oauth_personal_mvp/001_x_oauth_g5pv.sql" "$c/postona_g4_x_oauth_personal_epoch/002_x_oauth_product_wiring.sql" \
          "$c/postona_g4_x_oauth_personal_epoch/003_x_disconnect_user_rpc.sql" "$c/postona_g4_x_oauth_personal_epoch/004_x_consume_preexchange_recheck.sql" \
-         "$c/postona_g4_x_oauth_personal_mvp/005_x_connect_lifecycle_t13_g5pv.sql" "$c/postona_g4_x_oauth_personal_mvp/006_x_connect_profile_fence.sql" "$c/postona_g4_credential_verdict/002_x_publish_credential_verdict.sql"; do
+         "$c/postona_g4_x_oauth_personal_mvp/005_x_connect_lifecycle_t13_g5pv.sql" "$c/postona_g4_x_oauth_personal_mvp/006_x_connect_profile_fence.sql" "$c/postona_g4_credential_verdict/002_x_publish_credential_verdict.sql" "$c/postona_g4_x_oauth_personal_mvp/007_x_refresh_precheck.sql"; do
   need "$f"
 done
 echo "OK world: G4's personal world on the real local schema (as postgres)"
+# G4-02 #8: the REAL X refresh core (main 20260925140000) instead of the deletion fixture's stand-in table, as G4-40's runner tests it
+own -c "drop trigger social_accounts_x_refresh_reset_on_reconnect on public.social_accounts; drop function public.x_account_refresh_reset_on_reconnect(); drop table public.x_account_refresh_state_v2 cascade" >/dev/null
+need "$m/20260925140000_x_account_credential_refresh_core.sql"
+echo "OK the real X refresh core"
 ATTESTATION="$(openssl rand -hex 32)"
 own -v k="$ATTESTATION" >/dev/null <<'SQL'
 delete from vault.secrets where name = 'postona_threads_connect_attestation_v1';
@@ -151,7 +157,7 @@ done
 echo "OK functions served"
 
 t0=$SECONDS
-if out="$(cd "$REPO/apps/social-mobile" && env FLOW_DEBUG="${FLOW_DEBUG:-}" LS_API="http://127.0.0.1:$API_PORT" LS_PUBLISHABLE="$PUBLISHABLE" LS_DB_PORT="$DB_PORT" \
+if out="$(cd "$REPO/apps/social-mobile" && env FLOW_DEBUG="${FLOW_DEBUG:-}" LS_API="http://127.0.0.1:$API_PORT" LS_PUBLISHABLE="$PUBLISHABLE" LS_SERVICE_KEY="$SERVICE_KEY" LS_DB_PORT="$DB_PORT" \
     node --experimental-transform-types --test --test-reporter=tap tests/oauth-local-stack.e2e.mjs 2>&1)"; then
   grep -E '^(ok|not ok|# (pass|fail|tests|measured))' <<<"$out"
   echo "node exited by itself with status 0 after $((SECONDS - t0)) s"

@@ -295,6 +295,21 @@ if [ -n "${G4T_VERDICT:-}" ]; then
   need "$fr" "$fence"
   echo "ok 006 rollback, then install again"
   q "$pv" -c "select 'md5 postona_x_connect_profile_v1 ' || md5(prosrc) from pg_proc where oid = 'public.postona_x_connect_profile_v1()'::regprocedure"
+  # G4-02 #8: the refresh writer's precheck (007): install refusals, ACL, rollback
+  pre7="$px/007_x_refresh_precheck.sql"; pre7_rb="$px/007_x_refresh_precheck_rollback.sql"
+  r="$(apply "$(copy pre7full "$vx")" "$pre7")"; [ "$r" = G4X_PRECHECK_PRECONDITION_FULL_PROFILE ] || fail "007 on full: $r"
+  echo "ok 007 refused on the full profile ($r)"
+  no6="$(copy pre7no6 "$pv")"; need "$no6" "$fence_rb"
+  r="$(apply "$no6" "$pre7")"; [ "$r" = "G4X_PRECHECK_PRECONDITION_DEPENDENCY public.postona_x_connect_profile_v1()" ] || fail "007 without 006: $r"
+  echo "ok 007 refused without 006 ($r)"
+  need "$pv" "$pre7"
+  r="$(apply "$pv" "$pre7")"; [ "$r" = G4X_PRECHECK_ALREADY_APPLIED ] || fail "007 twice: $r"
+  acl7="$(q "$pv" -c "select has_function_privilege('anon', 'public.postona_x_refresh_precheck_v1(text)', 'EXECUTE')::text || has_function_privilege('authenticated', 'public.postona_x_refresh_precheck_v1(text)', 'EXECUTE')::text || has_function_privilege('service_role', 'public.postona_x_refresh_precheck_v1(text)', 'EXECUTE')::text")"
+  [ "$acl7" = falsefalsetrue ] || fail "007 ACL: $acl7"
+  echo "ok 007 EXECUTE: service_role only (anon, authenticated: no)"
+  r7="$(copy pre7rb "$pv")"; need "$r7" "$pre7_rb"; need "$r7" "$pre7"
+  echo "ok 007 rollback, then install again"
+  q "$pv" -c "select 'md5 postona_x_refresh_precheck_v1 ' || md5(prosrc) from pg_proc where oid = 'public.postona_x_refresh_precheck_v1(text)'::regprocedure"
   echo "== G4-02 #5 X verdict through G4's personal X SQL (personal profile)"
   out="$(as_owner "$pv" -A -t -v profile=personal -f "$xbeh" 2>&1)" || { echo "$out"; fail "X verdict behavior (personal)"; }
   grep -E '^[0-9]+\|' <<<"$out"
@@ -316,7 +331,7 @@ PY
   echo "MUTANT_CAUGHT personal_generation_constant by: $(grep -E '\|FAIL ' <<<"$out" | cut -d'|' -f2 | paste -sd ';' -)"
   # the personal rollbacks are the full-profile ones, verbatim (005 -> 001), after the X verdict
   pr="$(copy xrb "$pv")"
-  for f in "$px/006_x_connect_profile_fence_rollback.sql" "$v2_rb" "$xc/005_x_connect_lifecycle_t13_rollback.sql" "$xc/004_x_consume_preexchange_recheck_rollback.sql" \
+  for f in "$px/007_x_refresh_precheck_rollback.sql" "$px/006_x_connect_profile_fence_rollback.sql" "$v2_rb" "$xc/005_x_connect_lifecycle_t13_rollback.sql" "$xc/004_x_consume_preexchange_recheck_rollback.sql" \
     "$xc/003_x_disconnect_user_rpc_rollback.sql" "$xc/002_x_oauth_product_wiring_rollback.sql" "$xc/001_x_oauth_personal_epoch_rollback.sql"; do need "$pr" "$f"; done
   [ -z "$(q "$pr" -c "select to_regnamespace('postona_g4_x_oauth')")" ] || fail "personal X rollback left the schema"
   echo "ok personal X rolled back with the full-profile rollbacks (005 -> 001), schema gone"
