@@ -296,7 +296,13 @@ def cmd_exec_init(a):
     doc = wiring.exec_wiring_doc(template, os.path.realpath(a.keys_dir))
     os.makedirs(exec_root, exist_ok=True)
     wiring.write(exec_root, doc)  # validate + key_fingerprints（鍵が公開鍵と一致すること）+ 0600
-    SplitLayout(exec_root, control_pub).ensure()  # agent-out/work/requests + pub symlink
+    layout = SplitLayout(exec_root, control_pub).ensure()  # agent-out/work/requests + pub symlink
+    # watchdog の起動時 load_current は policy の正本(priv)も読む。exec は制御の priv を持たないので、公開ポリシー
+    # （control_pub/policy.json・秘密ではない）の写しを priv に置く。食い違えば watchdog は fail-safe（古い版で続ける）。
+    os.makedirs(os.path.dirname(layout.policy_priv), exist_ok=True)
+    with open(layout.policy_pub, "rb") as _s, open(layout.policy_priv, "wb") as _d:
+        _d.write(_s.read())
+    os.chmod(layout.policy_priv, 0o600)
     signer, _verifier = wiring.agent_side(exec_root)  # agent 鍵が実際に使えること
     authority = [r for r in ("runner", "human") if r in doc["private_keys"]]
     print(json.dumps({"exec_root": exec_root, "wiring": "written (0600)",

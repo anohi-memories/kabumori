@@ -6,6 +6,7 @@ launchd 登録・実 Claude・特権は使わない。"""
 import json
 import os
 import plistlib
+import shutil
 import unittest
 
 from g10runner import wiring
@@ -48,6 +49,9 @@ class ExecInit(JobRunnerBase):
         super().setUp()
         self.control_pub = os.path.join(self.env.real, "control-pub")
         os.makedirs(self.control_pub)
+        # control_pub には yuya が公開した policy.json がある前提（B1a 相当）。exec-init はこれを priv へ写す。
+        shutil.copyfile(os.path.join(self.env.layout.pub, "policy.json"),
+                        os.path.join(self.control_pub, "policy.json"))
         self.exec_root = os.path.join(self.env.real, "exec-root")
         self.fr = load_first_run()
 
@@ -64,6 +68,11 @@ class ExecInit(JobRunnerBase):
         signer, _v = wiring.agent_side(self.exec_root)   # agent 鍵が実際に使える
         self.assertTrue(signer.can_sign("agent"))
         self.assertFalse(signer.can_sign("runner"))
+        # watchdog の起動時 load_current が通るよう、公開ポリシーの写しが priv に置かれていること
+        from g10runner import policy as policy_mod
+        from g10runner.layout import Layout
+        self.assertTrue(os.path.isfile(os.path.join(self.exec_root, "control", "priv", "policy.json")))
+        self.assertIsNotNone(policy_mod.load_current(Layout(self.exec_root)))  # priv==pub で例外にならない
 
     def test_missing_control_pub_is_refused_before_making_a_symlink(self):
         """control_pub がまだ無ければ（B1a 未実施）、dangling な pub symlink を作らずに止まる。"""

@@ -168,7 +168,9 @@ symlink にし、`wiring.load` と `wiring.agent_side` で検証する（鍵の�
 ```
 
 出力の `authority_private_keys` が空・`agent_can_sign` が true・`pub_symlink` が control_pub を指すこと。
-（exec-init は非特権。クロちゃんではなく _kaburun のセッションで実行する。）
+（exec-init は非特権。クロちゃんではなく _kaburun のセッションで実行する。）exec-init は公開ポリシーの写しを
+`exec_root/control/priv/policy.json` にも置く（watchdog の起動時 `load_current` が priv も読むため。内容は公開物と同一＝秘密ではない。
+食い違えば watchdog は fail-safe に古い版で続ける）。
 
 ### B1d. exec の S2 見張り役（watchdog）▶GO（_kaburun のセッション）
 起動直前の判定は新鮮な S2 心拍を要求する（無いと `supervisor_unavailable` で起動しない）。_kaburun の watchdog を
