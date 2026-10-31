@@ -4,6 +4,10 @@
 #   B   before: the 016 of PR #609 (ee8eeaee, git show) -- H4-17's P1 (the key in the queue), P2 (another project's URL) and P2 (an alias
 #       job left calling a dropped tick) reproduced, printed as measured;
 #   T1-T6  the repaired 016 (behavior.sql); BUSY (a second session holds the tick lock);
+#   H   G3-02 #12 (H4-18 P2): a superuser's job hidden by pg_cron's row-level security -- PR #610's rollback drops the tick under it
+#       (before, measured); now refused (CRON_JOBS_NOT_ALL_VISIBLE) until an administrator's read-back (..._rollback_admin_check.sql)
+#       finds no job of any owner and records it; the read-back refuses a non-administrator, a present job, and the rollback refuses a
+#       stale record or one counting fewer jobs than the owner sees;
 #   R   rollback: refused while any visible job calls the tick (canonical, alias, quoted / cased / schema-qualified), while a wrapper
 #       function names it, and while the job list is unreadable; nothing dropped on a refusal; then clean.
 # Usage: RESV_PGHOST=/private/tmp/<socket-dir> RESV_PGPORT=<port> RESV_PGSUPER=<local superuser> worker_tick_run.sh
@@ -17,6 +21,7 @@ export LC_ALL=C PGTZ=UTC
 here="$(cd "$(dirname "$0")" && pwd)"
 candidate="${WORKER_TICK_CANDIDATE:-$here/016_postona_x_resv_worker_tick.sql}"
 rollback="${WORKER_TICK_ROLLBACK:-$here/016_postona_x_resv_worker_tick_rollback.sql}"
+admin_check="${WORKER_TICK_ADMIN_CHECK:-$here/016_postona_x_resv_worker_tick_rollback_admin_check.sql}"
 owner="kb_g3_tick_owner"
 prefix="kabumori_g3_tick_$$"
 S=(psql -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super")
@@ -83,7 +88,7 @@ own "$old" -c "select cron.schedule('nightly-other-name', '*/5 * * * *', '$ALIAS
 own "$old" -f "$here/016_postona_x_resv_worker_tick_schedule_rollback.sql" >/dev/null
 if own "$old" -f "$tmp/old016r.sql" >/dev/null 2>&1; then p3="$(val "$old" -c "select exists (select 1 from cron.job where jobname = 'nightly-other-name') and to_regprocedure('postona_x_resv.tick_delivery_worker()') is null")"; else p3=f; fi
 echo "B_BEFORE_PR609 P1_key_readable_in_queue_by_api_role=$p1 P2_other_project_url_called=$p2 P2_alias_job_left_after_rollback=$p3"
-if [[ -z "${WORKER_TICK_CANDIDATE:-}${WORKER_TICK_ROLLBACK:-}" ]]; then
+if [[ -z "${WORKER_TICK_CANDIDATE:-}${WORKER_TICK_ROLLBACK:-}${WORKER_TICK_ADMIN_CHECK:-}" ]]; then
   [[ "$p1/$p2/$p3" == "t/t/t" ]] || fail "the H4-17 counterexamples did not reproduce on PR #609's 016 ($p1/$p2/$p3)"
 fi
 
@@ -106,13 +111,52 @@ sleep 1
 wait "$holder"
 echo "BUSY_TICK_LOCK_PASS"
 
-# ---- R: rollback (H4-17 P2 alias) ----------------------------------------------------------------------------------------------------
+# ---- H: a hidden superuser job (H4-18 P2) -------------------------------------------------------------------------------------------
+HIDDEN="select postona_x_resv.tick_delivery_worker()"
+git -C "$here" show 48729033e719f40341d764ac6501fd1f7b2e8cdd:supabase/candidates/postona_x_reservations/016_postona_x_resv_worker_tick_rollback.sql > "$tmp/r610.sql"
+h0="$(new_world hidden_before)"
+own "$h0" -f "$candidate" >/dev/null
+"${S[@]}" -d "$h0" -c "select cron.schedule('hidden-super-tick', '* * * * *', '$HIDDEN')" >/dev/null
+seen="$(val "$h0" -c "select count(*) from cron.job")"
+if own "$h0" -f "$tmp/r610.sql" >/dev/null 2>&1; then
+  hb="$("${S[@]}" -A -t -d "$h0" -c "select exists (select 1 from cron.job where jobname = 'hidden-super-tick') and to_regprocedure('postona_x_resv.tick_delivery_worker()') is null")"
+else hb=f; fi
+echo "H_BEFORE_PR610 owner_sees_jobs=$seen P2_tick_dropped_under_hidden_superuser_job=$hb"
+if [[ -z "${WORKER_TICK_CANDIDATE:-}${WORKER_TICK_ROLLBACK:-}${WORKER_TICK_ADMIN_CHECK:-}" ]]; then
+  [[ "$seen/$hb" == "0/t" ]] || fail "the H4-18 counterexample did not reproduce on PR #610's rollback ($seen/$hb)"
+fi
 fns() { val "$db" -c "select count(*) from pg_proc where pronamespace = 'postona_x_resv'::regnamespace and proname in ('worker_url', 'tick_delivery_worker', 'worker_tick_health', 'consume_worker_tick')"; }
 refused() {  # <code>: the rollback refuses with it and drops nothing
   if own "$db" -f "$rollback" >"$tmp/r" 2>&1; then fail "rollback ran ($1)"; fi
   grep -q "$1" "$tmp/r" || fail "rollback: expected $1, got $(tail -1 "$tmp/r")"
   [[ "$(fns)" == 4 ]] || fail "rollback dropped something ($1)"
 }
+attest() { "${S[@]}" -d "$db" -c "alter database $db set postona_x_resv.worker_tick_rollback_check = '$1'" >/dev/null; }
+now_s() { date +%s; }
+"${S[@]}" -d "$db" -c "select cron.schedule('hidden-super-tick', '* * * * *', '$HIDDEN')" >/dev/null
+[[ "$(val "$db" -c "select count(*) from cron.job")" == 0 ]] || fail "the superuser job is visible to the owner"
+refused CRON_JOBS_NOT_ALL_VISIBLE
+if own "$db" -f "$admin_check" >"$tmp/a" 2>&1; then fail "a non-administrator's read-back ran"; fi
+grep -q POSTONA_X_WORKER_TICK_ADMIN_CHECK_NOT_ADMIN "$tmp/a" || fail "admin check as owner: $(tail -1 "$tmp/a")"
+if "${S[@]}" -d "$db" -f "$admin_check" >"$tmp/a" 2>&1; then fail "the read-back passed over a hidden job"; fi
+grep -q "POSTONA_X_WORKER_TICK_ADMIN_CHECK_JOBS_PRESENT: hidden-super-tick@$super" "$tmp/a" || fail "admin check: $(tail -1 "$tmp/a")"
+[[ "$("${S[@]}" -A -t -d "$db" -c "select count(*) from pg_db_role_setting s join pg_database d on d.oid = s.setdatabase where d.datname = current_database() and array_to_string(s.setconfig, ',') ~ 'worker_tick_rollback_check'")" == 0 ]] || fail "a refused read-back recorded something"
+refused CRON_JOBS_NOT_ALL_VISIBLE
+[[ "$("${S[@]}" -A -t -d "$db" -c "select count(*) from cron.job where jobname = 'hidden-super-tick'")" == 1 ]] || fail "the hidden job was touched"
+"${S[@]}" -d "$db" -c "select cron.unschedule('hidden-super-tick')" >/dev/null   # its owner (the superuser) stops it knowingly
+attest "$(( $(now_s) - 901 )):0"
+refused CRON_JOBS_NOT_ALL_VISIBLE   # a record older than 15 minutes
+attest "notarecord"
+refused CRON_JOBS_NOT_ALL_VISIBLE
+own "$db" -c "select cron.schedule('owner-other-job', '0 3 * * *', 'select 1')" >/dev/null
+attest "$(now_s):0"
+refused CRON_JOBS_NOT_ALL_VISIBLE   # it counted fewer jobs than the owner itself sees
+own "$db" -c "select cron.unschedule('owner-other-job')" >/dev/null
+"${S[@]}" -d "$db" -f "$admin_check" >"$tmp/a" 2>&1 || fail "the read-back with no job: $(tail -1 "$tmp/a")"
+grep -q POSTONA_X_WORKER_TICK_ADMIN_CHECK_RECORDED "$tmp/a" || fail "no record"
+echo "H_HIDDEN_SUPERUSER_JOB_REFUSED_ADMIN_READBACK_PASS"
+
+# ---- R: rollback (H4-17 P2 alias), each with a fresh administrator's record so the visible-job checks are the ones answering ------
 own "$db" -f "$here/016_postona_x_resv_worker_tick_schedule.sql" >/dev/null
 refused "SCHEDULE_PRESENT: postona-x-reservation-worker-tick"
 for alias in "$ALIAS" "SELECT postona_x_resv.TICK_DELIVERY_WORKER();" "select tick_delivery_worker()"; do
@@ -128,7 +172,9 @@ own "$db" -c "drop function public.g3_tick_wrapper()" >/dev/null
 "${S[@]}" -d "$db" -c "revoke select on cron.job from public" >/dev/null
 refused CRON_CATALOG_UNREADABLE
 "${S[@]}" -d "$db" -c "grant select on cron.job to public" >/dev/null
+"${S[@]}" -d "$db" -f "$admin_check" >/dev/null 2>&1 || fail "the read-back before the clean rollback"
 own "$db" -f "$rollback" >/dev/null || fail "clean rollback"
+"${S[@]}" -d "$db" -c "alter database $db reset postona_x_resv.worker_tick_rollback_check" >/dev/null
 [[ "$(val "$db" -c "select to_regclass('postona_x_resv.worker_ticks') is null and to_regclass('postona_x_resv.worker_target') is null and (select count(*) from pg_proc where pronamespace = 'postona_x_resv'::regnamespace) = 2")" == t ]] || fail "016 left behind"
 own "$db" -f "$candidate" >/dev/null || fail "re-apply after rollback"
 echo "R_ROLLBACK_ALIAS_WRAPPER_CATALOG_REFUSED_THEN_CLEAN_PASS"

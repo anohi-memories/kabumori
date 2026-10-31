@@ -246,7 +246,12 @@ What it showed, for the operator:
   - The ticket names the pinned ref, so another project's worker refuses it.
 - **H4-17 P2 → no dangling job**:
   - 016's rollback refuses, and drops nothing, while any job the owner can see calls the tick under any name or spelling (`SCHEDULE_PRESENT: <job names>`), while a function outside 016 names it (`TICK_REFERENCED`), or while the job list cannot be read (`CRON_CATALOG_UNREADABLE`). It unschedules nothing itself.
-  - **Limit**: pg_cron shows a non-superuser only its own jobs, so a superuser's job is not seen. Only the owner can EXECUTE the tick.
+  - **Hidden jobs** (G3-02 #12, H4-18 P2): pg_cron's row-level security shows a caller without BYPASSRLS only its own jobs, and a superuser's job may run the tick whatever its ACL says.
+    - When the owner cannot see every job, the rollback also needs an administrator's read-back from the last 15 minutes, else `CRON_JOBS_NOT_ALL_VISIBLE`.
+    - The read-back is `016_postona_x_resv_worker_tick_rollback_admin_check.sql`, run by a superuser / BYPASSRLS role. It names every job of any owner calling the tick and refuses (`JOBS_PRESENT: <job>@<owner>`), or records `postona_x_resv.worker_tick_rollback_check = '<unix s>:<jobs seen>'` on the database when there is none. A record that is stale, malformed, or counts fewer jobs than the owner sees is refused.
+    - Nobody's job is unscheduled by either file.
+    - **Measured**: the local Supabase image gives `postgres` BYPASSRLS (it saw the superuser's job, and the rollback answered `SCHEDULE_PRESENT`). Hosted is NOT_VERIFIED. If hosted gives the owner neither a full view nor an administrator to run the read-back, the rollback stays refused (fail closed): stop every job calling the tick, then have the platform's administrator run the read-back, then roll back within 15 minutes.
+    - **Trust**: the record guards against an operator's mistake, not against the schema owner. An owner who owns the database could write the record, or drop the functions by hand, in any case.
 - **No call when**: `TICK_BUSY` (another tick holds the lock), `PREVIOUS_IN_FLIGHT` (the previous call has no answer and is < 70 s old), `NOT_CONFIGURED` (no pin, or the key is missing / < 32 characters). Re-sending is never the tick's business: the worker claims under row locks and never re-sends an uncertain row.
 - **Privileges**: owner only, except `consume_worker_tick` (SECURITY DEFINER, EXECUTE for `postona_resv_worker` only). No table privilege for PUBLIC, anon, authenticated, service_role or the API / worker roles.
 - **Proof**:
@@ -268,7 +273,7 @@ What it showed, for the operator:
   3. Vault: `postona_resv_worker_secret` (the same secret; no URL entry);
   4. apply 016 as the schema owner, pin the project's ref, run one tick by hand, read `worker_tick_health()`;
   5. apply the schedule and watch the health read;
-  6. to stop: the schedule's rollback, remove any other job calling the tick, then 016's rollback.
+  6. to stop: the schedule's rollback, remove any other job calling the tick (each by its owner), the administrator's read-back when the owner cannot see every job, then 016's rollback within 15 minutes.
 - **NOT_VERIFIED**:
   - hosted pg_net / pg_cron / Vault / pgcrypto behaviour and permissions, pg_net's hosted retention;
   - the hosted `SUPABASE_URL` form;
