@@ -23,6 +23,32 @@ const kabumoriSettings: BrandOperationalSettings = {
   enabled_post_types: [],
 };
 
+test("an injected text provider preserves validation and metadata without calling default OpenAI", async () => {
+  let calls = 0;
+  const draft = await generateBrandPost({
+    openAiApiKey: "unused", context: aiLabContext(), postType: "brand_post", topicSeed: "ボタンの位置",
+    textProvider: async (request) => {
+      calls++;
+      assert.equal(request.brandId, "ai_salaryman_lab");
+      assert.equal(request.input, "今日のテーマ: ボタンの位置");
+      assert.ok(request.instructions.includes("会社員AIラボ"));
+      return { text: " 本文 ", model: "selected-provider", inputTokens: 100, outputTokens: 10, apiCostUsd: 0.001 };
+    },
+    fetchImpl: () => { throw new Error("must not call OpenAI"); },
+  });
+  assert.equal(calls, 1);
+  assert.equal(draft.text, "本文");
+  assert.equal(draft.model, "selected-provider");
+  assert.equal(draft.characterCount, 2);
+  assert.equal(draft.apiCostUsd, 0.001);
+  let disabledCalls = 0;
+  await assert.rejects(generateBrandPost({
+    openAiApiKey: "unused", context: aiLabContext("disabled"), postType: "brand_post",
+    textProvider: async () => { disabledCalls++; return draft; },
+  }));
+  assert.equal(disabledCalls, 0);
+});
+
 function aiLabContext(
   publishMode: "disabled" | "dry_run" | "live" = "dry_run",
 ) {

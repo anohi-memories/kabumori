@@ -410,7 +410,8 @@ test("(22) cross-brand fingerprint block still stops before X and releases the c
   const db = new ClaimDb();
   const hash = await fingerprintText(TEXTS[0]);
   const d = dispatch(db, 0, diaryOnly(INCIDENT_EVENT), {
-    loadRecentFingerprints: () => Promise.resolve([{ brandId: "kabumori", normalizedTextSha256: hash, publishedAt: NOW.toISOString() }]),
+    // The cross-brand guard uses wall-clock time; the diary's fixed October fixture has expired.
+    loadRecentFingerprints: () => Promise.resolve([{ brandId: "kabumori", normalizedTextSha256: hash, publishedAt: new Date().toISOString() }]),
   });
   await assert.rejects(d.run, /AI_LAB_CROSS_BRAND_DUPLICATE/u);
   assert.equal(d.counter.x, 0);

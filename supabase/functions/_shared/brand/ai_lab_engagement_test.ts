@@ -95,7 +95,7 @@ test("every ten consecutive schedule ordinals have seven regular slots and one o
   }
 });
 
-test("regular slots send the exact previous prompt; conversation slots preserve the seed and existing voice with distinct guidance", async () => {
+test("regular slots add concise truthful guidance; conversation slots preserve seed and voice with distinct guidance", async () => {
   const baseline = capture();
   await baseline.generate({
     ...args(),
@@ -113,7 +113,11 @@ test("regular slots send the exact previous prompt; conversation slots preserve 
     assert.equal(request.input, baseline.requests[0].input);
     const mode = aiLabEngagementMode(index);
     if (mode === "regular") {
-      assert.deepEqual(request, baseline.requests[0]);
+      assert.equal(request.input, baseline.requests[0].input);
+      assert.match(request.instructions, /200〜300文字程度/u);
+      assert.match(request.instructions, /未提供の体験・最近の考えの変化・習慣・近況を補わない/u);
+      assert.match(request.instructions, /毎回きれいな教訓で締めたりしない/u);
+      assert.ok(request.instructions.includes(context().codeProfile.voiceInstructions.join("\n")));
     } else {
       assert.ok(request.instructions.includes(formatMarkers[mode]));
       assert.ok(
