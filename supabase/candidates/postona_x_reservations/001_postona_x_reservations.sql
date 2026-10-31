@@ -304,6 +304,9 @@ end $$;
 /**
  * Gap / capacity check for one account against every active reservation (planned, claimed, published,
  * uncertain), excluding `p_exclude`. Raises a fixed code naming the problem; never moves anything.
+ * The gap is checked for the operation's own times only: each against every other active row, and the times
+ * against each other. Two existing rows close to each other (a "post now" next to a reservation) are not this
+ * operation's conflict and never block it (G3-02 #6).
  */
 create function postona_x_resv.assert_slots_free(p_social_account_id text, p_times timestamptz[], p_exclude uuid[])
 returns void language plpgsql stable security definer set search_path = '' as $$
@@ -317,14 +320,19 @@ begin
   where r.social_account_id = p_social_account_id
     and r.status in ('planned', 'claimed', 'published', 'uncertain')
     and not (r.id = any (coalesce(p_exclude, '{}')));
-  v_all := v_all || p_times;
+  foreach v_t in array p_times loop
+    if exists (select 1 from unnest(v_all) e where e > v_t - min_gap and e < v_t + min_gap) then
+      raise exception 'POSTONA_RESV_SLOT_CONFLICT' using errcode = 'P0001';
+    end if;
+  end loop;
   v_prev := null;
-  foreach v_t in array (select coalesce(array_agg(t order by t), '{}') from unnest(v_all) t) loop
+  foreach v_t in array (select coalesce(array_agg(t order by t), '{}') from unnest(p_times) t) loop
     if v_prev is not null and v_t - v_prev < min_gap then
       raise exception 'POSTONA_RESV_SLOT_CONFLICT' using errcode = 'P0001';
     end if;
     v_prev := v_t;
   end loop;
+  v_all := v_all || p_times;
   foreach v_t in array p_times loop
     v_day := (v_t at time zone 'Asia/Tokyo')::date;
     v_month := date_trunc('month', v_t at time zone 'Asia/Tokyo')::date;

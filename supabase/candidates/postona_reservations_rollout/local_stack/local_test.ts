@@ -409,4 +409,31 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     console.log(`G3LS_APIKEY_OMITTED ${JSON.stringify(without).slice(0, 120)}`);
     assert.ok(without.ok || (!without.ok && typeof without.code === "string"));
   });
+
+  await t.step("L16 gap scope (G3-02 #6): two EXISTING rows 20 minutes apart never block a far save / reschedule; near ones still refused", async () => {
+    const s = appX(a.token);
+    const e1At = at(40);
+    const e1 = await s.save(await saveRequest(a, "g1", e1At));
+    const e2 = await s.save(await saveRequest(a, "g2", at(40, 3)));
+    assert.ok(e1.kind === "saved" && e2.kind === "saved", JSON.stringify([e1, e2]));
+    const plus = (iso: string, minutes: number) => new Date(Date.parse(iso) + minutes * 60e3).toISOString();
+    // SYNTHETIC: e2 moved 20 minutes after e1 -- what a "post now" (005 / 006, no gap check) next to a reservation leaves
+    await owner("update postona_x_resv.reservations set scheduled_at = :'t'::timestamptz, consent_scheduled_at = :'t'::timestamptz, expires_at = :'t'::timestamptz + interval '6 hours' where id = :'i'",
+      { t: plus(e1At, 20), i: e2.reservations[0].reservationId });
+    const pair = () => owner("select string_agg(status || '@' || scheduled_at::text, ',' order by scheduled_at) from postona_x_resv.reservations where id in (:'i', :'j')",
+      { i: e1.reservations[0].reservationId, j: e2.reservations[0].reservationId });
+    const before = await pair();
+    const far = await s.save(await saveRequest(a, "g3", at(45)));
+    assert.deepStrictEqual(far.kind, "saved", `a far save is not this pair's conflict: ${JSON.stringify(far)}`);
+    const near = await s.save(await saveRequest(a, "g4", plus(e1At, 40)));
+    assert.deepStrictEqual([near, reservationErrorAction(near.kind === "failed" ? near.code : "")], [{ kind: "failed", code: "POSTONA_RESV_SLOT_CONFLICT" }, "fix_input"]);
+    const row = far.kind === "saved" ? far.reservations[0] : null;
+    assert.ok(row);
+    const moved = await s.reschedule(row.reservationId, row.revision, at(46));
+    assert.ok(moved.ok, `a far reschedule: ${JSON.stringify(moved)}`);
+    const intoPair = await s.reschedule(row.reservationId, moved.value.revision, plus(e1At, 10));
+    assert.deepStrictEqual(intoPair, { ok: false, code: "POSTONA_RESV_SLOT_CONFLICT" });
+    assert.deepStrictEqual(await pair(), before, "the existing pair is left as it was");
+    assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations where draft_id = 'g3app_g4'"), 0, "the refused save wrote nothing");
+  });
 });
