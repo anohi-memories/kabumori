@@ -81,7 +81,8 @@ class ResidentLoop:
         atomic_write_json(os.path.join(self.out_dir, job_id + ".json"), disposition)
 
     def _record(self, entry):
-        keep = {k: entry[k] for k in ("decision", "reason", "job", "job_id", "run_id", "status", "logged_in")
+        keep = {k: entry[k] for k in ("decision", "reason", "job", "job_id", "run_id", "status", "logged_in",
+                                      "exported", "export_error")
                 if k in entry}
         keep["ts"] = self.now()
         if self.log_path:
@@ -117,9 +118,15 @@ class ResidentLoop:
             result = {"run_id": None, "status": "dispatch_failed", "reason": type(exc).__name__}
         disposition = {"job_id": job_id, "status": result.get("status"), "run_id": result.get("run_id"),
                        "ts": self.now()}
+        # export の成否も out の disposition に残す（束が無いときの原因が分かるように）
+        if "exported" in result:
+            disposition["exported"] = result["exported"]
+        if result.get("export_error"):
+            disposition["export_error"] = result["export_error"]
         self._write_out(job_id, disposition)
         return self._record({"decision": "ran", "reason": result.get("status"), "job": filename,
-                             "job_id": job_id, "run_id": result.get("run_id"), "status": result.get("status")})
+                             "job_id": job_id, "run_id": result.get("run_id"), "status": result.get("status"),
+                             "exported": result.get("exported"), "export_error": result.get("export_error")})
 
     def run(self, max_cycles=None, interval=DEFAULT_INTERVAL, sleep=time.sleep):
         """常駐。max_cycles を与えたらその回数で戻る（テスト用）。HALT/STOP では起動しないが常駐は続く

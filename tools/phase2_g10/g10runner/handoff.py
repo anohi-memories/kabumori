@@ -27,7 +27,7 @@ from .fsutil import canonical, loads_strict, sha256_hex
 JOB_FIELDS = {"job_id", "go", "request_doc", "issued_at", "expires_at", "role"}
 REQUEST_FIELDS = {"approval_id", "task_sha256", "prompt", "base_ref", "base_sha"}
 ALLOWED_JOB_ROLES = ("human",)  # ジョブを承認できる役割はこれだけ（人の承認）。role は検証する鍵を選ぶので load-bearing
-_JOB_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
+_JOB_ID = re.compile(r"(?!\.+$)[A-Za-z0-9._-]{1,64}")  # "." や ".." などドットだけの名前は不可
 _SHA = re.compile(r"[0-9a-f]{64}")
 _BASE_SHA = re.compile(r"[0-9a-f]{40}")
 

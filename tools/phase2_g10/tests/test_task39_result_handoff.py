@@ -8,7 +8,7 @@ import tempfile
 import time
 import unittest
 
-from g10runner import result_handoff, signing
+from g10runner import handoff, result_handoff, signing
 from g10runner.layout import Layout
 from test_task38_dispatch import DispatchBase
 
@@ -90,6 +90,31 @@ class RoundTrip(unittest.TestCase):
         os.symlink("/etc/hosts", os.path.join(self.src.run_dir(self.run_id), "link"))
         with self.assertRaises(result_handoff.ResultHandoffError):
             self.export()
+
+    def test_symlink_manifest_is_rejected(self):
+        """out は _kaburun 所有: manifest.json を symlink に差し替えても、ingest は O_NOFOLLOW で拒否する（read_json 追従の塞ぎ）。"""
+        self.export()
+        man = os.path.join(self.out, self.run_id, result_handoff.MANIFEST)
+        os.remove(man)
+        os.symlink("/etc/hosts", man)
+        with self.assertRaises(result_handoff.ResultHandoffError):
+            result_handoff.ingest_result(self.out, self.run_id, self.dst, self.verifier)
+
+    def test_ingest_refuses_to_overwrite_an_already_ingested_run(self):
+        """取り込み側の at-most-once: 同じ run の束を二度 ingest しても、既存の成果物を上書きしない。"""
+        self.export()
+        result_handoff.ingest_result(self.out, self.run_id, self.dst, self.verifier)
+        with self.assertRaises(result_handoff.ResultHandoffError):
+            result_handoff.ingest_result(self.out, self.run_id, self.dst, self.verifier)
+
+
+class JobIdPattern(unittest.TestCase):
+    def test_pure_dot_names_are_rejected(self):
+        self.assertIsNone(handoff._JOB_ID.fullmatch("."))
+        self.assertIsNone(handoff._JOB_ID.fullmatch(".."))
+        self.assertIsNone(handoff._JOB_ID.fullmatch("..."))
+        self.assertTrue(handoff._JOB_ID.fullmatch("job-1"))
+        self.assertTrue(handoff._JOB_ID.fullmatch("run-0123456789abcdef"))
 
 
 class FinalizeViaOut(DispatchBase):

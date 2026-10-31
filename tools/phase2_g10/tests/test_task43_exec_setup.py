@@ -65,6 +65,15 @@ class ExecInit(JobRunnerBase):
         self.assertTrue(signer.can_sign("agent"))
         self.assertFalse(signer.can_sign("runner"))
 
+    def test_missing_control_pub_is_refused_before_making_a_symlink(self):
+        """control_pub がまだ無ければ（B1a 未実施）、dangling な pub symlink を作らずに止まる。"""
+        missing = os.path.join(self.env.real, "no-such-control-pub")
+        with self.assertRaises(SystemExit):
+            self.fr.main(["exec-init", "--root", self.exec_root, "--control-pub", missing,
+                          "--keys-dir", os.path.join(self.env.real, "keys"),
+                          "--from-wiring", os.path.join(self.env.tmp, "wiring.json")])
+        self.assertFalse(os.path.lexists(os.path.join(self.exec_root, "pub")))
+
 
 class WatchdogPlist(ReleaseBase):
     def test_release_watchdog_plist(self):

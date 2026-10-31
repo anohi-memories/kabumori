@@ -288,12 +288,15 @@ def cmd_exec_init(a):
     symlink を作って検証する。鍵（agent.key・witness.key・4つの .pub）は --keys-dir に置かれている前提（B1b）。
     runner・human の秘密鍵は入れない（exec_wiring_doc が {agent,witness} だけにする）。クロちゃんは特権操作をしない。"""
     exec_root = os.path.realpath(a.root)
+    control_pub = os.path.realpath(a.control_pub)
+    if not os.path.isdir(control_pub):  # B1a を先に: dangling な pub symlink を作らない（起動時でなく今ここで気づく）
+        raise SystemExit("control-pub does not exist yet (run B1a first): %s" % control_pub)
     with open(a.from_wiring, encoding="utf-8") as f:
         template = json.load(f)
     doc = wiring.exec_wiring_doc(template, os.path.realpath(a.keys_dir))
     os.makedirs(exec_root, exist_ok=True)
     wiring.write(exec_root, doc)  # validate + key_fingerprints（鍵が公開鍵と一致すること）+ 0600
-    SplitLayout(exec_root, os.path.realpath(a.control_pub)).ensure()  # agent-out/work/requests + pub symlink
+    SplitLayout(exec_root, control_pub).ensure()  # agent-out/work/requests + pub symlink
     signer, _verifier = wiring.agent_side(exec_root)  # agent 鍵が実際に使えること
     authority = [r for r in ("runner", "human") if r in doc["private_keys"]]
     print(json.dumps({"exec_root": exec_root, "wiring": "written (0600)",

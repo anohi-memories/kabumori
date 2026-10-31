@@ -12,12 +12,13 @@ _kaburun は finalize が読む実行プレーンの成果物（request・regist
   （未署名のファイルの混入・改ざんを拒否）。シンボリックリンク等の通常ファイル以外は書き出し・取り込みとも拒否（fail-closed）。
 - request 封筒は runner 署名つきなので、取り込み後も finalize/Agent 側で独立に検証される（この橋は配送の完全性を担う）。
 """
+import json
 import os
 import stat
 import time
 
 from . import handoff
-from .fsutil import atomic_write_json, canonical, read_json, sha256_hex
+from .fsutil import atomic_write_json, canonical, sha256_hex
 
 MANIFEST = "manifest.json"
 MANIFEST_ROLE = "agent"
@@ -120,7 +121,12 @@ def _verify_bundle(bundle, verifier):
     """束のマニフェストの署名とファイル集合・SHA-256 を検証。問題なければ (manifest, {rel: bytes}) を返す。"""
     if not (os.path.isdir(bundle) and not os.path.islink(bundle)):
         raise ResultHandoffError("result bundle is not a directory")
-    env = read_json(os.path.join(bundle, MANIFEST))
+    try:  # マニフェストも O_NOFOLLOW・通常ファイルで読む（out は _kaburun 所有: FIFO/symlink の差し込みを拒否）
+        env = json.loads(_read_regular(os.path.join(bundle, MANIFEST)).decode("utf-8"))
+    except OSError as exc:
+        raise ResultHandoffError("cannot read manifest: %s" % type(exc).__name__)
+    except (ValueError, UnicodeDecodeError):
+        raise ResultHandoffError("manifest is not valid JSON")
     if not (isinstance(env, dict) and set(env) == {"manifest", "sig"} and isinstance(env.get("sig"), str)):
         raise ResultHandoffError("manifest envelope invalid")
     manifest = env["manifest"]
@@ -152,6 +158,10 @@ def ingest_result(out_dir, run_id, dest_layout, verifier):
     handoff._safe_source_dir(out_dir)  # yuya=読み（_kaburun=書き・group/other 不可）
     if not handoff._JOB_ID.fullmatch(run_id):
         raise ResultHandoffError("run_id invalid")
+    # at-most-once（取り込み側）: 既に取り込み済みの run を重複・再送の束で上書きしない。request 封筒は control 側が
+    # try_claim 時に先に置くので判定に使わない。proc.json・run フォルダ（実行プレーンの成果物）の有無で見る。
+    if os.path.exists(dest_layout.proc_file(run_id)) or os.path.exists(dest_layout.run_dir(run_id)):
+        raise ResultHandoffError("destination already has this run (refusing to overwrite)")
     bundle = os.path.join(out_dir, run_id)
     manifest, data = _verify_bundle(bundle, verifier)
     if manifest["run_id"] != run_id:
