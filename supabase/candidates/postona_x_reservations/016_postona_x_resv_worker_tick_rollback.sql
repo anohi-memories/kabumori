@@ -8,16 +8,23 @@
 --   SCHEDULE_PRESENT       ANY job the owner can see calls the tick, under any name or spelling (the canonical job, an alias, a
 --                          schema-qualified, quoted or differently cased call); no job is unscheduled here -- the operator removes
 --                          each one knowingly first;
+--   CRON_JOBS_NOT_ALL_VISIBLE (G3-02 #12, H4-18 P2) pg_cron's row-level security shows this caller only its own jobs (cron.job has
+--                          RLS and the caller neither owns it nor bypasses RLS), so "no visible job calls the tick" is not "no job
+--                          does": a superuser's job (which may EXECUTE the tick whatever its ACL says) stays hidden. The rollback then
+--                          needs an administrator's read-back from the last 15 minutes: 016_postona_x_resv_worker_tick_rollback_admin_check
+--                          .sql, run by a superuser / BYPASSRLS role that sees every job, found none calling the tick and recorded
+--                          postona_x_resv.worker_tick_rollback_check = '<unix s>:<all jobs it saw>' on this database. Missing, malformed,
+--                          older than 15 minutes, or counting fewer jobs than this caller can see -> refused;
 --   TICK_REFERENCED        a function outside 016 names the tick (a wrapper a job could call).
--- Limits (stated, not hidden): pg_cron shows a non-superuser only its own jobs, so a superuser's job is not seen here; such a job, and a
--- call built from pieces at run time, are outside what a catalog check can prove. Only the owner can EXECUTE the tick, so another
--- non-superuser's job could not run it in any case.
+-- Every check runs before the first DROP, so a refusal leaves 016 whole. Limits (stated): a call built from pieces at run time is beyond a
+-- catalog check; a job scheduled after the administrator's read-back and within its 15 minutes is the operator's to prevent (stop the
+-- scheduler's changes for the window). The record expires on its own; the administrator may RESET it afterwards.
 begin;
 
 set local lock_timeout = '5s';
 
 do $$
-declare v_jobs text; v_fns text;
+declare v_jobs text; v_fns text; v_visible bigint; v_check text; v_parts text[];
 begin
   if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) is distinct from false
      or (select n.nspowner from pg_catalog.pg_namespace n where n.nspname = 'postona_x_resv') is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
@@ -34,6 +41,19 @@ begin
               where pg_catalog.lower(j.command) ~ 'tick_delivery_worker'$q$ into v_jobs;
     if v_jobs is not null then
       raise exception 'POSTONA_X_WORKER_TICK_ROLLBACK_SCHEDULE_PRESENT: %', v_jobs;
+    end if;
+    -- H4-18 P2: jobs this caller cannot see need an administrator's fresh read-back
+    if exists (select 1 from pg_catalog.pg_class c where c.oid = 'cron.job'::regclass and c.relrowsecurity
+                 and (c.relforcerowsecurity or c.relowner is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)))
+       and (select r.rolbypassrls from pg_catalog.pg_roles r where r.rolname = current_user) is not true then
+      execute $q$select pg_catalog.count(*) from cron.job$q$ into v_visible;
+      v_check := pg_catalog.current_setting('postona_x_resv.worker_tick_rollback_check', true);
+      v_parts := pg_catalog.regexp_match(coalesce(v_check, ''), '^([0-9]{10}):([0-9]{1,9})$');
+      if v_parts is null
+         or pg_catalog.floor(extract(epoch from pg_catalog.clock_timestamp()))::bigint - v_parts[1]::bigint not between 0 and 900
+         or v_parts[2]::bigint < v_visible then
+        raise exception 'POSTONA_X_WORKER_TICK_ROLLBACK_CRON_JOBS_NOT_ALL_VISIBLE';
+      end if;
     end if;
   end if;
   select pg_catalog.string_agg(p.oid::regprocedure::text, ',') into v_fns

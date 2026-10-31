@@ -18,7 +18,8 @@
 #           g3ls_test schema (a throw-away login reaches only that schema; both dropped before RB); L19-L24.
 #   tick    G3-02 #10 / #11: 016 (worker tick: a signed one-use ticket, the target pinned to a project ref) + pg_net / pg_cron on this
 #           stack only, a TEST ONLY target (g3ls_test.tick_target: this stack's kong entries) and Vault key; L25-L31, then the real
-#           pg_cron job, an alias job refusing 016's rollback, the unschedule and 016's rollback before RB.
+#           pg_cron job, an alias job and a superuser's job refusing 016's rollback (G3-02 #12), the administrator's read-back, the
+#           unschedule and 016's rollback before RB.
 # Test-world stand-ins (not G3's to decide; labelled in the test): a service end = the entitlement row as G5's end leaves it; a Threads
 # connection = G4's binding_row shape (as smoke.sql); the API / worker LOGIN members (a separately approved rollout step) = two
 # throw-away login roles with random passwords, kept only in a 0600 file inside the work dir.
@@ -286,10 +287,29 @@ if own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >"$WORK/o16a" 2>&1;
 grep -q "POSTONA_X_WORKER_TICK_ROLLBACK_SCHEDULE_PRESENT: g3ls-alias-tick" "$WORK/o16a" || fail "alias rollback: $(tail -1 "$WORK/o16a")"
 [ "$(own -A -t -c "select to_regprocedure('postona_x_resv.tick_delivery_worker()') is not null and exists (select 1 from cron.job where jobname = 'g3ls-alias-tick')")" = t ] || fail "alias refusal changed something"
 own -c "select cron.unschedule('g3ls-alias-tick')" >/dev/null   # the operator removes it knowingly
+# H4-18 P2 on the real pg_cron: a superuser's job (never due) calling the tick -> 016's rollback refuses, drops nothing (which refusal
+# answers is measured: CRON_JOBS_NOT_ALL_VISIBLE when pg_cron hides it from the owner, SCHEDULE_PRESENT if the owner sees it)
+sa -c "select cron.schedule('g3ls-hidden-super-tick', '0 0 1 1 *', 'select postona_x_resv.tick_delivery_worker()')" >/dev/null || fail "hidden job"
+owner_sees="$(own -A -t -c "select count(*) from cron.job where jobname = 'g3ls-hidden-super-tick'")"
+if own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >"$WORK/o16h" 2>&1; then fail "016 rolled back under a superuser's job"; fi
+grep -q -E "POSTONA_X_WORKER_TICK_ROLLBACK_(CRON_JOBS_NOT_ALL_VISIBLE|SCHEDULE_PRESENT: g3ls-hidden-super-tick)" "$WORK/o16h" || fail "hidden rollback: $(tail -1 "$WORK/o16h")"
+hidden_answer="$(grep -o -E "CRON_JOBS_NOT_ALL_VISIBLE|SCHEDULE_PRESENT" "$WORK/o16h" | head -1)"
+[ "$(own -A -t -c "select to_regprocedure('postona_x_resv.tick_delivery_worker()') is not null")" = t ] || fail "hidden refusal dropped the tick"
+if sa -f "$X16/016_postona_x_resv_worker_tick_rollback_admin_check.sql" >"$WORK/o16c" 2>&1; then fail "the read-back passed over the superuser's job"; fi
+grep -q "POSTONA_X_WORKER_TICK_ADMIN_CHECK_JOBS_PRESENT: g3ls-hidden-super-tick@supabase_admin" "$WORK/o16c" || fail "read-back: $(tail -1 "$WORK/o16c")"
+# the owner's own read-back: refused as NOT_ADMIN, or -- where this image gives postgres BYPASSRLS (measured) -- it sees every job and
+# names the superuser's one too; never a record
+owner_bypass="$(own -A -t -c "select rolbypassrls from pg_roles where rolname = current_user")"
+if own -f "$X16/016_postona_x_resv_worker_tick_rollback_admin_check.sql" >"$WORK/o16o" 2>&1; then fail "the owner's read-back recorded over a job"; fi
+if [ "$owner_bypass" = t ]; then want="POSTONA_X_WORKER_TICK_ADMIN_CHECK_JOBS_PRESENT: g3ls-hidden-super-tick@supabase_admin"; else want=POSTONA_X_WORKER_TICK_ADMIN_CHECK_NOT_ADMIN; fi
+grep -q "$want" "$WORK/o16o" || fail "owner read-back: $(grep -E 'ERROR' "$WORK/o16o" | tail -1)"
+sa -c "select cron.unschedule('g3ls-hidden-super-tick')" >/dev/null   # its owner stops it knowingly
+sa -f "$X16/016_postona_x_resv_worker_tick_rollback_admin_check.sql" >"$WORK/o16c" 2>&1 || fail "read-back: $(tail -1 "$WORK/o16c")"
 own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >/dev/null || fail "016 rollback"
+sa -c "alter database postgres reset postona_x_resv.worker_tick_rollback_check" >/dev/null
 [ "$(own -A -t -c "select to_regclass('postona_x_resv.worker_ticks') is null and to_regprocedure('postona_x_resv.tick_delivery_worker()') is null and not exists (select 1 from cron.job where jobname = 'postona-x-reservation-worker-tick')")" = t ] || fail "016 left behind"
 sa -c "delete from vault.secrets where name = 'postona_resv_worker_secret'" >/dev/null
-echo "OK CRON pg_cron ran the tick on its own ($runs succeeded run(s)) and the worker answered 200 to its ticket; unschedule / canonical + alias-job rollback refusals checked; job + 016 rolled back; Vault key removed"
+echo "OK CRON pg_cron ran the tick on its own ($runs succeeded run(s)) and the worker answered 200 to its ticket; unschedule / canonical + alias-job rollback refusals checked; a superuser's job (owner sees $owner_sees, owner BYPASSRLS=$owner_bypass) -> $hidden_answer, the read-back named it (the owner's: ${want#POSTONA_X_WORKER_TICK_ADMIN_CHECK_}); after it stopped: read-back recorded, job + 016 rolled back, record reset; Vault key removed"
 
 own -c "drop schema g3ls_test cascade" -c "drop role g3ls_test_login" >/dev/null   # G3-02 #9 test-only objects, before RB
 
