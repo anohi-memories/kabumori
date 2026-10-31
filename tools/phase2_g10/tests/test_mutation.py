@@ -24,6 +24,15 @@ MUTANTS = [
      '        bundle = self.go.get("source_bundle")\n        if bundle:\n            return BundleSourcePreparer(bundle)\n        return GitSourcePreparer(self.go["source_repo"])',
      '        return GitSourcePreparer(self.go["source_repo"])',
      "test_task34_bundle_source.GoSourceBundleWiring.test_adapter_selects_bundle_when_source_bundle_present"),
+    # --- TASK 37: 常駐ループ resident.py の安全ゲート ---
+    ("resident HALT does not block launch", "g10runner/resident.py",
+     'if self._flag_present(HALT_FLAG):\n            return "halted"',
+     'if False:\n            return "halted"',
+     "test_task37_resident.FailClosed.test_halt_blocks_before_auth_and_accept"),
+    ("resident runs when not logged in", "g10runner/resident.py",
+     'if auth.get("logged_in") is not True:',
+     "if False:",
+     "test_task37_resident.FailClosed.test_not_logged_in_does_not_claim"),
     # --- TASK 35: 専用ユーザー方式のジョブ受け口 handoff.py ---
     ("handoff signature not verified", "g10runner/handoff.py",
      'if not isinstance(doc.get("sig"), str) or not verifier.verify(role, canonical(body), doc["sig"]):\n        raise HandoffError("job signature does not verify")',

@@ -285,3 +285,20 @@ yuya は _kaburun のプロセスに直接シグナルを送れない。so:
 3. **auth 前チェックの位置**（15.4-3 の CLAIM 前／後）。
 4. **ログイン維持**（再起動後の再ログイン・自動再ログインの可否）はセキュリティと両睨みで要検討。
 5. 実 -p の1回ドライラン（指摘3）後に、~/.claude の許可/拒否を最終確定。
+
+### 15.8 ループ本体の実装（TASK 37）
+§15.4 の1周期を g10runner/resident.py に実装した（非特権・代役で E2E 可）。実 CLI もログインキーチェーンも使わない。
+- `ResidentLoop(inbox, flags_dir, out_dir, cli_realpath, home, dispatch, auth_check, now, log_path)`。
+  flags_dir は source dir（yuya 書き・group/other 不可）、out_dir は _kaburun 所有として検査（handoff.py と同じ規則）。
+- `step()` の順序（fail-closed）: ① flags/HALT・STOP があれば止める（**認証確認すらしない**）→ ② 固定版 CLI で
+  `auth_check`、未ログインなら accept 前に止める（**承認を消費しない**＝§15.7 Q3 の決定）→ ③ in/ の候補を名前順で
+  1件 `HandoffInbox.accept`（検証＋at-most-once CLAIM）→ ④ `dispatch(decision)`（実行プレーンへ。注入）→
+  ⑤ 結果を out/ に書く（本文・秘密・メール不可）→ ⑥ 記録。dispatch が例外でも「このジョブは終わり」として扱い、
+  CLAIM 済みなので次周期で再実行しない。
+- `run(max_cycles, interval, sleep)`: 常駐。HALT/STOP では起動しないが周回は続く（フラグが消えれば再開。恒久停止は
+  launchctl bootout）。1インスタンス＋同期 dispatch なのでランは常に1本。
+- **§15.7 Q1/Q2（request の署名境界・共有状態の所有権）は `dispatch` シームの内側に切り出した**。本体はそれに依存
+  しないので、この2点の決定は dispatch の実結線（次段）まで保留できる。テストは代役の dispatch を注入して本体を固定。
+- テスト: test_task37_resident（12）。変異2件（HALT が起動を止めない／未ログインでも起動する）を追加しすべて killed。
+- 残り（次段）: `dispatch` の実結線＝ジョブの request を実行プレーン Agent が検証できる形にして
+  agent.handle_request_file → スタブ起動 → 終端待ちにつなぐ（Q1/Q2 をここで決める）。その後に一度きりの特権 setup。
