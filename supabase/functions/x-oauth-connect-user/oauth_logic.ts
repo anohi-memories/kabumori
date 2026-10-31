@@ -34,6 +34,30 @@ export function xAuthProfilePinned(value: string | undefined): boolean {
   return value === X_PRODUCT_AUTH_PROFILE;
 }
 
+// G4-02 #7: the environment value above says what this deployment expects; the DATABASE must agree. Its own answer comes from
+// public.postona_x_connect_profile_v1() (candidates/postona_g4_x_oauth_personal_mvp/006), which exists only in the personal build and
+// reads the catalog. Called with the caller's JWT, first on every start and callback: before GoTrue, the X code exchange and any write.
+// Only exactly "personal" passes. A full or not-installed database (404), "mismatch", any other answer, a timeout or a network failure
+// is X_CONNECT_PROFILE_MISMATCH (503), so nothing proceeds on a guess. An unaccepted JWT stays the usual "sign in again" (401).
+export const X_DB_PROFILE_RPC = "postona_x_connect_profile_v1";
+export async function assertPersonalDatabaseProfile(input: { userAccessToken: string; supabaseUrl: string; anonKey: string }): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${input.supabaseUrl}/rest/v1/rpc/${X_DB_PROFILE_RPC}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: input.anonKey, Authorization: `Bearer ${input.userAccessToken}` },
+      body: "{}",
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    fail("X_CONNECT_PROFILE_MISMATCH", 503);
+  }
+  if (response.status === 401) fail("SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED", 401);
+  const answer = response.ok ? await response.json().catch(() => null) : (await response.body?.cancel(), null);
+  if (answer !== X_PRODUCT_AUTH_PROFILE) fail("X_CONNECT_PROFILE_MISMATCH", 503);
+}
+
 // G4-41: RPC refusals the app must tell apart. A dead or anonymous session means "sign in again" (401, like the
 // missing-token answer of index.ts); the person's workspace failing the one personal-workspace rule (G5's verdict, see
 // supabase/candidates/postona_g4_x_oauth_personal_epoch) means "a retry will not help" (409). Everything else stays 400.

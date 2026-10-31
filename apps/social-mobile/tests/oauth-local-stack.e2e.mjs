@@ -480,3 +480,106 @@ test('X7. disconnect through the real RPC (its gate opened in this TEST world): 
   assert.ok(verdict('x', a, id).startsWith('true|'));
   noProviderToken();
 });
+
+// ---- G4-02 #7: the X entry and the database's own profile answer --------------------------------------------------------------------------
+const xCalls = async () => (await (await fetch(`${API}/functions/v1/g4ls-x-connect/__x_calls`, { headers: { apikey: PUBLISHABLE }, signal: AbortSignal.timeout(20000) })).json()).calls;
+const rest = (fn, token) => fetch(`${API}/rest/v1/rpc/${fn}`, {
+  method: 'POST', headers: { apikey: PUBLISHABLE, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: '{}', signal: AbortSignal.timeout(20000),
+});
+const reloadSchema = () => owner("notify pgrst, 'reload schema'");
+
+test('X8. the fence through real PostgREST: a person gets "personal"; no JWT is refused; a tampered JWT is refused', T, async () => {
+  const a = await person('x8');
+  const yes = await rest('postona_x_connect_profile_v1', a.session.access_token);
+  assert.deepEqual([yes.status, await yes.json()], [200, 'personal']);
+  const anon = await rest('postona_x_connect_profile_v1');
+  assert.ok([401, 403, 404].includes(anon.status), `the anon role has no EXECUTE: ${anon.status}`);
+  await anon.body?.cancel();
+  const bad = await rest('postona_x_connect_profile_v1', `${a.session.access_token.slice(0, -4)}AAAA`);
+  assert.equal(bad.status, 401);
+  await bad.body?.cancel();
+});
+
+// Each row makes this real database not the personal build (real SQL, undone after the case); the entry must refuse with no X call and no write.
+const mismatches = [
+  ['F5 owner epoch present (the real PR #303 function name)', "create function private.account_lifecycle_brand_owner_epoch(text) returns bigint language sql as 'select 1::bigint'",
+    'drop function private.account_lifecycle_brand_owner_epoch(text)'],
+  ['the fence not installed (a full or a bare database: PostgREST 404)', 'alter function public.postona_x_connect_profile_v1() rename to postona_x_connect_profile_gone',
+    'alter function public.postona_x_connect_profile_gone() rename to postona_x_connect_profile_v1'],
+];
+for (const [index, [label, breakIt, undo]] of mismatches.entries()) {
+  const xId = 7090 + index;  // one X user per person: X refuses the same X user on a second account
+  test(`X9. mismatch: ${label}: refused at start and at the callback; no X call, no state, no credential; correct again = connects`, T, async () => {
+    const a = await person('x9');
+    // positive control in the same worker: a connect reaches the fake X
+    const before = await xCalls();
+    let screen = xScreen(a, a.session, { code: xCode(xId) });
+    await screen.render().connect();
+    assert.equal(screen.render().state, 'connected', screen.render().stateText);
+    const afterGood = await xCalls();
+    assert.ok(afterGood > before, 'the counter sees a good connect');
+    const id = accountId(a, 'x');
+    const generation = verdict('x', a, id);
+    const credential = () => owner(`select vault_access_token_secret_id::text || '|' || (select updated_at::text from vault.secrets where id = vault_access_token_secret_id) from public.social_accounts where id = ${lit(id)}`);
+    const secret = credential();
+    const stateCount = states(a);
+    // at start
+    owner(breakIt); reloadSchema();
+    try {
+      await new Promise((r) => setTimeout(r, 1500));
+      screen = xScreen(a, a.session, { code: xCode(xId) });
+      await screen.render().connect();
+      assert.equal(screen.render().state, 'retryable_error', screen.render().stateText);
+      assert.equal(screen.reloads(), 0);
+      assert.equal(states(a), stateCount, 'no state');
+      const direct = await post('g4ls-x-connect', { state: 's', code_challenge: 'c', redirect_uri: X_REDIRECT }, a.session.access_token);
+      assert.equal(await answer(direct), '503 X_CONNECT_PROFILE_MISMATCH');
+    } finally {
+      owner(undo); reloadSchema();
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    // at the callback: the start passed, the database changes while the person is at X
+    let broke = false;
+    screen = xScreen(a, a.session, { code: xCode(xId), during: async () => {
+      owner(breakIt); reloadSchema(); broke = true;
+      await new Promise((r) => setTimeout(r, 1500));
+    } });
+    try {
+      await screen.render().connect();
+      assert.ok(broke);
+      assert.equal(screen.render().state, 'retryable_error', screen.render().stateText);
+    } finally {
+      owner(undo); reloadSchema();
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    assert.equal(await xCalls(), afterGood, 'no call reached X');
+    assert.equal(credential(), secret, 'the credential was not written');
+    assert.match(verdict('x', a, id), /^false\|g4x1:[0-9]+\|CONNECT_PENDING$/u, 'only the open begin of the callback case remains');
+    assert.equal(verdict('x', a, id).split('|')[1], generation.split('|')[1], 'the generation did not move');
+    // correct again
+    screen = xScreen(a, a.session, { code: xCode(xId) });
+    await screen.render().connect();
+    assert.equal(screen.render().state, 'connected', screen.render().stateText);
+    assert.ok(verdict('x', a, id).startsWith('true|'));
+    noProviderToken();
+  });
+}
+
+test('X10. on a mismatched database, disconnect stays possible (it reaches no provider), and it never exchanges or stores anything', T, async () => {
+  const a = await person('x10');
+  let screen = xScreen(a, a.session, { code: xCode(7010) });
+  await screen.render().connect();
+  assert.equal(screen.render().state, 'connected', screen.render().stateText);
+  const calls = await xCalls();
+  const [, breakIt, undo] = mismatches[0];
+  owner(breakIt);
+  try {
+    screen = xScreen(a, a.session, { code: xCode(7010) });
+    await screen.render().disconnect();
+    console.log(`measured X10 disconnect on a mismatched database: ${screen.render().state}`);
+    assert.equal(screen.render().state, 'disconnected', screen.render().stateText);
+    assert.equal(await xCalls(), calls, 'no provider call');
+  } finally {
+    owner(undo);
+  }
+});

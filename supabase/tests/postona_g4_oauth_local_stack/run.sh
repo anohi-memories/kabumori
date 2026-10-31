@@ -123,7 +123,7 @@ for f in "$WORK"/t/g5chain_20261013140000_common_account_service_reconciliation_
          "$c/postona_threads_disconnect/threads_disconnect_candidate.sql" "$c/postona_g4_credential_verdict/001_threads_publish_credential_verdict.sql" \
          "$c/postona_g4_x_oauth_personal_mvp/001_x_oauth_g5pv.sql" "$c/postona_g4_x_oauth_personal_epoch/002_x_oauth_product_wiring.sql" \
          "$c/postona_g4_x_oauth_personal_epoch/003_x_disconnect_user_rpc.sql" "$c/postona_g4_x_oauth_personal_epoch/004_x_consume_preexchange_recheck.sql" \
-         "$c/postona_g4_x_oauth_personal_mvp/005_x_connect_lifecycle_t13_g5pv.sql" "$c/postona_g4_credential_verdict/002_x_publish_credential_verdict.sql"; do
+         "$c/postona_g4_x_oauth_personal_mvp/005_x_connect_lifecycle_t13_g5pv.sql" "$c/postona_g4_x_oauth_personal_mvp/006_x_connect_profile_fence.sql" "$c/postona_g4_credential_verdict/002_x_publish_credential_verdict.sql"; do
   need "$f"
 done
 echo "OK world: G4's personal world on the real local schema (as postgres)"

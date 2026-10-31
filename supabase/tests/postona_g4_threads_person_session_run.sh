@@ -263,6 +263,38 @@ if [ -n "${G4T_VERDICT:-}" ]; then
   for f in "$px/001_x_oauth_g5pv.sql" "$xc/002_x_oauth_product_wiring.sql" "$xc/003_x_disconnect_user_rpc.sql" \
     "$xc/004_x_consume_preexchange_recheck.sql" "$px/005_x_connect_lifecycle_t13_g5pv.sql" "$v2"; do need "$pv" "$f"; done
   echo "ok personal X 001-005 + the X verdict installed on the personal profile"
+  # G4-02 #7: the database's own profile answer (006): install refusals, ACL, and each thing that must turn it to 'mismatch'
+  fence="$px/006_x_connect_profile_fence.sql"; fence_rb="$px/006_x_connect_profile_fence_rollback.sql"
+  r="$(apply "$(copy fencefull "$vx")" "$fence")"; [ "$r" = G4X_FENCE_PRECONDITION_FULL_PROFILE ] || fail "fence on full: $r"
+  echo "ok 006 refused on the full profile ($r)"
+  r="$(apply "$(copy fenceno "$(mvp_world fencebase)")" "$fence")"; [ "$r" = G4X_FENCE_PRECONDITION_X_NOT_INSTALLED ] || fail "fence without X: $r"
+  echo "ok 006 refused without the personal X ($r)"
+  need "$pv" "$fence"
+  r="$(apply "$pv" "$fence")"; [ "$r" = G4X_FENCE_ALREADY_APPLIED ] || fail "fence twice: $r"
+  ask() { q "$1" -c "begin; set local role authenticated; select public.postona_x_connect_profile_v1(); rollback" | tail -1; }
+  [ "$(ask "$pv")" = personal ] || fail "fence answer on personal: $(ask "$pv")"
+  echo "ok authenticated asks: personal; anon / service_role cannot: $(q "$pv" -c "select has_function_privilege('anon', 'public.postona_x_connect_profile_v1()', 'EXECUTE'), has_function_privilege('service_role', 'public.postona_x_connect_profile_v1()', 'EXECUTE')" | tr '|' ' ')"
+  [ "$(q "$pv" -c "select has_function_privilege('anon', 'public.postona_x_connect_profile_v1()', 'EXECUTE') or has_function_privilege('service_role', 'public.postona_x_connect_profile_v1()', 'EXECUTE')")" = f ] || fail "fence reachable by another API role"
+  probe_fence() {  # label, SQL (as the owner) that makes the database not the personal build
+    local db; db="$(copy "fp$RANDOM" "$pv")"
+    q "$db" -c "$2" > /dev/null
+    [ "$(ask "$db")" = mismatch ] || fail "fence still says personal: $1"
+    echo "ok mismatch: $1"
+  }
+  probe_fence "F5's owner epoch function exists" "create function private.account_lifecycle_brand_owner_epoch(text) returns bigint language sql as 'select 1::bigint'"
+  probe_fence "the generation helper is the full profile's body" "create or replace function postona_g4_x_oauth.require_owner_epoch(p_brand_id text) returns bigint language plpgsql volatile security definer set search_path = '' as \$\$ declare v_epoch bigint; begin return 1; end \$\$"
+  probe_fence "begin is not the reviewed body" "create or replace function public.begin_social_mobile_x_oauth_connection(p_state_hash text, p_redirect_uri text, p_expires_at timestamptz) returns table (brand_id text, social_account_id text) language plpgsql security definer as \$\$ begin return; end \$\$"
+  probe_fence "the generation helper is exposed" "grant execute on function postona_g4_x_oauth.require_owner_epoch(text) to authenticated"
+  probe_fence "G5's MV is exposed" "grant execute on function private.postona_personal_worker_verdict(uuid,text,text,bigint) to authenticated"
+  probe_fence "G5's MV is missing" "alter function private.postona_personal_worker_verdict(uuid,text,text,bigint) rename to mv_gone"
+  # a second overload of a checked name
+  probe_fence "a second function of a checked name" "create function postona_g4_x_oauth.require_owner_epoch(bigint) returns bigint language sql as 'select 1::bigint'"
+  fr="$(copy fencerb "$pv")"
+  need "$fr" "$fence_rb"
+  [ -z "$(q "$fr" -c "select to_regprocedure('public.postona_x_connect_profile_v1()')")" ] || fail "fence rollback left the function"
+  need "$fr" "$fence"
+  echo "ok 006 rollback, then install again"
+  q "$pv" -c "select 'md5 postona_x_connect_profile_v1 ' || md5(prosrc) from pg_proc where oid = 'public.postona_x_connect_profile_v1()'::regprocedure"
   echo "== G4-02 #5 X verdict through G4's personal X SQL (personal profile)"
   out="$(as_owner "$pv" -A -t -v profile=personal -f "$xbeh" 2>&1)" || { echo "$out"; fail "X verdict behavior (personal)"; }
   grep -E '^[0-9]+\|' <<<"$out"
@@ -284,7 +316,7 @@ PY
   echo "MUTANT_CAUGHT personal_generation_constant by: $(grep -E '\|FAIL ' <<<"$out" | cut -d'|' -f2 | paste -sd ';' -)"
   # the personal rollbacks are the full-profile ones, verbatim (005 -> 001), after the X verdict
   pr="$(copy xrb "$pv")"
-  for f in "$v2_rb" "$xc/005_x_connect_lifecycle_t13_rollback.sql" "$xc/004_x_consume_preexchange_recheck_rollback.sql" \
+  for f in "$px/006_x_connect_profile_fence_rollback.sql" "$v2_rb" "$xc/005_x_connect_lifecycle_t13_rollback.sql" "$xc/004_x_consume_preexchange_recheck_rollback.sql" \
     "$xc/003_x_disconnect_user_rpc_rollback.sql" "$xc/002_x_oauth_product_wiring_rollback.sql" "$xc/001_x_oauth_personal_epoch_rollback.sql"; do need "$pr" "$f"; done
   [ -z "$(q "$pr" -c "select to_regnamespace('postona_g4_x_oauth')")" ] || fail "personal X rollback left the schema"
   echo "ok personal X rolled back with the full-profile rollbacks (005 -> 001), schema gone"
