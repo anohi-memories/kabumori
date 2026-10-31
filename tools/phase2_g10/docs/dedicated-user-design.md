@@ -331,3 +331,25 @@ yuya は _kaburun のプロセスに直接シグナルを送れない。so:
   handoff の request_doc 封筒チェックに変異1件（envelope 未検証）を追加し killed。
 - 残り: Q2 の finalize を out/ 経由にする改修、その後に一度きりの特権 setup（ACL・LaunchAgent・固定版CLI、各別途GO）、
   実 -p の1回ドライラン（指摘3・要GO）。
+
+### 15.10 結果の受け渡し（Q2 実装・TASK 39）
+Q2 の「finalize を handoff/out 経由にする」を、**finalize を変えずに**実現した。finalize は yuya 側のまま
+（GitHub postflight・ledger CLAIM 照合・ポリシー／wiring・取消・human/runner 署名）。_kaburun が finalize の読む
+成果物を out に書き出し、yuya が検証して自分のレイアウトに取り込んでから既存 finalize を走らせる橋を足した
+（g10runner/result_handoff.py）。
+
+- `export_result(layout, run_id, out_dir, signer)`: request 封筒・registry の proc・run フォルダ・work フォルダを
+  out_dir/<run_id>/ に写し、**agent 署名つきマニフェスト**（run_id＋通常ファイルの rel→{sha, mode}＋ディレクトリの
+  rel→mode）を書く。finalize の work 照合（tree_digest）は内容と**パーミッションの両方**を含むので mode も保存する。
+  束に通常ファイル以外（シンボリックリンク等）があれば拒否。
+- `ingest_result(out_dir, run_id, dest_layout, verifier)`: マニフェストの agent 署名を検証し、束の通常ファイルの集合が
+  マニフェストと**完全一致**すること・各 SHA-256 が一致することを確かめてから（未署名の混入・改ざんを拒否）、
+  dest_layout の request_file/proc_file/run_dir/work_dir に書き、mode を復元する（ディレクトリは子を書き終えてから
+  深い方から chmod）。request 封筒は runner 署名つきなので、取り込み後も Agent/finalize が独立に検証する。
+- テスト: test_task39_result_handoff。往復（全ファイルが dest に載る・tamper 拒否・未署名ファイル混入拒否・署名不正
+  拒否・シンボリックリンク拒否）と、**E2E**（ラン後に export → 実行プレーンの成果物を消す → out から ingest →
+  既存 finalize が `ended_checks_passed`。out 束だけで finalize に必要なものが全部そろうことを示す）。
+  変異3件（署名未検証・SHA 未照合・ファイル集合の不一致未検出）を追加し killed。
+- 残り: 一度きりの特権 setup（ACL 受け渡し・LaunchAgent 登録・固定版CLI配置、各別途GO）、実 -p の1回ドライラン
+  （指摘3・要GO）。常駐から export→（yuya 側の取り込み・finalize は autorun 相当の制御ループで）という常駐どうしの
+  往復の結線は、特権 setup 後の実機結線で詰める。
