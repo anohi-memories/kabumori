@@ -40,6 +40,6 @@
 
 ## artifact / rollback
 
-依頼元workspaceの`artifacts/ai-lab-opus-switch-20261031/`に本番v147の`baseline.json`、今回差分の`release-artifact.json`、`manifest.json`、非公開試作文を保存。全65fileのうち元47fileはbyte不変、既存変更はentry/generator/engagementの3file、残15fileは既存Providerの必要な依存closure。APIキー値は含めない。
+依頼元workspaceの`artifacts/ai-lab-opus-switch-20261031/`に本番v147の`baseline.json`、今回差分の`release-artifact.json`、`manifest.json`、非公開試作文を保存。全66fileのうち元47fileはbyte不変、既存変更はentry/generator/engagementの3file、新規16fileはProvider依存15fileと既存X refreshのtype-only依存1file。後者はget-edge-functionの取得sourceに欠けていた既存import先をmainの無変更sourceで補ったもので、新しいruntime callerは追加しない。APIキー値は含めない。
 
 反映失敗時は、承認範囲内の復旧としてv147 baselineへ戻しread-backする。新設secretの撤去は他の利用がないことを確認してから。既存共通secret・他slot設定・旧履歴は変更しない。
