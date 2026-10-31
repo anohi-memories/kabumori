@@ -117,24 +117,29 @@ Part B の「LaunchAgent 登録」より前に、**常駐ループの起動ス�
   両方が持つ**（公開鍵は1つなので鍵ペアは共有）。秘密鍵が2ユーザー間を渡るのを避けたい場合の代替（起動直前の再取得を外す）は
   安全性が落ちるので採らない。**witness 秘密鍵の受け渡しは、world-readable に一瞬も置かずに行う**（下記 B1b）。
 
-### B1a. control_pub（共有の読み取り専用）と yuya の制御プレーン ▶GO（yuya のセッション）
+### B1a. yuya の制御プレーンと control_pub（共有の読み取り専用）▶GO（yuya のセッション）
 制御の公開状態は exec_root の中に置かず、両ユーザーが通れる `/Users/Shared` の下の **yuya 所有・読み取り専用**ディレクトリに置く。
+`init` は**空のルート**を要求するので、先に symlink は張らない。**init → pub を共有先へ移す → symlink に張り替える**の順で行う
+（2026-11-01 に scratch で検証済み。open_control が symlink 経由で読めることまで確認）。
 
 ```
+# 1) 空のルートに init（keys・wiring・policy・pub を作る。pub はまだルート直下の実ディレクトリ）
+/usr/bin/python3 -I <bin>/g10_first_run.py init --root ~/g10-control --issue-source github_rest_anonymous
+# 2) pub を共有の読み取り専用ディレクトリへ移し、symlink に張り替える（_kaburun が読めるように）
 mkdir -p /Users/Shared/g10-control-pub && chmod 0755 /Users/Shared/g10-control-pub
+mv ~/g10-control/pub/* /Users/Shared/g10-control-pub/ && rmdir ~/g10-control/pub && ln -s /Users/Shared/g10-control-pub ~/g10-control/pub
 ```
 
-yuya の制御ルート（priv は /Users/yuya の下＝秘密。pub は上の共有ディレクトリ）を作る。pub を共有先への symlink にしてから
-init すると、制御イベント・policy・HALT/STOP が共有 control_pub に出る（init の ensure は exist_ok なので symlink 先を使う）:
+`<bin>` はこの worktree の `tools/phase2_g10/bin`（B1a/B1b/B1c は非特権で worktree から可）。B2・B1d の plist 生成は固定版が要るので、
+その前に `g10_first_run.py install` で固定版を作る。検証:
 
 ```
-mkdir -p ~/g10-control && ln -s /Users/Shared/g10-control-pub ~/g10-control/pub
-/usr/bin/python3 -I <固定版>/bin/g10_first_run.py init --root ~/g10-control --issue-source github_rest_anonymous
+ls -le /Users/Shared/g10-control-pub   # control_events.log・policy.json・halt.lock・requests が yuya 所有・group/other に w なし
+readlink ~/g10-control/pub             # /Users/Shared/g10-control-pub を指す
 ```
 
-→ これで yuya 所有の control_events.log・policy.json・halt.lock が `/Users/Shared/g10-control-pub` にでき、keys/ に4役割の
-秘密鍵（yuya 所有 0600）と wiring.json（private={agent,witness}）ができる。検証: `ls -le /Users/Shared/g10-control-pub`（yuya 所有・
-group/other に w なし）。
+→ yuya 所有の control_events.log・policy.json・halt.lock・requests が共有 control_pub にでき、`~/g10-control/keys` に4役割の
+秘密鍵（yuya 所有 0600）と `~/g10-control/wiring.json`（private={agent,witness}）ができる。
 
 ### B1b. witness と agent の鍵を _kaburun に渡す ▶GO（yuya→_kaburun・world-readable を避ける）
 _kaburun は agent・witness の秘密鍵の**自分の複製**（_kaburun 所有 0600）が要る。world-readable な場所に平文で置かないため、
