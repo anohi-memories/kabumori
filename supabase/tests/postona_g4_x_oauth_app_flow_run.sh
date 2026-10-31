@@ -152,9 +152,26 @@ echo "== 3. mode=g4p (G4 X on G5's PERSONAL MVP: 001/005 g5pv builds + 002-004 v
 pcand="$repo/supabase/candidates/postona_g4_x_oauth_personal_mvp"
 world fp personal
 for xf in "$pcand/001_x_oauth_g5pv.sql" "$cand/002_x_oauth_product_wiring.sql" "$cand/003_x_disconnect_user_rpc.sql" \
-  "$cand/004_x_consume_preexchange_recheck.sql" "$pcand/005_x_connect_lifecycle_t13_g5pv.sql"; do
+  "$cand/004_x_consume_preexchange_recheck.sql" "$pcand/005_x_connect_lifecycle_t13_g5pv.sql" "$pcand/006_x_connect_profile_fence.sql"; do
   [ "$(apply fp "$xf")" = applied ] || fail "$(basename "$xf") on the personal profile: $(apply fp "$xf")"
 done
 own_db fp -c "select postona_g4_x_oauth.set_x_disconnect_enabled(true)" >/dev/null
 people fp; flow fp g4p
+# G4-02 #7: FAIL before / PASS after: the entry WITHOUT the fence call connects on a full database (the risk), proved on a fresh copy of mode g4
+echo "== 4. negative control: the X entry without the database check on the full profile"
+world fn; x4 fn
+[ "$(apply fn "$cand/005_x_connect_lifecycle_t13.sql")" = applied ] || fail "005 on fn"
+own_db fn -c "select postona_g4_x_oauth.set_x_disconnect_enabled(true)" >/dev/null
+people fn
+nofence="$work/nofence"; mkdir -p "$nofence"; cp "$repo/supabase/functions/x-oauth-connect-user/"{index.ts,oauth_logic.ts} "$nofence/"
+python3 -I - "$nofence/index.ts" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+o = "    await assertPersonalDatabaseProfile({ userAccessToken, supabaseUrl, anonKey });\n"
+assert s.count(o) == 1, "fence call"
+open(p, "w").write(s.replace(o, ""))
+PY
+if (FLOW_EDGE_OVERRIDE="$nofence/index.ts" flow fn g4) 2>"$work/nofence.err"; then fail "the negative control passed: the fence scenario did not need the fence"; fi
+grep -q "the database's own answer" "$work/nofence.err" || { cat "$work/nofence.err"; fail "the negative control failed for another reason"; }
+echo "NEGATIVE_CONTROL_CAUGHT x_entry_without_db_check: $(grep -E '^not ok ' "$work/nofence.err" | cut -c1-110 | paste -sd ';' -)"
 echo "G4X_APP_FLOW_ALL_PASS"

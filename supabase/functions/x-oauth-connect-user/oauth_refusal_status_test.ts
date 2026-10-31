@@ -1,7 +1,7 @@
 // G4-41: the HTTP status the Edge answers for each RPC refusal of the X begin / complete (incl. the G4 candidate's codes).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OAuthConnectUserError, rpcRefusalCode, rpcRefusalStatus, startConnection, xAuthProfilePinned } from "./oauth_logic.ts";
+import { assertPersonalDatabaseProfile, OAuthConnectUserError, rpcRefusalCode, rpcRefusalStatus, startConnection, xAuthProfilePinned } from "./oauth_logic.ts";
 
 const SUPABASE_URL = "https://example.supabase.co";
 const ANON_KEY = "anon-key-fixture";
@@ -161,4 +161,33 @@ test("G4-02 #6: G5's MV answers through the personal generation helper reach the
 test("G4-02 #6: the entry is pinned to the personal profile; unset, full or anything else is not", () => {
   assert.equal(xAuthProfilePinned("personal"), true);
   for (const value of [undefined, "", "full", "PERSONAL", "personal "]) assert.equal(xAuthProfilePinned(value), false, String(value));
+});
+
+test("G4-02 #7: only the database's exact answer passes; anything else is refused, with no second call", async () => {
+  const original = globalThis.fetch;
+  const check = async (reply: () => Promise<Response>) => {
+    let calls = 0;
+    globalThis.fetch = (() => { calls += 1; return reply(); }) as typeof fetch;
+    try {
+      await assertPersonalDatabaseProfile({ userAccessToken: "jwt", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY });
+      return `pass/${calls}`;
+    } catch (error) {
+      const e = error as OAuthConnectUserError;
+      return `${e.status} ${e.message}/${calls}`;
+    }
+  };
+  try {
+    assert.equal(await check(() => Promise.resolve(Response.json("personal"))), "pass/1");
+    const refused = "503 X_CONNECT_PROFILE_MISMATCH/1";
+    assert.equal(await check(() => Promise.resolve(Response.json("mismatch"))), refused);
+    assert.equal(await check(() => Promise.resolve(Response.json("full"))), refused);
+    assert.equal(await check(() => Promise.resolve(Response.json({ profile: "personal" }))), refused);
+    assert.equal(await check(() => Promise.resolve(new Response("personal"))), refused, "not JSON");
+    assert.equal(await check(() => Promise.resolve(Response.json({ code: "PGRST202" }, { status: 404 }))), refused, "full / not installed");
+    assert.equal(await check(() => Promise.resolve(Response.json("personal", { status: 403 }))), refused, "an error status never passes");
+    assert.equal(await check(() => Promise.reject(new TypeError("network"))), refused);
+    assert.equal(await check(() => Promise.resolve(Response.json({}, { status: 401 }))), "401 SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED/1");
+  } finally {
+    globalThis.fetch = original;
+  }
 });

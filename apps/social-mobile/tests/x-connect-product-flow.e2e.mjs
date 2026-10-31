@@ -83,6 +83,8 @@ function x(url) {
 
 // ---- the REAL Edge handler, run in Node with a minimal Deno stand-in --------------------------------------------------------
 const EDGE_ENV = { SUPABASE_URL, SUPABASE_ANON_KEY: ANON_KEY, X_CLIENT_ID: 'flow-x-client', X_CLIENT_SECRET: 'flow-x-secret', POSTONA_X_AUTH_PROFILE: 'personal' };
+let fenceStandIn = env('FLOW_MODE') !== 'g4p';
+let xCalls = 0;
 let loseCallbackAnswer = false;  // the Edge runs, its answer never reaches the app (an unknown outcome)
 let edge = null;
 globalThis.Deno = { serve: (handler) => { edge = handler; }, env: { get: (k) => EDGE_ENV[k] } };
@@ -97,11 +99,14 @@ const route = async (input, init = {}) => {
     if (loseCallbackAnswer && url.endsWith('/callback')) throw new TypeError('the connection was lost');
     return answer;
   }
+  // G4-02 #7: main / g4 have no fence function, so the Edge refuses them all. To keep their older scenarios on those SQL stacks the test
+  // stands in for the answer, except in the scenario that proves the refusal. g4p always asks its real database.
+  if (fenceStandIn && url === `${SUPABASE_URL}/rest/v1/rpc/postona_x_connect_profile_v1`) return Response.json('personal');
   if (url.startsWith(`${SUPABASE_URL}/rest/v1/rpc/`)) {
     return postgrest(url.slice(`${SUPABASE_URL}/rest/v1/rpc/`.length).split('?')[0], bodyText ? JSON.parse(bodyText) : {}, headers.get('Authorization'));
   }
   if (url === `${SUPABASE_URL}/auth/v1/user`) return gotrueUser(headers.get('Authorization'));
-  if (url.startsWith('https://api.x.com/')) return x(url);
+  if (url.startsWith('https://api.x.com/')) { xCalls += 1; return x(url); }
   throw new Error(`unexpected fetch ${url}`);
 };
 // FLOW_DEBUG=1 prints every answer (status and body) of the fakes and the Edge
@@ -275,6 +280,36 @@ test(`[${MODE}] the Edge has no pinned personal profile (unset / full): 503 befo
     }
   } finally {
     EDGE_ENV.POSTONA_X_AUTH_PROFILE = pinned;
+  }
+});
+
+test(`[${MODE}] the database's own answer: ${PERSONAL ? 'personal: connects' : 'no fence function (full / main): refused at start and at the callback; no state, no X call, nothing written'}`, async () => {
+  const stored = fenceStandIn;
+  const before = account(A);
+  const states = () => owner(`select count(*) from public.social_account_oauth_states where initiated_by_user_id = ${lit(A)}::uuid`);
+  try {
+    fenceStandIn = false;
+    const calls = xCalls, statesBefore = states();
+    const a = app({ ui: SESSION_A, script: [SESSION_A] });
+    await a.render().connect();
+    if (PERSONAL) {
+      assert.equal(a.render().state, 'connected', a.render().stateText);
+    } else {
+      assert.equal(a.render().state, 'retryable_error', a.render().stateText);
+      assert.equal(a.reloads(), 0);
+      assert.equal(xCalls, calls, 'no X call');
+      assert.equal(states(), statesBefore, 'no state');
+      assert.equal(account(A), before);
+      // a start that passed, then the database is found mismatched at the callback: the code is never exchanged
+      fenceStandIn = true;
+      const b = app({ ui: SESSION_A, script: [SESSION_A], duringBrowser: () => { fenceStandIn = false; } });
+      await b.render().connect();
+      assert.equal(b.render().state, 'retryable_error', b.render().stateText);
+      assert.equal(xCalls, calls, 'the code was never exchanged');
+      assert.equal(account(A), before);
+    }
+  } finally {
+    fenceStandIn = stored;
   }
 });
 
