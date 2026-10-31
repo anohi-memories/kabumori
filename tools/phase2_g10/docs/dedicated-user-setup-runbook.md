@@ -102,11 +102,84 @@ Part B の「LaunchAgent 登録」より前に、**常駐ループの起動ス�
 
 これで B0 の前提コードは出そろった。下の B1 以降（各特権・各GO）に進む。
 
-## B1. exec プレーンの first-run（_kaburun のレイアウト初期化）▶GO（後日）
-`/Users/_kaburun/g10-exec` を root に、exec 側の鍵（agent）を置く（鍵の生成は要 GO）。**制御の公開状態は exec_root の中には
-置かず**、yuya 所有の読み取り専用 control_pub（例: `/Users/Shared/g10-control-pub`。yuya がそこに control_events・policy・
-HALT/STOP・halt.lock を公開する）に置く。exec_root 側は `pub` を control_pub への symlink にする（SplitLayout.ensure 相当）。
-したがって exec_root/pub は実体のディレクトリにしない（symlink のみ）。
+## B1. first-run（制御プレーン＝yuya と exec プレーン＝_kaburun の初期化）▶GO（各段・後日）
+
+専用ユーザー方式は**新しい独立したパイプライン**を作る（既存の同一ユーザー常駐 f998feb5／policy-v2 には触れない。承認番号
+0005/0006/0007 も使わない）。鍵の持ち分と置き場をはっきり分ける。
+
+### 鍵の持ち分（ここが肝）
+- **yuya（制御）**: runner・human・agent・witness の**秘密鍵**を持つ（yuya 所有 0600）。制御イベント・GO・CLAIM・CONFIRM を
+  runner/human で署名し、CLAIM 時に witness で Issue #323 の証拠を作る。
+- **_kaburun（実行）**: **agent と witness の秘密鍵だけ**を持つ（_kaburun 所有 0600）＋4役割の公開鍵。agent は自分のログ
+  （ACCEPTED/used）と結果マニフェストの署名に、witness は起動直前の Issue 再取得の証拠づくりに使う。
+  **runner・human の秘密鍵は決して _kaburun に渡さない**（これがあると制御・GO・CLAIM を偽造できる）。
+- witness は「取り込んだ Issue の事実に署名する」低権限の鍵で、両プレーンが Issue を取得・照合するため**同じ witness 鍵を
+  両方が持つ**（公開鍵は1つなので鍵ペアは共有）。秘密鍵が2ユーザー間を渡るのを避けたい場合の代替（起動直前の再取得を外す）は
+  安全性が落ちるので採らない。**witness 秘密鍵の受け渡しは、world-readable に一瞬も置かずに行う**（下記 B1b）。
+
+### B1a. control_pub（共有の読み取り専用）と yuya の制御プレーン ▶GO（yuya のセッション）
+制御の公開状態は exec_root の中に置かず、両ユーザーが通れる `/Users/Shared` の下の **yuya 所有・読み取り専用**ディレクトリに置く。
+
+```
+mkdir -p /Users/Shared/g10-control-pub && chmod 0755 /Users/Shared/g10-control-pub
+```
+
+yuya の制御ルート（priv は /Users/yuya の下＝秘密。pub は上の共有ディレクトリ）を作る。pub を共有先への symlink にしてから
+init すると、制御イベント・policy・HALT/STOP が共有 control_pub に出る（init の ensure は exist_ok なので symlink 先を使う）:
+
+```
+mkdir -p ~/g10-control && ln -s /Users/Shared/g10-control-pub ~/g10-control/pub
+/usr/bin/python3 -I <固定版>/bin/g10_first_run.py init --root ~/g10-control --issue-source github_rest_anonymous
+```
+
+→ これで yuya 所有の control_events.log・policy.json・halt.lock が `/Users/Shared/g10-control-pub` にでき、keys/ に4役割の
+秘密鍵（yuya 所有 0600）と wiring.json（private={agent,witness}）ができる。検証: `ls -le /Users/Shared/g10-control-pub`（yuya 所有・
+group/other に w なし）。
+
+### B1b. witness と agent の鍵を _kaburun に渡す ▶GO（yuya→_kaburun・world-readable を避ける）
+_kaburun は agent・witness の秘密鍵の**自分の複製**（_kaburun 所有 0600）が要る。world-readable な場所に平文で置かないため、
+**管理者の権限で複製＋所有権の付け替え**を行う（sudo の cp/chown は**あなた**が打つ。クロちゃんは打たない）。目安:
+
+```
+sudo mkdir -p /Users/_kaburun/g10-exec/keys && sudo chown _kaburun /Users/_kaburun/g10-exec/keys && sudo chmod 0700 /Users/_kaburun/g10-exec/keys
+sudo cp ~/g10-control/keys/agent.key ~/g10-control/keys/witness.key /Users/_kaburun/g10-exec/keys/
+sudo cp ~/g10-control/keys/*.pub /Users/_kaburun/g10-exec/keys/
+sudo chown _kaburun /Users/_kaburun/g10-exec/keys/* && sudo chmod 0600 /Users/_kaburun/g10-exec/keys/*.key && sudo chmod 0644 /Users/_kaburun/g10-exec/keys/*.pub
+```
+
+→ runner.key・human.key は**コピーしない**。検証（_kaburun のセッション）: `ls -le /Users/_kaburun/g10-exec/keys`（agent.key・
+witness.key・4つの .pub が _kaburun 所有・.key は 0600）。runner.key・human.key が無いこと。
+
+### B1c. exec プレーンの組み立て（wiring・ディレクトリ・pub symlink）▶GO（_kaburun のセッション）
+exec_root の wiring.json（issue_source・ledger は yuya の wiring.json に合わせる。public_keys=4役割の .pub、
+private_keys={agent,witness} を上の _kaburun 所有の鍵に向ける）を置き、agent-out/work/requests を作り、`pub` を control_pub への
+symlink にする（実体ディレクトリにしない）:
+
+```
+ln -s /Users/Shared/g10-control-pub /Users/_kaburun/g10-exec/pub
+mkdir -p /Users/_kaburun/g10-exec/agent-out/requests /Users/_kaburun/g10-exec/work
+```
+
+wiring.json の形（_kaburun 所有 0600。鍵パスは exec_root/keys を指す。issue_source・ledger は yuya のものと同じ値にする）:
+
+```
+{"version": <yuya と同じ>, "mode": "ecdsa",
+ "public_keys": {"runner":".../keys/runner.pub","human":".../keys/human.pub","agent":".../keys/agent.pub","witness":".../keys/witness.pub"},
+ "private_keys": {"agent":".../keys/agent.key","witness":".../keys/witness.key"},
+ "issue_source": {"kind":"github_rest_anonymous"},
+ "ledger": <yuya と同じ・または null>}
+```
+
+検証（_kaburun のセッション・固定版から）: `python3 -I -c "from g10runner import wiring; print(wiring.load('/Users/_kaburun/g10-exec') is not None)"`
+が True（鍵の指紋・公開鍵との一致・runner/human 秘密鍵が無いことを wiring.load が確かめる）。`readlink /Users/_kaburun/g10-exec/pub`
+が control_pub を指すこと。
+
+### B1d. exec の S2 見張り役（watchdog）▶GO（_kaburun のセッション）
+起動直前の判定は新鮮な S2 心拍を要求する（無いと `supervisor_unavailable` で起動しない）。_kaburun の watchdog を
+`~/g10-exec/agent-out/s2_heartbeat.json` に心拍を書くよう常駐させる（B2 と同じく gui/503 の LaunchAgent。別 plist）。
+（watchdog の plist 生成はまだ用意していない＝次段の小さな非特権コードの候補。それまでは B3 の検証でも手動で心拍を置く。）
+
+→ B1 が済んだら、下の B2（登録）→ B3（隔離検証）→ B4（実 -p ドライラン）→ B5（本番1回）に進む（各別途 GO）。
 
 ## B2. LaunchAgent を gui/503 に登録 ▶GO（_kaburun のセッションで実行・後日）
 まず固定版の中の g10_first_run.py で plist を作る（作って lint するだけ・登録しない。B1 で root と鍵・ポリシーができてから）:
