@@ -121,7 +121,7 @@ A refusal of a later step (an unforeseen reason) stops there. Each step is atomi
   - 403 `POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED`: X is disconnected. Offer reconnect; after the reconnect, create works again.
   - 409 `POSTONA_RESV_IDEMPOTENCY_CONFLICT`: the same `clientBatchId` with another body. The same id with the same body answers the same rows, so a retry is safe.
   - 409 `POSTONA_RESV_SLOT_CONFLICT`: one of the operation's times is within 60 minutes of another active row, or of another time in the same batch. Two existing rows close to each other never block an operation that is clear of both (G3-02 #6).
-  - 409 `POSTONA_RESV_NOT_PLANNED`: reschedule of a row that is no longer planned (for example `uncertain`).
+  - 409 `POSTONA_RESV_NOT_PLANNED`: reschedule of a row that is no longer planned (for example `uncertain`), or of a "send now" row (G3-02 #7).
   - 422 `POSTONA_RESV_CONSENT_REQUIRED`: a reconfirm hash that does not match the body.
 - After `reschedule`, `consentState` is `needs_reconfirm`. Send `reconfirm` with the body's SHA-256 before the row can be sent.
 - A row's `status`:
@@ -194,6 +194,14 @@ What it showed, for the operator:
 - **Now** (`assert_slots_free`, 001): only the operation's own times are checked, each against every other active row and against each other.
 - **Unchanged**: the 60-minute gap (exactly 60 is fine), the day / month caps, the active states, the row's own exclusion on reschedule, the per-account advisory lock.
 - **Proof**: PG17 `postona_x_reservations/run.sh` M7 (+ C1-C3 races); `local_stack/` L16 over the real runtime and the app store.
+
+**Send now next to reservations** (G3-02 #7):
+- **One row, two flows**: a "send now" (005 / 006, draft `single:...`) is one reservations row, created `claimed` with `expires_at` = its own time, so the delivery worker never claims it. Its retry is `post_now_begin` with the same request id (a never-sent row is re-armed).
+- **Fixed**: a send now handed back before any send (`planned`: SERVICE_BUSY, lease too short or expired before the send) could be moved by `reschedule`. That reset `expires_at`, so after `reconfirm` the delivery worker claimed it, against 005's contract. `reschedule` now answers `POSTONA_RESV_NOT_PLANNED` for it and changes nothing. The worker's sweep closes it as `expired` (never sent), and its own retry still re-arms it.
+- **Unchanged, measured** (a product decision is pending):
+  - a send now is not held to the 60-minute gap (a send now 30 minutes before a reservation is accepted);
+  - a NEW reservation within 60 minutes of an active send now (claimed / published / uncertain) is refused `SLOT_CONFLICT`.
+- **Proof**: PG17 `single_post_live_fence_run.sh` L10; `local_stack/` L17 (the app store's reschedule → `final`).
 
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.
