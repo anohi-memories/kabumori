@@ -16,6 +16,8 @@
 #   test    local_test.ts (phases L0-L12, real HTTP; G3-02 #2: create / reschedule / reconfirm decided in the database).
 #   e2e     G3-02 #9: a TEST ONLY worker twin (postona-x-reservation-worker-e2etest) with a FAKE credential snapshot and a fake X in a
 #           g3ls_test schema (a throw-away login reaches only that schema; both dropped before RB); L19-L24.
+#   tick    G3-02 #10: 016 (worker tick) + pg_net / pg_cron on this stack only, a TEST ONLY URL rule for its kong entries, Vault entries;
+#           L25-L31, then the real pg_cron job, the unschedule and 016's rollback before RB.
 # Test-world stand-ins (not G3's to decide; labelled in the test): a service end = the entitlement row as G5's end leaves it; a Threads
 # connection = G4's binding_row shape (as smoke.sql); the API / worker LOGIN members (a separately approved rollout step) = two
 # throw-away login roles with random passwords, kept only in a 0600 file inside the work dir.
@@ -80,8 +82,11 @@ for sec in ["realtime", "studio", "local_smtp", "analytics"]:
 s, n = re.subn(r"(\[db\.seed\]\n(?:#.*\n)*)enabled = true", r"\1enabled = false", s, count=1); assert n == 1
 s, n = re.subn(r"enable_anonymous_sign_ins = false", "enable_anonymous_sign_ins = true", s, count=1); assert n == 1
 assert 'project_id = "g3ls"' in s
-for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest", "postona-x-reservation-worker-e2etest"]:
+for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest"]:
     s += f'\n[functions.{fn}]\nverify_jwt = true\n'
+# G3-02 #10: the worker entries are called by the scheduler (pg_net, no user JWT; the worker checks its own secret), as a deploy needs them
+for fn in ["postona-x-reservation-worker", "postona-x-reservation-worker-e2etest"]:
+    s += f'\n[functions.{fn}]\nverify_jwt = false\n'
 open(p, "w").write(s)
 PY
 fns="$WORK/p/supabase/functions"
@@ -94,6 +99,8 @@ cp "$here/local_transport.ts" "$fns/_shared_g3ls/"
 mkdir -p "$WORK/bundle"; cp "$bundle/rollout.sh" "$bundle/preflight.sql" "$bundle/MANIFEST.tsv" "$WORK/bundle/"
 sed -i '' "s|^root=.*|root=\"$bundle/..\"|" "$WORK/bundle/rollout.sh"
 mutate() { python3 -I -c 'import sys; p, o, n = sys.argv[1:4]; s = open(p).read(); assert s.count(o) == 1, "G3LS_MUTANT target"; open(p, "w").write(s.replace(o, n))' "$@"; }
+X16="$bundle/../postona_x_reservations"; T16="$X16/016_postona_x_resv_worker_tick.sql"
+mutate16() { cp "$T16" "$WORK/016.sql"; T16="$WORK/016.sql"; mutate "$T16" "$@"; }
 case "${G3LS_MUTANT:-}" in
   "") ;;
   host_any) mutate "$WORK/bundle/rollout.sh" '/private/tmp/*|/tmp/*|127.0.0.1) ;;' '*) ;;' ;;
@@ -103,6 +110,10 @@ case "${G3LS_MUTANT:-}" in
   no_set_role) mutate "$fns/_shared/postona_reservations/postgres_db.ts" 'await client.queryArray({ text: `SET LOCAL ROLE ${API_ROLE}` });' '' ;;
   bound_generation_ignored) mutate "$fns/_shared/postona_reservations/x_bound_delivery.ts" '        || credential.generation !== checked.credentialGeneration) {' '        ) {' ;;
   unknown_as_rejected) mutate "$fns/_shared/postona_reservations/x_publisher.ts" 'return { kind: "unknown", code: controller.signal.aborted ? "X_TIMEOUT" : "X_TRANSPORT_UNKNOWN" };' 'return { kind: "rejected_before_send", code: "X_TRANSPORT_UNKNOWN" };' ;;
+  tick_no_in_flight) mutate16 "  if found and v_last.ticked_at > pg_catalog.now() - interval '70 seconds'" "  if false and v_last.ticked_at > pg_catalog.now() - interval '70 seconds'" ;;
+  tick_no_lock) mutate16 "  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:worker_tick', 0)) then" "  if false then" ;;
+  tick_short_secret) mutate16 " or pg_catalog.length(v_secret) < 32 then" " then" ;;
+  tick_url_any) mutate16 "  select coalesce(p_url ~ '^https://[a-z0-9]{20}\\.supabase\\.co/functions/v1/postona-x-reservation-worker\$', false)" "  select true" ;;
   *) fail "unknown G3LS_MUTANT" ;;
 esac
 RO_SH="$bundle/rollout.sh"; [ "${G3LS_MUTANT:-}" = host_any ] && RO_SH="$WORK/bundle/rollout.sh"
@@ -184,6 +195,25 @@ grep -q G3_ROLLOUT_ATTESTATION_MISMATCH <<<"$o" || fail "attestation mismatch: $
 ro() { env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=postgres G3RO_OWNER=postgres G3RO_DB_ATTESTATION="$ATT" "$@" bash "$RO_SH" "$mode"; }
 mode=preflight; o="$(ro 2>&1)" || fail "preflight: $o"; grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=15$' <<<"$o" || fail "preflight: $o"
 mode=install; o="$(ro 2>&1)" || fail "install: $o"; grep -q '^G3_ROLLOUT_INSTALLED steps=15 ' <<<"$o" || fail "install: $o"
+# ---- G3-02 #10: the worker tick (016 candidate) on this throw-away stack only (a later, separately approved step in a real rollout) ----
+sa() { psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$DB_PORT" -U supabase_admin -d postgres "$@"; }
+sa -c "create extension if not exists pg_net" -c "create extension if not exists pg_cron" >/dev/null || fail "pg_net / pg_cron"
+own -f "$T16" >/dev/null || fail "016"
+if own -f "$T16" >"$WORK/o16" 2>&1; then fail "016 re-applied"; fi
+grep -q POSTONA_X_WORKER_TICK_ALREADY_APPLIED "$WORK/o16" || fail "016 re-apply: $(tail -1 "$WORK/o16")"
+[ "$(own -A -t -c "select string_agg(postona_x_resv.worker_url_allowed(u)::text, ',' order by o) from unnest(array[
+  'https://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservation-worker', 'http://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservation-worker',
+  'https://abcdefghij0123456789.supabase.co/functions/v1/postona-x-reservations', 'https://evil.example/functions/v1/postona-x-reservation-worker',
+  'http://kong:8000/functions/v1/postona-x-reservation-worker', null]) with ordinality as x(u, o)")" = "true,false,false,false,false,false" ] || fail "016 URL rule"
+# TEST ONLY (this stack): the URL rule also admits this stack's own kong worker entries and one unreachable host; production stays https only
+own >/dev/null <<'SQL'
+create or replace function postona_x_resv.worker_url_allowed(p_url text) returns boolean
+language sql immutable set search_path = '' as $$
+  select coalesce(p_url ~ '^http://kong:8000/functions/v1/postona-x-reservation-worker(-localtest|-e2etest)?$'
+                  or p_url = 'http://g3ls-unreachable.invalid/functions/v1/postona-x-reservation-worker', false)
+$$;
+SQL
+echo "OK 016 worker tick installed (pg_net + Vault; re-apply refused; production URL rule https-only measured); TEST ONLY URL rule: this stack's kong"
 mode=install; o="$(ro 2>&1)" && fail "a second install succeeded"; grep -q G3_ROLLOUT_PREFLIGHT_REFUSED <<<"$o" || fail "second install: $o"
 echo "OK G3 rollout.sh preflight + install (15 steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
 
@@ -230,6 +260,28 @@ env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLI
   deno test --no-config --no-check --cached-only \
     --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_API_PW,G3LS_WORKER_PW,G3LS_WORKER_SECRET,G3LS_JWT_SECRET \
     --allow-net="127.0.0.1:$API_PORT" --allow-run=psql "$here/local_test.ts"
+
+# ---- G3-02 #10: the real pg_cron job calls the worker on its own; then the job, then 016 roll back (each refusal checked) -------------
+if own -f "$X16/016_postona_x_resv_worker_tick_schedule_rollback.sql" >/dev/null 2>&1; then fail "unschedule without a job"; fi
+since="$(own -A -t -c "select now()")"
+own -f "$X16/016_postona_x_resv_worker_tick_schedule.sql" >/dev/null || fail "schedule"
+if own -f "$X16/016_postona_x_resv_worker_tick_schedule.sql" >/dev/null 2>&1; then fail "a second schedule"; fi
+if own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >"$WORK/o16r" 2>&1; then fail "016 rolled back under its job"; fi
+grep -q POSTONA_X_WORKER_TICK_ROLLBACK_SCHEDULE_PRESENT "$WORK/o16r" || fail "016 rollback: $(tail -1 "$WORK/o16r")"
+cron_ok=""
+for _ in $(seq 1 45); do
+  st="$(own -A -t -c "select coalesce((select r.status_code::text from postona_x_resv.worker_ticks t join net._http_response r on r.id = t.request_id where t.ticked_at > '$since'::timestamptz and t.outcome = 'INVOKED' order by t.id desc limit 1), '')")"
+  [ "$st" = 200 ] && { cron_ok=1; break; }
+  sleep 3
+done
+[ -n "$cron_ok" ] || fail "pg_cron did not call the worker"
+runs="$(sa -A -t -c "select count(*) from cron.job_run_details d join cron.job j on j.jobid = d.jobid where j.jobname = 'postona-x-reservation-worker-tick' and d.status = 'succeeded'")"
+[ "$runs" -ge 1 ] || fail "no succeeded cron run"
+own -f "$X16/016_postona_x_resv_worker_tick_schedule_rollback.sql" >/dev/null || fail "unschedule"
+own -f "$X16/016_postona_x_resv_worker_tick_rollback.sql" >/dev/null || fail "016 rollback"
+[ "$(own -A -t -c "select to_regclass('postona_x_resv.worker_ticks') is null and to_regprocedure('postona_x_resv.tick_delivery_worker()') is null and not exists (select 1 from cron.job where jobname = 'postona-x-reservation-worker-tick')")" = t ] || fail "016 left behind"
+sa -c "delete from vault.secrets where name in ('postona_resv_worker_url', 'postona_resv_worker_secret')" >/dev/null
+echo "OK CRON pg_cron ran the tick on its own ($runs succeeded run(s)) and the worker answered 200; unschedule / 016 rollback refusals checked; job + 016 rolled back; Vault entries removed"
 
 own -c "drop schema g3ls_test cascade" -c "drop role g3ls_test_login" >/dev/null   # G3-02 #9 test-only objects, before RB
 

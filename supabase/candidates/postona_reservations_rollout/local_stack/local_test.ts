@@ -580,4 +580,124 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await owner("select count(distinct text) || '/' || count(*) from g3ls_test.x_calls where text in ('G3-02 app e6', 'G3-02 app e7', 'G3-02 app e8')"), "3/3");
     for (const id of ids) assert.match(await outcome(id), /^published\/PUBLISHED\/9[0-9]{9}$/u);
   });
+
+  // ---- G3-02 #10: the scheduler's call (016 tick: Vault URL + secret by name -> pg_net -> the worker entry), on this stack's real pg_net.
+  // run.sh installed 016 and the TEST ONLY URL rule (this stack's kong worker entries + one unreachable host); the real pg_cron job is
+  // run.sh's own step after these. The Vault entries are this stack's only.
+  const admin = (script: string, vars: Record<string, string> = {}) => psql("supabase_admin", "postgres", script, vars);
+  const setVault = async (name: string, value: string | null) => {
+    await admin("delete from vault.secrets where name = :'n'", { n: name });
+    if (value !== null) assert.doesNotMatch(await admin("select vault.create_secret(:'v', :'n')", { v: value, n: name }), /^ERR:/u);
+  };
+  const configure = async (url: string | null, secret: string | null) => {
+    await setVault("postona_resv_worker_url", url);
+    await setVault("postona_resv_worker_secret", secret);
+  };
+  const KONG_FN = "http://kong:8000/functions/v1";
+  const tick = () => owner("select postona_x_resv.tick_delivery_worker()");
+  const invoked = () => countOf("select count(*) from postona_x_resv.worker_ticks where outcome = 'INVOKED'");
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  /** The last call's answer as pg_net recorded it: "<status>|<body>", "error|<message>" or "timeout|". */
+  const lastAnswer = async () => {
+    const rid = await owner("select request_id from postona_x_resv.worker_ticks where outcome = 'INVOKED' order by id desc limit 1");
+    for (let i = 0; i < 60; i++) {
+      const r = await owner("select coalesce(status_code::text, case when timed_out then 'timeout' else 'error' end) || '|' || coalesce(content, error_msg, '') from net._http_response where id = :'r'", { r: rid });
+      if (r) return r;
+      await sleep(500);
+    }
+    return "none|";
+  };
+  const reportOf = (answer: string) => (JSON.parse(answer.slice(answer.indexOf("|") + 1)) as { report: Record<string, number | boolean> }).report;
+
+  await t.step("L25 tick: nothing is called when Vault has no URL / secret, the secret is short, or the URL is not a worker entry", async () => {
+    await configure(null, null);
+    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED");
+    await configure(`${KONG_FN}/${WK2}`, "short-secret");
+    assert.deepStrictEqual(await tick(), "NOT_CONFIGURED");
+    await configure(`${KONG_FN}/${X}`, WORKER_SECRET);   // the reservations entry, not the worker
+    assert.deepStrictEqual(await tick(), "URL_REFUSED");
+    assert.deepStrictEqual(await invoked(), 0, "no HTTP call was made");
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.worker_ticks where request_id is not null"), "0");
+  });
+
+  await t.step("L26 tick -> the production worker entry (release gate OFF): 503 NOT_AVAILABLE, nothing claimed or sent; verify_jwt measured", async () => {
+    const id = await saved("t1", 70);
+    await makeDue(id);
+    const calls = await xCalls();
+    await configure(`${KONG_FN}/postona-x-reservation-worker`, WORKER_SECRET);
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    assert.deepStrictEqual(await lastAnswer(), '503|{"ok":false,"code":"NOT_AVAILABLE"}');
+    assert.deepStrictEqual([await rowState(id), await xCalls()], ["planned/1/-", calls]);
+    // measured, not assumed: a worker entry left at verify_jwt = true (the localtest twin) against a call without a user JWT
+    await configure(`${KONG_FN}/postona-x-reservation-worker-localtest`, WORKER_SECRET);
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    const gated = await lastAnswer();
+    console.log(`G3LS_TICK_VERIFY_JWT_TRUE ${gated.slice(0, 80)}`);
+    assert.match(gated, /^(200|401)\|/u);
+    assert.deepStrictEqual(await rowState(id), "planned/1/-");
+  });
+
+  await t.step("L27 tick with a wrong secret -> the worker's 401 WORKER_AUTH_REQUIRED, nothing claimed or sent", async () => {
+    const calls = await xCalls();
+    await configure(`${KONG_FN}/${WK2}`, "w".repeat(48));
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    assert.deepStrictEqual(await lastAnswer(), '401|{"ok":false,"code":"WORKER_AUTH_REQUIRED"}');
+    assert.deepStrictEqual(await xCalls(), calls);
+  });
+
+  await t.step("L28 tick -> the e2e worker: the due row sent once, a future row not; the next tick sends nothing; health shows the report", async () => {
+    await snapshot(a.account!, await generationOf(a.account!));
+    const due = await owner("select id from postona_x_resv.reservations where draft_id = 'g3app_t1'");
+    const future = await saved("t2", 71);
+    const calls = await xCalls();
+    await configure(`${KONG_FN}/${WK2}`, WORKER_SECRET);
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    const first = await lastAnswer();
+    assert.match(first, /^200\|/u, first);
+    assert.deepStrictEqual([reportOf(first).claimed, reportOf(first).sends, reportOf(first).published], [1, 1, 1], first);
+    assert.match(await outcome(due), /^published\/PUBLISHED\/9[0-9]{9}$/u);
+    assert.deepStrictEqual([await rowState(future), await xCalls()], ["planned/1/-", calls + 1]);
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    const second = await lastAnswer();
+    assert.deepStrictEqual([second.split("|")[0], reportOf(second).claimed, await xCalls()], ["200", 0, calls + 1], "the next tick re-sends nothing");
+    const health = await owner("select last_report::text from postona_x_resv.worker_tick_health() where outcome = 'HTTP' and http_status = 200");
+    assert.match(health, /"claimed": 0/u, health);
+  });
+
+  await t.step("L29 tick: an unknown X answer -> uncertain; the next tick never re-sends it", async () => {
+    const id = await saved("t3", 72);
+    await makeDue(id);
+    const calls = await xCalls();
+    await xMode("unknown");
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    const run = await lastAnswer();
+    await xMode("ok");
+    assert.deepStrictEqual([reportOf(run).sends, reportOf(run).uncertain], [1, 1], run);
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    assert.deepStrictEqual([reportOf(await lastAnswer()).claimed, await xCalls(), await rowState(id)], [0, calls + 1, "uncertain/1/X_TRANSPORT_UNKNOWN"]);
+  });
+
+  await t.step("L30 tick never stacks: a previous call still without an answer -> PREVIOUS_IN_FLIGHT; a tick already running -> TICK_BUSY", async () => {
+    const before = await invoked();
+    // SYNTHETIC: a call pg_net has not answered yet (request id -1 never gets a response)
+    await owner("insert into postona_x_resv.worker_ticks (outcome, request_id) values ('INVOKED', -1)");
+    assert.deepStrictEqual(await tick(), "PREVIOUS_IN_FLIGHT");
+    await owner("delete from postona_x_resv.worker_ticks where request_id = -1");
+    const holder = owner("begin; select pg_advisory_xact_lock(hashtextextended('postona_x_resv:worker_tick', 0)); select pg_sleep(4); commit;");
+    await sleep(1500);
+    assert.deepStrictEqual(await tick(), "TICK_BUSY");
+    await holder;
+    assert.deepStrictEqual(await invoked(), before, "neither made a call");
+  });
+
+  await t.step("L31 tick to an unreachable host: pg_net's failure shows in the health read (TRANSPORT_ERROR), nothing claimed", async () => {
+    await configure("http://g3ls-unreachable.invalid/functions/v1/postona-x-reservation-worker", WORKER_SECRET);
+    assert.deepStrictEqual(await tick(), "INVOKED");
+    const answer = await lastAnswer();
+    assert.match(answer, /^(error|timeout)\|/u, answer);
+    const outcomes = await owner("select string_agg(outcome || coalesce('/' || http_status, ''), ',' order by outcome, http_status) from postona_x_resv.worker_tick_health()");
+    for (const o of ["NOT_CONFIGURED", "URL_REFUSED", "HTTP/503", "HTTP/401", "HTTP/200", "PREVIOUS_IN_FLIGHT", "TICK_BUSY"]) assert.ok(outcomes.split(",").includes(o), `${o} in ${outcomes}`);
+    assert.ok(outcomes.includes("TRANSPORT_ERROR") || outcomes.includes("TIMED_OUT"), outcomes);
+    await configure(`${KONG_FN}/${WK2}`, WORKER_SECRET);   // left for run.sh's pg_cron step
+  });
 });
