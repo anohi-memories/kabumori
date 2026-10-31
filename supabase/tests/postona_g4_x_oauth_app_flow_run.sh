@@ -136,7 +136,8 @@ flow() { # <db> <mode>
       node --test --test-reporter=tap tests/x-connect-product-flow.e2e.mjs 2>&1)"; then
     grep -E '^# (tests|pass|fail|measured)|^ok |^not ok ' <<<"$out" | sed "s/^/[$mode] /"
   else
-    grep -E "^not ok |^# (tests|pass|fail)|AssertionError|expected|actual|\[flow\]" <<<"$out" | head -40 >&2
+    grep -E -A14 "^not ok " <<<"$out" | head -60 >&2
+    grep -E "^# (tests|pass|fail)" <<<"$out" >&2
     fail "flow $mode"
   fi
 }

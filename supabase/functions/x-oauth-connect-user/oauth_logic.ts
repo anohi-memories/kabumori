@@ -25,6 +25,15 @@ function fail(code: string, status: number): never {
   throw new OAuthConnectUserError(code, status);
 }
 
+// G4-02 #6: this entry serves G5's personal MVP only (supabase/candidates/postona_g4_x_oauth_personal_mvp). Unset or anything else
+// answers 503 before any Auth, database or X call. It pins the configuration; that the database runs the same profile is the
+// install's own refusal (each profile's X SQL refuses on the other).
+export const X_AUTH_PROFILE_ENV = "POSTONA_X_AUTH_PROFILE";
+export const X_PRODUCT_AUTH_PROFILE = "personal";
+export function xAuthProfilePinned(value: string | undefined): boolean {
+  return value === X_PRODUCT_AUTH_PROFILE;
+}
+
 // G4-41: RPC refusals the app must tell apart. A dead or anonymous session means "sign in again" (401, like the
 // missing-token answer of index.ts); the person's workspace failing the one personal-workspace rule (G5's verdict, see
 // supabase/candidates/postona_g4_x_oauth_personal_epoch) means "a retry will not help" (409). Everything else stays 400.
@@ -48,6 +57,11 @@ const WORKSPACE_REFUSALS = new Set([
   "SERVICE_DELETION_IN_PROGRESS",
   "ACCOUNT_DELETION_IN_PROGRESS",
   "ACCOUNT_LOCKED",
+  // G4-02 #6: G5's MV through the personal profile's generation helper (a moved generation stays 400: start over)
+  "NOT_PERSONAL_WORKSPACE",
+  "WORKSPACE_ABSENT",
+  "SERVICE_GENERATION_UNAVAILABLE",
+  "SERVICE_STATE_UNKNOWN",
 ]);
 const TRANSIENT_REFUSALS = new Set(["ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE"]);
 
@@ -95,6 +109,12 @@ export const X_CONNECT_RPC_ERROR_CODES: ReadonlySet<string> = new Set([
   "SERVICE_NOT_REGISTERED",
   "SERVICE_NOT_ACTIVE",
   "SERVICE_DELETION_IN_PROGRESS",
+  // G5's MV, raised by supabase/candidates/postona_g4_x_oauth_personal_mvp's require_owner_epoch (G4-02 #5 / #6)
+  "NOT_PERSONAL_WORKSPACE",
+  "WORKSPACE_ABSENT",
+  "SERVICE_GENERATION_CHANGED",
+  "SERVICE_GENERATION_UNAVAILABLE",
+  "SERVICE_STATE_UNKNOWN",
 ]);
 
 export function rpcRefusalCode(message: unknown): string {

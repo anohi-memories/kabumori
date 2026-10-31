@@ -144,18 +144,20 @@ test('executed authorization URL validation still blocks unsafe host/protocol be
 });
 
 test('executed unsupported result, transient errors and invalid server success stay truthful', async () => {
-  for (const [options, state] of [
-    [{ browserResult: () => ({ type: 'locked' }) }, 'retryable_error'],
-    [{ startError: { status: 503 } }, 'retryable_error'],
-    [{ callbackError: { name: 'FunctionsFetchError' } }, 'retryable_error'],
-    [{ callbackData: { success: false, handle: 'fixture' } }, 'terminal_error'],
-    [{ callbackData: { success: true } }, 'terminal_error'],
+  // rereads: G4-02 #6, the code was sent and the answer is unknown (network / 5xx): the shared data is re-read, no success is claimed
+  for (const [options, state, rereads] of [
+    [{ browserResult: () => ({ type: 'locked' }) }, 'retryable_error', 0],
+    [{ startError: { status: 503 } }, 'retryable_error', 0],
+    [{ callbackError: { name: 'FunctionsFetchError' } }, 'retryable_error', 1],
+    [{ callbackError: { status: 409 } }, 'workspace_blocked', 0],
+    [{ callbackData: { success: false, handle: 'fixture' } }, 'terminal_error', 0],
+    [{ callbackData: { success: true } }, 'terminal_error', 0],
   ]) {
     const harness = await hookHarness(options);
     await harness.render().connect();
     assert.equal(harness.render().state, state);
     assert.equal(harness.render().verifiedHandle, null);
-    assert.equal(harness.completed, 0);
+    assert.equal(harness.completed, rereads);
   }
 });
 

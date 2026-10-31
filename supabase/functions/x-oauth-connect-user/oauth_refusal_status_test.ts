@@ -1,7 +1,7 @@
 // G4-41: the HTTP status the Edge answers for each RPC refusal of the X begin / complete (incl. the G4 candidate's codes).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OAuthConnectUserError, rpcRefusalCode, rpcRefusalStatus, startConnection } from "./oauth_logic.ts";
+import { OAuthConnectUserError, rpcRefusalCode, rpcRefusalStatus, startConnection, xAuthProfilePinned } from "./oauth_logic.ts";
 
 const SUPABASE_URL = "https://example.supabase.co";
 const ANON_KEY = "anon-key-fixture";
@@ -146,4 +146,19 @@ test("startConnection: a person without POSTONA (T13) answers 409, a writer fenc
     (error: unknown) =>
       error instanceof OAuthConnectUserError && error.message === "ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE" && error.status === 503,
   );
+});
+
+test("G4-02 #6: G5's MV answers through the personal generation helper reach the app with fixed statuses", () => {
+  for (const code of ["NOT_PERSONAL_WORKSPACE", "WORKSPACE_ABSENT", "SERVICE_GENERATION_UNAVAILABLE", "SERVICE_STATE_UNKNOWN"]) {
+    assert.equal(rpcRefusalCode(code), code);
+    assert.equal(rpcRefusalStatus(code, 400), 409, code);
+  }
+  assert.equal(rpcRefusalCode("SERVICE_GENERATION_CHANGED"), "SERVICE_GENERATION_CHANGED");
+  assert.equal(rpcRefusalStatus("SERVICE_GENERATION_CHANGED", 400), 400);
+  assert.equal(rpcRefusalStatus("OWNER_EPOCH_CHANGED", 400), 400);
+});
+
+test("G4-02 #6: the entry is pinned to the personal profile; unset, full or anything else is not", () => {
+  assert.equal(xAuthProfilePinned("personal"), true);
+  for (const value of [undefined, "", "full", "PERSONAL", "personal "]) assert.equal(xAuthProfilePinned(value), false, String(value));
 });

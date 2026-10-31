@@ -100,7 +100,17 @@ export function createG4ThreadsSourceServer(config: RuntimeConfig, ports: G4Cons
   });
 }
 
-/** The entry's composition seam (same shape as H5's nondeployable.ts): H5's strict reader, the pinned profile, then the G4 server. */
+/**
+ * G4-02 #6: the product entry runs G5's personal MVP only (1 person / 1 workspace; the full profile is not adopted). The
+ * full profile stays a test-only path through createG4ThreadsSourceServer's own argument.
+ */
+export const G4_PRODUCT_AUTH_PROFILE: G4AuthProfile = "personal";
+export function g4ProductAuthProfile(value: string | undefined): G4AuthProfile {
+  if (g4AuthProfile(value) !== G4_PRODUCT_AUTH_PROFILE) throw new RuntimeRefusal("HTTP_INTEGRATION_UNAVAILABLE");
+  return G4_PRODUCT_AUTH_PROFILE;
+}
+
+/** The entry's composition seam (same shape as H5's nondeployable.ts): H5's strict reader, the product profile, then the G4 server. */
 export function buildForApprovedSourceIntegration(handlerFactory: HandlerFactory, read: (name: string) => string | undefined) {
-  return createG4ThreadsSourceServer(readConfig(read), { handlerFactory }, g4AuthProfile(read(G4_AUTH_PROFILE_ENV)));
+  return createG4ThreadsSourceServer(readConfig(read), { handlerFactory }, g4ProductAuthProfile(read(G4_AUTH_PROFILE_ENV)));
 }

@@ -58,10 +58,11 @@ test("G4-02 #2 real composition: no (or an unknown) G5 profile -> unavailable, n
     const entry = createThreadsConnectEntry({ read: (name) => values[name], gates: OPEN });
     assert.deepEqual(await answer(entry, request({ action: "start" }, null)), { status: 503, body: { ok: false, error: "THREADS_CONNECT_RUNTIME_UNAVAILABLE" } }, String(profile));
   }
-  for (const profile of ["full", "personal"]) {
-    const entry = createThreadsConnectEntry({ read: (name) => ({ ...canonical, POSTONA_THREADS_G4_AUTH_PROFILE: profile })[name], gates: OPEN });
-    assert.deepEqual(await answer(entry, request({ action: "start" }, null)), { status: 401, body: { ok: false, error: "AUTH_REQUIRED" } }, profile);
-  }
+  // G4-02 #6: the product entry is pinned to the personal MVP; "full" is refused like any other value
+  const full = createThreadsConnectEntry({ read: (name) => ({ ...canonical, POSTONA_THREADS_G4_AUTH_PROFILE: "full" })[name], gates: OPEN });
+  assert.deepEqual(await answer(full, request({ action: "start" }, null)), { status: 503, body: { ok: false, error: "THREADS_CONNECT_RUNTIME_UNAVAILABLE" } });
+  const personal = createThreadsConnectEntry({ read: (name) => ({ ...canonical, POSTONA_THREADS_G4_AUTH_PROFILE: "personal" })[name], gates: OPEN });
+  assert.deepEqual(await answer(personal, request({ action: "start" }, null)), { status: 401, body: { ok: false, error: "AUTH_REQUIRED" } });
 });
 
 test("real composition: a config H5 refuses (production-like owner, wrong DB host, non-HTTPS callback) fails closed", async () => {
@@ -102,5 +103,11 @@ test("G4-02 #2: the composition is built only with a pinned G5 profile (full | p
   // the entry's own seam reads the profile through the same reader as H5's config (the POSTONA_THREADS_ prefix passes it)
   const src = (await Deno.readTextFile(new URL("../../../candidates/postona_g4_threads_personal_auth/composition.ts", import.meta.url)))
     .split("\n").filter((line) => !line.trimStart().startsWith("//")).join("\n");
-  assert.match(src, /g4AuthProfile\(read\(G4_AUTH_PROFILE_ENV\)\)/);
+  assert.match(src, /g4ProductAuthProfile\(read\(G4_AUTH_PROFILE_ENV\)\)/);
+});
+
+test("G4-02 #6: the deployed function resolves the composition's bare imports with the versions the runtime is tested on", async () => {
+  const own = JSON.parse(await Deno.readTextFile(new URL("../../threads-oauth-connect-user/deno.json", import.meta.url)));
+  const wiring = JSON.parse(await Deno.readTextFile(new URL("../../../candidates/postona_threads_auth_runtime/wiring/deno.json", import.meta.url)));
+  assert.deepEqual(own.imports, wiring.imports);
 });
