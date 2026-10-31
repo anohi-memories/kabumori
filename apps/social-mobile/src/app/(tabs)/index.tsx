@@ -110,6 +110,9 @@ export default function HomeScreen() {
           <Link href="/(tabs)/schedule" asChild>
             <ActionButton label="投稿予定を見る" onPress={() => {}} />
           </Link>
+          <Link href="/reservations" asChild>
+            <ActionButton label="X・Threadsの予約を管理" onPress={() => {}} />
+          </Link>
         </Card>
 
         <Card>
