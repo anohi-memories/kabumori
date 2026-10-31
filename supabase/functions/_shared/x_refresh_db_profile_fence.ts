@@ -1,0 +1,69 @@
+/**
+ * G4-02 #8: a fence for the X token refresh writer on G5's personal MVP database. NOT WIRED: the writer (x-test-post, with
+ * _shared/x_v2_account_refresh.ts, on main's refresh core) is live and is not G4's, and today's production database has no personal
+ * build, so wiring this there without adopting the personal SQL first would stop every token refresh. The owner's change is one call
+ * around their port, in the release that adopts the personal profile:
+ *
+ *   const port = withXRefreshPrecheck(ledgerPort, createXRefreshPrecheck({ supabaseUrl, serviceRoleKey }), accountIdOf);
+ *
+ * Only `begin` is fenced. X refresh tokens are single-use: once the provider has been called, the result must still reach commit /
+ * release, or the new tokens are lost. So commit and release pass through untouched.
+ */
+
+/** A refusal the refresh routine reports as not started: it must never call the provider. */
+const CODE = /^[A-Z][A-Z0-9_]{1,80}$/u;
+export const X_REFRESH_DB_PROFILE_MISMATCH = "X_REFRESH_DB_PROFILE_MISMATCH";
+
+export type XRefreshPrecheck = (socialAccountId: string) => Promise<void>;
+
+/**
+ * public.postona_x_refresh_precheck_v1 (candidates/postona_g4_x_oauth_personal_mvp/007), with the worker's service role. Only exactly
+ * "allow" passes. No such function (full / not installed: 404), no privilege, another shape: X_REFRESH_DB_PROFILE_MISMATCH. A network
+ * failure or a 5xx: X_REFRESH_UNAVAILABLE (the routine's existing "retry later"). A database refusal: its fixed code, as below.
+ */
+export function createXRefreshPrecheck(
+  { supabaseUrl, serviceRoleKey, fetchImpl = fetch }: { supabaseUrl: string; serviceRoleKey: string; fetchImpl?: typeof fetch },
+): XRefreshPrecheck {
+  const url = `${supabaseUrl.replace(/\/$/u, "")}/rest/v1/rpc/postona_x_refresh_precheck_v1`;
+  return async (socialAccountId) => {
+    let response: Response;
+    try {
+      response = await fetchImpl(url, {
+        method: "POST",
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ p_social_account_id: socialAccountId }),
+        redirect: "error",
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      throw new Error("X_REFRESH_UNAVAILABLE");
+    }
+    if (response.status >= 500) {
+      await response.body?.cancel();
+      throw new Error("X_REFRESH_UNAVAILABLE");
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(X_REFRESH_DB_PROFILE_MISMATCH);
+    }
+    const answer = await response.json().catch(() => null);
+    if (answer === "allow") return;
+    if (answer === "DB_PROFILE_MISMATCH" || typeof answer !== "string" || !CODE.test(answer)) throw new Error(X_REFRESH_DB_PROFILE_MISMATCH);
+    // already taken: the routine's existing retryable code; anything else stays a fixed, non-retryable refusal
+    throw new Error(answer === "REFRESH_IN_PROGRESS" ? "X_REFRESH_IN_PROGRESS" : `X_REFRESH_PRECHECK_${answer}`);
+  };
+}
+
+/** The same refresh port with the precheck before `begin`. `commit`, `release` and everything else are the port's own, untouched. */
+export function withXRefreshPrecheck<Args extends unknown[], Lease, Port extends { begin(...args: Args): Promise<Lease> }>(
+  port: Port,
+  precheck: XRefreshPrecheck,
+  accountIdOf: (...args: Args) => string,
+): Port {
+  const fenced = Object.create(port) as Port;
+  fenced.begin = async (...args: Args) => {
+    await precheck(accountIdOf(...args));
+    return await port.begin(...args);
+  };
+  return fenced;
+}

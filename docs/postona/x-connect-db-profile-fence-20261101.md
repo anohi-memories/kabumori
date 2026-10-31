@@ -73,7 +73,7 @@ Add this function and the Edge's call to the single review already proposed (the
 ## 4. Limits (stated, not hidden)
 
 - **Disconnect is deliberately not fenced.** It is a direct RPC without the Edge, it reaches no provider and stores no credential, and blocking it would leave a person unable to disconnect on a misconfigured deployment.
-- **Token refresh does not pass through this entry.** Main's refresh core and its worker are the only token writer (G4-40 002) and are not G4's Edge. This fence does not stop them on a mismatched database. Do not run the refresh worker on a mismatched database; G3's send still needs G4's verdict + MV.
+- (See G4-02 #8: `x-refresh-writer-db-profile-fence-20261101.md`; a fence is built, its live wiring is its owner's.) **Token refresh does not pass through this entry.** Main's refresh core and its worker are the only token writer (G4-40 002) and are not G4's Edge. This fence does not stop them on a mismatched database. Do not run the refresh worker on a mismatched database; G3's send still needs G4's verdict + MV.
 - **The check runs at request time, per request.** A database changed between the check and the RPC is still subject to the SQL's own rules.
 - **The fence's pins are exact.** Any later change to a pinned body makes X connect refuse until the pin is updated with a review: that is the point, and it needs planning.
 
