@@ -377,3 +377,26 @@ Q2 の「finalize を handoff/out 経由にする」を、**finalize を変え�
 - 残り（B0 の前提コード）: B0-2 その LaunchAgent plist 生成（gui/503・Background・KeepAlive・固定版の検証つき）、
   B0-3 鍵と制御状態の配り方の確定（exec の Agent が参照する yuya の公開物＝pub の control_events・policy・wiring・GO 本文を
   handoff で配るか pub を ACL 共有にするか）。これが入ってから B1 以降（各特権・各GO）。
+
+### §15.12 常駐ジョブ実行の LaunchAgent（B0-2）— plist を作って検査する
+
+B0-1 の driver（bin/g10_jobrunner.py）を _kaburun の gui セッションで回すための LaunchAgent の plist を、作って検査する
+だけの段を足した（g10runner/launchd_plan.py・入口 bin/g10_first_run.py の `jobrunner-plist` サブコマンド）。登録はしない
+（登録は B2・人の GO の後、_kaburun のセッションで `launchctl bootstrap gui/503`）。
+
+- `job_runner_agent_plan(python, root, in, claims, out, flags, cli, home, interval, release_digest, package_root)`:
+  ラベルは `com.kabumori.g10.phase2.agent.jobrunner`、ProgramArguments は固定版の `bin/g10_jobrunner.py` と handoff の
+  4パス・固定版CLI・HOME・間隔・`--release-digest` を並べた**21要素の決め打ち**。KeepAlive/RunAtLoad/Background/Umask 077・
+  環境は PATH/LANG だけ・ログは root/logs。UserName は付けない（LaunchAgent は bootstrap したドメインのユーザー＝gui/503
+  の _kaburun として動く）。
+- `validate_job_runner_plan`: キー集合が完全一致・ProgramArguments の各フラグが所定の位置・スクリプトは固定版の中の
+  g10_jobrunner.py だけ・`--release-digest` がその版と一致（release.verify）・間隔は有限で 300 秒以上（--once を付けない
+  常駐なので resident の下限と同じ）・root/in/claims/out/flags/cli/home はすべて絶対パス・環境は PATH/LANG だけ。
+  開発 worktree を指す計画は拒否（固定版からのみ）。`render_validated_job_runner` は検査を通った計画だけを plist にする。
+- 入口 `jobrunner-plist`: 固定版の中の g10_first_run.py からのみ実行でき、plist を作って `plutil -lint` で形式も確かめ、
+  登録・確認・停止のコマンド文字列（`launchctl bootstrap/print/bootout gui/$(id -u)/<label>`）を**表示するだけ**で実行しない。
+- テスト: test_task41_jobrunner_plist。固定版から生成・lint・ラベル・21要素・固定版のスクリプトを指すこと／開発 worktree・
+  ハッシュ違い・余分なキー・短い間隔・相対パス・API キーの拒否／開発 worktree からは作らない。変異3件（ハッシュ未照合・
+  間隔の下限撤去・絶対パス未要求）を追加し killed。
+- 残り（B0 の前提コード）: B0-3 鍵と制御状態の配り方の確定（exec の Agent が参照する yuya の公開物をどう渡すか）。
+  これが入れば B1 以降（各特権・各GO）へ。

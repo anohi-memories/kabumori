@@ -55,6 +55,18 @@ MUTANTS = [
      '            result_handoff.export_result(self.layout, run_id, self.out_dir, self.signer, now=self.now)\n            return dict(result, exported=True)',
      "            return result",
      "test_task40_jobrunner.BuildLoopE2E.test_run_auto_exports_a_bundle_yuya_can_finalize"),
+    # --- B0-2: 常駐ジョブ実行の LaunchAgent（gui/503）の plist の検査 launchd_plan.py ---
+    ("jobrunner plist release digest not matched", "g10runner/launchd_plan.py",
+     'release.verify(package_root, args[20])\n    if problems:\n        raise PlanError("release does not verify: %s" % "; ".join(problems[:3]))',
+     "release.verify(package_root, args[20])\n    if False:\n        pass",
+     "test_task41_jobrunner_plist.JobRunnerPlist.test_release_jobrunner_plist_and_rules"),
+    ("jobrunner plist interval floor removed", "g10runner/launchd_plan.py",
+     "interval >= AGENT_MIN_LIVE_INTERVAL", "interval >= 0",
+     "test_task41_jobrunner_plist.JobRunnerPlist.test_release_jobrunner_plist_and_rules"),
+    ("jobrunner plist path not required absolute", "g10runner/launchd_plan.py",
+     '        if not os.path.isabs(args[i]):\n            raise PlanError("%s must be an absolute path" % _JOBRUNNER_FLAGS[i - 1])',
+     '        if False:\n            raise PlanError("%s must be an absolute path" % _JOBRUNNER_FLAGS[i - 1])',
+     "test_task41_jobrunner_plist.JobRunnerPlist.test_release_jobrunner_plist_and_rules"),
     # --- TASK 35: 専用ユーザー方式のジョブ受け口 handoff.py ---
     ("handoff signature not verified", "g10runner/handoff.py",
      'if not isinstance(doc.get("sig"), str) or not verifier.verify(role, canonical(body), doc["sig"]):\n        raise HandoffError("job signature does not verify")',

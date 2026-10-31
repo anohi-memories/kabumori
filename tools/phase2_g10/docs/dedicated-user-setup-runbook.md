@@ -90,7 +90,9 @@ Part B の「LaunchAgent 登録」より前に、**常駐ループの起動ス�
   exec ルートを与えて `resident.ResidentLoop`（HALT/STOP → 固定版の検証 → auth 前チェック → accept → dispatch）を回し、
   ラン後に `result_handoff.export_result` で out へ書く、までを1本にした `g10runner/jobrunner.build_loop` と入口
   `bin/g10_jobrunner.py`。固定版から動くときは `--release-digest` 必須（開始時と各周期で検証）。代役で E2E 済み。
-- B0-2. その LaunchAgent plist 生成（gui/503・ProcessType=Background・KeepAlive・固定版の検証つき）。
+- B0-2.（実装済み 2026-10-31）その LaunchAgent plist 生成（gui/503・ProcessType=Background・KeepAlive・固定版の検証つき）。
+  `g10runner/launchd_plan.job_runner_agent_plan`／`validate_job_runner_plan` と入口 `bin/g10_first_run.py jobrunner-plist`
+  （固定版からのみ・作って lint するだけ・登録しない）。ラベルは `com.kabumori.g10.phase2.agent.jobrunner`。
 - B0-3. 鍵と制御状態の配り方の確定（Q の延長）: exec プレーンの Agent は request 封筒の runner 署名検証・Issue 結合・
   認可のために、yuya 側の**公開物**（pub の control_events・policy・wiring・GO 本文）を**読み取り専用**で参照する必要がある。
   これを handoff で配るか、pub を ACL 共有（yuya=書き／_kaburun=読み）にするかを決める。agent 鍵は exec 側、runner/human 鍵は yuya 側。
@@ -101,14 +103,24 @@ Part B の「LaunchAgent 登録」より前に、**常駐ループの起動ス�
 `/Users/_kaburun/g10-exec` を root に、exec 側の鍵（agent）とポリシー公開物を置く。鍵の生成は要 GO。
 
 ## B2. LaunchAgent を gui/503 に登録 ▶GO（_kaburun のセッションで実行・後日）
-B0-2 が生成する plist（ProgramArguments は B0-1 のドライバ＋固定版パス・handoff のパス）を _kaburun の
-`~/Library/LaunchAgents/` に置き:
+まず固定版の中の g10_first_run.py で plist を作る（作って lint するだけ・登録しない。B1 で root と鍵・ポリシーができてから）:
 
 ```
-launchctl bootstrap gui/503 ~/Library/LaunchAgents/com.g10.jobrunner.plist
+/usr/bin/python3 -I <固定版>/bin/g10_first_run.py jobrunner-plist --root /Users/_kaburun/g10-exec \
+  --in /Users/Shared/g10-handoff/in --claims /Users/Shared/g10-kaburun/claims \
+  --out /Users/Shared/g10-kaburun/out --flags /Users/Shared/g10-handoff/flags \
+  --cli /Users/_kaburun/clirun/2.1.305 --home /Users/_kaburun
 ```
 
-恒久停止はこのラベルの `launchctl bootout gui/503/...`。緊急停止は `flags/HALT` を yuya が置く（次周期・起動直前で効く）。
+出力の `path`（既定は `/Users/_kaburun/g10-exec/launchd-plans/com.kabumori.g10.phase2.agent.jobrunner.plist`）を _kaburun の
+`~/Library/LaunchAgents/` に置き、登録する:
+
+```
+launchctl bootstrap gui/503 ~/Library/LaunchAgents/com.kabumori.g10.phase2.agent.jobrunner.plist
+```
+
+恒久停止は `launchctl bootout gui/503/com.kabumori.g10.phase2.agent.jobrunner`。緊急停止は `flags/HALT` を yuya が置く
+（次周期・起動直前で効く）。plist は handoff の4パス・固定版CLI・HOME・`--release-digest` を決め打ちで持つ（実行先は変えられない）。
 
 ## B3. 隔離の最小検証 ▶GO（後日）
 yuya の資産に _kaburun が届かないこと／受け渡しが成立すること／flags/HALT で止まることを、無害なダミーのジョブで確かめる。

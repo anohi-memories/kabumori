@@ -218,3 +218,92 @@ def agent_commands(label, path):
     return {"install": "launchctl bootstrap gui/$(id -u) '%s'" % path,
             "check": "launchctl print gui/$(id -u)/%s" % label,
             "stop": "launchctl bootout gui/$(id -u)/%s" % label}
+
+
+# --- B0-2: 専用ユーザー _kaburun の常駐ジョブ実行（gui/503）の LaunchAgent（作って検査するだけ。登録しない） ---
+# 常駐ドライバ bin/g10_jobrunner.py を _kaburun の GUI セッションで回す計画。_kaburun 自身のログインキーチェーンの
+# トークンを使うので、主ユーザーの autorun（gui/$(id -u)）とは別に、_kaburun の gui ドメインに bootstrap する
+# （登録は B2・人の GO の後、_kaburun のセッションで launchctl bootstrap gui/503）。
+JOBRUNNER_SCRIPT = "g10_jobrunner.py"
+JOBRUNNER_LABEL = "%s.agent.jobrunner" % LABEL_PREFIX
+# ProgramArguments の形（実行先・実行のしかたを変えられないよう、完全一致で検査する）
+_JOBRUNNER_SHAPE = ("[python, -I, g10_jobrunner.py, --root, ROOT, --in, IN, --claims, CLAIMS, --out, OUT, "
+                    "--flags, FLAGS, --cli, CLI, --home, HOME, --interval, SECONDS, --release-digest, DIGEST]")
+_JOBRUNNER_FLAGS = {3: "--root", 5: "--in", 7: "--claims", 9: "--out", 11: "--flags",
+                    13: "--cli", 15: "--home", 17: "--interval", 19: "--release-digest"}
+_JOBRUNNER_PATH_ARGS = (4, 6, 8, 10, 12, 14, 16)  # root/in/claims/out/flags/cli/home はすべて絶対パス
+
+
+def job_runner_agent_plan(python, root, in_dir, claims, out_dir, flags, cli, home, interval, release_digest,
+                          package_root=PACKAGE_ROOT):
+    """固定版（package_root）の bin/g10_jobrunner.py を、そのマニフェストのハッシュ付きで _kaburun の gui で回す計画。
+    handoff の向きは呼び出し側が固定したパスで渡す（in・flags=yuya 所有／out・claims=_kaburun 所有）。"""
+    script = os.path.join(package_root, "bin", JOBRUNNER_SCRIPT)
+    logs = os.path.join(root, "logs")
+    args = [python, "-I", script, "--root", root, "--in", in_dir, "--claims", claims, "--out", out_dir,
+            "--flags", flags, "--cli", cli, "--home", home, "--interval", str(float(interval)),
+            "--release-digest", release_digest]
+    return {
+        "Label": JOBRUNNER_LABEL,
+        "ProgramArguments": args,
+        "KeepAlive": True,
+        "RunAtLoad": True,
+        "ProcessType": "Background",
+        "Umask": 0o077,
+        "EnvironmentVariables": {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+        "StandardOutPath": os.path.join(logs, "jobrunner.out"),
+        "StandardErrorPath": os.path.join(logs, "jobrunner.err"),
+    }
+
+
+def validate_job_runner_plan(plan, package_root=PACKAGE_ROOT):
+    """常駐ジョブ実行の LaunchAgent の計画の検査。固定版の bin/g10_jobrunner.py だけ・ハッシュ一致・全パス絶対・
+    間隔は有限で 300 秒以上（--once を付けないので resident の下限と同じ）・環境は PATH/LANG だけ。合わなければ PlanError。"""
+    from . import release
+    if not isinstance(plan, dict) or set(plan) != AGENT_KEYS:
+        raise PlanError("jobrunner plist keys must be exactly %s" % sorted(AGENT_KEYS))
+    if plan.get("Label") != JOBRUNNER_LABEL:
+        raise PlanError("unexpected label")
+    args = plan.get("ProgramArguments")
+    if not (isinstance(args, list) and len(args) == 21 and all(isinstance(a, str) for a in args)):
+        raise PlanError("ProgramArguments must be " + _JOBRUNNER_SHAPE)
+    if args[0] not in ALLOWED_PYTHONS or args[1] != "-I":
+        raise PlanError("python must be one of %s run with -I" % (ALLOWED_PYTHONS,))
+    for i, flag in _JOBRUNNER_FLAGS.items():
+        if args[i] != flag:
+            raise PlanError("ProgramArguments must be " + _JOBRUNNER_SHAPE)
+    if os.path.realpath(args[2]) != os.path.realpath(os.path.join(package_root, "bin", JOBRUNNER_SCRIPT)):
+        raise PlanError("only the bundled %s may be run" % JOBRUNNER_SCRIPT)
+    if release.package_manifest(package_root) is None:
+        raise PlanError("plists must point at an installed release, not a development tree")
+    problems = release.verify(package_root, args[20])
+    if problems:
+        raise PlanError("release does not verify: %s" % "; ".join(problems[:3]))
+    try:
+        interval = float(args[18])
+    except ValueError:
+        raise PlanError("--interval must be a number")
+    if not (math.isfinite(interval) and interval >= AGENT_MIN_LIVE_INTERVAL):
+        raise PlanError("--interval must be a finite number >= %d" % AGENT_MIN_LIVE_INTERVAL)
+    for i in _JOBRUNNER_PATH_ARGS:
+        if not os.path.isabs(args[i]):
+            raise PlanError("%s must be an absolute path" % _JOBRUNNER_FLAGS[i - 1])
+    env = plan.get("EnvironmentVariables", {})
+    if set(env) - {"PATH", "LANG"} or any(FORBIDDEN_ENV.search(k) for k in env):
+        raise PlanError("only PATH and LANG may be set in the environment")
+    if plan.get("KeepAlive") is not True or plan.get("RunAtLoad") is not True:
+        raise PlanError("KeepAlive and RunAtLoad must be true")
+    if plan.get("Umask") != 0o077 or plan.get("ProcessType") != "Background":
+        raise PlanError("Umask must be 077 and ProcessType Background")
+    for key in ("StandardOutPath", "StandardErrorPath"):
+        if not os.path.isabs(str(plan.get(key, ""))):
+            raise PlanError("log paths must be absolute")
+    return True
+
+
+def render_validated_job_runner(plan, package_root=PACKAGE_ROOT):
+    validate_job_runner_plan(plan, package_root)
+    data = render(plan)
+    if plistlib.loads(data) != plan:
+        raise PlanError("rendered plist differs from the validated plan")
+    return data

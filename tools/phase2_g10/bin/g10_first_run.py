@@ -229,6 +229,35 @@ def cmd_plists(a):
     return 0 if all(x["lint_ok"] for x in shown) else 1
 
 
+def cmd_jobrunner_plist(a):
+    """（B0-2）専用ユーザー _kaburun の常駐ジョブ実行（bin/g10_jobrunner.py）の LaunchAgent（gui/503）の plist を
+    作って検査するだけ（登録しない。登録は B2・人が _kaburun のセッションで launchctl bootstrap gui/503）。
+    固定版の中の g10_first_run.py から実行したときだけ作る（開発 worktree からは作らない）。"""
+    manifest = release.package_manifest(PACKAGE)
+    if manifest is None:
+        raise SystemExit("run jobrunner-plist from an installed release (bin/g10_first_run.py install first)")
+    digest = manifest.get("digest", "")
+    problems = release.verify(PACKAGE, digest)
+    if problems:
+        raise SystemExit("release verification failed: %s" % "; ".join(problems[:3]))
+    root = os.path.realpath(a.root)
+    out_dir = os.path.realpath(a.plans or os.path.join(root, "launchd-plans"))
+    os.makedirs(out_dir, 0o700, exist_ok=True)
+    os.makedirs(os.path.join(root, "logs"), 0o700, exist_ok=True)
+    plan = launchd_plan.job_runner_agent_plan(
+        "/usr/bin/python3", root, os.path.realpath(a.in_dir), os.path.realpath(a.claims), os.path.realpath(a.out),
+        os.path.realpath(a.flags), os.path.realpath(a.cli), os.path.realpath(a.home), a.interval, digest,
+        package_root=PACKAGE)
+    path = os.path.join(out_dir, plan["Label"] + ".plist")
+    with open(path, "wb") as f:
+        f.write(launchd_plan.render_validated_job_runner(plan, PACKAGE))
+    lint_ok = launchd_plan.lint(path)
+    print(json.dumps({"release_digest": digest, "kind": "jobrunner", "path": path, "lint_ok": lint_ok,
+                      "registered": False, "commands_not_run": launchd_plan.agent_commands(plan["Label"], path)},
+                     ensure_ascii=False, indent=1))
+    return 0 if lint_ok else 1
+
+
 def cmd_auth_check(a):
     missing = [n for n in a.with_env if n not in os.environ]
     if missing:
@@ -274,9 +303,20 @@ def main(argv=None):
     c = sub.add_parser("auth-check")
     c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
+    jp = sub.add_parser("jobrunner-plist")
+    jp.add_argument("--root", required=True, help="exec プレーンの初期化済みルート")
+    jp.add_argument("--in", dest="in_dir", required=True, help="handoff/in（yuya 所有）")
+    jp.add_argument("--claims", required=True, help="handoff/claims（_kaburun 所有）")
+    jp.add_argument("--out", required=True, help="handoff/out（_kaburun 所有）")
+    jp.add_argument("--flags", required=True, help="handoff/flags（yuya 所有・HALT/STOP）")
+    jp.add_argument("--cli", required=True, help="_kaburun の固定版 CLI の実体（版の名前のファイル）")
+    jp.add_argument("--home", required=True, help="_kaburun の HOME")
+    jp.add_argument("--interval", type=float, default=300.0)
+    jp.add_argument("--plans", help="plist の出力先（既定はルートの launchd-plans/）")
     a = p.parse_args(argv)
     return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt, "unhalt": cmd_unhalt,
             "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check,
+            "jobrunner-plist": cmd_jobrunner_plist,
             "code-edit-policy": cmd_code_edit_policy}[a.cmd](a)
 
 
