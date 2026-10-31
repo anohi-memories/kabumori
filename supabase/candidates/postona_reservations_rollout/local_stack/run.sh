@@ -14,6 +14,8 @@
 #   G5 W0   G5's accepted first-run workspace (PR #590 2c8087fc: MVP_W0_INSTALL + MVP_W0_EXECUTE_GRANT, blob-pinned, unchanged), so the
 #           person starts the service and gets the workspace over PostgREST with their own JWT.
 #   test    local_test.ts (phases L0-L12, real HTTP; G3-02 #2: create / reschedule / reconfirm decided in the database).
+#   e2e     G3-02 #9: a TEST ONLY worker twin (postona-x-reservation-worker-e2etest) with a FAKE credential snapshot and a fake X in a
+#           g3ls_test schema (a throw-away login reaches only that schema; both dropped before RB); L19-L24.
 # Test-world stand-ins (not G3's to decide; labelled in the test): a service end = the entitlement row as G5's end leaves it; a Threads
 # connection = G4's binding_row shape (as smoke.sql); the API / worker LOGIN members (a separately approved rollout step) = two
 # throw-away login roles with random passwords, kept only in a 0600 file inside the work dir.
@@ -78,7 +80,7 @@ for sec in ["realtime", "studio", "local_smtp", "analytics"]:
 s, n = re.subn(r"(\[db\.seed\]\n(?:#.*\n)*)enabled = true", r"\1enabled = false", s, count=1); assert n == 1
 s, n = re.subn(r"enable_anonymous_sign_ins = false", "enable_anonymous_sign_ins = true", s, count=1); assert n == 1
 assert 'project_id = "g3ls"' in s
-for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest"]:
+for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest", "postona-x-reservation-worker-e2etest"]:
     s += f'\n[functions.{fn}]\nverify_jwt = true\n'
 open(p, "w").write(s)
 PY
@@ -99,10 +101,12 @@ case "${G3LS_MUTANT:-}" in
   x_default_lookalike) mutate "$fns/postona-x-reservations/http.ts" 'overrides.permissions ?? PERMISSIONS_DECIDED_IN_DATABASE' 'overrides.permissions ?? { ...PERMISSIONS_DECIDED_IN_DATABASE }' ;;
   threads_default_lookalike) mutate "$fns/postona-threads-reservations/http.ts" 'overrides.permissions ?? THREADS_PERMISSIONS_DECIDED_IN_DATABASE' 'overrides.permissions ?? { ...THREADS_PERMISSIONS_DECIDED_IN_DATABASE }' ;;
   no_set_role) mutate "$fns/_shared/postona_reservations/postgres_db.ts" 'await client.queryArray({ text: `SET LOCAL ROLE ${API_ROLE}` });' '' ;;
+  bound_generation_ignored) mutate "$fns/_shared/postona_reservations/x_bound_delivery.ts" '        || credential.generation !== checked.credentialGeneration) {' '        ) {' ;;
+  unknown_as_rejected) mutate "$fns/_shared/postona_reservations/x_publisher.ts" 'return { kind: "unknown", code: controller.signal.aborted ? "X_TIMEOUT" : "X_TRANSPORT_UNKNOWN" };' 'return { kind: "rejected_before_send", code: "X_TRANSPORT_UNKNOWN" };' ;;
   *) fail "unknown G3LS_MUTANT" ;;
 esac
 RO_SH="$bundle/rollout.sh"; [ "${G3LS_MUTANT:-}" = host_any ] && RO_SH="$WORK/bundle/rollout.sh"
-for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest; do
+for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest; do
   mkdir -p "$fns/$d"; cp "$here/$d/index.ts" "$fns/$d/"
   (cd "$WORK/p" && deno check --no-config --cached-only "supabase/functions/$d/index.ts" >/dev/null 2>&1) || fail "deno check $d"
 done
@@ -184,18 +188,32 @@ mode=install; o="$(ro 2>&1)" && fail "a second install succeeded"; grep -q G3_RO
 echo "OK G3 rollout.sh preflight + install (15 steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
 
 # the test's LOGIN members (stand-ins for the separately approved rollout step): random passwords, never printed, 0600 file only
-API_PW="$(openssl rand -hex 24)"; WORKER_PW="$(openssl rand -hex 24)"; WORKER_SECRET="$(openssl rand -hex 24)"
+API_PW="$(openssl rand -hex 24)"; WORKER_PW="$(openssl rand -hex 24)"; WORKER_SECRET="$(openssl rand -hex 24)"; TEST_PW="$(openssl rand -hex 24)"
 own -v a="$API_PW" -v k="$WORKER_PW" >/dev/null <<'SQL'
 create role g3ls_api_login login noinherit password :'a';
 create role g3ls_worker_login login noinherit password :'k';
 grant postona_resv_api to g3ls_api_login with inherit false, set true;
 grant postona_resv_worker to g3ls_worker_login with inherit false, set true;
 SQL
+# G3-02 #9 TEST ONLY: the e2e twin's fake credential snapshot and fake X record (g3ls_test), reached only by a throw-away login that
+# reaches nothing else; dropped before RB.
+own -v t="$TEST_PW" >/dev/null <<'SQL'
+create schema g3ls_test;
+create table g3ls_test.x_token_snapshot (social_account_id text primary key, token text not null, generation text not null);
+create table g3ls_test.x_calls (id bigint generated always as identity primary key, bearer_sha256 text not null, text text not null, at timestamptz not null default now());
+create table g3ls_test.x_mode (one boolean primary key default true check (one), mode text not null check (mode in ('ok', 'reject_401', 'unknown')));
+insert into g3ls_test.x_mode (mode) values ('ok');
+create role g3ls_test_login login noinherit password :'t';
+grant usage on schema g3ls_test to g3ls_test_login;
+grant select on g3ls_test.x_token_snapshot, g3ls_test.x_mode to g3ls_test_login;
+grant select, insert on g3ls_test.x_calls to g3ls_test_login;
+SQL
 ENV_FILE="$WORK/functions.env"
 (umask 077; {
   printf 'POSTONA_RESV_DATABASE_URL=postgres://g3ls_api_login:%s@db:5432/postgres\n' "$API_PW"
   printf 'POSTONA_RESV_WORKER_DATABASE_URL=postgres://g3ls_worker_login:%s@db:5432/postgres\n' "$WORKER_PW"
   printf 'POSTONA_RESV_WORKER_SECRET=%s\n' "$WORKER_SECRET"
+  printf 'G3LS_TEST_DB_URL=postgres://g3ls_test_login:%s@db:5432/postgres\n' "$TEST_PW"
 } > "$ENV_FILE")
 (cd "$WORK/p" && exec supabase functions serve --env-file "$ENV_FILE" >"$WORK/serve.log" 2>&1) &
 SERVE_PID=$!
@@ -213,6 +231,8 @@ env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLI
     --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_API_PW,G3LS_WORKER_PW,G3LS_WORKER_SECRET,G3LS_JWT_SECRET \
     --allow-net="127.0.0.1:$API_PORT" --allow-run=psql "$here/local_test.ts"
 
+own -c "drop schema g3ls_test cascade" -c "drop role g3ls_test_login" >/dev/null   # G3-02 #9 test-only objects, before RB
+
 # ---- RB: rollback on the real stack: each refusal before any change, then the full rollback -----------------------------------------
 g3count() { own -A -t -c "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname in ('postona_x_resv', 'postona_threads_resv')"; }
 before="$(g3count)"
@@ -223,9 +243,11 @@ rb_refused() {  # <label> <code> [env...]: refused with the code, G3's functions
   [ "$(g3count)" = "$before" ] || fail "RB $label: changed G3"
 }
 rb_refused "planned + uncertain rows (L6 / L8)" G3_ROLLOUT_ROLLBACK_LIVE_ROWS
-own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END' where status in ('planned', 'claimed')" >/dev/null   # operator
-[ "$(own -A -t -c "select count(*) from postona_x_resv.reservations where status = 'uncertain'")" = 1 ] || fail "the test left no uncertain row (L8)"
-rb_refused "the uncertain row alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads 1/0"
+# operator; 'expired' too: G3-02 #9's delivery runs sweep L17's send-now-shaped row to expired, which a send now's retry could re-arm (008 counts it live)
+own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END' where status in ('planned', 'claimed', 'expired')" >/dev/null
+unsure="$(own -A -t -c "select count(*) from postona_x_resv.reservations where status = 'uncertain'")"   # L9 (+ L22's unknown send)
+[ "$unsure" -ge 1 ] || fail "the test left no uncertain row (L9)"
+rb_refused "the uncertain rows alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads $unsure/0"
 own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END_RESOLVED' where status = 'uncertain'" >/dev/null   # operator, after checking X
 xrows="$(own -A -t -c "select (select count(*) from postona_x_resv.reservations) || ':' || (select count(*) from postona_x_resv.batches) || ':' || (select count(*) from postona_x_resv.audit)")"
 trows="$(own -A -t -c "select (select count(*) from postona_threads_resv.reservations) || ':' || (select count(*) from postona_threads_resv.audit)")"
@@ -237,5 +259,5 @@ grep -q '^G3_ROLLOUT_ROLLED_BACK steps=15$' <<<"$o" || fail "rollback: $o"
 left="$(own -A -t -c "select (select count(*) from pg_namespace where nspname in ('postona_x_resv', 'postona_threads_resv')) || '/' || (select count(*) from pg_roles where rolname in ('postona_resv_api', 'postona_resv_worker'))")"
 [ "$left" = "0/0" ] || fail "G3 left after the rollback: $left"
 mode=preflight; o="$(ro 2>&1)" || fail "preflight after rollback: $o"; grep -q 'G3_ROLLOUT_PREFLIGHT_PASS fresh' <<<"$o" || fail "preflight after rollback: $o"
-echo "OK RB refused before any change: live rows, the uncertain row alone, rows not stated, login members; then 15 steps rolled back (X $xrows, Threads $trows discarded), G3 schemas + roles gone, preflight fresh again"
+echo "OK RB refused before any change: live rows, the uncertain rows alone, rows not stated, login members; then 15 steps rolled back (X $xrows, Threads $trows discarded), G3 schemas + roles gone, preflight fresh again"
 echo "G3LS_LOCAL_STACK_PASS"

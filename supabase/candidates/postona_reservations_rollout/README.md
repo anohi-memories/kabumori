@@ -205,5 +205,26 @@ What it showed, for the operator:
 - **Proof**: PG17 `single_post_live_fence_run.sh` L10; `local_stack/` L17 (the app store's reschedule → `final`).
 - **Reserved namespace** (G3-02 #8): a reservation draft id starting `single:` is refused `POSTONA_RESV_ITEM_INVALID` (422 → `fix_input`; the whole batch, nothing written), so no client can make a reservation look like a send now. Only the exact, case-sensitive prefix is reserved (`x_single:1`, `Single:2`, `single_3` are ordinary). The check runs on new items only: a batch stored earlier still replays as itself, and no row is changed. Proof: PG17 `run.sh` M8; `local_stack/` L18.
 
+**Delivery end to end** (G3-02 #9, `local_stack/` L19-L24, one throw-away runtime):
+- **The path**: a person's HTTP create (real GoTrue JWT, G5 W0, G4's real verdict SQL) → SYNTHETIC clock (due) → the worker entry over HTTP (scheduler secret) → `claim_due` (014 pins the generation) → ONE `credentialFor` → `pre_publish_check_bound` (015) → one X create → `finish` → the person's read-back.
+- **TEST ONLY** (twin `postona-x-reservation-worker-e2etest`):
+  - `credentialFor` answers a FAKE snapshot `{ token, generation }` that the test writes;
+  - X is a fake that records each call and answers ok / 401 / a broken connection.
+  - Neither is G4's token read. The production entry keeps `X_GENERATION_CREDENTIALS_NOT_CONNECTED` (claim 0, send 0; L19 re-checks it with a due row).
+- **Reached**:
+  - one send with the snapshot's token and the stored text → `published` (provider id stored), read back by the app store; another person gets 404; a second run sends nothing (L19);
+  - a reconnect after the snapshot → claimed, never sent, `CREDENTIAL_GENERATION_CHANGED` (L20);
+  - no claim while disconnected or after the service ended; a cancel before the run is never sent (L21);
+  - an unknown answer → `uncertain`, never re-sent, cancel → `final` (L22);
+  - X 401 → failed before send `X_REJECTED_401`, never retried (L23);
+  - two workers at once → three due rows, three sends, each once (L24);
+  - a wrong scheduler secret → 401 before anything (L19).
+- **NOT_VERIFIED here**:
+  - G4's real token + generation snapshot (not delivered);
+  - the real X API;
+  - a lease running out mid-run, and a cancel racing a claim inside one run (covered by PG17 `dispatch_run.sh` and `x_bound_delivery_test.ts`, not here);
+  - an owner change A → B → A (PG17 EP / W1);
+  - the hosted gateway, Cron.
+
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.
