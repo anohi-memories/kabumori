@@ -6,6 +6,10 @@
 // workspace comes from G5's REAL W0 (PR #590, accepted) over PostgREST with the person's JWT. Test-world stand-ins are labelled SYNTHETIC.
 // Nothing here calls X, Threads, OAuth, a managed project or a paid API; the worker's X credential source stays NOT_CONNECTED (0 sends).
 import assert from "node:assert/strict";
+// G3-02 #5: the APP's stores (read-only imports of G3's app client), over the same real HTTP
+import { createFetchTransport, createRemoteReservationStore, UNCERTAIN } from "../../../../apps/social-mobile/src/features/schedule/remote-reservation-store.ts";
+import { createRemoteThreadsReservationStore } from "../../../../apps/social-mobile/src/features/schedule/remote-threads-reservation-store.ts";
+import { reservationErrorAction } from "../../../../apps/social-mobile/src/features/schedule/reservation-error-actions.ts";
 
 const API = Deno.env.get("G3LS_API")!;
 const PUBLISHABLE = Deno.env.get("G3LS_PUBLISHABLE")!;
@@ -250,8 +254,9 @@ Deno.test("G3-02 reservations on the real local Supabase runtime (create decided
   await t.step("L9 nothing is sent: the worker entry claims nothing (credential source deny); an uncertain row is never re-sent nor cancelled", async () => {
     const r7 = String(rows(await http(X, await createPayload(a, "r7", at(13)), a.token))[0].reservationId);
     const r8 = String(rows(await http(X, await createPayload(a, "r8", at(14)), a.token))[0].reservationId);
-    // SYNTHETIC time: both due now
-    await owner("update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute', expires_at = now() + interval '6 hours' where id in (:'i', :'j')", { i: r7, j: r8 });
+    // SYNTHETIC time: both due now, two hours apart (the 60-minute slot rule keeps holding between them)
+    await owner("update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute', expires_at = now() + interval '6 hours' where id = :'i'", { i: r7 });
+    await owner("update postona_x_resv.reservations set scheduled_at = now() - interval '121 minutes', consent_scheduled_at = now() - interval '121 minutes', expires_at = now() + interval '6 hours' where id = :'j'", { j: r8 });
     const run = await http(WK, {}, undefined, { "x-postona-worker-secret": WORKER_SECRET });
     assert.deepStrictEqual([run.status, (run.body.report as Record<string, unknown>).claimed, (run.body.report as Record<string, unknown>).notAvailable], [200, 0, true]);
     assert.deepStrictEqual(code(await http(WK, {}, undefined, { "x-postona-worker-secret": "w".repeat(48) })), "401 WORKER_AUTH_REQUIRED");
@@ -316,5 +321,92 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await owner("alter role g3ls_api_login login");
     assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations"), before);
     assert.deepStrictEqual(code(await http(X, { action: "list", payload: { socialAccountId: a.account } }, a.token)), "200 ok");
+  });
+  // ---- G3-02 #5: the app's stores through the real Kong / GoTrue / Edge / Postgres -----------------------------------------------------
+  const appX = (token: string | null, apiKey: string | undefined = PUBLISHABLE) => createRemoteReservationStore({
+    transport: createFetchTransport({ url: `${API}/functions/v1/${X}`, fetch, apiKey, allowLoopbackHttpForTests: true }),
+    getAccessToken: () => Promise.resolve(token),
+  });
+  const appTh = (token: string | null) => createRemoteThreadsReservationStore({
+    transport: createFetchTransport({ url: `${API}/functions/v1/${TH}`, fetch, apiKey: PUBLISHABLE, allowLoopbackHttpForTests: true }) as never,
+    getAccessToken: () => Promise.resolve(token),
+  });
+  const saveRequest = async (p: Person, name: string, when: string, batch = crypto.randomUUID()) => {
+    const body = `G3-02 app ${name}`;
+    return { socialAccountId: p.account!, clientBatchId: batch, revision: 1, mode: "manual_exact" as const, band: null,
+      items: [{ draft_id: `g3app_${name}`, scheduled_at: when, body, consent: { confirmed: true as const, content_sha256: await sha256(body) } }] };
+  };
+
+  await t.step("L13 the app's X store: save -> read-back saved; edit -> reconfirm -> cancel; each refusal routed to the screen action; unknown never saved", async () => {
+    const s = appX(a.token);
+    const req = await saveRequest(a, "s1", at(20));
+    const saved = await s.save(req);
+    assert.deepStrictEqual(saved.kind, "saved", JSON.stringify(saved));
+    const row = saved.kind === "saved" ? saved.reservations[0] : null;
+    assert.ok(row);
+    assert.deepStrictEqual((await s.save(req)).kind, "saved", "a retry of the same request: the same row, still saved");
+    assert.deepStrictEqual(rows(await http(X, { action: "list", payload: { socialAccountId: a.account } }, a.token)).filter((r) => r.draftId === "g3app_s1").length, 1);
+    const moved = await s.reschedule(row.reservationId, row.revision, at(21));
+    assert.ok(moved.ok && moved.value.consentState === "needs_reconfirm", JSON.stringify(moved));
+    const confirmed = await s.reconfirm(row.reservationId, moved.value.revision, await sha256("G3-02 app s1"));
+    assert.ok(confirmed.ok && confirmed.value.consentState === "confirmed", JSON.stringify(confirmed));
+    const stale = await s.cancel(row.reservationId, row.revision);
+    assert.deepStrictEqual([stale, reservationErrorAction(stale.ok ? "" : stale.code)], [{ ok: false, code: "POSTONA_RESV_STALE_REVISION" }, "reload"]);
+    const reread = await s.get(row.reservationId);
+    assert.ok(reread.ok);
+    const cancelled = await s.cancel(row.reservationId, reread.value.revision);
+    assert.ok(cancelled.ok && cancelled.value.status === "cancelled", JSON.stringify(cancelled));
+    // another person: not found (no oracle)
+    const other = await appX(b.token).get(row.reservationId);
+    assert.deepStrictEqual([other, reservationErrorAction(other.ok ? "" : other.code)], [{ ok: false, code: "POSTONA_RESV_NOT_FOUND" }, "not_found"]);
+    // 401s are definite (nothing written): a garbage token at the gateway, a signed-out session at the handler
+    const n0 = await countOf("select count(*) from postona_x_resv.reservations");
+    const garbage = await appX("not.a.jwt.at-all-0000").save(await saveRequest(a, "s2", at(22)));
+    assert.deepStrictEqual([garbage, reservationErrorAction(garbage.kind === "failed" ? garbage.code : "")], [{ kind: "failed", code: "AUTH_REQUIRED" }, "sign_in"]);
+    const a3 = await (await auth("token?grant_type=password", { email: a.email, password: a.password })).json();
+    const out = await fetch(`${API}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: PUBLISHABLE, authorization: `Bearer ${a3.access_token}` } });
+    await out.body?.cancel();
+    const signedOut = await appX(a3.access_token).save(await saveRequest(a, "s3", at(23)));
+    assert.deepStrictEqual(signedOut, { kind: "failed", code: "AUTH_REQUIRED" });
+    assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations"), n0, "no 401 wrote anything");
+    // service ended (SYNTHETIC, as G5's end leaves it) -> start_service; X disconnected (G4's real SQL) -> reconnect_x
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: a.userId });
+    const ended = await s.save(await saveRequest(a, "s4", at(24)));
+    await owner("update public.service_entitlements set status = 'active', ended_at = null where user_id = :'u' and service_key = 'x_autopost'", { u: a.userId });
+    assert.deepStrictEqual([ended, reservationErrorAction(ended.kind === "failed" ? ended.code : "")], [{ kind: "failed", code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" }, "start_service"]);
+    assert.deepStrictEqual(await xDisconnect(a), "done");
+    const unverified = await s.save(await saveRequest(a, "s5", at(25)));
+    assert.deepStrictEqual(await xConnect(a, "a3", "62001"), a.account);
+    assert.deepStrictEqual([unverified, reservationErrorAction(unverified.kind === "failed" ? unverified.code : "")], [{ kind: "failed", code: "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED" }, "reconnect_x"]);
+    // the uncertain row from L9 is final for the store too (never re-sent, never cancelled)
+    const unsure = rows(await http(X, { action: "list", payload: { socialAccountId: a.account } }, a.token)).find((r) => r.status === "uncertain")!;
+    const final = await s.cancel(String(unsure.reservationId), Number(unsure.revision));
+    assert.deepStrictEqual([final, reservationErrorAction(final.ok ? "" : final.code)], [{ ok: false, code: "POSTONA_RESV_ALREADY_FINAL" }, "final"]);
+    // the store unreachable from the Edge (API login NOLOGIN -> 503 STORE_UNAVAILABLE): unknown, never saved; nothing written
+    await owner("alter role g3ls_api_login nologin");
+    const unknown = await s.save(await saveRequest(a, "s6", at(26)));
+    await owner("alter role g3ls_api_login login");
+    assert.deepStrictEqual([unknown, reservationErrorAction(unknown.kind === "uncertain" ? unknown.code : "")], [{ kind: "uncertain", code: UNCERTAIN }, "check"]);
+    assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations"), n0);
+    assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations where status = 'published' or provider_post_id is not null"), 0, "zero sends");
+  });
+
+  await t.step("L14 the app's Threads store: create refused by U8 (not available), another person's account not found, a receipt for nothing not found", async () => {
+    const acct = `th_g3ls_${a.userId.slice(0, 8)}`;   // L10's SYNTHETIC binding
+    const text = "G3-02 app Threads";
+    const req = { socialAccountId: acct, clientRequestId: crypto.randomUUID(), text, contentSha256: await sha256(text), scheduledAt: at(6) };
+    const refusedU8 = await appTh(a.token).create(req);
+    assert.deepStrictEqual([refusedU8, reservationErrorAction(refusedU8.kind === "failed" ? refusedU8.code : "")], [{ kind: "failed", code: "POSTONA_THREADS_RESV_PUBLISH_DISABLED" }, "not_available"]);
+    const otherPerson = await appTh(b.token).create({ ...req, clientRequestId: crypto.randomUUID() });
+    assert.deepStrictEqual([otherPerson, reservationErrorAction(otherPerson.kind === "failed" ? otherPerson.code : "")], [{ kind: "failed", code: "POSTONA_THREADS_RESV_ACCOUNT_NOT_FOUND" }, "not_found"]);
+    assert.deepStrictEqual(await appTh(a.token).receipt(acct, req.clientRequestId), { ok: false, code: "POSTONA_THREADS_RESV_NOT_FOUND" });
+    assert.deepStrictEqual(await appTh(null).create(req), { kind: "failed", code: "AUTH_REQUIRED" });
+    assert.deepStrictEqual(await countOf("select count(*) from postona_threads_resv.reservations"), 0);
+  });
+
+  await t.step("L15 measured: the app store without the apikey header (the gateway's answer is recorded, not assumed)", async () => {
+    const without = await appX(a.token, undefined).list(a.account!);
+    console.log(`G3LS_APIKEY_OMITTED ${JSON.stringify(without).slice(0, 120)}`);
+    assert.ok(without.ok || (!without.ok && typeof without.code === "string"));
   });
 });

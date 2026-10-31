@@ -10,6 +10,11 @@
  *   reschedule / reconfirm / cancel (CAS on the row revision) -> get -> the change is visible => ok.
  * A refusal (4xx with a fixed code) means nothing was written. A network error, a 5xx or a malformed answer
  * means the outcome is unknown and is reported as such -- never as success.
+ * G3-02 #5 (measured on the real local Supabase runtime, G3-02 #1-#4): the gateway answers 401 (no / bad / expired token) and
+ * 429 with its own body, before the function runs; the function answers 503 NOT_AVAILABLE / NOT_CONFIGURED / AUTH_UNAVAILABLE /
+ * PERMISSION_UNAVAILABLE / POSTONA_RESV_SERVICE_BUSY before (or instead of) any write. Those are definite: nothing was written.
+ * 503 STORE_UNAVAILABLE, 500 INTERNAL, a network error or a malformed answer stay unknown (UNCERTAIN: read again, never re-send
+ * blindly). reservation-error-actions.ts maps every code to what the screen should offer.
  */
 import { verifySavedByReadBack, type SaveOutcome, type SaveRequest, type ServerReservation } from '../../domain/reservation-flow.ts';
 import type { ReservationStore, StoreResult } from './reservation-store.ts';
@@ -24,6 +29,23 @@ export type ReservationTransport = (call: TransportCall, accessToken: string) =>
 export const UNCERTAIN = 'UNCERTAIN';
 
 const CODE_RE = /^[A-Z][A-Z0-9_]{1,63}$/u;
+/** 503 codes the function answers before any database write (the request was not applied). */
+const PRE_WRITE_503 = new Set(['NOT_AVAILABLE', 'NOT_CONFIGURED', 'AUTH_UNAVAILABLE', 'PERMISSION_UNAVAILABLE', 'POSTONA_RESV_SERVICE_BUSY']);
+
+/**
+ * A non-success answer as { code, definite }: definite = the server proved nothing was written (shared with the Threads store).
+ *   401 -> AUTH_REQUIRED unless the body carries a fixed code (the gateway's own 401 body is not ours); 429 -> RATE_LIMITED;
+ *   another 4xx with a fixed code -> that code; 503 with a pre-write code -> that code; anything else -> UNCERTAIN, not definite.
+ */
+export function refusalOf(response: TransportResponse): { code: string; definite: boolean } {
+  const body = response.body;
+  const fixed = isObject(body) && body.ok === false && typeof body.code === 'string' && CODE_RE.test(body.code) ? body.code : null;
+  if (response.status === 401) return { code: fixed ?? 'AUTH_REQUIRED', definite: true };
+  if (response.status === 429) return { code: 'RATE_LIMITED', definite: true };
+  if (response.status >= 400 && response.status < 500 && fixed) return { code: fixed, definite: true };
+  if (response.status === 503 && fixed && PRE_WRITE_503.has(fixed)) return { code: fixed, definite: true };
+  return { code: fixed ?? UNCERTAIN, definite: false };
+}
 const STATUSES: readonly ServerReservation['status'][] = ['planned', 'claimed', 'published', 'failed', 'uncertain', 'cancelled', 'expired'];
 const CONSENTS: readonly ServerReservation['consentState'][] = ['confirmed', 'needs_reconfirm', 'ai_owner_opt_in'];
 
@@ -81,10 +103,7 @@ export function createRemoteReservationStore(input: {
       if (rows.some((row) => row === null)) return { ok: false, code: UNCERTAIN, definite: false };
       return { ok: true, rows: rows as ServerReservation[] };
     }
-    const code = isObject(body) && typeof body.code === 'string' && CODE_RE.test(body.code) ? body.code : UNCERTAIN;
-    // Only an explicit 4xx refusal with a fixed code proves nothing was written.
-    const definite = response.status >= 400 && response.status < 500 && code !== UNCERTAIN;
-    return { ok: false, code, definite };
+    return { ok: false, ...refusalOf(response) };
   }
 
   async function readOne(reservationId: string): Promise<ServerReservation | null> {
@@ -113,7 +132,7 @@ export function createRemoteReservationStore(input: {
         band: request.band,
         items: request.items,
       });
-      if (!created.ok && created.definite) return { kind: 'failed', code: created.code };
+      if (!created.ok && created.definite) return created.code === 'NOT_AVAILABLE' ? { kind: 'not_available' } : { kind: 'failed', code: created.code };
       // The write's own answer is never enough: an independent read-back decides.
       const readBack = await call('list', { socialAccountId: request.socialAccountId });
       if (!readBack.ok) return { kind: 'uncertain', code: UNCERTAIN };
@@ -149,18 +168,33 @@ export function createRemoteReservationStore(input: {
 /**
  * HTTPS transport for the (future, registered) reservation API. Not used while the gate is OFF. No redirects,
  * a hard timeout, and a non-JSON answer is returned as `body: null` (the store treats it as unknown).
+ * G3-02 #5: `apiKey` (the project's PUBLIC key, as supabase-js sends it) goes in the `apikey` header. Only an `sb_publishable_` key
+ * or a legacy JWT whose role is `anon` is accepted; any other key is refused. Plain http only with `allowLoopbackHttpForTests: true` AND a 127.0.0.1 /
+ * localhost URL (the local Supabase stack's tests); every other http URL is refused.
  */
-export function createFetchTransport(input: { url: string; fetch: typeof fetch; timeoutMs?: number }): ReservationTransport {
+export function createFetchTransport(input: {
+  url: string;
+  fetch: typeof fetch;
+  timeoutMs?: number;
+  apiKey?: string;
+  allowLoopbackHttpForTests?: boolean;
+}): ReservationTransport {
   const url = new URL(input.url);
-  if (url.protocol !== 'https:') throw new Error('RESERVATION_API_URL_MUST_BE_HTTPS');
+  const loopbackHttp = input.allowLoopbackHttpForTests === true && url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !loopbackHttp) throw new Error('RESERVATION_API_URL_MUST_BE_HTTPS');
+  if (input.apiKey !== undefined && !(/^sb_publishable_[A-Za-z0-9_-]{8,256}$/u.test(input.apiKey) || publicClaimsRole(input.apiKey) === 'anon')) {
+    throw new Error('RESERVATION_API_KEY_MUST_BE_PUBLIC');
+  }
   const timeoutMs = input.timeoutMs ?? 15000;
   return async (call, accessToken) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const headers: Record<string, string> = { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` };
+    if (input.apiKey !== undefined) headers.apikey = input.apiKey;
     try {
       const response = await input.fetch(url.toString(), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+        headers,
         body: JSON.stringify(call),
         redirect: 'error',
         signal: controller.signal,
@@ -176,4 +210,16 @@ export function createFetchTransport(input: { url: string; fetch: typeof fetch; 
       clearTimeout(timer);
     }
   };
+}
+
+/** The `role` claim of a legacy JWT-shaped key ('' for anything else): only `anon` is a public key. */
+function publicClaimsRole(key: string): string {
+  const parts = key.split('.');
+  if (parts.length !== 3) return '';
+  try {
+    const json = JSON.parse(atob(parts[1].replace(/-/gu, '+').replace(/_/gu, '/').padEnd(Math.ceil(parts[1].length / 4) * 4, '=')));
+    return typeof json?.role === 'string' ? json.role : '';
+  } catch {
+    return '';
+  }
 }

@@ -163,5 +163,32 @@ What it showed, for the operator:
 
   The app then creates over HTTP, and nothing is sent.
 
+## App client (G3-02 #5; G3's files in `apps/social-mobile/src/features/schedule/`, gates OFF)
+**Stores**
+- **X**: `createReservationStore(gate, live)` (reservation-store.ts) → `createLiveReservationStore({ supabaseUrl, session, publishableKey })`. Methods: `save` / `list` / `get` / `reschedule` / `reconfirm` / `cancel`.
+- **Threads**: `createThreadsReservationStore(gate, live)` (remote-threads-reservation-store.ts). Methods: `create` / `cancel` / `receipt`.
+- **Gate constants**: `POSTONA_RESERVATION_PERSISTENCE_ENABLED` and `POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED` are both `false`. With either one false, the factory returns the disabled store: no network.
+
+**Truth**: always a separate read-back — `list` / `get` for X, `receipt` for Threads. The write's own answer never decides.
+
+**Definite vs unknown**
+- **Definite** (nothing written, no read-back needed):
+  - 401 (the gateway's own body, or ours) → `AUTH_REQUIRED`;
+  - 429 → `RATE_LIMITED`;
+  - another 4xx with a fixed code;
+  - 503 `NOT_AVAILABLE` / `NOT_CONFIGURED` / `AUTH_UNAVAILABLE` / `PERMISSION_UNAVAILABLE` / `POSTONA_RESV_SERVICE_BUSY`.
+- **Unknown** (`UNCERTAIN`): 503 `STORE_UNAVAILABLE`, 500, a network error, a malformed answer. Read again; never re-send blindly. A retry with the same `clientBatchId` / `clientRequestId` is idempotent.
+
+**Screen actions**: `reservationErrorAction(code)` (reservation-error-actions.ts) maps each code to one of `sign_in`, `start_service`, `reconnect_x`, `reconnect_threads`, `not_available` (incl. U8 `PUBLISH_DISABLED`), `reload`, `final`, `not_found`, `fix_input`, `retry_later`, `check`.
+
+**Transport**
+- HTTPS only; plain http only with `allowLoopbackHttpForTests` and a 127.0.0.1 / localhost URL.
+- The `apikey` header carries the project's PUBLIC key only (`sb_publishable_…` or an `anon` JWT; anything else is refused).
+- The local gateway answered without `apikey` too (measured); hosted is not verified, so the key is sent.
+
+**Proof**: `local_stack/` L13 / L14 run these stores over the real runtime.
+
+**Observation** (G3 SQL, not changed here): the 60-minute slot rule compares every pair of an account's active rows. Two existing rows closer than that (only a SYNTHETIC clock move made them) make every later create on that account answer `SLOT_CONFLICT`.
+
 ## Not verified here
 The managed project, a deployed Edge function, a real scheduler, G4's real token custody, real X / Threads, and the app / Simulator. The real local GoTrue / Kong / Edge runtime / Postgres are covered by `local_stack/run.sh` (G3-02 #1), with fake data only. The local Vault holds only fake tokens.

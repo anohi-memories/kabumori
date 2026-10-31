@@ -17,7 +17,9 @@ export type SessionSource = {
   auth: { getSession(): Promise<{ data: { session: { access_token?: string | null } | null }; error: unknown }> };
 };
 
-export type LiveReservationDeps = { supabaseUrl: string; session: SessionSource; fetch?: typeof fetch };
+/** G3-02 #5: `publishableKey` is the project's PUBLIC key (the one the app's Supabase client already holds); it is sent as `apikey`, as
+ *  supabase-js does. Optional so the existing screen keeps compiling; pass it when wiring the live store. */
+export type LiveReservationDeps = { supabaseUrl: string; session: SessionSource; fetch?: typeof fetch; publishableKey?: string };
 
 /** The current access token, or null when there is no usable session (the store then sends nothing). */
 export function accessTokenFrom(source: SessionSource): () => Promise<string | null> {
@@ -33,7 +35,7 @@ export function createLiveReservationStore(deps: LiveReservationDeps): RemoteRes
   const base = new URL(deps.supabaseUrl);
   if (base.protocol !== 'https:') throw new Error('SUPABASE_URL_MUST_BE_HTTPS');
   return createRemoteReservationStore({
-    transport: createFetchTransport({ url: `${base.origin}${RESERVATION_FUNCTION_PATH}`, fetch: deps.fetch ?? fetch }),
+    transport: createFetchTransport({ url: `${base.origin}${RESERVATION_FUNCTION_PATH}`, fetch: deps.fetch ?? fetch, apiKey: deps.publishableKey }),
     getAccessToken: accessTokenFrom(deps.session),
   });
 }
