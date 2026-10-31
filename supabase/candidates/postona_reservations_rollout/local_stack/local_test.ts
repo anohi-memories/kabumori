@@ -450,4 +450,18 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual([moved, reservationErrorAction(moved.ok ? "" : moved.code)], [{ ok: false, code: "POSTONA_RESV_NOT_PLANNED" }, "final"]);
     assert.deepStrictEqual(await state(), before, "the row is unchanged");
   });
+
+  await t.step("L18 the send-now draft namespace is reserved (G3-02 #8): a `single:` draft from the app store -> 422 ITEM_INVALID (fix_input), nothing written", async () => {
+    const s = appX(a.token);
+    const withDraft = async (draft: string, when: string) => {
+      const req = await saveRequest(a, draft, when);
+      return { ...req, items: [{ ...req.items[0], draft_id: draft }] };
+    };
+    const n0 = await countOf("select count(*) from postona_x_resv.reservations");
+    const spoof = await s.save(await withDraft(`single:${crypto.randomUUID().replace(/-/gu, "")}`, at(55)));
+    assert.deepStrictEqual([spoof, reservationErrorAction(spoof.kind === "failed" ? spoof.code : "")], [{ kind: "failed", code: "POSTONA_RESV_ITEM_INVALID" }, "fix_input"]);
+    assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations"), n0, "the refused spoof wrote nothing");
+    const lookAlike = await s.save(await withDraft("x_single:1", at(56)));
+    assert.deepStrictEqual(lookAlike.kind, "saved", JSON.stringify(lookAlike));
+  });
 });

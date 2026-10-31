@@ -290,6 +290,41 @@ delete from postona_x_resv.batches where id in (select batch_id from postona_x_r
 select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m7')::bigint, 'M7 cleaned up');
 select 'M7_GAP_SCOPE_EXISTING_PAIR_PASS' as result;
 
+-- M8. Reserved draft namespace (G3-02 #8): `single:` is the "send now" rows' (005 / 006 write it themselves); a reservation
+--     request cannot claim it, so a reservation is never treated as a send now (reschedule refused, post_now_* reading it).
+select set_config('rt.before_m8', pg_temp.count_resv()::text, false);
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('single:0123456789abcdef0123456789abcdef', pg_temp.jst(80, '10:00'), 'spoof')))$q$, 'POSTONA_RESV_ITEM_INVALID');
+-- one spoofed item refuses the whole batch
+select pg_temp.expect_error($q$select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m8_ok', pg_temp.jst(80, '12:00'), 'ok'), pg_temp.item('single:x', pg_temp.jst(80, '14:00'), 'spoof')))$q$, 'POSTONA_RESV_ITEM_INVALID');
+select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m8')::bigint, 'a refused spoof stores nothing');
+-- only the exact prefix is reserved: look-alikes stay ordinary reservations with the full owner flow
+create temp table m8 as
+select * from postona_x_resv.create_batch('x_a', gen_random_uuid(), 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('x_single:1', pg_temp.jst(80, '10:00'), 'look-alike'), pg_temp.item('Single:2', pg_temp.jst(80, '12:00'), 'upper'),
+                    pg_temp.item('single_3', pg_temp.jst(80, '14:00'), 'no colon')));
+select pg_temp.check((select count(*) from m8) = 3, 'look-alike drafts accepted');
+select set_config('rt.m8r', (select reservation_id::text from m8 where draft_id = 'x_single:1'), false);
+select pg_temp.check((select consent_state = 'needs_reconfirm' from postona_x_resv.reschedule(current_setting('rt.m8r')::uuid, 1, pg_temp.jst(81, '10:00'))), 'm8 reschedule');
+select pg_temp.check((select consent_state = 'confirmed' from postona_x_resv.reconfirm(current_setting('rt.m8r')::uuid, 2, pg_temp.sha('look-alike'))), 'm8 reconfirm');
+select pg_temp.check((select status = 'cancelled' from postona_x_resv.cancel(current_setting('rt.m8r')::uuid, 2)), 'm8 cancel');
+-- a batch stored before this rule (SYNTHETIC: its draft and payload hash rewritten as if made then) still replays as itself
+select set_config('rt.m8key', gen_random_uuid()::text, false);
+create temp table m8l as
+select * from postona_x_resv.create_batch('x_a', current_setting('rt.m8key')::uuid, 1, 'manual_exact', null,
+  jsonb_build_array(pg_temp.item('m8_legacy', pg_temp.jst(82, '10:00'), 'legacy')));
+update postona_x_resv.reservations set draft_id = 'single:legacy' where id = (select reservation_id from m8l);
+update postona_x_resv.batches set payload_sha256 = postona_x_resv.sha256_hex(jsonb_build_object('mode', 'manual_exact', 'band', null,
+  'items', jsonb_build_array(pg_temp.item('single:legacy', pg_temp.jst(82, '10:00'), 'legacy')))::text)
+where id = (select batch_id from m8l);
+select pg_temp.check((select reservation_id = (select reservation_id from m8l) and draft_id = 'single:legacy'
+  from postona_x_resv.create_batch('x_a', current_setting('rt.m8key')::uuid, 1, 'manual_exact', null,
+    jsonb_build_array(pg_temp.item('single:legacy', pg_temp.jst(82, '10:00'), 'legacy')))), 'a stored batch replays unchanged');
+delete from postona_x_resv.batches where id in (select batch_id from m8) or id in (select batch_id from m8l);
+select pg_temp.check(pg_temp.count_resv() = current_setting('rt.before_m8')::bigint, 'M8 cleaned up');
+select 'M8_RESERVED_SINGLE_PREFIX_PASS' as result;
+
 -- W1. Worker: claim only due, consented, publishable manual rows; one lease; finish; replay; lease expiry.
 -- Make three rows due (test-only time travel keeps consent bound to the new time).
 update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute',
