@@ -1,7 +1,10 @@
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
+import { clearAllXReconnectRequired, isXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { connectionPill, RESTART_HELP_TEXT } from '@/features/reservations/x-write-view';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -10,9 +13,15 @@ export default function AccountsScreen() {
   const router = useRouter();
   const { accounts, activeAccount, selectAccount } = useActiveAccount();
   const { status, reload } = useDataStatus();
+  useXReconnectSignal();
   const { state: connectState, stateText, verifiedHandle, connect } = useXConnect(reload);
+  // A new connect is what a server's "reconnect" refusal asks for; if it was not enough, the next refusal says so again.
+  useEffect(() => {
+    if (connectState === 'connected') clearAllXReconnectRequired();
+  }, [connectState]);
   const xAccount = accounts.find((account) => account.platform === 'x');
-  const needsReconnect = xAccount?.connectionStatus === 'needs_attention';
+  const reconnectConfirmed = accounts.some((account) => account.platform === 'x' && isXReconnectRequired(account.id));
+  const needsReconnect = xAccount?.connectionStatus === 'needs_attention' || reconnectConfirmed;
 
   return (
     <Screen>
@@ -24,7 +33,9 @@ export default function AccountsScreen() {
         {status === 'ready' && accounts.length === 0 ? (
           <Card><Text style={styles.muted}>まだ接続済みのアカウントはありません。下のボタンからXアカウントを接続してください。</Text></Card>
         ) : null}
-        {accounts.map((account) => (
+        {accounts.map((account) => {
+          const pill = connectionPill(account.connectionStatus, account.platform === 'x' && isXReconnectRequired(account.id), '要再接続');
+          return (
           <Card key={account.id}>
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -33,21 +44,21 @@ export default function AccountsScreen() {
                   <Text style={{ color: colors.ink, fontWeight: '800' }}>{account.profile.displayName}</Text>
                   <Text style={styles.muted}>{account.profile.handle} ・ {account.platform.toUpperCase()}</Text>
                 </View>
-                <Pill tone={account.connectionStatus === 'connected' ? 'success' : 'warning'}>
-                  {account.connectionStatus === 'connected' ? '接続済み' : '要再接続'}
-                </Pill>
+                <Pill tone={pill.tone}>{pill.label}</Pill>
               </View>
             </Pressable>
             <Text style={styles.muted}>投稿状態: {account.postingState === 'active' ? '稼働中' : '停止中'}</Text>
             <ActionButton label={activeAccount?.id === account.id ? '選択中' : 'このアカウントを選択'} onPress={() => selectAccount(account.id)} />
           </Card>
-        ))}
+          );
+        })}
 
         <Card>
           <SectionTitle detail="ログイン中の利用者本人のXアカウントを連携します。">
             {needsReconnect ? 'Xアカウントの再接続' : 'Xアカウント接続'}
           </SectionTitle>
-          {needsReconnect ? <Pill tone="warning">Xとの接続を確認できません。再接続してください。</Pill> : null}
+          {needsReconnect ? <Pill tone="warning">{reconnectConfirmed ? 'Xの再接続が必要です。再接続するまで、このアカウントの予約は保存・変更できません。下のボタンから接続し直してください。' : 'Xとの接続を確認できません。再接続してください。'}</Pill> : null}
+          <Text style={styles.muted}>{RESTART_HELP_TEXT}</Text>
           <Text style={styles.muted}>{stateText}</Text>
           <Text style={styles.muted}>接続時に、Xのログイン画面で接続したいアカウントを選んで（またはログインして）ください。ブラウザの状態によっては、以前ログインしたアカウントが表示される場合があります。</Text>
           {connectState === 'connected' && verifiedHandle ? <Pill tone="success">確認済み {verifiedHandle}</Pill> : null}

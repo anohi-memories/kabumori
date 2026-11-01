@@ -6,6 +6,10 @@ import { SupabaseContentSettingsRepository } from '@/data/content-settings-repos
 import { getSupabaseConfig, supabase } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
+import { isSendNowRow, type ActionButtonKind } from '@/features/reservations/reservation-view';
+import { useXWriteGuard } from '@/features/reservations/use-x-write-guard';
+import { clearXReconnectRequired, markXReconnectRequired } from '@/features/reservations/x-reconnect-signal';
+import { xAnswerView } from '@/features/reservations/x-write-view';
 import { resolvePostsView } from '@/domain/data-view';
 import { buildSaveRequest, type SaveRequest, type ServerReservation } from '@/domain/reservation-flow';
 import {
@@ -42,6 +46,7 @@ import {
   type ConfirmationMap,
 } from '@/features/schedule/confirmation-state';
 import { PreviewCard } from '@/features/schedule/preview-card';
+import { reservationErrorAction } from '@/features/schedule/reservation-error-actions';
 import { createReservationStore, POSTONA_RESERVATION_PERSISTENCE_ENABLED } from '@/features/schedule/reservation-store';
 import { ServerReservationCard } from '@/features/schedule/server-reservation-card';
 import {
@@ -68,6 +73,7 @@ const statusLabels: Record<PostStatus, { label: string; tone: 'neutral' | 'succe
 const FILTERS: { key: UnifiedFilter; label: string }[] = [{ key: 'all', label: 'すべて' }, { key: 'ai', label: 'AI自動投稿' }, { key: 'manual', label: '手動予約' }];
 
 export default function ScheduleScreen() {
+  const router = useRouter();
   const { activeAccount } = useActiveAccount();
   const { status, reason, snapshot } = useDataStatus();
   const mockPosts = mockRepository.getPlannedPosts().filter((post) => post.accountId === activeAccount?.id);
@@ -94,7 +100,7 @@ export default function ScheduleScreen() {
   // What the user confirmed, post by post (session-only). Validity is recomputed from the current draft on
   // every render, so an edit, time change, re-roll or conflict move invalidates it at once.
   const [confirmations, setConfirmations] = useState<ConfirmationMap>(EMPTY_CONFIRMATIONS);
-  const [notice, setNotice] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string; button?: ActionButtonKind } | null>(null);
   // The AI plan uses the frequency confirmed in AI consultation (read only; nothing is written from here).
   // The values are bound to the exact brand they were read for: a workspace switch drops them at once, a late
   // answer for a previous brand/load is discarded, and an unreadable brand is labelled instead of inheriting.
@@ -107,6 +113,11 @@ export default function ScheduleScreen() {
   const [pendingSaves, setPendingSaves] = useState<Record<string, PendingSave>>({});
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [rowRetiming, setRowRetiming] = useState<{ id: string; date: string; time: string } | null>(null);
+  // One save at a time; an answer for another person / login / account does not reach the screen.
+  const xGuard = useXWriteGuard(activeAccount);
+  const saving = useRef(false);
+  const liveScope = useRef<string | null>(xGuard.scope);
+  useEffect(() => { liveScope.current = xGuard.scope; }, [xGuard.scope]);
   useEffect(() => {
     // Not ready / no brand: nothing to load. aiPlanningFor() already returns the unloaded default for any
     // brand the state was not read for, so a previous brand's values are never shown here.
@@ -128,22 +139,43 @@ export default function ScheduleScreen() {
   }, [brandId, repository]);
   const ai: AiPlanningInput = aiPlanningFor(aiState, brandId);
 
+  /** The list shows its own error; a refusal of the read still decides for this token / account. */
+  function applyListResult(answer: Awaited<ReturnType<typeof reservationStore.list>>, account: string, loadId: number, scope: string | null, sentToken: string | null) {
+    setServerSnapshot((current) => applyListAnswer(current, account, loadId, answer));
+    if (answer.ok) xGuard.unblock(scope);
+    else recordRefusal(answer.code, account, scope, sentToken);
+  }
+
+  function recordRefusal(code: string, account: string, scope: string | null, sentToken: string | null) {
+    const answer = xAnswerView(code, reservationErrorAction);
+    // A 401 is about that token and a reconnect has its own signal, which the new connect clears.
+    if (answer.action === 'sign_in') xGuard.refuseToken(sentToken);
+    else if (answer.action === 'reconnect_x') markXReconnectRequired(account);
+    else if (answer.blocks) xGuard.block(scope, { text: answer.text, button: answer.button });
+    return answer;
+  }
+
   const accountId = activeAccount?.id ?? null;
   // Every (re)entry of an account -- including an app restart -- reads its reservations fresh from the server.
   useEffect(() => {
-    if (!reservationStore.enabled || !accountId) return;
+    if (!reservationStore.enabled || !accountId || !xGuard.canRead) return;
     serverLoads.current += 1;
     const loadId = serverLoads.current;
+    const scope = xGuard.scope;
+    const sentToken = xGuard.token;
     let cancelled = false;
     void reservationStore.list(accountId).then((answer) => {
-      if (!cancelled) setServerSnapshot((current) => applyListAnswer(current, accountId, loadId, answer));
+      if (!cancelled) applyListResult(answer, accountId, loadId, scope, sentToken);
     });
     return () => {
       cancelled = true;
     };
-  }, [accountId, reservationStore]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, reservationStore, xGuard.scope, xGuard.canRead]);
   const serverList = reservationStore.enabled ? serverListFor(serverSnapshot, accountId) : null;
   const serverRows: ServerReservation[] = serverList?.state === 'ready' ? serverList.rows : [];
+  // A "post now" row is not a reservation: its state and its cancel are on the reservations screen.
+  const reservationRows = serverRows.filter((row) => !isSendNowRow(row));
   // Planning is offered for an X account whose own brand is known. In the sample-data preview there is no
   // production brand (and nothing is read), so the demo account's brand -- or 'preview' -- is used.
   // A real account without a known brand cannot plan: the first workspace is never a fallback.
@@ -177,15 +209,30 @@ export default function ScheduleScreen() {
   ];
 
   function reloadServer(account: string) {
-    if (!reservationStore.enabled) return;
+    if (!reservationStore.enabled || !xGuard.canRead) return;
     serverLoads.current += 1;
     const loadId = serverLoads.current;
-    void reservationStore.list(account).then((answer) => setServerSnapshot((current) => applyListAnswer(current, account, loadId, answer)));
+    const scope = xGuard.scope;
+    const sentToken = xGuard.token;
+    void reservationStore.list(account).then((answer) => applyListResult(answer, account, loadId, scope, sentToken));
   }
 
-  /** Saves one batch; '保存済み' is decided by the store's independent read-back, never by the write's answer. */
+  /** A refused write: decided for the token / account whatever is on screen by now; the words and the re-read only if it still is. */
+  function applyRefusal(code: string, account: string, scope: string | null, sentToken: string | null) {
+    const answer = recordRefusal(code, account, scope, sentToken);
+    if (liveScope.current !== scope) return;
+    setNotice({ tone: answer.tone, text: answer.text, button: answer.button });
+    if (answer.reread) reloadServer(account);
+  }
+
+  /** Saves one batch, only on the person's press; '保存済み' is decided by the store's independent read-back, never by the write's answer. */
   async function saveBatch(batch: ScheduleBatch, retry?: SaveRequest) {
-    if (!reservationStore.enabled) return;
+    if (!reservationStore.enabled || saving.current) return;
+    if (xGuard.refusal) {
+      setNotice({ tone: 'danger', text: xGuard.refusal.text, button: xGuard.refusal.button });
+      return;
+    }
+    saving.current = true;
     let request = retry ?? null;
     if (!request) {
       const built = await buildSaveRequest({
@@ -193,14 +240,24 @@ export default function ScheduleScreen() {
         aiOptIn: { source: ai.source, approvalMode: ai.approvalMode }, sha256: sha256Hex,
       });
       if (!built.ok) {
+        saving.current = false;
         setNotice({ tone: 'danger', text: built.issues.map((issue) => issue.message).join(' ') });
         return;
       }
       request = built.request;
     }
     const sent = request;
+    const scope = xGuard.scope;
+    const sentToken = xGuard.token;
     setPendingSaves((current) => ({ ...current, [batch.id]: { request: sent, phase: 'saving' } }));
-    const outcome = await reservationStore.save(sent);
+    let outcome: Awaited<ReturnType<typeof reservationStore.save>>;
+    try {
+      outcome = await reservationStore.save(sent);
+    } catch {
+      outcome = { kind: 'uncertain', code: UNCERTAIN_CODE };
+    } finally {
+      saving.current = false;
+    }
     const next = pendingAfter(sent, outcome);
     setPendingSaves((current) => {
       const copy = { ...current };
@@ -213,17 +270,31 @@ export default function ScheduleScreen() {
       setDrafts((current) => current.filter((draft) => draft.batchId !== batch.id));
       setBatches((current) => current.filter((candidate) => candidate.id !== batch.id));
       setConfirmations((current) => withoutConfirmations(current, savedIds));
+      clearXReconnectRequired(sent.socialAccountId);
+      if (liveScope.current !== scope) return;
       setNotice({ tone: 'success', text: `${outcome.reservations.length}件をサーバーに保存し、読み戻して一致を確認しました。X への投稿はまだ行われません。` });
       reloadServer(sent.socialAccountId);
       return;
     }
-    setNotice({ tone: outcome.kind === 'uncertain' ? 'warning' : 'danger', text: reservationMessage(outcome.kind === 'not_available' ? 'NOT_AVAILABLE' : outcome.code) });
+    if (outcome.kind === 'uncertain') {
+      if (liveScope.current !== scope) return;
+      setNotice({ tone: 'warning', text: reservationMessage(outcome.code) });
+      reloadServer(sent.socialAccountId);
+      return;
+    }
+    applyRefusal(outcome.kind === 'not_available' ? 'NOT_AVAILABLE' : outcome.code, sent.socialAccountId, scope, sentToken);
   }
 
   /** One change of a saved reservation (CAS on its revision), applied only after the server's read-back. */
   async function changeReservation(row: ServerReservation, kind: 'reschedule' | 'reconfirm' | 'cancel') {
     if (!reservationStore.enabled || !accountId) return;
+    if (xGuard.refusal) {
+      setNotice({ tone: 'danger', text: xGuard.refusal.text, button: xGuard.refusal.button });
+      return;
+    }
     const account = accountId;
+    const scope = xGuard.scope;
+    const sentToken = xGuard.token;
     let iso: string | null = null;
     if (kind === 'reschedule') {
       iso = rowRetiming && rowRetiming.id === row.reservationId ? isoFromJstFields(rowRetiming) : null;
@@ -240,10 +311,11 @@ export default function ScheduleScreen() {
         : await reservationStore.cancel(row.reservationId, row.revision);
     setRowBusy(null);
     if (!result.ok) {
-      setNotice({ tone: result.code === UNCERTAIN_CODE ? 'warning' : 'danger', text: reservationMessage(result.code) });
-      reloadServer(account);
+      applyRefusal(result.code, account, scope, sentToken);
       return;
     }
+    clearXReconnectRequired(account);
+    if (liveScope.current !== scope) return;
     setServerSnapshot((current) => replaceRow(current, account, result.value));
     if (kind === 'reschedule') setRowRetiming(null);
     setNotice({
@@ -396,11 +468,11 @@ export default function ScheduleScreen() {
                   {reservationStore.enabled ? (
                     <View style={{ gap: 4 }}>
                       {pending?.phase === 'uncertain'
-                        ? <SmallButton label="保存状況を確認" onPress={() => void saveBatch(batch, pending.request)} />
-                        : <SmallButton label="サーバーに保存" disabled={!saveReady || pending?.phase === 'saving'} onPress={() => void saveBatch(batch)} />}
+                        ? <SmallButton label="保存状況を確認" disabled={xGuard.refusal !== null} onPress={() => void saveBatch(batch, pending.request)} />
+                        : <SmallButton label="サーバーに保存" disabled={!saveReady || pending?.phase === 'saving' || xGuard.refusal !== null} onPress={() => void saveBatch(batch)} />}
                       {pending?.phase === 'saving' ? <Text style={styles.muted}>保存して、サーバーから読み戻しています…（まだ確定していません）</Text> : null}
                       {pending?.phase === 'uncertain' ? <Pill tone="warning">保存できたかを確認できません（未確定）。「保存状況を確認」で、同じ内容をもう一度確かめます</Pill> : null}
-                      {pending?.phase === 'failed' ? <Pill tone="danger">{reservationMessage(pending.code)}</Pill> : null}
+                      {pending?.phase === 'failed' ? <Pill tone="danger">{xAnswerView(pending.code ?? '', reservationErrorAction).text}</Pill> : null}
                     </View>
                   ) : null}
                 </View>
@@ -416,6 +488,13 @@ export default function ScheduleScreen() {
           </Card>
         ) : null}
         {notice ? <Pill tone={notice.tone}>{notice.text}</Pill> : null}
+        {reservationStore.enabled && xGuard.refusal && xGuard.refusal.text !== notice?.text ? <Pill tone="warning">{xGuard.refusal.text}</Pill> : null}
+        {reservationStore.enabled ? (notice?.button ?? xGuard.refusal?.button) === 'accounts'
+          ? <ActionButton label="アカウント画面を開く" onPress={() => router.push('/accounts')} />
+          : (notice?.button ?? xGuard.refusal?.button) === 'settings'
+            ? <ActionButton label="設定画面を開く" onPress={() => router.push('/(tabs)/settings')} />
+            : null : null}
+        <ActionButton label="予約の管理を開く" onPress={() => router.push('/reservations')} />
 
         {serverList && accountId ? (
           <View style={{ gap: 8 }}>
@@ -429,7 +508,8 @@ export default function ScheduleScreen() {
               </View>
             ) : null}
             {serverList.state === 'ready' && !serverList.rows.length ? <Text style={styles.muted}>まだありません。</Text> : null}
-            {serverRows.map((row) => (
+            {serverRows.length > reservationRows.length ? <Text style={styles.muted}>{`即時投稿が${serverRows.length - reservationRows.length}件あります。「予約の管理」で確認できます。`}</Text> : null}
+            {reservationRows.map((row) => (
               <ServerReservationCard key={row.reservationId} row={row} account={previewAccount} busy={rowBusy === row.reservationId}
                 retiming={rowRetiming?.id === row.reservationId ? { date: rowRetiming.date, time: rowRetiming.time } : null}
                 onRetime={() => setRowRetiming({ id: row.reservationId, ...jstFieldsOf(row.scheduledAt) })}

@@ -37,7 +37,7 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatJst(row.scheduledAt)}</Text>
-        <Pill tone={toneOf(row)}>{serverReservationLabel(row)}</Pill>
+        <Pill tone={toneOf(row)}>{row.status === 'planned' && row.consentState === 'ai_owner_opt_in' ? 'AI自動予約' : serverReservationLabel(row)}</Pill>
       </View>
       <Text style={styles.muted}>{account ? `投稿先: ${account.displayName}（${account.handle}）・日本時間` : '投稿先: 確認できません'}</Text>
       <Text style={{ color: colors.ink }}>{manual ? (row.body ?? '') : 'AIが投稿の直前に本文を作成します（現在はAIの枠は投稿されません）'}</Text>

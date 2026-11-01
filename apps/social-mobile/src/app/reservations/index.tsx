@@ -21,6 +21,8 @@ import {
   type Tone,
 } from '@/features/reservations/reservation-view';
 import { contentSha256, newClientRequestId, useReservationPorts } from '@/features/reservations/use-reservation-ports';
+import { isXReconnectRequired, markXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { RECONNECT_REQUIRED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -65,7 +67,10 @@ export default function ReservationsScreen() {
   const [blockedScope, setBlockedScope] = useState<string | null>(null);
   // Reads stay possible while a refusal blocks the writes (after reconnecting, a read clears it).
   const canRead = scope !== null && enabled && !loginRefused;
-  const usable = canRead && blockedScope !== scope;
+  useXReconnectSignal();
+  // A server said this X connection must be made again: only a new connect (the accounts screen) turns the writes back on.
+  const reconnectRequired = platform === 'x' && isXReconnectRequired(account?.id);
+  const usable = canRead && blockedScope !== scope && !reconnectRequired;
 
   const [xList, setXList] = useState<{ scope: string; rows: ServerReservation[] } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -85,11 +90,14 @@ export default function ReservationsScreen() {
 
   /** A refusal: what it means for the screen. `reread` reads the rows / receipt again (never the same write again). */
   const fail = (code: string, mine: string, sentToken: string | null, reread: (() => void) | null) => {
-    const action = ports.actionOf(code);
-    const view = actionView(action, mine.split('\n')[2] === 'threads' ? 'threads' : 'x');
+    const isX = mine.split('\n')[2] !== 'threads';
+    const action = isX ? xActionOf(code, ports.actionOf) : ports.actionOf(code);
+    const view = actionView(action, isX ? 'x' : 'threads');
+    if (action === 'reconnect_x') markXReconnectRequired(mine.split('\n')[3]);
     // a 401 is shown by the refused-token card (for that token only), not as a notice that would outlive it
     if (action === 'sign_in') { setRefusedToken(sentToken); return; }
-    if (view.blocks) setBlockedScope(mine);
+    // A reconnect has its own signal, which the new connect clears.
+    if (view.blocks && action !== 'reconnect_x') setBlockedScope(mine);
     const again = view.reread && reread !== null;
     say(mine, again ? `${view.message}${REREAD_TEXT}` : view.message, 'warning', view.button);
     if (again) reread();
@@ -279,6 +287,7 @@ export default function ReservationsScreen() {
             <ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} />
           </Card>
         ) : null}
+        {reconnectRequired && !refusal ? <Card><Pill tone="warning">{RECONNECT_REQUIRED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
         {loginRefused ? <Card><Pill tone="warning">{actionView('sign_in', platform).message}</Pill><ActionButton label="設定画面を開く" onPress={() => go('settings')} /></Card> : null}
         {shownNotice ? (
           <Card>
