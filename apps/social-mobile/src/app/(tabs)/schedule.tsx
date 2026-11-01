@@ -81,7 +81,7 @@ export default function ScheduleScreen() {
   // nothing is ever sent from this screen. The live client is handed over, but only a gate ON builds the live store.
   const reservationStore = useMemo(() => {
     const config = getSupabaseConfig();
-    const live = supabase && config.ok ? { supabaseUrl: config.config.url, session: supabase } : null;
+    const live = supabase && config.ok ? { supabaseUrl: config.config.url, session: supabase, publishableKey: config.config.publishableKey } : null;
     return createReservationStore(POSTONA_RESERVATION_PERSISTENCE_ENABLED, live);
   }, []);
   const [filter, setFilter] = useState<UnifiedFilter>('all');

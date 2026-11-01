@@ -11,8 +11,10 @@ import {
   actionView,
   formatJst,
   GATE_OFF_TEXT,
+  isSendNowRow,
   parseJstInput,
   REREAD_TEXT,
+  THREADS_MEMORY_NOTE,
   threadsReceiptView,
   xRowView,
   type ActionButtonKind,
@@ -159,7 +161,7 @@ export default function ReservationsScreen() {
   };
   const cancelX = (row: ServerReservation) => {
     if (confirmCancel !== row.reservationId) { setConfirmCancel(row.reservationId); return; }
-    void editX(() => ports.x.cancel(row.reservationId, row.revision), () => '予約を取り消しました。');
+    void editX(() => ports.x.cancel(row.reservationId, row.revision), () => (isSendNowRow(row) ? '即時投稿を取り消しました。' : '予約を取り消しました。'));
   };
 
   // Threads: one create per press, with a new client request id; the request is kept (memory) so its receipt can be read.
@@ -297,12 +299,14 @@ export default function ReservationsScreen() {
             {rows.map((row) => {
               const view = xRowView(row);
               const open = selected === row.reservationId;
+              const sendNow = isSendNowRow(row);
               return (
                 <Card key={row.reservationId}>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`予約 ${formatJst(row.scheduledAt)}`} onPress={() => { setSelected(open ? null : row.reservationId); setConfirmCancel(null); setTimeText(formatJst(row.scheduledAt)); }}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`${sendNow ? '即時投稿' : '予約'} ${formatJst(row.scheduledAt)}`} onPress={() => { setSelected(open ? null : row.reservationId); setConfirmCancel(null); setTimeText(formatJst(row.scheduledAt)); }}>
                     <View style={{ gap: 4 }}>
                       <Text style={{ color: colors.ink, fontWeight: '700' }}>{formatJst(row.scheduledAt)}</Text>
                       <Pill tone={view.tone}>{view.label}</Pill>
+                      {sendNow && row.status !== 'planned' ? <Text style={styles.muted}>即時投稿</Text> : null}
                       {row.body ? <Text style={styles.muted} numberOfLines={open ? undefined : 2}>{row.body}</Text> : null}
                     </View>
                   </Pressable>
@@ -318,7 +322,7 @@ export default function ReservationsScreen() {
                       ) : null}
                       {view.needsReconfirm ? <ActionButton label="この本文で再確認する" disabled={disabled} onPress={() => reconfirm(row)} /> : null}
                       {view.canCancel ? (
-                        <ActionButton label={confirmCancel === row.reservationId ? '本当に取り消す' : '予約を取り消す'} disabled={disabled} onPress={() => cancelX(row)} />
+                        <ActionButton label={confirmCancel === row.reservationId ? '本当に取り消す' : sendNow ? '即時投稿を取り消す' : '予約を取り消す'} disabled={disabled} onPress={() => cancelX(row)} />
                       ) : null}
                     </View>
                   ) : null}
@@ -330,6 +334,7 @@ export default function ReservationsScreen() {
           <>
             <Card>
               <Text style={{ color: colors.ink, fontWeight: '800' }}>新しいThreadsの予約</Text>
+              <Text style={styles.muted}>{THREADS_MEMORY_NOTE}</Text>
               <TextInput accessibilityLabel="Threadsの本文" value={threadsText} onChangeText={setThreadsText} style={[inputStyle, { minHeight: 84, textAlignVertical: 'top' }]} multiline maxLength={500} editable={!disabled} />
               <Text style={styles.muted}>日時（日本時間、例: 2026-11-01 09:30）</Text>
               <TextInput accessibilityLabel="Threadsの日時" value={threadsTime} onChangeText={setThreadsTime} style={inputStyle} editable={!disabled} />

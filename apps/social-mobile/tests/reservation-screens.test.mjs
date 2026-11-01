@@ -1,15 +1,17 @@
-// G1 TASK 30: the X / Threads reservations screen (src/app/reservations/index.tsx) against G3's store contract (handoff
-// 6536788017, PR #601 2a02fcbd). The REAL view rules (reservation-view.ts), the REAL disabled ports of this build, and the
-// REAL screen (transpiled, stubbed React / RN / router) driven by scripted stand-ins of G3's stores that answer the way
-// the handoff says the real ones do. A scripted "saved" here proves the screen's handling only -- not that a real server
-// adopted anything. Nothing leaves the process.
+// G1 TASK 30 / 31: the X / Threads reservations screen (src/app/reservations/index.tsx) on G3's stores. The REAL view rules
+// (reservation-view.ts), G3's REAL gates, disabled stores and code -> action table, and the REAL screen (transpiled, stubbed
+// React / RN / router), driven by scripted stand-ins of the stores and by G3's REAL stores over a scripted fetch. Their
+// "saved" proves the screen and the wiring only -- not that a real server adopted anything. Nothing leaves the process.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as view from '../src/features/reservations/reservation-view.ts';
-import * as ports from '../src/features/reservations/reservation-ports.ts';
+import { buildReservationPorts } from '../src/features/reservations/live-reservation-ports.ts';
+import { reservationErrorAction } from '../src/features/schedule/reservation-error-actions.ts';
+import { POSTONA_RESERVATION_PERSISTENCE_ENABLED } from '../src/features/schedule/reservation-store.ts';
+import { POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED } from '../src/features/schedule/remote-threads-reservation-store.ts';
 import * as enrollment from '../src/domain/service-enrollment.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
@@ -99,16 +101,30 @@ test('only an account of the person\'s own personal workspace, connected, on the
   assert.match(view.accountRefusal(acc({ connectionStatus: 'needs_attention' }), 'x', 'u_me'), /接続し直して/u);
 });
 
-test('the ports of this build are the disabled ones: every call NOT_AVAILABLE, nothing else is known', async () => {
-  const d = ports.DISABLED_RESERVATION_PORTS;
+const OFF = { x: POSTONA_RESERVATION_PERSISTENCE_ENABLED, threads: POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED };
+const untouchedClient = () => {
+  const client = { reads: 0, auth: { getSession: async () => { client.reads += 1; return { data: { session: { access_token: 'never' } }, error: null }; } } };
+  return client;
+};
+
+test('both gates of this build are OFF: G3\'s disabled stores, whatever client is handed over; every call NOT_AVAILABLE, no token read, no fetch', async () => {
+  assert.equal(POSTONA_RESERVATION_PERSISTENCE_ENABLED, false);
+  assert.equal(POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED, false);
+  const client = untouchedClient();
+  let fetched = 0;
+  const d = buildReservationPorts(OFF, { supabaseUrl: 'https://proj.example.test', session: client, publishableKey: 'sb_publishable_testkey01', fetch: async () => { fetched += 1; throw new Error('no'); } });
   assert.equal(d.x.enabled, false); assert.equal(d.threads.enabled, false);
   for (const call of [d.x.list('a'), d.x.get('r'), d.x.reschedule('r', 1, 't'), d.x.reconfirm('r', 1, 's'), d.x.cancel('r', 1), d.threads.cancel('r', 'a', 'c'), d.threads.receipt('a', 'c')]) {
     assert.deepEqual(await call, { ok: false, code: 'NOT_AVAILABLE' });
   }
   assert.deepEqual(await d.threads.create({ socialAccountId: 'a', clientRequestId: 'c', text: 't', contentSha256: 's', scheduledAt: 'x' }), { kind: 'not_available' });
+  assert.equal(d.actionOf, reservationErrorAction);
   assert.equal(d.actionOf('NOT_AVAILABLE'), 'not_available');
-  for (const code of ['POSTONA_RESV_STALE_REVISION', 'AUTH_REQUIRED', 'SOMETHING']) assert.equal(d.actionOf(code), 'check', code);
-  assert.ok(Object.isFrozen(d) && Object.isFrozen(d.x) && Object.isFrozen(d.threads));
+  assert.equal(d.actionOf('SOMETHING'), 'check');
+  assert.equal(client.reads, 0); assert.equal(fetched, 0);
+  // a gate ON without a client is disabled too
+  const noClient = buildReservationPorts({ x: true, threads: true }, null);
+  assert.equal(noClient.x.enabled, false); assert.equal(noClient.threads.enabled, false);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -118,13 +134,6 @@ const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
 const jwt = (user, session, n = 1) => `${b64({ alg: 'ES256' })}.${b64({ sub: user, session_id: session, n })}.sig${n}`;
 const S1 = '11111111-1111-4111-8111-111111111111';
 const S2 = '22222222-2222-4222-8222-222222222222';
-// A fixture of G3's code -> action table (reservation-error-actions.ts at #601), for the codes these tests use.
-const G3_ACTIONS = {
-  AUTH_REQUIRED: 'sign_in', POSTONA_RESV_SERVICE_NOT_ACTIVE: 'start_service', POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED: 'reconnect_x',
-  POSTONA_THREADS_RESV_ACCOUNT_NOT_VERIFIED: 'reconnect_threads', NOT_AVAILABLE: 'not_available', POSTONA_THREADS_RESV_PUBLISH_DISABLED: 'not_available',
-  POSTONA_RESV_STALE_REVISION: 'reload', POSTONA_RESV_ALREADY_FINAL: 'final', POSTONA_RESV_NOT_FOUND: 'not_found', POSTONA_THREADS_RESV_NOT_FOUND: 'not_found',
-  POSTONA_RESV_SLOT_CONFLICT: 'fix_input', POSTONA_THREADS_RESV_TEXT_INVALID: 'fix_input', RATE_LIMITED: 'retry_later',
-};
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -157,7 +166,7 @@ function scriptedPorts({ x = true, threads = true } = {}) {
   const value = {
     x: { enabled: x, list: method('x', 'list'), get: method('x', 'get'), reschedule: method('x', 'reschedule'), reconfirm: method('x', 'reconfirm'), cancel: method('x', 'cancel') },
     threads: { enabled: threads, create: method('threads', 'create'), cancel: method('threads', 'cancel'), receipt: method('threads', 'receipt') },
-    actionOf: (code) => G3_ACTIONS[code] ?? 'check',
+    actionOf: reservationErrorAction,
   };
   const answer = (name, result, hold = false) => { (queues[name] ??= []).push({ value: result, hold }); };
   return { value, calls, answer, release: async () => { held.shift()(); await settle(); }, count: (name) => calls.filter((c) => c[0] === name).length };
@@ -188,7 +197,7 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {} } },
     '@/domain/service-enrollment': enrollment,
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: world.workspace, retry() {} }) },
-    '@/features/reservations/reservation-ports': ports,
+    '@/features/reservations/reservation-ports': {},
     '@/features/reservations/reservation-view': view,
     '@/features/reservations/use-reservation-ports': { useReservationPorts: () => world.ports, newClientRequestId: () => `cid-${++world.ids}`, contentSha256: async (text) => `sha256:${text}` },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts }) },
@@ -223,8 +232,8 @@ async function threadsScreen(store) {
 const press = async (h, label, index = 0) => { const b = button(h.renderOnce(), label, index); assert.ok(b, `button ${label}`); assert.notEqual(b.disabled, true, `${label} enabled`); b.onPress(); await settle(); return h.render(); };
 const open = async (h, label) => { rowPress(h.renderOnce(), label).onPress(); return h.render(); };
 
-test('gates OFF (the real disabled ports): the reason is shown, nothing is offered, nothing is called, nothing reads 「予約済み」', async () => {
-  const h = await mount({ store: { value: ports.DISABLED_RESERVATION_PORTS } });
+test('gates OFF (G3\'s real disabled stores): the reason is shown, nothing is offered, nothing is called, nothing reads 「予約済み」', async () => {
+  const h = await mount({ store: { value: buildReservationPorts(OFF, { supabaseUrl: 'https://proj.example.test', session: untouchedClient(), publishableKey: 'sb_publishable_testkey01' }) } });
   let tree = await h.render();
   assert.ok(has(tree, 'Xの予約の保存・変更・取消は、公開前の準備中のため、まだ使えません'));
   assert.equal(button(tree, '最新の状態を読み込む').disabled, true);
@@ -567,22 +576,274 @@ test('navigation: home → /reservations; the route is registered in the stack; 
   assert.match(screen, /router\.push\('\/\(tabs\)\/schedule'\)/u);
 });
 
-test('boundary: the screen reaches the stores only through use-reservation-ports (the disabled ports); no G3 file, no network, no storage, no post', async () => {
+test('boundary: the screen reaches the stores only through use-reservation-ports; the hook passes G3\'s own gates, never a literal; no network, storage or post of its own', async () => {
   const screen = code(await read('app/reservations/index.tsx'));
   const hook = code(await read('features/reservations/use-reservation-ports.ts'));
+  const wiring = code(await read('features/reservations/live-reservation-ports.ts'));
   const contract = code(await read('features/reservations/reservation-ports.ts'));
   const rules = code(await read('features/reservations/reservation-view.ts'));
   const importsOf = (source) => [...source.matchAll(/from ['"]([^'"]+)['"]/gu)].map((m) => m[1]).sort();
   assert.deepEqual(importsOf(screen), ['@/components/ui', '@/constants/theme', '@/domain/service-enrollment', '@/features/personal-workspace/personal-workspace-provider',
     '@/features/reservations/reservation-ports', '@/features/reservations/reservation-view', '@/features/reservations/use-reservation-ports',
     '@/providers/active-account-provider', '@/providers/auth-provider', 'expo-router', 'react', 'react-native']);
-  assert.deepEqual(importsOf(hook), ['@/features/reservations/reservation-ports', 'expo-crypto']);
+  assert.deepEqual(importsOf(hook), ['@/features/reservations/live-reservation-ports', '@/features/reservations/reservation-ports', '@/features/schedule/remote-threads-reservation-store',
+    '@/features/schedule/reservation-store', '@/lib/supabase', 'expo-crypto', 'react']);
+  assert.deepEqual(importsOf(wiring), ['../schedule/live-reservation-store.ts', '../schedule/remote-threads-reservation-store.ts', '../schedule/reservation-error-actions.ts', '../schedule/reservation-store.ts', './reservation-ports.ts']);
   assert.deepEqual(importsOf(contract), []);
   assert.deepEqual(importsOf(rules), ['./reservation-ports.ts']);
-  assert.match(hook, /return DISABLED_RESERVATION_PORTS;/u);
-  for (const [name, text] of [['screen', screen], ['hook', hook], ['contract', contract], ['rules', rules]]) {
+  assert.match(hook, /\{ x: POSTONA_RESERVATION_PERSISTENCE_ENABLED, threads: POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED \}/u);
+  assert.doesNotMatch(hook + wiring, /\btrue\b/u, 'no gate is turned on here');
+  for (const [name, text] of [['screen', screen], ['contract', contract], ['rules', rules]]) {
     assert.doesNotMatch(text, /features\/schedule\/|reservation-store|reservation-error-actions/u, `${name}: no G3 file`);
-    assert.doesNotMatch(text, /fetch\(|supabase|functions\.invoke|\.rpc\(|\.from\(|AsyncStorage|SecureStore|localStorage|console\./u, `${name}: no network / storage / log`);
+    assert.doesNotMatch(text, /supabase/u, `${name}: no client`);
+  }
+  for (const [name, text] of [['screen', screen], ['hook', hook], ['wiring', wiring], ['contract', contract], ['rules', rules]]) {
+    assert.doesNotMatch(text, /fetch\(|functions\.invoke|\.rpc\(|\.from\(|AsyncStorage|SecureStore|localStorage|console\./u, `${name}: no network / storage / log`);
     assert.doesNotMatch(text, /publish\w*\(|manual-publish|start_x_autopost_service|x-oauth|oauth_state/iu, `${name}: no post, no service start, no OAuth`);
   }
+});
+
+test('the composer\'s store gets the public key too (only that one key of the screen\'s client)', async () => {
+  const schedule = code(await read('app/(tabs)/schedule.tsx'));
+  assert.match(schedule, /\{ supabaseUrl: config\.config\.url, session: supabase, publishableKey: config\.config\.publishableKey \}/u);
+  assert.match(schedule, /createReservationStore\(POSTONA_RESERVATION_PERSISTENCE_ENABLED, live\)/u);
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The real hook.
+
+async function loadHook({ config = { ok: true, config: { url: 'https://proj.example.test', publishableKey: 'sb_publishable_testkey01' } }, client = untouchedClient(), build = buildReservationPorts } = {}) {
+  const source = await read('features/reservations/use-reservation-ports.ts');
+  const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const loaded = { exports: {} };
+  let memoRuns = 0;
+  const stubs = {
+    react: { useMemo: (make) => { memoRuns += 1; return make(); } },
+    'expo-crypto': {},
+    '@/features/reservations/live-reservation-ports': { buildReservationPorts: build },
+    '@/features/schedule/reservation-store': { POSTONA_RESERVATION_PERSISTENCE_ENABLED },
+    '@/features/schedule/remote-threads-reservation-store': { POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED },
+    '@/lib/supabase': { getSupabaseConfig: () => config, supabase: client },
+  };
+  vm.runInNewContext(js, { module: loaded, exports: loaded.exports, require: (name) => { assert.ok(Object.hasOwn(stubs, name), `unexpected import ${name}`); return stubs[name]; } });
+  return { hook: loaded.exports.useReservationPorts, memoRuns: () => memoRuns, client };
+}
+
+test('the real hook: both gates as G3 set them (OFF), the person\'s client and the public key handed over; no client without a good config; disabled stores, nothing read', async () => {
+  const seen = [];
+  const spy = (gates, live) => { seen.push({ gates: { ...gates }, live: live && { ...live } }); return buildReservationPorts(gates, live); };
+  const { hook, client } = await loadHook({ build: spy });
+  const answer = hook();
+  assert.equal(answer.x.enabled, false); assert.equal(answer.threads.enabled, false);
+  assert.equal(answer.actionOf, reservationErrorAction);
+  assert.deepEqual(JSON.parse(JSON.stringify(seen[0].gates)), { x: false, threads: false });
+  assert.equal(seen[0].live.supabaseUrl, 'https://proj.example.test');
+  assert.equal(seen[0].live.publishableKey, 'sb_publishable_testkey01');
+  assert.equal(seen[0].live.session, client);
+  assert.equal(client.reads, 0);
+  const bad = await loadHook({ build: spy, config: { ok: false, kind: 'missing', reason: 'x' } });
+  bad.hook();
+  assert.equal(seen[1].live, null);
+  const none = await loadHook({ build: spy, client: null });
+  none.hook();
+  assert.equal(seen[2].live, null);
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Send-now rows and the Threads limit.
+
+test('a send-now row (draftId single:) is not a reservation: labelled, no time change, no 「予約済み」; it can be cancelled; other statuses keep their label', async () => {
+  const single = (over = {}) => row('s', { draftId: 'single:abc', ...over });
+  const planned = view.xRowView(single());
+  assert.equal(planned.label, '即時投稿（送信待ち）');
+  assert.equal(planned.canReschedule, false); assert.equal(planned.needsReconfirm, false); assert.equal(planned.canCancel, true);
+  assert.equal(view.xRowView(single({ consentState: 'needs_reconfirm' })).needsReconfirm, false);
+  assert.equal(view.xRowView(single({ status: 'published' })).label, '投稿済み');
+  assert.equal(view.xRowView(single({ status: 'uncertain' })).canCancel, false);
+  assert.equal(view.isSendNowRow(row('n')), false);
+  assert.equal(view.isSendNowRow(row('n', { draftId: 'x-single:abc' })), false, 'only the prefix');
+
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [single(), single({ reservationId: 'p', status: 'published', scheduledAt: '2026-11-03T00:30:00Z' }), row('a', { scheduledAt: '2026-11-04T00:30:00Z' })] });
+  const h = await mount({ store });
+  await h.render();
+  let tree = await open(h, '即時投稿 2026-11-02 09:30');
+  assert.ok(texts(tree).includes('即時投稿（送信待ち）'));
+  assert.equal(texts(tree).filter((text) => text === '予約済み').length, 1, 'only the real reservation');
+  assert.equal(texts(tree).filter((text) => text === '即時投稿').length, 1, 'the finished send-now row keeps its kind');
+  assert.equal(button(tree, '時刻を変更'), undefined);
+  assert.equal(field(tree, '新しい日時'), undefined);
+  tree = await press(h, '即時投稿を取り消す');
+  assert.equal(store.count('x.cancel'), 0, 'asked twice');
+  store.answer('x.cancel', { ok: true, value: single({ status: 'cancelled', revision: 2 }) });
+  tree = await press(h, '本当に取り消す');
+  assert.deepEqual(store.calls.at(-1), ['x.cancel', 's', 1]);
+  assert.ok(has(tree, '即時投稿を取り消しました'));
+  // an ordinary row still offers the time change
+  tree = await open(h, '予約 2026-11-04 09:30');
+  assert.ok(button(tree, '時刻を変更'));
+});
+
+test('Threads: the screen says the receipts are this device\'s memory only', async () => {
+  const h = await threadsScreen(scriptedPorts());
+  assert.ok(has(await h.render(), 'この端末で作成したものだけ'));
+  assert.ok(has(h.renderOnce(), 'アプリを閉じると消え'));
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// G3's REAL stores (gates passed ON, here only) over a scripted fetch: the HTTP the wiring really produces.
+
+function wired(token = () => jwt('user-A', S1)) {
+  const sent = [];
+  const queues = {};
+  const client = { auth: { getSession: async () => ({ data: { session: { access_token: token() } }, error: null }) } };
+  const scripted = async (url, init) => {
+    const call = JSON.parse(init.body);
+    sent.push({ url, action: call.action, payload: call.payload, apikey: init.headers.apikey, authorization: init.headers.authorization });
+    const next = (queues[`${url.includes('threads') ? 'threads' : 'x'}.${call.action}`] ?? []).shift();
+    assert.ok(next, `unexpected ${url} ${call.action}`);
+    if (next === 'network') throw new TypeError('network down');
+    return new Response(JSON.stringify(next.body), { status: next.status });
+  };
+  return {
+    sent,
+    actions: () => sent.map((item) => item.action).join(','),
+    reply: (name, status, body) => { (queues[name] ??= []).push({ status, body }); },
+    down: (name) => { (queues[name] ??= []).push('network'); },
+    value: buildReservationPorts({ x: true, threads: true }, { supabaseUrl: 'https://proj.example.test', session: client, publishableKey: 'sb_publishable_testkey01', fetch: scripted }),
+  };
+}
+const wire = (id, over = {}) => ({ ...row(id), batchId: 'b1', mode: 'manual', origin: 'manual', ...over });
+const rows = (...list) => ({ ok: true, reservations: list });
+const refused = (code) => ({ ok: false, code });
+const receiptBody = (state, reservationId = 'th-1') => ({ ok: true, receipt: { reservationId, state, providerPostId: null, outcomeCode: null, afterFreeze: false, simulated: false } });
+
+test('wired: the X list goes to the real function path with the public key and the person\'s token; rows and rules as the store parses them', async () => {
+  const w = wired();
+  w.reply('x.list', 200, rows(wire('a'), wire('s', { draftId: 'single:abc', scheduledAt: '2026-11-03T00:30:00Z' })));
+  const h = await mount({ store: w });
+  const tree = await h.render();
+  assert.equal(w.sent[0].url, 'https://proj.example.test/functions/v1/postona-x-reservations');
+  assert.equal(w.sent[0].apikey, 'sb_publishable_testkey01');
+  assert.equal(w.sent[0].authorization, `Bearer ${jwt('user-A', S1)}`);
+  assert.equal(w.sent[0].payload.socialAccountId, 'acc-x');
+  assert.equal(texts(tree).filter((text) => text === '予約済み').length, 1);
+  assert.ok(texts(tree).includes('即時投稿（送信待ち）'));
+});
+
+test('wired: 401 stops that token (nothing more is sent); 403 keeps the writes off; 409 re-reads once; 429 changes nothing; each write sent once', async () => {
+  // 401 on the list
+  let w = wired();
+  w.reply('x.list', 401, { message: 'Invalid JWT' });
+  let h = await mount({ store: w });
+  let tree = await h.render();
+  assert.ok(has(tree, 'ログインの有効期限が切れた'));
+  assert.equal(w.actions(), 'list');
+  assert.equal(button(tree, '最新の状態を読み込む').disabled, true);
+
+  // 403 on a write
+  w = wired();
+  w.reply('x.list', 200, rows(wire('a')));
+  h = await mount({ store: w });
+  await h.render();
+  tree = await open(h, '予約 2026-11-02 09:30');
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  w.reply('x.reschedule', 403, refused('POSTONA_RESV_SERVICE_NOT_ACTIVE'));
+  tree = await press(h, '時刻を変更');
+  assert.ok(has(tree, '利用登録が有効でない'));
+  assert.equal(button(tree, '時刻を変更').disabled, true);
+  assert.equal(w.actions(), 'list,reschedule');
+
+  // 409 stale: the same write never again, one read
+  w = wired();
+  w.reply('x.list', 200, rows(wire('a')));
+  h = await mount({ store: w });
+  await h.render();
+  tree = await open(h, '予約 2026-11-02 09:30');
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  w.reply('x.reschedule', 409, refused('POSTONA_RESV_STALE_REVISION'));
+  w.reply('x.list', 200, rows(wire('a', { revision: 9 })));
+  tree = await press(h, '時刻を変更');
+  assert.ok(has(tree, '内容が更新されていました'));
+  assert.equal(w.actions(), 'list,reschedule,list');
+  assert.equal(w.sent[1].payload.expectedRevision, 1);
+
+  // 429: no re-read, no re-send, the row as it was
+  w = wired();
+  w.reply('x.list', 200, rows(wire('a')));
+  h = await mount({ store: w });
+  await h.render();
+  tree = await open(h, '予約 2026-11-02 09:30');
+  await press(h, '予約を取り消す');
+  w.reply('x.cancel', 429, {});
+  tree = await press(h, '本当に取り消す');
+  assert.ok(has(tree, '混み合っている'));
+  assert.ok(texts(tree).includes('予約済み'));
+  assert.equal(w.actions(), 'list,cancel');
+});
+
+test('wired: a write whose answer is lost is never sent again and never reads as done: the store reads back, the screen says "check" and re-reads once', async () => {
+  const w = wired();
+  w.reply('x.list', 200, rows(wire('a')));
+  const h = await mount({ store: w });
+  await h.render();
+  await open(h, '予約 2026-11-02 09:30');
+  await press(h, '予約を取り消す');
+  w.down('x.cancel');
+  w.reply('x.get', 200, rows(wire('a')));
+  w.reply('x.list', 200, rows(wire('a')));
+  const tree = await press(h, '本当に取り消す');
+  assert.ok(has(tree, '結果を確認できませんでした'));
+  assert.equal(w.actions(), 'list,cancel,get,list');
+  assert.ok(!has(tree, '予約を取り消しました'));
+});
+
+test('wired Threads: saved only by a pending receipt; an uncertain create is kept and never created again; U8 keeps the writes off with no row; receipts read by the same id', async () => {
+  const fill = (tree) => { field(tree, 'Threadsの本文').onChangeText('本文'); field(tree, 'Threadsの日時').onChangeText('2026-11-05 10:00'); };
+  // saved
+  let w = wired();
+  w.reply('x.list', 200, rows());
+  let h = await mount({ store: w });
+  await h.render();
+  chip(h.renderOnce(), 'Threads').onPress();
+  fill(await h.render());
+  w.reply('threads.create', 200, { ok: true });
+  w.reply('threads.receipt', 200, receiptBody('pending'));
+  let tree = await press(h, 'Threadsに予約する');
+  assert.ok(texts(tree).includes('予約済み'));
+  assert.equal(w.sent[1].url, 'https://proj.example.test/functions/v1/postona-threads-reservations');
+  assert.equal(w.actions(), 'list,create,receipt');
+
+  // uncertain: the answer is lost and the receipt unreadable
+  w = wired();
+  w.reply('x.list', 200, rows());
+  h = await mount({ store: w });
+  await h.render();
+  chip(h.renderOnce(), 'Threads').onPress();
+  fill(await h.render());
+  w.down('threads.create');
+  w.down('threads.receipt');
+  tree = await press(h, 'Threadsに予約する');
+  assert.ok(has(tree, 'Threadsに届いたかどうか分かりません'));
+  assert.ok(!texts(tree).includes('予約済み'));
+  const id = w.sent[1].payload.clientRequestId;
+  w.reply('threads.receipt', 200, receiptBody('uncertain'));
+  tree = await press(h, '受領票を確認');
+  assert.ok(texts(tree).includes('Threadsで確認してください'));
+  assert.equal(w.sent.at(-1).payload.clientRequestId, id);
+  assert.equal(w.sent.filter((item) => item.action === 'create').length, 1);
+
+  // U8: the publish switch is off
+  w = wired();
+  w.reply('x.list', 200, rows());
+  h = await mount({ store: w });
+  await h.render();
+  chip(h.renderOnce(), 'Threads').onPress();
+  fill(await h.render());
+  w.reply('threads.create', 403, refused('POSTONA_THREADS_RESV_PUBLISH_DISABLED'));
+  tree = await press(h, 'Threadsに予約する');
+  assert.ok(has(tree, 'いまは使えません'));
+  assert.ok(!texts(tree).includes('予約済み'));
+  assert.equal(button(tree, 'Threadsに予約する').disabled, true);
+  assert.equal(w.actions(), 'list,create');
 });
