@@ -8,11 +8,19 @@
 //     `sub` == verified user), an explicit confirmation constant and the scope
 //     the user was shown (preview). A different current scope refuses.
 //   * The durable DB state machine (migration 20260928160000) does the
-//     serialization: acquire (lease) -> credentials -> X revoke -> mark (by
+//     serialization: acquire (lease) -> stop X publishing (F3 candidate
+//     social_mobile_account_deletion_stop_x) -> credentials -> X revoke -> mark (by
 //     SHA-256 of exactly the revoked material) -> Apple revoke + durable
-//     checkpoint (only when the login itself is deleted) -> purge -> finalize.
+//     checkpoint (only when the login itself is deleted) -> stop X publishing
+//     again (pre-purge) -> purge -> finalize.
 //     A retry resumes where the DB says it stopped; nothing external is
 //     repeated after its checkpoint.
+//   * X posts whose result is unknown are counted from the DB's DURABLE
+//     checkpoint (x_posts_unconfirmed, written before the purge), never from
+//     this request's memory: a retry after a committed purge, a failed
+//     finalize or a lease takeover still reports them. The count travels with
+//     its snapshot (x_unconfirmed_snapshot): the caller acknowledges exactly
+//     that snapshot, never a bare count (J3 V3 R1a).
 //   * Every failure returns a fixed code and releases the lease; success is
 //     reported only after finalize committed.
 //   * Tokens, keys and server messages are never returned or logged.
@@ -24,7 +32,8 @@ export type DeletionScope = 'social_only' | 'social_and_login';
 
 export const BLOCK_REASONS = [
   'ADMIN_ACCOUNT', 'OWNS_OTHER_WORKSPACE', 'WORKSPACE_NOT_SELF_SERVICE', 'SHARED_WORKSPACE', 'WORKSPACE_ROLE_MISMATCH',
-  'POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'CREDENTIAL_OWNERSHIP_AMBIGUOUS', 'UNEXPECTED_DEPENDENT_DATA', 'UNKNOWN',
+  'POSTING_IN_PROGRESS', 'CREDENTIAL_REFRESH_IN_PROGRESS', 'CREDENTIAL_OWNERSHIP_AMBIGUOUS', 'UNEXPECTED_DEPENDENT_DATA',
+  'NON_X_ACCOUNT_PRESENT', 'UNKNOWN',
 ] as const;
 export type BlockReason = (typeof BLOCK_REASONS)[number];
 
@@ -36,7 +45,7 @@ export type DeletionErrorCode =
 
 /** providers and Apple subjects come from the server's view of the user's identities. */
 export type VerifiedUser = { id: string; providers: readonly string[]; appleSubjects: readonly string[] };
-export type RpcName = 'preview' | 'acquire' | 'release' | 'credentials' | 'mark_x_revoked' | 'mark_apple_revoked' | 'purge' | 'finalize' | 'record';
+export type RpcName = 'preview' | 'x_precheck' | 'acquire' | 'release' | 'stop_x' | 'credentials' | 'mark_x_revoked' | 'mark_apple_revoked' | 'purge' | 'finalize' | 'record';
 export type RpcResult = { ok: true; data: unknown } | { ok: false; code: string | null };
 
 export type DeletionDeps = {
@@ -85,6 +94,18 @@ export function blockReason(value: unknown): BlockReason {
 }
 
 const isScope = (value: unknown): value is DeletionScope => value === 'social_only' || value === 'social_and_login';
+/** A durable count from the DB: a non-negative integer, or null (= the answer is not trusted). */
+const durableCount = (value: unknown): number | null => (typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null);
+export const SNAPSHOT_PATTERN = /^[0-9a-f]{64}$/u;
+type Evidence = { count: number; snapshot: string | null };
+/** The durable unknown-post evidence of a DB answer: the count and its snapshot, consistent, or null (not trusted). */
+function durableEvidence(data: Record<string, unknown>): Evidence | null {
+  const count = durableCount(data.x_posts_unconfirmed);
+  const snapshot = data.x_unconfirmed_snapshot;
+  if (count === 0 && snapshot === null) return { count, snapshot: null };
+  if (count !== null && count > 0 && typeof snapshot === 'string' && SNAPSHOT_PATTERN.test(snapshot)) return { count, snapshot };
+  return null;
+}
 const record = (value: unknown) => (typeof value === 'object' && value !== null ? value as Record<string, unknown> : {});
 
 async function verifiedUser(authorization: string | null, deps: DeletionDeps): Promise<{ token: string; user: VerifiedUser } | null> {
@@ -156,6 +177,15 @@ export async function handleAccountDeletion(
   if (current.scope !== scope) return fail(409, 'SCOPE_CHANGED');
   if (apple && current.apple_revoked !== true && !appleCode) return fail(400, 'APPLE_REAUTH_REQUIRED');
 
+  // A non-X social account refuses before anything is recorded (the credential set is bound at acquire).
+  const precheck = await deps.rpc('x_precheck', { p_user_id: userId });
+  if (!precheck.ok) return fail(500, 'FAILED');
+  const nonX = durableCount(record(precheck.data).non_x_accounts);
+  // The precheck's durable evidence is only checked for shape here (fail closed on a DB without it); the evidence
+  // reported is the one the stop step answers under the lease, which every run asks for at least once.
+  if (nonX === null || durableEvidence(record(precheck.data)) === null) return fail(500, 'FAILED');
+  if (nonX > 0) return fail(409, 'DELETION_BLOCKED_NON_X_ACCOUNT_PRESENT');
+
   await audit('requested');
   const acquired = await deps.rpc('acquire', { p_expected_scope: scope, p_apple_required: apple, p_user_id: userId });
   if (!acquired.ok) return fail(500, 'FAILED');
@@ -176,6 +206,31 @@ export async function handleAccountDeletion(
     return fail(status, error);
   };
   const leaseLost = (result: RpcResult) => !result.ok && result.code === 'SOCIAL_MOBILE_DELETION_LEASE_LOST';
+
+  // X publishing stops before any credential is read, revoked at X or removed, and again right before the purge:
+  // publish authority revoked, planned reservations cancelled (idempotent). A post in flight, a non-X account or a
+  // shared workspace answers a TYPED block (the stop itself stays in effect) -- never an operator hand-off from here.
+  // Every stop answer carries the DURABLE count of X posts whose result is unknown with its snapshot. Under the lease
+  // the set only grows (no acknowledgement during a deletion), so the latest answer is the whole, consistent pair.
+  let evidence: Evidence = { count: 0, snapshot: null };
+  const stopXPublishing = async (): Promise<DeletionResponse | null> => {
+    const halted = await deps.rpc('stop_x', leaseArgs);
+    if (leaseLost(halted)) return fail(409, 'DELETION_IN_PROGRESS');
+    if (!halted.ok) return stop(500, 'FAILED', 'X_STOP_FAILED');
+    const result = record(halted.data);
+    if (result.status === 'blocked') {
+      const reason = blockReason(result.reason);
+      return stop(409, `DELETION_BLOCKED_${reason}`, reason);
+    }
+    const durable = durableEvidence(result);
+    if ((result.status === 'stopped' || result.status === 'not_applicable') && durable !== null) {
+      evidence = durable;
+      return null;
+    }
+    return stop(500, 'FAILED', 'X_STOP_UNEXPECTED');
+  };
+  const stopped = await stopXPublishing();
+  if (stopped) return stopped;
 
   // X: revoke exactly the current material, then record it by fingerprint.
   if (lease.state === 'started') {
@@ -226,6 +281,8 @@ export async function handleAccountDeletion(
     if (!checkpoint.ok) return stop(500, 'FAILED', 'APPLE_CHECKPOINT_FAILED');
   }
 
+  const stoppedAgain = await stopXPublishing();
+  if (stoppedAgain) return stoppedAgain;
   const purge = await deps.rpc('purge', leaseArgs);
   if (leaseLost(purge)) return fail(409, 'DELETION_IN_PROGRESS');
   if (!purge.ok) {
@@ -250,6 +307,8 @@ export async function handleAccountDeletion(
       ok: true,
       login_deleted: done.login_deleted === true,
       ...(done.reason === 'MAIN_APP_ACCOUNT_PRESENT' ? { login_kept_reason: 'MAIN_APP_ACCOUNT_PRESENT' } : {}),
+      // Reservations whose X result was never known: reported with the snapshot to acknowledge, never hidden.
+      ...(evidence.count > 0 ? { x_posts_unconfirmed: evidence.count, x_unconfirmed_snapshot: evidence.snapshot } : {}),
     },
   };
 }

@@ -9,10 +9,16 @@ import type { ReservationAction, ServerReservation, ThreadsReceiptState } from '
 export type Tone = 'neutral' | 'success' | 'warning' | 'danger';
 export type RowView = { label: string; tone: Tone; detail: string | null; canReschedule: boolean; needsReconfirm: boolean; canCancel: boolean };
 
+/** A "post now" row: list_reservations returns those too (draftId `single:`). The server refuses to move one (G3 handoff 6548386005). */
+export function isSendNowRow(row: ServerReservation): boolean {
+  return row.draftId.startsWith('single:');
+}
+
 export function xRowView(row: ServerReservation): RowView {
   const edit = { canReschedule: false, needsReconfirm: false, canCancel: false };
   switch (row.status) {
     case 'planned':
+      if (isSendNowRow(row)) return { label: '即時投稿（送信待ち）', tone: 'neutral', detail: '「すぐに投稿」で作られた行です。予約ではないため、時刻は変更できません。', canReschedule: false, needsReconfirm: false, canCancel: true };
       if (row.consentState === 'confirmed') return { label: '予約済み', tone: 'success', detail: null, canReschedule: true, needsReconfirm: false, canCancel: true };
       if (row.consentState === 'needs_reconfirm') {
         return { label: '再確認が必要', tone: 'warning', detail: '時刻を変えたため、この本文で投稿してよいか、もう一度確認してください。確認するまで投稿されません。', canReschedule: true, needsReconfirm: true, canCancel: true };
@@ -87,6 +93,8 @@ export function actionView(action: ReservationAction, platform: 'x' | 'threads')
 }
 
 export const REREAD_TEXT = '最新の状態を読み込みます。';
+
+export const THREADS_MEMORY_NOTE = 'Threadsの予約は一覧を取得できないため、ここにはこの端末で作成したものだけを表示します。受領票はアプリを閉じると消え、確認できなくなります。';
 
 export const GATE_OFF_TEXT = {
   x: 'Xの予約の保存・変更・取消は、公開前の準備中のため、まだ使えません。ここで「予約済み」と表示されることはありません。',

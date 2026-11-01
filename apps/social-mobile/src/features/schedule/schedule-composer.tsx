@@ -283,7 +283,8 @@ export function ScheduleComposer({
   }
 
   function preview() {
-    const result = planBatch(request(), { ...context, batchId: `local-${Date.now().toString(36)}` });
+    // A random UUID: the same id later becomes the server idempotency key (client_batch_id) of this batch.
+    const result = planBatch(request(), { ...context, batchId: Crypto.randomUUID() });
     if (!result.ok) {
       setIssues(result.issues);
       return;

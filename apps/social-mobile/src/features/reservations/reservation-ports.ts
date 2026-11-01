@@ -1,12 +1,8 @@
-// The X / Threads reservation stores, as the reservations screen sees them (G1 TASK 30).
+// The X / Threads reservation stores, as the reservations screen sees them (G1 TASK 30 / 31).
 //
-// The stores themselves are G3's (apps/social-mobile/src/features/schedule/reservation-store.ts,
-// remote-threads-reservation-store.ts and reservation-error-actions.ts on the G3 stack, PR #601 2a02fcbd; not on this
-// branch). This file holds only the SHAPE of their public contract (G3 handoff 6536788017), so the screen can be built
-// and tested before the G3 stack reaches main, and a type check against G3's real files proves the shapes match.
-// It contains no store logic. Until G3's stores are wired here (one adapter, after the G3 merge and the release gates),
-// the only ports this build has are the disabled ones below: no network, no storage, every call NOT_AVAILABLE --
-// the same answers as G3's DISABLED_RESERVATION_STORE / DISABLED_THREADS_RESERVATION_STORE.
+// The stores themselves are G3's (apps/social-mobile/src/features/schedule/). This file holds only the SHAPE of the part
+// of their public contract the screen uses; live-reservation-ports.ts assigns G3's real stores to it, so tsc proves the
+// shapes match. It contains no store logic.
 
 export type StoreResult<T> = { ok: true; value: T } | { ok: false; code: string };
 
@@ -75,24 +71,6 @@ export type ReservationAction =
 export type ReservationPorts = {
   x: XReservationPort;
   threads: ThreadsReservationPort;
-  /** G3's reservationErrorAction once wired; anything it does not know is 'check'. */
+  /** G3's reservationErrorAction; anything it does not know is 'check'. */
   actionOf: (code: string) => ReservationAction;
 };
-
-const NOT_AVAILABLE = 'NOT_AVAILABLE';
-const refused = () => Promise.resolve({ ok: false as const, code: NOT_AVAILABLE });
-
-/**
- * The ports of this build: the release gates are OFF, so nothing is sent and nothing can be saved. Only the code the
- * disabled ports answer is known here; every other code is 'check' (read again, never success, never a blind re-send).
- */
-export const DISABLED_RESERVATION_PORTS: ReservationPorts = Object.freeze({
-  x: Object.freeze({ enabled: false, list: refused, get: refused, reschedule: refused, reconfirm: refused, cancel: refused }),
-  threads: Object.freeze({
-    enabled: false,
-    create: () => Promise.resolve({ kind: 'not_available' } as const),
-    cancel: refused,
-    receipt: refused,
-  }),
-  actionOf: (code: string): ReservationAction => (code === NOT_AVAILABLE ? 'not_available' : 'check'),
-});

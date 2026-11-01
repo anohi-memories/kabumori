@@ -1,0 +1,332 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  type ApiRequest,
+  type AuthVerifier,
+  createReservationApi,
+  type PermissionSources,
+  PERMISSIONS_DECIDED_IN_DATABASE,
+  PERMISSIONS_NOT_CONNECTED,
+  POSTONA_RESERVATION_API_ENABLED,
+  type ReservationDb,
+  type ReservationRow,
+  type ReservationSubject,
+} from "./api.ts";
+
+const USER = "00000000-0000-4000-8000-00000000000a";
+const OTHER = "00000000-0000-4000-8000-00000000000b";
+const SESSION = "00000000-0000-4000-8000-0000000000c1";
+const b64url = (s: string) => btoa(s).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/u, "");
+/** A token shaped like Auth's (header.payload.signature); the payload's session_id is read only after the verifier accepted it. */
+const tokenFor = (claims: Record<string, unknown>) => `eyJhbGciOiJIUzI1NiJ9.${b64url(JSON.stringify(claims))}.signature-0123456789`;
+const TOKEN = tokenFor({ sub: USER, session_id: SESSION, is_anonymous: false });
+const BATCH = "0f9d2a52-8c1b-4b6a-9d55-1a2b3c4d5e6f";
+const RID = "11111111-2222-4333-8444-555555555555";
+const SHA = "a".repeat(64);
+
+const row = (over: Partial<ReservationRow> = {}): ReservationRow => ({
+  reservation_id: RID, batch_id: BATCH, draft_id: `${BATCH}:0`, position: 0, origin: "user_authored", mode: "manual_exact",
+  body: "本文", scheduled_at: "2026-10-20 00:30:00+00", fixed: true, status: "planned", revision: 1, consent_state: "confirmed", ...over,
+});
+
+// MOCK_ONLY: a verifier that knows one token, permissions that allow, and a recording database double.
+const verifier: AuthVerifier = { verify: (token) => Promise.resolve(token === TOKEN ? { userId: USER } : null) };
+const allow: PermissionSources = { xAutopostAllowed: () => Promise.resolve(true), xAccountVerified: () => Promise.resolve(true) };
+function recordingDb(answer: Awaited<ReturnType<ReservationDb["call"]>> | (() => never) = { ok: true, rows: [row()] }) {
+  const calls: { fn: string; args: readonly unknown[]; subject: ReservationSubject }[] = [];
+  const db: ReservationDb = {
+    call(fn, args, subject) {
+      calls.push({ fn, args, subject });
+      if (typeof answer === "function") return Promise.reject(new Error("socket closed"));
+      return Promise.resolve(answer);
+    },
+  };
+  return { db, calls };
+}
+const codeOf = (res: Awaited<ReturnType<ReturnType<typeof createReservationApi>>>) => (res.body.ok ? null : res.body.code);
+const req = (payload: unknown, over: Partial<ApiRequest> = {}): ApiRequest => ({
+  method: "POST", authorization: `Bearer ${TOKEN}`, body: JSON.stringify(payload), ...over,
+});
+const createPayload = (over: Record<string, unknown> = {}) => ({
+  action: "create",
+  payload: {
+    socialAccountId: "x_a", clientBatchId: BATCH, revision: 1, mode: "manual_exact", band: null,
+    items: [{ draft_id: `${BATCH}:0`, scheduled_at: "2026-10-20T00:30:00.000Z", body: "本文", consent: { confirmed: true, content_sha256: SHA } }],
+    ...over,
+  },
+});
+
+test("the release gate is a literal OFF and an OFF api touches nothing (no Auth, permission or database call)", async () => {
+  assert.equal(POSTONA_RESERVATION_API_ENABLED, false);
+  let touched = 0;
+  const { db, calls } = recordingDb();
+  const api = createReservationApi({
+    enabled: POSTONA_RESERVATION_API_ENABLED,
+    auth: { verify: () => { touched += 1; return Promise.resolve({ userId: USER }); } },
+    permissions: { xAutopostAllowed: () => { touched += 1; return Promise.resolve(true); }, xAccountVerified: () => Promise.resolve(true) },
+    db,
+  });
+  assert.deepEqual(await api(req(createPayload())), { status: 503, body: { ok: false, code: "NOT_AVAILABLE" } });
+  assert.equal(touched, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("defaults are fail-closed: no verifier -> 503, no G5/G4 permission source -> 403, no database -> 503", async () => {
+  assert.equal(codeOf(await createReservationApi({ enabled: true })(req(createPayload()))), "AUTH_UNAVAILABLE");
+  const { db, calls } = recordingDb();
+  const noPermissions = createReservationApi({ enabled: true, auth: verifier, db });
+  const denied = await noPermissions(req(createPayload()));
+  assert.deepEqual(denied, { status: 403, body: { ok: false, code: "POSTONA_RESV_SERVICE_NOT_ACTIVE" } });
+  assert.equal(calls.length, 0, "a denied request never reaches the database");
+  const noDb = await createReservationApi({ enabled: true, auth: verifier, permissions: allow })(req(createPayload()));
+  assert.deepEqual(noDb, { status: 503, body: { ok: false, code: "STORE_UNAVAILABLE" } });
+});
+
+test("authentication: missing / malformed / unknown token -> 401, a failing verifier -> 503; nothing reaches the database", async () => {
+  const { db, calls } = recordingDb();
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: allow, db });
+  for (const authorization of [null, "", "Basic abc", "Bearer short", `Bearer ${TOKEN} extra`, "Bearer wrong-token-0123456789"]) {
+    const res = await api(req(createPayload(), { authorization }));
+    assert.deepEqual(res, { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, String(authorization));
+  }
+  const throwing = createReservationApi({ enabled: true, auth: { verify: () => Promise.reject(new Error("auth down")) }, permissions: allow, db });
+  assert.equal((await throwing(req(createPayload()))).status, 503);
+  const notUuid = createReservationApi({ enabled: true, auth: { verify: () => Promise.resolve({ userId: "admin" }) }, permissions: allow, db });
+  assert.equal((await notUuid(req(createPayload()))).status, 401);
+  assert.equal(calls.length, 0);
+});
+
+test("G3-43: cancel skips the G5 / G4 pre-gate (it only stops a send) but keeps Auth and the person session; every other action keeps it", async () => {
+  let asked = 0;
+  const deny: PermissionSources = {
+    xAutopostAllowed: () => { asked += 1; return Promise.resolve(false); },
+    xAccountVerified: () => { asked += 1; return Promise.resolve(false); },
+  };
+  const { db, calls } = recordingDb({ ok: true, rows: [row({ status: "cancelled", revision: 4 })] });
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db });
+  const cancel = { action: "cancel", payload: { reservationId: RID, expectedRevision: 3 } };
+  const ok = await api(req(cancel));
+  assert.equal(ok.status, 200);
+  assert.equal(asked, 0, "no permission source is asked for a cancel");
+  assert.deepEqual(calls.map((c) => [c.fn, c.args, c.subject.userId]), [["cancel", [RID, 3], USER]]);
+  const throwing = createReservationApi({ enabled: true, auth: verifier, db, permissions: { xAutopostAllowed: () => Promise.reject(new Error("x")), xAccountVerified: () => Promise.reject(new Error("x")) } });
+  assert.equal((await throwing(req(cancel))).status, 200, "a failing permission source does not block a cancel");
+  assert.equal(codeOf(await api(req(cancel, { authorization: undefined }))), "AUTH_REQUIRED", "a cancel still needs the bearer token");
+  assert.equal(codeOf(await api(req(cancel, { authorization: "Bearer someone-elses-token-0000" }))), "AUTH_REQUIRED");
+  for (const token of [tokenFor({ sub: USER, session_id: SESSION, is_anonymous: true }), tokenFor({ sub: USER, session_id: SESSION }), tokenFor({ sub: USER })]) {
+    const anyUser = createReservationApi({ enabled: true, auth: { verify: () => Promise.resolve({ userId: USER }) }, permissions: deny, db });
+    assert.equal(codeOf(await anyUser(req(cancel, { authorization: `Bearer ${token}` }))), "AUTH_REQUIRED", "anonymous / unknown / no session: refused");
+  }
+  const n = calls.length;
+  for (const other of [
+    createPayload(),
+    { action: "reschedule", payload: { reservationId: RID, expectedRevision: 3, scheduledAt: "2026-10-20T01:00:00.000Z" } },
+    { action: "reconfirm", payload: { reservationId: RID, expectedRevision: 3, contentSha256: SHA } },
+  ]) {
+    assert.equal(codeOf(await api(req(other))), "POSTONA_RESV_SERVICE_NOT_ACTIVE", `${other.action} keeps the G5 gate`);
+  }
+  assert.equal(calls.length, n, "no other action reached the database");
+  const sqlSays = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db: recordingDb({ ok: false, code: "POSTONA_RESV_NOT_FOUND" }).db });
+  assert.deepEqual(await sqlSays(req(cancel)), { status: 404, body: { ok: false, code: "POSTONA_RESV_NOT_FOUND" } }, "the SQL decides own row");
+});
+
+test("G3-44: get and list skip the G5 / G4 pre-gate (the person reads their own rows after the service ended) but keep Auth and the session", async () => {
+  let asked = 0;
+  const deny: PermissionSources = {
+    xAutopostAllowed: () => { asked += 1; return Promise.resolve(false); },
+    xAccountVerified: () => { asked += 1; return Promise.resolve(false); },
+  };
+  const { db, calls } = recordingDb({ ok: true, rows: [row({ status: "planned", revision: 5 })] });
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db });
+  const get = { action: "get", payload: { reservationId: RID } };
+  const list = { action: "list", payload: { socialAccountId: "x_a" } };
+  const got = await api(req(get));
+  assert.equal(got.status, 200);
+  assert.equal(got.body.ok && got.body.reservations[0].revision, 5, "the current revision reaches the client");
+  assert.equal((await api(req(list))).status, 200);
+  assert.equal(asked, 0, "no permission source is asked for a read");
+  assert.deepEqual(calls.map((c) => [c.fn, c.args, c.subject.userId]), [["get_reservation", [RID], USER], ["list_reservations", ["x_a"], USER]]);
+  const throwing = createReservationApi({ enabled: true, auth: verifier, db, permissions: { xAutopostAllowed: () => Promise.reject(new Error("x")), xAccountVerified: () => Promise.reject(new Error("x")) } });
+  assert.equal((await throwing(req(get))).status, 200, "a failing permission source does not block a read");
+  const n = calls.length;
+  for (const token of [tokenFor({ sub: USER, session_id: SESSION, is_anonymous: true }), tokenFor({ sub: USER, session_id: SESSION }), tokenFor({ sub: USER }), tokenFor({ sub: OTHER, session_id: SESSION, is_anonymous: false })]) {
+    const anyUser = createReservationApi({ enabled: true, auth: { verify: () => Promise.resolve({ userId: USER }) }, permissions: deny, db });
+    for (const p of [get, list]) {
+      assert.equal(codeOf(await anyUser(req(p, { authorization: `Bearer ${token}` }))), "AUTH_REQUIRED", "anonymous / unknown / no session / another subject: refused");
+    }
+  }
+  assert.equal(codeOf(await api(req(get, { authorization: undefined }))), "AUTH_REQUIRED");
+  assert.equal(calls.length, n, "no refused read reached the database");
+  const sqlSays = createReservationApi({ enabled: true, auth: verifier, permissions: deny, db: recordingDb({ ok: false, code: "POSTONA_RESV_NOT_FOUND" }).db });
+  assert.deepEqual(await sqlSays(req(get)), { status: 404, body: { ok: false, code: "POSTONA_RESV_NOT_FOUND" } }, "the SQL decides own row");
+});
+
+test("G5 and G4 decisions are separate and both required; a failing source is 503, never allow", async () => {
+  const { db, calls } = recordingDb();
+  const g5off = createReservationApi({ enabled: true, auth: verifier, permissions: { ...allow, xAutopostAllowed: () => Promise.resolve(false) }, db });
+  assert.equal(codeOf(await g5off(req(createPayload()))), "POSTONA_RESV_SERVICE_NOT_ACTIVE");
+  let askedFor: string[] = [];
+  const g4off = createReservationApi({
+    enabled: true, auth: verifier, db,
+    permissions: { xAutopostAllowed: () => Promise.resolve(true), xAccountVerified: (user, account) => { askedFor = [user, account]; return Promise.resolve(false); } },
+  });
+  assert.equal(codeOf(await g4off(req(createPayload()))), "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED");
+  assert.deepEqual(askedFor, [USER, "x_a"], "G4 is asked for the verified subject and the requested account");
+  const throwing = createReservationApi({ enabled: true, auth: verifier, db, permissions: { ...allow, xAutopostAllowed: () => Promise.reject(new Error("x")) } });
+  assert.deepEqual(await throwing(req(createPayload())), { status: 503, body: { ok: false, code: "PERMISSION_UNAVAILABLE" } });
+  const truthy = createReservationApi({ enabled: true, auth: verifier, db, permissions: { ...allow, xAutopostAllowed: () => Promise.resolve("yes" as unknown as boolean) } });
+  assert.equal((await truthy(req(createPayload()))).status, 403, "only a literal true allows");
+  const truthyG4 = createReservationApi({ enabled: true, auth: verifier, db, permissions: { ...allow, xAccountVerified: () => Promise.resolve(1 as unknown as boolean) } });
+  assert.equal(codeOf(await truthyG4(req(createPayload()))), "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED", "G4 also needs a literal true");
+  assert.equal(calls.length, 0);
+});
+
+test("strict request shape: unknown action, extra keys, a client user id, bad ids, AI text, oversize -> refused before Auth", async () => {
+  let verified = 0;
+  const { db, calls } = recordingDb();
+  const api = createReservationApi({ enabled: true, auth: { verify: (t) => { verified += 1; return verifier.verify(t); } }, permissions: allow, db });
+  const bad = [
+    "not json",
+    JSON.stringify({ action: "drop", payload: {} }),
+    JSON.stringify(createPayload({ userId: OTHER })),
+    JSON.stringify(createPayload({ brandId: "brand_b" })),
+    JSON.stringify(createPayload({ clientBatchId: "local-abc" })),
+    JSON.stringify(createPayload({ socialAccountId: "x a; drop" })),
+    JSON.stringify(createPayload({ revision: 0 })),
+    JSON.stringify(createPayload({ mode: "manual_anything" })),
+    JSON.stringify(createPayload({ items: [] })),
+    JSON.stringify(createPayload({ items: [{ draft_id: "d", scheduled_at: "tomorrow", body: "x", consent: { confirmed: true, content_sha256: SHA } }] })),
+    JSON.stringify(createPayload({ items: [{ draft_id: "d", scheduled_at: "2026-10-20T00:30:00Z", body: "x", consent: { confirmed: "yes", content_sha256: SHA } }] })),
+    JSON.stringify(createPayload({ mode: "ai_flexible", band: {}, items: [{ draft_id: "d", scheduled_at: "2026-10-20T00:30:00Z", body: "AI text" }] })),
+    JSON.stringify({ action: "get", payload: { reservationId: "1" } }),
+    JSON.stringify({ action: "cancel", payload: { reservationId: RID, expectedRevision: 1, force: true } }),
+    JSON.stringify({ action: "reconfirm", payload: { reservationId: RID, expectedRevision: 1, contentSha256: "abc" } }),
+  ];
+  for (const body of bad) assert.equal((await api({ method: "POST", authorization: `Bearer ${TOKEN}`, body })).status, 400, body.slice(0, 60));
+  assert.equal((await api({ method: "GET", authorization: `Bearer ${TOKEN}`, body: "{}" })).status, 405);
+  assert.equal((await api({ method: "POST", authorization: `Bearer ${TOKEN}`, body: "x".repeat(70 * 1024) })).status, 413);
+  assert.equal(verified, 0, "nothing invalid reaches Auth");
+  assert.equal(calls.length, 0);
+});
+
+test("each action calls exactly one owner function as the VERIFIED subject with typed arguments", async () => {
+  const { db, calls } = recordingDb();
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: allow, db });
+  const cases: [unknown, string, unknown[]][] = [
+    [createPayload(), "create_batch", ["x_a", BATCH, 1, "manual_exact", null, createPayload().payload.items]],
+    [{ action: "list", payload: { socialAccountId: "x_a" } }, "list_reservations", ["x_a"]],
+    [{ action: "get", payload: { reservationId: RID } }, "get_reservation", [RID]],
+    [{ action: "reschedule", payload: { reservationId: RID, expectedRevision: 2, scheduledAt: "2026-10-21T01:00:00.000Z" } }, "reschedule", [RID, 2, "2026-10-21T01:00:00.000Z"]],
+    [{ action: "reconfirm", payload: { reservationId: RID, expectedRevision: 3, contentSha256: SHA } }, "reconfirm", [RID, 3, SHA]],
+    [{ action: "cancel", payload: { reservationId: RID, expectedRevision: 3 } }, "cancel", [RID, 3]],
+  ];
+  for (const [payload, fn, args] of cases) {
+    const res = await api(req(payload));
+    assert.equal(res.status, 200, fn);
+    const last = calls[calls.length - 1];
+    assert.equal(last.fn, fn);
+    assert.deepEqual(last.args, args);
+    assert.deepEqual(last.subject, { userId: USER, sessionId: SESSION, isAnonymous: false });
+  }
+  const ok = await api(req({ action: "get", payload: { reservationId: RID } }));
+  assert.deepEqual(ok.body, {
+    ok: true,
+    reservations: [{
+      reservationId: RID, batchId: BATCH, draftId: `${BATCH}:0`, position: 0, origin: "user_authored", mode: "manual_exact", body: "本文",
+      scheduledAt: "2026-10-20T00:30:00.000Z", fixed: true, status: "planned", revision: 1, consentState: "confirmed",
+    }],
+  });
+});
+
+test("database codes map to fixed statuses; unknown codes and exceptions never leak detail", async () => {
+  const expectations: [string, number, string][] = [
+    ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404, "POSTONA_RESV_ACCOUNT_NOT_FOUND"],
+    ["POSTONA_RESV_SERVICE_NOT_ACTIVE", 403, "POSTONA_RESV_SERVICE_NOT_ACTIVE"],
+    ["POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED", 403, "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED"],
+    ["POSTONA_RESV_STALE_REVISION", 409, "POSTONA_RESV_STALE_REVISION"],
+    ["POSTONA_RESV_CANCEL_TOO_LATE", 409, "POSTONA_RESV_CANCEL_TOO_LATE"],
+    ["POSTONA_RESV_INTERVAL_MISMATCH", 422, "POSTONA_RESV_INTERVAL_MISMATCH"],
+    ["DB_UNAVAILABLE", 503, "STORE_UNAVAILABLE"],
+    ["permission denied for table reservations", 500, "INTERNAL"],
+  ];
+  for (const [code, status, shown] of expectations) {
+    const api = createReservationApi({ enabled: true, auth: verifier, permissions: allow, db: recordingDb({ ok: false, code }).db });
+    assert.deepEqual(await api(req(createPayload())), { status, body: { ok: false, code: shown } }, code);
+  }
+  const throwing = createReservationApi({ enabled: true, auth: verifier, permissions: allow, db: recordingDb(() => { throw new Error("x"); }).db });
+  assert.deepEqual(await throwing(req(createPayload())), { status: 503, body: { ok: false, code: "STORE_UNAVAILABLE" } });
+});
+
+test("G3-02 #2: PERMISSIONS_DECIDED_IN_DATABASE -- create / reschedule / reconfirm reach the owner function as the verified subject (no TS pre-check), its G5 / G4 refusals map to fixed statuses", async () => {
+  const { db, calls } = recordingDb();
+  const api = createReservationApi({ enabled: true, auth: verifier, permissions: PERMISSIONS_DECIDED_IN_DATABASE, db });
+  assert.equal((await api(req(createPayload()))).status, 200);
+  assert.equal((await api(req({ action: "reschedule", payload: { reservationId: RID, expectedRevision: 1, scheduledAt: "2026-10-21T00:30:00.000Z" } }))).status, 200);
+  assert.equal((await api(req({ action: "reconfirm", payload: { reservationId: RID, expectedRevision: 2, contentSha256: SHA } }))).status, 200);
+  assert.deepEqual(calls.map((c) => c.fn), ["create_batch", "reschedule", "reconfirm"]);
+  for (const c of calls) assert.deepEqual(c.subject, { userId: USER, sessionId: SESSION, isAnonymous: false });
+  for (const [code, status] of [["POSTONA_RESV_SERVICE_NOT_ACTIVE", 403], ["POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED", 403], ["POSTONA_RESV_BRAND_NOT_ELIGIBLE", 403],
+    ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404], ["POSTONA_RESV_AUTH_REQUIRED", 401], ["POSTONA_RESV_IDEMPOTENCY_CONFLICT", 409], ["POSTONA_RESV_SERVICE_BUSY", 503]] as const) {
+    const refused = createReservationApi({ enabled: true, auth: verifier, permissions: PERMISSIONS_DECIDED_IN_DATABASE, db: recordingDb({ ok: false, code }).db });
+    assert.deepEqual(await refused(req(createPayload())), { status, body: { ok: false, code } }, code);
+  }
+  // the identity matters, not the shape: a look-alike object is an ordinary (denying) source, and Auth still comes first
+  const lookAlike = createReservationApi({ enabled: true, auth: verifier, permissions: { ...PERMISSIONS_DECIDED_IN_DATABASE }, db: recordingDb().db });
+  assert.equal(codeOf(await lookAlike(req(createPayload()))), "POSTONA_RESV_SERVICE_NOT_ACTIVE");
+  const noAuth = recordingDb();
+  const unauthenticated = createReservationApi({ enabled: true, auth: verifier, permissions: PERMISSIONS_DECIDED_IN_DATABASE, db: noAuth.db });
+  assert.equal(codeOf(await unauthenticated(req(createPayload(), { authorization: null }))), "AUTH_REQUIRED");
+  assert.equal(noAuth.calls.length, 0);
+  assert.notEqual(PERMISSIONS_DECIDED_IN_DATABASE, PERMISSIONS_NOT_CONNECTED);
+  assert.equal(await PERMISSIONS_DECIDED_IN_DATABASE.xAutopostAllowed(USER), false, "asked directly, it denies");
+  assert.equal(await PERMISSIONS_DECIDED_IN_DATABASE.xAccountVerified(USER, "x_a"), false);
+});
+
+test("source: the API module has no imports, no Deno.env, no service-role key, no direct provider or table access", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(new URL("./api.ts", import.meta.url), "utf8");
+  const code = source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/\/\/.*$/gmu, "");
+  assert.doesNotMatch(code, /^import /mu);
+  assert.doesNotMatch(code, /Deno\.env|SERVICE_ROLE|service_role|fetch\(|api\.x\.com|twitter|openai|\.from\(|claim_due|finish\(/iu);
+  assert.match(code, /export const POSTONA_RESERVATION_API_ENABLED = false as const;/u);
+});
+
+test("G3-34: a verified token without a session id of the same subject is refused (401) before any permission or database call", async () => {
+  const { db, calls } = recordingDb();
+  let asked = 0;
+  for (const token of [tokenFor({ sub: USER }), tokenFor({ sub: OTHER, session_id: SESSION }), tokenFor({ sub: USER, session_id: "not-a-uuid" }), "no-payload-0123456789"]) {
+    const api = createReservationApi({
+      enabled: true,
+      auth: { verify: () => Promise.resolve({ userId: USER }) },
+      permissions: { xAutopostAllowed: () => { asked += 1; return Promise.resolve(true); }, xAccountVerified: () => Promise.resolve(true) },
+      db,
+    });
+    assert.deepEqual(await api(req(createPayload(), { authorization: `Bearer ${token}` })), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, token);
+  }
+  assert.equal(asked, 0);
+  assert.equal(calls.length, 0);
+});
+
+test("G3-34 F1: the same verified token must state is_anonymous as the JSON false; missing / null / \"false\" / true -> 401, no permission, database or provider call", async () => {
+  const { db, calls } = recordingDb();
+  let asked = 0;
+  const api = createReservationApi({
+    enabled: true,
+    auth: { verify: () => Promise.resolve({ userId: USER }) }, // Auth accepted the token (its own is_anonymous field is not trusted here)
+    permissions: { xAutopostAllowed: () => { asked += 1; return Promise.resolve(true); }, xAccountVerified: () => Promise.resolve(true) },
+    db,
+  });
+  const cases: [string, Record<string, unknown>][] = [
+    ["missing", { sub: USER, session_id: SESSION }],
+    ["null", { sub: USER, session_id: SESSION, is_anonymous: null }],
+    ["string false", { sub: USER, session_id: SESSION, is_anonymous: "false" }],
+    ["true", { sub: USER, session_id: SESSION, is_anonymous: true }],
+    ["false for another subject", { sub: OTHER, session_id: SESSION, is_anonymous: false }],
+  ];
+  for (const [label, claims] of cases) {
+    assert.deepEqual(await api(req(createPayload(), { authorization: `Bearer ${tokenFor(claims)}` })), { status: 401, body: { ok: false, code: "AUTH_REQUIRED" } }, label);
+  }
+  assert.deepEqual([asked, calls.length], [0, 0]);
+  assert.equal((await api(req(createPayload(), { authorization: `Bearer ${tokenFor({ sub: USER, session_id: SESSION, is_anonymous: false })}` }))).status, 200, "the strict false of the same subject and session passes");
+  assert.deepEqual(calls.at(-1)?.subject, { userId: USER, sessionId: SESSION, isAnonymous: false });
+});
