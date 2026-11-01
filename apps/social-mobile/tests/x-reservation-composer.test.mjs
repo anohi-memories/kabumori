@@ -1,0 +1,496 @@
+// G1 TASK 32: the X new-reservation flow on the REAL schedule.tsx (transpiled, stubbed React / RN), with the REAL write guard, the
+// REAL buildSaveRequest and G3's REAL X store over a scripted fetch, plus the connection display after a server's reconnect refusal.
+// The gate is turned on by an argument in this file only. "saved" proves the screen and the wiring, not that a real server adopted
+// anything. Nothing leaves the process.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+import ts from 'typescript';
+import * as scheduleView from '../src/domain/schedule-view.ts';
+import * as planner from '../src/domain/schedule-planner.ts';
+import * as dataView from '../src/domain/data-view.ts';
+import * as contentSettings from '../src/domain/content-settings.ts';
+import * as reservationFlow from '../src/domain/reservation-flow.ts';
+import * as enrollment from '../src/domain/service-enrollment.ts';
+import * as reservationStore from '../src/features/schedule/reservation-store.ts';
+import { reservationErrorAction } from '../src/features/schedule/reservation-error-actions.ts';
+import * as confirmationState from '../src/features/schedule/confirmation-state.ts';
+import * as timeEdit from '../src/features/schedule/time-edit.ts';
+import * as scheduleLabels from '../src/features/schedule/schedule-labels.ts';
+import * as serverState from '../src/features/schedule/server-reservations-state.ts';
+import * as reservationView from '../src/features/reservations/reservation-view.ts';
+import * as xWriteView from '../src/features/reservations/x-write-view.ts';
+import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
+
+const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
+const savedGlobals = new Map();
+let trapped = 0;
+test.before(() => {
+  for (const name of NETWORK) {
+    savedGlobals.set(name, globalThis[name]);
+    globalThis[name] = function forbidden() { trapped += 1; throw new Error(`network entry point ${name} must not be used`); };
+  }
+});
+test.after(() => {
+  for (const name of NETWORK) {
+    if (savedGlobals.get(name) === undefined) delete globalThis[name];
+    else globalThis[name] = savedGlobals.get(name);
+  }
+  assert.equal(trapped, 0);
+});
+test.beforeEach(() => signal.clearAllXReconnectRequired());
+
+const walk = (node, visit) => {
+  if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
+  if (node === null || typeof node !== 'object') return;
+  visit(node);
+  walk(node.props?.children, visit);
+};
+const settle = async () => { for (let i = 0; i < 10; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
+const textOf = (tree) => { const out = []; walk(tree, (n) => { for (const c of [n.props?.children].flat()) if (typeof c === 'string' || typeof c === 'number') out.push(String(c)); }); return out.join('\n'); };
+const labelled = (tree, type, label) => { let hit = null; walk(tree, (n) => { if (n.type === type && n.props.label === label) hit = n.props; }); return hit; };
+const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
+const jwt = (sub, sid, n = 1) => { const part = (o) => Buffer.from(JSON.stringify(o)).toString('base64url'); return `${part({ alg: 'none' })}.${part({ sub, session_id: sid, n })}.x`; };
+
+const ME = 'u_me';
+const ACCOUNT = { id: '11111111-1111-4111-8111-111111111111', brandId: ME, platform: 'x', profile: { displayName: 'me', handle: '@me', avatarColor: '#000' }, connectionStatus: 'connected', postingState: 'active' };
+
+/**
+ * The real schedule screen. `gate`: G3's store is built by G3's factory with this argument; the live deps are the ones the screen
+ * assembles. `reply(call)` answers each fetch.
+ */
+async function screen({ gate = true, reply = null, account = ACCOUNT, workspaceId = ME } = {}) {
+  const slots = []; let cursor = 0; const effects = [];
+  const slot = (init) => { const i = cursor++; if (!(i in slots)) slots[i] = init(); return i; };
+  const react = {
+    useState: (initial) => { const i = slot(() => (typeof initial === 'function' ? initial() : initial)); return [slots[i], (v) => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; },
+    useRef: (initial) => slots[slot(() => ({ current: initial }))],
+    useMemo: (factory) => slots[slot(factory)],
+    useEffect: (effect, deps) => {
+      const i = cursor++;
+      const changed = !(i in slots) || !deps || deps.length !== slots[i].length || deps.some((d, k) => !Object.is(d, slots[i][k]));
+      if (changed) { slots[i] = deps ?? []; effects.push(effect); }
+    },
+  };
+  const world = { account, workspaceId, token: jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'), userId: 'person-1', calls: [], pushes: [], sessionReads: 0 };
+  const client = { auth: { getSession: async () => { world.sessionReads += 1; return { data: { session: world.token ? { access_token: world.token, user: { id: world.userId } } : null }, error: null }; } } };
+  const fetchImpl = async (url, init) => {
+    const call = { url: String(url), body: init?.body ? JSON.parse(init.body) : null, token: init?.headers?.authorization ?? null, apikey: init?.headers?.apikey ?? null };
+    world.calls.push(call);
+    const answer = reply ? await reply(call, world) : { status: 200, json: { ok: true, reservations: [] } };
+    if (answer === 'lost') throw new Error('network lost');
+    return new Response(JSON.stringify(answer.json ?? {}), { status: answer.status, headers: { 'content-type': 'application/json' } });
+  };
+  class Repository { read() { return Promise.resolve({ state: 'ready', data: contentSettings.SOCIAL_MOBILE_CONTENT_DEFAULTS, persona: null, updatedAt: null }); } }
+  const guardStubs = {
+    react: { ...react },
+    '@/domain/service-enrollment': enrollment,
+    '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: world.workspaceId ? { kind: 'ready', workspaceId: world.workspaceId } : { kind: 'loading' } }) },
+    '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
+    '@/features/reservations/x-write-view': xWriteView,
+    '@/providers/auth-provider': { useAuth: () => ({ session: world.token ? { access_token: world.token, user: { id: world.userId } } : null }) },
+  };
+  const load = async (rel, stubs) => {
+    const source = await readFile(new URL(rel, import.meta.url), 'utf8');
+    const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+    const loaded = { exports: {} };
+    vm.runInNewContext(js, { module: loaded, exports: loaded.exports, Promise, require: (name) => { assert.ok(Object.hasOwn(stubs, name), `unexpected import ${name}`); return stubs[name]; } }, { filename: rel });
+    return loaded.exports;
+  };
+  const guard = await load('../src/features/reservations/use-x-write-guard.ts', guardStubs);
+  const stubs = {
+    'expo-router': { useRouter: () => ({ push: (href) => world.pushes.push(href) }) },
+    react,
+    'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), Fragment: 'Fragment' },
+    'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
+    '@/constants/theme': { colors: { primary: 'p', primarySoft: 'ps', surface: 's', border: 'b', ink: 'i', danger: 'd' } },
+    '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {}, buttonPressed: {} } },
+    '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getAccounts: () => [world.account] } },
+    '@/data/content-settings-repository': { SupabaseContentSettingsRepository: Repository },
+    '@/lib/supabase': { supabase: client, getSupabaseConfig: () => ({ ok: true, config: { url: 'https://example.invalid', publishableKey: 'sb_publishable_testkey01' } }) },
+    '@/domain/data-view': dataView,
+    '@/domain/schedule-view': scheduleView,
+    '@/domain/schedule-planner': planner,
+    '@/domain/types': {},
+    '@/domain/reservation-flow': reservationFlow,
+    '@/features/reservations/reservation-view': reservationView,
+    '@/features/reservations/use-x-write-guard': guard,
+    '@/features/reservations/x-reconnect-signal': signal,
+    '@/features/reservations/x-write-view': xWriteView,
+    '@/features/schedule/schedule-composer': { ScheduleComposer: function ScheduleComposer(props) { return { type: 'ScheduleComposer', props }; }, SmallButton: 'SmallButton' },
+    '@/features/schedule/reservation-error-actions': { reservationErrorAction },
+    '@/features/schedule/reservation-store': {
+      ...reservationStore,
+      // G3's real factory with the gate of this test, on a real live store whose fetch is scripted.
+      createReservationStore: (_constant, live) => reservationStore.createReservationStore(gate, live ? { ...live, fetch: fetchImpl } : null),
+    },
+    '@/features/schedule/server-reservations-state': serverState,
+    '@/features/schedule/server-reservation-card': { ServerReservationCard: function ServerReservationCard(props) { return { type: 'ServerReservationCard', props }; } },
+    '@/features/schedule/confirmation-state': confirmationState,
+    '@/features/schedule/time-edit': timeEdit,
+    '@/features/schedule/schedule-labels': scheduleLabels,
+    '@/features/schedule/preview-card': { PreviewCard: function PreviewCard(props) { return { type: 'PreviewCard', props }; } },
+    '@/features/schedule/sha256': { sha256Hex: async (text) => sha(text) },
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: world.account, accounts: world.account ? [world.account] : [] }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { workspace: { id: world.workspaceId }, accounts: world.account ? [world.account] : [], plannedPosts: [] } }) },
+  };
+  // The guard's hooks share the screen's slots.
+  guardStubs.react.useState = react.useState;
+  const screenModule = await load('../src/app/(tabs)/schedule.tsx', stubs);
+  const render = () => { cursor = 0; return screenModule.default({}); };
+  const flush = async () => {
+    for (let round = 0; round < 5; round += 1) {
+      effects.splice(0).forEach((effect) => effect());
+      render();
+      await settle();
+    }
+  };
+  render();
+  await flush();
+  const update = async () => { render(); await flush(); return render(); };
+  return { world, render, update, flush };
+}
+
+async function planOne(h, text = 'hello', batchId = 'f0e2b1a4-0000-4000-8000-000000000001') {
+  labelled(h.render(), 'ActionButton', '投稿を作成').onPress();
+  let composer = null;
+  walk(h.render(), (n) => { if (n.type === 'ScheduleComposer') composer = n.props; });
+  assert.ok(composer, 'the composer opens on the press');
+  const day = new Date(Date.now() + 5 * 864e5 + 9 * 36e5).toISOString().slice(0, 10);
+  const planned = planner.planBatch({ mode: 'manual_exact', posts: [{ text, date: day, time: '09:30' }] }, { ...composer.context, batchId });
+  assert.equal(planned.ok, true, JSON.stringify(planned.issues ?? []));
+  composer.onPlanned(planned);
+  await h.update();
+}
+async function confirmAll(h) {
+  const cards = []; walk(h.render(), (n) => { if (n.type === 'PreviewCard') cards.push(n.props); });
+  for (const card of cards) { card.onConfirm(); await settle(); }
+  await h.update();
+}
+const saveButton = (h) => labelled(h.render(), 'SmallButton', 'サーバーに保存');
+async function pressSave(h) { saveButton(h).onPress(); await settle(); await h.update(); }
+
+test('gate OFF (G3\'s constant): plan, confirm, the save stays 準備中; no store call, no token read, no fetch, no 「予約済み」; the list is one press away', async () => {
+  assert.equal(reservationStore.POSTONA_RESERVATION_PERSISTENCE_ENABLED, false);
+  const h = await screen({ gate: reservationStore.POSTONA_RESERVATION_PERSISTENCE_ENABLED });
+  await planOne(h);
+  await confirmAll(h);
+  const tree = h.render();
+  assert.equal(labelled(tree, 'ActionButton', '予約として保存（準備中）').disabled, true);
+  assert.equal(saveButton(h), null);
+  assert.deepEqual([h.world.calls.length, h.world.sessionReads], [0, 0]);
+  assert.doesNotMatch(textOf(tree), /予約済み/u);
+  labelled(tree, 'ActionButton', '予約の管理を開く').onPress();
+  assert.deepEqual(h.world.pushes, ['/reservations']);
+});
+
+test('nothing is sent before the press: planning and confirming send no write; the save needs every post confirmed', async () => {
+  const h = await screen();
+  const before = h.world.calls.length;
+  await planOne(h);
+  assert.equal(saveButton(h).disabled, true, 'unconfirmed');
+  await confirmAll(h);
+  assert.equal(saveButton(h).disabled, false);
+  assert.equal(h.world.calls.length, before, 'no call until the person presses');
+});
+
+const ok = (rows) => ({ status: 200, json: { ok: true, reservations: rows } });
+const no = (status, code) => ({ status, json: { ok: false, code } });
+/** A tiny server for the store's calls: `script[action]` may answer one call first (return nothing to fall through). */
+function server(script = {}) {
+  const rows = [];
+  const reply = async (call, world) => {
+    const { action, payload } = call.body;
+    const scripted = script[action]?.(call, world);
+    if (scripted) return scripted;
+    if (action === 'create') {
+      for (const item of payload.items) rows.push({ reservationId: `r-${rows.length + 1}`, batchId: payload.clientBatchId, draftId: item.draft_id, scheduledAt: item.scheduled_at, status: 'planned', revision: 1, consentState: item.body !== undefined ? 'confirmed' : 'ai_owner_opt_in', body: item.body ?? null, mode: payload.mode, origin: 'user_authored' });
+      return ok(rows);
+    }
+    if (action === 'get') return ok(rows.filter((row) => row.reservationId === payload.reservationId));
+    return ok(rows);
+  };
+  return { rows, reply };
+}
+const ofAction = (h, action) => h.world.calls.filter((c) => c.body?.action === action);
+const onScreen = (h) => textOf(h.render());
+async function ready(script, options = {}) {
+  const s = server(script);
+  const h = await screen({ reply: s.reply, ...options });
+  await planOne(h);
+  await confirmAll(h);
+  return { h, s };
+}
+
+test('saved: the exact confirmed text goes to the real function with the person\'s token and the public key; the store\'s read-back decides; the list is read again', async () => {
+  const { h, s } = await ready();
+  await pressSave(h);
+  const [create] = ofAction(h, 'create');
+  assert.ok(create.url.endsWith('/functions/v1/postona-x-reservations'));
+  assert.equal(create.token, `Bearer ${h.world.token}`);
+  assert.equal(create.apikey, 'sb_publishable_testkey01');
+  assert.equal(create.body.payload.socialAccountId, ACCOUNT.id);
+  assert.deepEqual(create.body.payload.items.map((item) => [item.body, item.consent.confirmed, item.consent.content_sha256]), [['hello', true, sha('hello')]]);
+  assert.match(onScreen(h), /サーバーに保存し、読み戻して一致を確認しました/u);
+  assert.equal(s.rows.length, 1);
+  let cards = 0; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') cards += 1; });
+  assert.equal(cards, 1, 'the row as read back');
+  assert.ok(ofAction(h, 'list').length >= 3, 'entry + read-back + a fresh list');
+  assert.equal(ofAction(h, 'create').length, 1);
+});
+
+test('uncertain: the write\'s answer is lost, the read-back cannot confirm: not saved, the list is read again, and 保存状況を確認 re-sends the SAME request', async () => {
+  let lost = true;
+  const { h } = await ready({ create: () => (lost ? 'lost' : undefined), list: () => (lost ? 'lost' : undefined) });
+  const readsBefore = ofAction(h, 'list').length;
+  await pressSave(h);
+  assert.match(onScreen(h), /保存できたかを確認できません（未確定）/u);
+  assert.doesNotMatch(onScreen(h), /一致を確認しました/u);
+  assert.equal(ofAction(h, 'list').length - readsBefore, 2, 'the store\'s read-back + the list read again');
+  const first = ofAction(h, 'create')[0].body.payload;
+  assert.equal(labelled(h.render(), 'SmallButton', 'サーバーに保存'), null, 'no fresh save is offered');
+  lost = false;
+  labelled(h.render(), 'SmallButton', '保存状況を確認').onPress();
+  await settle(); await h.update();
+  assert.deepEqual(ofAction(h, 'create')[1].body.payload, first, 'the same idempotency key and content');
+  assert.match(onScreen(h), /一致を確認しました/u);
+});
+
+test('401: sign in again; no further call with that token, not even a read; a new token reads and the save comes back', async () => {
+  const { h } = await ready({ create: () => no(401, 'POSTONA_RESV_AUTH_REQUIRED') });
+  const readsBefore = ofAction(h, 'list').length;
+  await pressSave(h);
+  assert.equal(ofAction(h, 'list').length, readsBefore, 'no read with the refused token');
+  assert.match(onScreen(h), /ログインを確認できませんでした|ログインの有効期限が切れた/u);
+  assert.equal(saveButton(h).disabled, true);
+  labelled(h.render(), 'ActionButton', '設定画面を開く').onPress();
+  assert.deepEqual(h.world.pushes, ['/(tabs)/settings']);
+  const before = h.world.calls.length;
+  await h.update();
+  assert.equal(h.world.calls.length, before, 'nothing more with the refused token');
+  saveButton(h).onPress();
+  await settle();
+  assert.equal(ofAction(h, 'create').length, 1, 'a stale press sends nothing');
+  h.world.token = jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', 2); // refreshed: the same login, another token
+  await h.update();
+  assert.equal(saveButton(h).disabled, false, 'the refusal was for that token only');
+  h.world.token = jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2');
+  await h.update();
+  assert.ok(h.world.calls.length > before, 'the new login reads');
+  assert.equal(saveButton(h).disabled, false);
+});
+
+test('a 401 on the list: 読み込み直す sends nothing with that token', async () => {
+  const s = server({ list: () => no(401, 'POSTONA_RESV_AUTH_REQUIRED') });
+  const h = await screen({ reply: s.reply });
+  await h.update();
+  const before = h.world.calls.length;
+  labelled(h.render(), 'SmallButton', '読み込み直す').onPress();
+  await settle();
+  assert.equal(h.world.calls.length, before);
+});
+
+test('403 service not active: writes off with the way to settings; a new login turns them back on', async () => {
+  const { h } = await ready({ create: () => no(403, 'POSTONA_RESV_SERVICE_NOT_ACTIVE') });
+  await pressSave(h);
+  assert.match(onScreen(h), /利用登録が有効ではないため/u);
+  assert.equal(saveButton(h).disabled, true);
+  assert.ok(labelled(h.render(), 'ActionButton', '設定画面を開く'));
+  assert.equal(signal.isXReconnectRequired(ACCOUNT.id), false, 'a service refusal says nothing about the X connection');
+  h.world.token = jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2');
+  await h.update();
+  assert.equal(saveButton(h).disabled, false);
+});
+
+test('403 X not verified: 「再接続が必要」; writes stay off (a read does not undo it) until a new connect; the way to the accounts screen', async () => {
+  const { h } = await ready({ create: () => no(403, 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED') });
+  await pressSave(h);
+  assert.match(onScreen(h), /Xの再接続が必要です/u);
+  assert.equal(signal.isXReconnectRequired(ACCOUNT.id), true);
+  assert.equal(saveButton(h).disabled, true);
+  labelled(h.render(), 'ActionButton', 'アカウント画面を開く').onPress();
+  assert.deepEqual(h.world.pushes, ['/accounts']);
+  await h.update();
+  assert.equal(saveButton(h).disabled, true, 'still off');
+  assert.equal(ofAction(h, 'create').length, 1);
+  signal.clearAllXReconnectRequired();
+  await h.update();
+  assert.equal(saveButton(h).disabled, false, 'the connect screen clears it');
+});
+
+test('409: a changed batch re-reads once and never re-sends; a slot conflict is the person\'s to fix; 422 too; 429 changes nothing and reads nothing', async () => {
+  for (const [status, code, words, rereads] of [
+    [409, 'POSTONA_RESV_IDEMPOTENCY_CONFLICT', /同じ保存が別の内容で/u, 1],
+    [409, 'POSTONA_RESV_SLOT_CONFLICT', /近い時刻にほかの予約があります/u, 0],
+    [422, 'POSTONA_RESV_TIME_OUT_OF_RANGE', /日時は5分以上先/u, 0],
+    [429, 'RATE', /何も変更されていません/u, 0],
+  ]) {
+    signal.clearAllXReconnectRequired();
+    const { h } = await ready({ create: () => no(status, code) });
+    const reads = ofAction(h, 'list').length;
+    await pressSave(h);
+    assert.match(onScreen(h), words, code);
+    assert.equal(ofAction(h, 'create').length, 1, `${code}: sent once`);
+    assert.equal(ofAction(h, 'list').length - reads, rereads, `${code}: re-reads`);
+    assert.doesNotMatch(onScreen(h), /一致を確認しました/u, code);
+    let cards = 0; walk(h.render(), (n) => { if (n.type === 'PreviewCard') cards += 1; });
+    assert.equal(cards, 1, `${code}: the preview is kept to fix`);
+    assert.equal(saveButton(h).disabled, false, `${code}: not blocked`);
+  }
+});
+
+test('a double press sends one save', async () => {
+  let release; const held = new Promise((resolve) => { release = resolve; });
+  const { h } = await ready({ create: () => held.then(() => ok([])) });
+  const press = saveButton(h).onPress;
+  press(); press();
+  await settle();
+  assert.equal(ofAction(h, 'create').length, 1);
+  release();
+  await settle();
+});
+
+test('another login / account while a save is out: its answer reaches nobody else, and the new screen does not read the old account', async () => {
+  let release; const held = new Promise((resolve) => { release = resolve; });
+  const { h } = await ready({ create: () => held.then(() => no(403, 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED')) });
+  saveButton(h).onPress();
+  await settle();
+  const other = { ...ACCOUNT, id: '22222222-2222-4222-8222-222222222222' };
+  h.world.account = other;
+  await h.update();
+  release();
+  await settle(); await h.update();
+  assert.equal(signal.isXReconnectRequired(ACCOUNT.id), true, 'the server\'s answer about the old account is still recorded');
+  assert.equal(signal.isXReconnectRequired(other.id), false);
+  assert.doesNotMatch(onScreen(h), /Xの再接続が必要です/u, 'its words are not shown on the other account');
+});
+
+test('refused before any request: no login, another person\'s workspace, W0 not ready, a disconnected account', async () => {
+  for (const [change, words] of [
+    [(world) => { world.token = null; }, /ログインが確認できない/u],
+    [(world) => { world.account = { ...ACCOUNT, brandId: 'shared' }; }, /個人ワークスペース/u],
+    [(world) => { world.workspaceId = null; }, /個人ワークスペース/u],
+    [(world) => { world.account = { ...ACCOUNT, connectionStatus: 'needs_attention' }; }, /接続し直して/u],
+  ]) {
+    const { h } = await ready();
+    change(h.world);
+    await h.update();
+    if (h.world.token && h.world.workspaceId && h.world.account.brandId === ME) assert.equal(saveButton(h).disabled, true);
+    assert.match(onScreen(h), words);
+    assert.equal(ofAction(h, 'create').length, 0);
+  }
+});
+
+test('a send-now row is not listed as a reservation here; a saved row is 予約済み only as planned + confirmed; AI rows are not', async () => {
+  const send = { reservationId: 's1', batchId: 'b', draftId: 'single:1', scheduledAt: '2026-12-01T00:30:00.000Z', status: 'planned', revision: 1, consentState: 'confirmed', body: 'now', mode: 'manual_exact', origin: 'user_authored' };
+  const h = await screen({ reply: async () => ok([send, { ...send, reservationId: 'k', draftId: 'd2' }]) });
+  await h.update();
+  const cards = []; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') cards.push(n.props.row.reservationId); });
+  assert.deepEqual(cards, ['k']);
+  assert.match(onScreen(h), /即時投稿が1件あります/u);
+  const source = await readFile(new URL('../src/features/schedule/server-reservation-card.tsx', import.meta.url), 'utf8');
+  assert.match(source, /row\.status === 'planned' && row\.consentState === 'ai_owner_opt_in' \? 'AI自動予約'/u);
+  assert.equal(reservationView.xRowView({ ...send, draftId: 'd', consentState: 'ai_owner_opt_in' }).label, 'AI自動予約');
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The contract with G4 PR 617 / G5, and the connection display.
+
+test('xAnswerView: every G3 action has one next step; only a server\'s code means reconnect; G4\'s generation code maps to it, an unknown code does not', () => {
+  const G4 = 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED';
+  assert.equal(reservationErrorAction(G4), 'check', 'G3\'s table does not know it (and is not changed)');
+  assert.equal(xWriteView.xActionOf(G4, reservationErrorAction), 'reconnect_x');
+  assert.equal(xWriteView.xAnswerView(G4, reservationErrorAction).text, xWriteView.RECONNECT_REQUIRED_TEXT);
+  assert.equal(xWriteView.xAnswerView('POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED', reservationErrorAction).button, 'accounts');
+  for (const code of ['X_REFRESH_HTTP_502', 'X_REFRESH_IN_PROGRESS', 'X_REFRESH_PRECHECK_SERVICE_NOT_ACTIVE', 'SOMETHING_NEW', 'UNCERTAIN']) {
+    assert.notEqual(xWriteView.xActionOf(code, reservationErrorAction), 'reconnect_x', code);
+  }
+  for (const code of ['AUTH_REQUIRED', 'POSTONA_RESV_SERVICE_NOT_ACTIVE', 'POSTONA_RESV_STALE_REVISION', 'POSTONA_RESV_SLOT_CONFLICT', 'RATE_LIMITED', 'SOMETHING_NEW']) {
+    assert.doesNotMatch(xWriteView.xAnswerView(code, reservationErrorAction).text, /保存しました|予約しました|投稿しました|再接続が必要/u, code);
+  }
+});
+
+test('connectionPill: 「再接続が必要」 only for a server\'s refusal; a restart alone changes nothing; connection_status keeps each screen\'s wording', () => {
+  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続'), { label: '接続済み', tone: 'success' });
+  assert.deepEqual(xWriteView.connectionPill('connected', true, '要再接続'), { label: '再接続が必要', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要再接続'), { label: '要再接続', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要確認'), { label: '要確認', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('needs_attention', true, '要確認'), { label: '再接続が必要', tone: 'warning' });
+  assert.doesNotMatch(xWriteView.RESTART_HELP_TEXT, /必要です/u, 'the help does not state it for this account');
+});
+
+test('the signal: set by a refusal, per account; cleared by the connect or by one account\'s accepted write; memory only', async () => {
+  signal.markXReconnectRequired('a');
+  signal.markXReconnectRequired('b');
+  assert.deepEqual([signal.isXReconnectRequired('a'), signal.isXReconnectRequired('c'), signal.isXReconnectRequired(null)], [true, false, false]);
+  signal.clearXReconnectRequired('a');
+  assert.deepEqual([signal.isXReconnectRequired('a'), signal.isXReconnectRequired('b')], [false, true]);
+  signal.clearAllXReconnectRequired();
+  assert.equal(signal.isXReconnectRequired('b'), false);
+  const source = await readFile(new URL('../src/features/reservations/x-reconnect-signal.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /AsyncStorage|SecureStore|fetch\(|localStorage/u);
+});
+
+async function loadScreen(rel, stubs) {
+  const source = await readFile(new URL(rel, import.meta.url), 'utf8');
+  const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const loaded = { exports: {} };
+  vm.runInNewContext(js, { module: loaded, exports: loaded.exports, Date, require: (name) => { if (!Object.hasOwn(stubs, name)) throw new Error(`unexpected import ${name}`); return stubs[name]; } }, { filename: rel });
+  return loaded.exports.default;
+}
+const baseStubs = () => ({
+  'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), Fragment: 'Fragment' },
+  'react-native': { ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View' },
+  '@/constants/theme': { colors: { primary: 'p', ink: 'i', muted: 'm' }, typography: {} },
+  '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
+  '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
+  '@/features/reservations/x-write-view': xWriteView,
+});
+
+test('accounts screen (real): 接続済み until a server\'s refusal; then 再接続が必要 with the words; a new connect clears it; the help is always there and never claims', async () => {
+  const effects = [];
+  let connectState = 'idle';
+  const render = await loadScreen('../src/app/accounts/index.tsx', {
+    ...baseStubs(),
+    react: { useEffect: (effect) => effects.push(effect) },
+    'expo-router': { useRouter: () => ({ push() {} }) },
+    '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: connectState, stateText: '', verifiedHandle: null, connect() {} }) },
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: [ACCOUNT], activeAccount: ACCOUNT, selectAccount() {} }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reload() {} }) },
+  });
+  let text = textOf(render({}));
+  assert.match(text, /接続済み/u);
+  assert.doesNotMatch(text, /再接続が必要/u);
+  assert.match(text, /接続の更新が止まることがあります/u);
+  signal.markXReconnectRequired(ACCOUNT.id);
+  text = textOf(render({}));
+  assert.match(text, /再接続が必要/u);
+  assert.doesNotMatch(text, /接続済み/u, 'the connected label does not stay');
+  assert.match(text, /Xの再接続が必要です/u);
+  assert.match(text, /Xアカウントの再接続/u);
+  connectState = 'connected';
+  effects.length = 0;
+  render({});
+  effects.forEach((effect) => effect());
+  assert.equal(signal.isXReconnectRequired(ACCOUNT.id), false);
+});
+
+test('home (real): 再接続が必要 replaces 接続済み for the selected X account after a server\'s refusal', async () => {
+  const render = await loadScreen('../src/app/(tabs)/index.tsx', {
+    ...baseStubs(),
+    'expo-router': { Link: 'Link' },
+    '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getHistory: () => [] } },
+    '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
+    '@/domain/data-view': dataView,
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: ACCOUNT }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
+    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
+  });
+  assert.match(textOf(render({})), /^接続済み$/mu);
+  signal.markXReconnectRequired(ACCOUNT.id);
+  const text = textOf(render({}));
+  assert.match(text, /再接続が必要/u);
+  assert.doesNotMatch(text, /^接続済み$/mu);
+});

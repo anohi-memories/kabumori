@@ -17,6 +17,9 @@ import * as timeEdit from '../src/features/schedule/time-edit.ts';
 import * as scheduleLabels from '../src/features/schedule/schedule-labels.ts';
 import * as reservationFlow from '../src/domain/reservation-flow.ts';
 import * as serverState from '../src/features/schedule/server-reservations-state.ts';
+import { reservationErrorAction } from '../src/features/schedule/reservation-error-actions.ts';
+import * as reservationView from '../src/features/reservations/reservation-view.ts';
+import * as xWriteView from '../src/features/reservations/x-write-view.ts';
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -97,6 +100,12 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
     },
     '@/domain/reservation-flow': reservationFlow,
     '@/features/schedule/server-reservations-state': serverState,
+    '@/features/schedule/reservation-error-actions': { reservationErrorAction },
+    '@/features/reservations/reservation-view': reservationView,
+    '@/features/reservations/x-write-view': xWriteView,
+    '@/features/reservations/x-reconnect-signal': { markXReconnectRequired: () => {}, clearXReconnectRequired: () => {} },
+    // The guard's own behaviour is tests/x-reservation-composer.test.mjs; here every X write may proceed.
+    '@/features/reservations/use-x-write-guard': { useXWriteGuard: (account) => ({ scope: account?.id ?? null, token: 't', canRead: true, refusal: null, refuseToken: () => {}, block: () => {}, unblock: () => {} }) },
     '@/features/schedule/server-reservation-card': { ServerReservationCard: function ServerReservationCard(props) { return { type: 'ServerReservationCard', props }; } },
     // The real confirmation / time-edit / label modules; the card is captured as props, the hash is node's.
     '@/features/schedule/confirmation-state': confirmationState,

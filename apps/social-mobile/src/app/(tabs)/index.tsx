@@ -4,6 +4,8 @@ import { mockRepository } from '@/data/mock-repository';
 import { colors, typography } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { BrandPostPreview } from '@/features/brand-preview/brand-post-preview';
+import { isXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { connectionPill } from '@/features/reservations/x-write-view';
 import { resolvePostsView, statusHeadline, summarizeHome } from '@/domain/data-view';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -17,6 +19,8 @@ export default function HomeScreen() {
   const { activeAccount } = useActiveAccount();
   const { status, reason, snapshot } = useDataStatus();
   const headline = statusHeadline(status);
+  useXReconnectSignal();
+  const connection = connectionPill(activeAccount?.connectionStatus ?? '', activeAccount?.platform === 'x' && isXReconnectRequired(activeAccount.id), '要確認');
 
   // Mock data is filtered to the selected demo account so switching accounts
   // still demonstrates the per-account view; real scheduled_posts rows have
@@ -69,9 +73,7 @@ export default function HomeScreen() {
                   <Text style={{ fontWeight: '700', color: colors.ink }}>{activeAccount.profile.displayName}</Text>
                   <Text style={{ color: colors.muted }}>{activeAccount.profile.handle}</Text>
                 </View>
-                <Pill tone={activeAccount.connectionStatus === 'connected' ? 'success' : 'warning'}>
-                  {activeAccount.connectionStatus === 'connected' ? '接続済み' : '要確認'}
-                </Pill>
+                <Pill tone={connection.tone}>{connection.label}</Pill>
               </View>
               <Pill tone={summary.autoPostEnabled ? 'success' : 'neutral'}>
                 自動投稿: {summary.autoPostEnabled ? 'ON（稼働中）' : 'OFF（停止中）'}

@@ -13,6 +13,8 @@ import { reservationErrorAction } from '../src/features/schedule/reservation-err
 import { POSTONA_RESERVATION_PERSISTENCE_ENABLED } from '../src/features/schedule/reservation-store.ts';
 import { POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED } from '../src/features/schedule/remote-threads-reservation-store.ts';
 import * as enrollment from '../src/domain/service-enrollment.ts';
+import * as reconnectSignal from '../src/features/reservations/x-reconnect-signal.ts';
+import * as xWriteView from '../src/features/reservations/x-write-view.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const savedGlobals = new Map();
@@ -23,6 +25,7 @@ test.before(() => {
     globalThis[name] = function forbidden() { trapped += 1; throw new Error(`network entry point ${name} must not be used`); };
   }
 });
+test.beforeEach(() => reconnectSignal.clearAllXReconnectRequired());
 test.after(() => {
   for (const name of NETWORK) {
     if (savedGlobals.get(name) === undefined) delete globalThis[name];
@@ -199,6 +202,8 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: world.workspace, retry() {} }) },
     '@/features/reservations/reservation-ports': {},
     '@/features/reservations/reservation-view': view,
+    '@/features/reservations/x-reconnect-signal': { ...reconnectSignal, useXReconnectSignal: () => 0 },
+    '@/features/reservations/x-write-view': xWriteView,
     '@/features/reservations/use-reservation-ports': { useReservationPorts: () => world.ports, newClientRequestId: () => `cid-${++world.ids}`, contentSha256: async (text) => `sha256:${text}` },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts }) },
     '@/providers/auth-provider': { useAuth: () => ({ session: world.token ? { access_token: world.token, user: { id: world.userId } } : null }) },
@@ -335,7 +340,7 @@ test('X 401: "sign in again", no write and no read with that token; a new token 
   assert.equal(button(tree, '最新の状態を読み込む').disabled, false);
 });
 
-test('X 403 service / X not verified: writes off with the way out (settings / accounts); reads still work and a good read clears it', async () => {
+test('X 403 service / X not verified: writes off with the way out (settings / accounts); reads still work; a good read clears the service block, a new connect the reconnect', async () => {
   for (const [code, label, href, words] of [
     ['POSTONA_RESV_SERVICE_NOT_ACTIVE', '設定画面を開く', '/(tabs)/settings', '利用登録が有効でない'],
     ['POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED', 'アカウント画面を開く', '/accounts', 'Xを接続し直して'],
@@ -354,9 +359,30 @@ test('X 403 service / X not verified: writes off with the way out (settings / ac
     assert.deepEqual(h.world.pushes, [href]);
     store.answer('x.list', { ok: true, value: [row('a')] });
     tree = await press(h, '最新の状態を読み込む');
-    assert.equal(button(tree, '時刻を変更').disabled, false, `${code}: a good read clears it`);
+    if (code === 'POSTONA_RESV_SERVICE_NOT_ACTIVE') assert.equal(button(tree, '時刻を変更').disabled, false, `${code}: a good read clears it`);
+    else {
+      // A read does not prove the connection: only a new connect (the accounts screen) clears a server's "reconnect".
+      assert.equal(button(tree, '時刻を変更').disabled, true, `${code}: a good read does not clear it`);
+      assert.ok(has(tree, 'Xの再接続が必要です'));
+      reconnectSignal.clearAllXReconnectRequired();
+      assert.equal(button(await h.render(), '時刻を変更').disabled, false, `${code}: a new connect clears it`);
+    }
     assert.equal(store.count('x.reschedule'), 1);
   }
+});
+
+test('X not verified: the new connect alone turns the writes back on (no read needed); a confirmed reconnect blocks nothing else', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('a')] });
+  const h = await mount({ store });
+  await h.render();
+  let tree = await open(h, '予約 2026-11-02 09:30');
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  store.answer('x.reschedule', { ok: false, code: 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED' });
+  tree = await press(h, '時刻を変更');
+  assert.equal(button(tree, '時刻を変更').disabled, true);
+  reconnectSignal.clearAllXReconnectRequired();
+  assert.equal(button(await h.render(), '時刻を変更').disabled, false);
 });
 
 test('X cancel asks twice; a double tap sends once; the revision last read is sent', async () => {
@@ -585,6 +611,7 @@ test('boundary: the screen reaches the stores only through use-reservation-ports
   const importsOf = (source) => [...source.matchAll(/from ['"]([^'"]+)['"]/gu)].map((m) => m[1]).sort();
   assert.deepEqual(importsOf(screen), ['@/components/ui', '@/constants/theme', '@/domain/service-enrollment', '@/features/personal-workspace/personal-workspace-provider',
     '@/features/reservations/reservation-ports', '@/features/reservations/reservation-view', '@/features/reservations/use-reservation-ports',
+    '@/features/reservations/x-reconnect-signal', '@/features/reservations/x-write-view',
     '@/providers/active-account-provider', '@/providers/auth-provider', 'expo-router', 'react', 'react-native']);
   assert.deepEqual(importsOf(hook), ['@/features/reservations/live-reservation-ports', '@/features/reservations/reservation-ports', '@/features/schedule/remote-threads-reservation-store',
     '@/features/schedule/reservation-store', '@/lib/supabase', 'expo-crypto', 'react']);
