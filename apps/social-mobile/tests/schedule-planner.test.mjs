@@ -224,14 +224,22 @@ test('the schedule screen and composer cannot save, schedule or publish: read-on
   const { readFile } = await import('node:fs/promises');
   const screen = await readFile(new URL('../src/app/(tabs)/schedule.tsx', import.meta.url), 'utf8');
   const composer = await readFile(new URL('../src/features/schedule/schedule-composer.tsx', import.meta.url), 'utf8');
-  for (const source of [screen, composer]) {
+  // The preview card and the confirmation / time-edit / label modules are part of the same local-only screen.
+  const card = await readFile(new URL('../src/features/schedule/preview-card.tsx', import.meta.url), 'utf8');
+  const confirmation = await readFile(new URL('../src/features/schedule/confirmation-state.ts', import.meta.url), 'utf8');
+  const timeEdit = await readFile(new URL('../src/features/schedule/time-edit.ts', import.meta.url), 'utf8');
+  const scheduleLabels = await readFile(new URL('../src/features/schedule/schedule-labels.ts', import.meta.url), 'utf8');
+  for (const source of [screen, composer, card, confirmation, timeEdit, scheduleLabels]) {
     assert.doesNotMatch(source, /saveConfirmed|\.upsert\(|\.insert\(|\.update\(|\.rpc\(|functions\.invoke|requestConsult|AsyncStorage|localStorage|SecureStore|fetch\(/u);
     assert.doesNotMatch(source, /予約確定|予約しました|投稿しました/u, 'no wording that pretends a plan was saved or posted');
   }
   // The only backend touch is the read of the confirmed AI-consult settings (frequency / approvalMode).
   assert.equal((screen.match(/repository\.\w+\(/gu) ?? []).join(','), 'repository.read(');
   assert.doesNotMatch(composer, /@\/data\/|@\/lib\/supabase/u, 'the composer has no data access at all');
-  assert.match(screen, /プレビュー／未予約・投稿されません/u);
+  // The label lives in one shared constant; the screen and every preview card must render exactly that.
+  assert.match(scheduleLabels, /export const PREVIEW_LABEL = 'プレビュー／未予約・投稿されません';/u);
+  assert.match(screen, /<Pill tone="warning">\{PREVIEW_LABEL\}<\/Pill>/u);
+  assert.match(card, /<Pill tone="neutral">\{PREVIEW_LABEL\}<\/Pill>/u);
   assert.match(screen, /再起動したりすると消えます/u);
 });
 
