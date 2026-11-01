@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runXTokenRefresh, XRefreshLease } from "./x_v2_account_refresh.ts";
-import { createXRefreshPrecheck, withXRefreshPrecheck, X_REFRESH_DB_PROFILE_MISMATCH } from "./x_refresh_db_profile_fence.ts";
+import { createXRefreshPrecheck, isPersonalXWorkspaceId, withXRefreshPrecheck, X_REFRESH_DB_PROFILE_MISMATCH } from "./x_refresh_db_profile_fence.ts";
 
 const ACCOUNT = "sa_0123456789abcdef01234567";
 const resolveClient = () => ({ clientId: "client", clientSecret: "secret" });
@@ -88,4 +88,11 @@ test("only begin is fenced: commit and release are the port's own (a single-use 
   assert.equal(asked, 0);
   await assert.rejects(() => fenced.begin(), /REFUSED/u);
   assert.equal(asked, 1);
+});
+
+test("G4-02 #9: only the exact derived id is a personal workspace", () => {
+  assert.equal(isPersonalXWorkspaceId("u_0123456789abcdef01234567"), true);
+  for (const id of ["kabumori", "ai_salaryman_lab", "brand_future", "u_", "u_0123456789abcdef0123456", "u_0123456789abcdef012345678", "u_0123456789ABCDEF01234567", "xu_0123456789abcdef01234567", "u_0123456789abcdef01234567\n", "", null, undefined, 1]) {
+    assert.equal(isPersonalXWorkspaceId(id), false, String(id));
+  }
 });

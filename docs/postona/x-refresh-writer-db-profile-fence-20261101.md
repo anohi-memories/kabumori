@@ -4,7 +4,7 @@ task_id: `postona-g4-gen2-08-x-refresh-worker-personal-db-profile-failclosed-no-
 
 **Status:** source and local QA only. Nothing is applied or deployed. Production stays NO_GO.
 
-**The fence is built and proved, but it is NOT WIRED into the live writer.** Until its owner wires it, the risk this TASK names stays open on that path.
+(Superseded where it differs by G4-02 #9, `x-refresh-writer-personal-precheck-wired-20261101.md`: the writer is wired in source, personal workspaces only, and XR5 now refuses.) **At G4-02 #8 the fence was built and proved, but NOT WIRED into the live writer.** Until its owner wires it, the risk this TASK names stays open on that path.
 
 ## 1. Who writes X credentials
 
