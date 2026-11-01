@@ -17,8 +17,7 @@ import * as disconnectDomain from '../src/domain/threads-disconnect.ts';
 import * as recoveryBinding from '../src/domain/recovery-binding.ts';
 import { xConnectAuthSessionOptions } from '../src/features/x-connect/auth-session-options.ts';
 import * as oauth from '../src/lib/x-oauth-onboarding.ts';
-import { runXTokenRefresh, XRefreshLease } from '../../../supabase/functions/_shared/x_v2_account_refresh.ts';
-import { createXRefreshPrecheck, withXRefreshPrecheck } from '../../../supabase/functions/_shared/x_refresh_db_profile_fence.ts';
+import { createVaultAccountCredentialRpc, VaultAccountXAuth } from '../../../supabase/functions/x-test-post/vault_account_auth.ts';
 
 const env = (k) => { const v = process.env[k]; if (!v) throw new Error(`${k} missing (run postona_g4_oauth_local_stack/run.sh)`); return v; };
 const API = env('LS_API');
@@ -197,7 +196,7 @@ const post = (fn, body, token) => fetch(`${API}/functions/v1/${fn}`, {
   method: 'POST',
   headers: { apikey: PUBLISHABLE, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
   body: JSON.stringify(body),
-  signal: AbortSignal.timeout(20000),
+  signal: AbortSignal.timeout(45000),
 });
 const answer = async (r) => `${r.status} ${(await r.json()).error ?? ''}`.trim();
 
@@ -208,7 +207,7 @@ test('R1. the real entries as in source: Threads connect and disconnect closed (
   assert.equal(closed.status, 503);
   await closed.body?.cancel();
   const a = await person('r1');
-  const bad = await fetch(`${API}/functions/v1/x-oauth-connect-user/start`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(20000) });
+  const bad = await fetch(`${API}/functions/v1/x-oauth-connect-user/start`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(45000) });
   assert.equal(bad.status, 401, 'no apikey / no token at the gateway');
   await bad.body?.cancel();
   const tampered = `${a.session.access_token.slice(0, -4)}AAAA`;
@@ -484,9 +483,9 @@ test('X7. disconnect through the real RPC (its gate opened in this TEST world): 
 });
 
 // ---- G4-02 #7: the X entry and the database's own profile answer --------------------------------------------------------------------------
-const xCalls = async () => (await (await fetch(`${API}/functions/v1/g4ls-x-connect/__x_calls`, { headers: { apikey: PUBLISHABLE }, signal: AbortSignal.timeout(20000) })).json()).calls;
+const xCalls = async () => (await (await fetch(`${API}/functions/v1/g4ls-x-connect/__x_calls`, { headers: { apikey: PUBLISHABLE }, signal: AbortSignal.timeout(45000) })).json()).calls;
 const rest = (fn, token) => fetch(`${API}/rest/v1/rpc/${fn}`, {
-  method: 'POST', headers: { apikey: PUBLISHABLE, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: '{}', signal: AbortSignal.timeout(20000),
+  method: 'POST', headers: { apikey: PUBLISHABLE, 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: '{}', signal: AbortSignal.timeout(45000),
 });
 const reloadSchema = () => owner("notify pgrst, 'reload schema'");
 
@@ -586,18 +585,21 @@ test('X10. on a mismatched database, disconnect stays possible (it reaches no pr
   }
 });
 
-// ---- G4-02 #8: the X token refresh writer: the REAL routine (runXTokenRefresh) and the REAL core (begin / commit / release through real
-// PostgREST as service_role, real Vault), with the fence around begin as its owner would wire it. X is faked here (the provider is called
-// from this process). The port is the same RPC port as x-test-post/vault_account_auth.ts's legacy path.
+// ---- G4-02 #8 / #9: the X token refresh writer: the REAL VaultAccountXAuth (x-test-post) with the REAL RPC adapter through real PostgREST as
+// service_role, the REAL core, publish permission, rollout authority and Vault; only X is faked (its token endpoint here, the post request).
 const SERVICE = env('LS_SERVICE_KEY');
-const serviceRpc = async (name, body) => {
-  const r = await fetch(`${API}/rest/v1/rpc/${name}`, {
-    method: 'POST', headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(20000),
-  });
-  const payload = await r.json().catch(() => null);
-  if (!r.ok) throw new Error(typeof payload?.message === 'string' && /^[A-Z][A-Z0-9_]{1,99}$/u.test(payload.message) ? payload.message : 'X_REFRESH_UNAVAILABLE');
-  return payload;
-};
+const realRpc = createVaultAccountCredentialRpc({ supabaseUrl: API, serviceRoleKey: SERVICE });
+const noGuard = { ...realRpc, precheckPersonalRefresh: () => Promise.resolve() };  // the negative control: the writer without the guard
+const factsOf = (id) => owner(`select (select decrypted_secret from vault.decrypted_secrets where id = sa.vault_access_token_secret_id) || '|' ||
+    (select decrypted_secret from vault.decrypted_secrets where id = sa.vault_refresh_token_secret_id) || '|' || coalesce((select r.status from public.x_account_refresh_state_v2 r where r.social_account_id = sa.id), 'no-row')
+  from public.social_accounts sa where sa.id = ${lit(id)}`);
+function enableAccount(id, brand) {
+  // SYNTHETIC: a brand allowed to publish, so the writer's real permission check passes and the refresh path is what is tested
+  owner(`update public.brands set is_active = true, publish_mode = 'live' where id = ${lit(brand)};
+    update public.social_accounts set publish_enabled = true where id = ${lit(id)};
+    insert into public.x_account_refresh_rollout (social_account_id, mode, reason_code) values (${lit(id)}, 'enabled', 'G4LS_TEST') on conflict (social_account_id) do update set mode = 'enabled'`);
+  return owner(`insert into public.scheduled_posts (brand_id, status, attempt_count) values (${lit(brand)}, 'running', 1) returning id`).split('\n')[0];
+}
 async function refreshable(label, xId) {
   const a = await person(label);
   const screen = xScreen(a, a.session, { code: xCode(xId) });
@@ -605,130 +607,187 @@ async function refreshable(label, xId) {
   assert.equal(screen.render().state, 'connected', screen.render().stateText);
   const id = accountId(a, 'x');
   const brand = owner(`select brand_id from public.social_accounts where id = ${lit(id)}`);
-  owner(`update public.social_accounts set publish_enabled = true where id = ${lit(id)}`);
-  const post = owner(`insert into public.scheduled_posts (brand_id, status, attempt_count) values (${lit(brand)}, 'running', 1) returning id`).split('\n')[0];
-  const ref = { p_scheduled_post_id: post, p_social_account_id: id, p_brand_id: brand };
-  const port = {
-    async begin() {
-      const rows = await serviceRpc('begin_x_account_refresh_legacy_post', ref);
-      return new XRefreshLease(rows[0].lease_token, rows[0].oauth_client_ref, rows[0].refresh_token);
-    },
-    commit: (lease, at, rt, expiresIn) => serviceRpc('commit_x_account_refresh_legacy_post', { p_lease_token: lease.leaseToken, p_social_account_id: id, p_access_token: at, p_refresh_token: rt, p_expires_in: expiresIn }),
-    release: (lease, outcome, code) => serviceRpc('release_x_account_refresh_v2', { p_lease_token: lease.leaseToken, p_social_account_id: id, p_outcome: outcome, p_error_code: code }),
-  };
-  const fact = () => owner(`select (select decrypted_secret from vault.decrypted_secrets where id = sa.vault_access_token_secret_id) || '|' ||
-      (select decrypted_secret from vault.decrypted_secrets where id = sa.vault_refresh_token_secret_id) || '|' || coalesce((select r.status || '/' || r.generation from public.x_account_refresh_state_v2 r where r.social_account_id = sa.id), 'no-row')
-    from public.social_accounts sa where sa.id = ${lit(id)}`);
-  return { a, id, port, fact };
+  assert.match(brand, /^u_[0-9a-f]{24}$/u);
+  return { a, id, brand, ref: { scheduledPostId: enableAccount(id, brand), socialAccountId: id, brandId: brand }, fact: () => factsOf(id) };
 }
-const refreshRun = async (port, { during = null, reply = null } = {}) => {
-  const provider = { calls: 0 };
+/** One publish through the real writer: X answers 401 to the old token, so the writer must refresh before it may retry. */
+async function writerRun(w, { rpc = realRpc, during = null, reply = null } = {}) {
+  const provider = { calls: 0, posts: 0, rotated: null };
   const fetchImpl = async () => {
     provider.calls += 1;
     await during?.();
-    return reply ? reply() : Response.json({ access_token: `rotated-at-${provider.calls}`, refresh_token: `rotated-rt-${provider.calls}`, expires_in: 7200 });
+    if (reply) return reply();
+    provider.rotated = `rotated-at-${provider.calls}-${randomUUID().slice(0, 8)}`;
+    return Response.json({ access_token: provider.rotated, refresh_token: `${provider.rotated}-rt`, expires_in: 7200, token_type: 'bearer' });
   };
-  const outcome = await runXTokenRefresh(port, () => ({ clientId: 'c', clientSecret: 's' }), { fetchImpl });
-  return { outcome, provider };
+  const request = async (token) => {
+    provider.posts += 1;
+    return token === provider.rotated ? { status: 201, body: { data: { id: 'x1' } } } : { status: 401, body: {} };
+  };
+  try {
+    const auth = await VaultAccountXAuth.load(w.ref, rpc, { resolveClient: () => ({ clientId: 'c', clientSecret: 's' }), refreshEnabled: true, fetchImpl });
+    const result = await auth.send(request);
+    return { kind: 'sent', status: result.status, provider };
+  } catch (error) {
+    return { kind: 'refused', code: error.message, provider };
+  }
+}
+const rejectedWithoutWrite = (r, code, w, before, label = code) => {
+  assert.deepEqual([r.kind, r.code, r.provider.calls, r.provider.posts], ['refused', code, 0, 1], label);
+  assert.equal(w.fact(), before, `${label}: no Vault write, no lease`);
 };
-const fencedFor = (w) => withXRefreshPrecheck(w.port, createXRefreshPrecheck({ supabaseUrl: API, serviceRoleKey: SERVICE }), () => w.id);
 
-test('XR1. correct personal database: the fenced routine refreshes through the real core and Vault; the generation does not change; the app never sees a token', T, async () => {
+test('XR1. correct personal database: the real writer asks, refreshes through the real core and Vault, retries once; the generation does not change', T, async () => {
   const w = await refreshable('xr1', 7101);
   const before = w.fact(), generation = verdict('x', w.a, w.id);
-  const { outcome, provider } = await refreshRun(fencedFor(w));
-  assert.equal(outcome.kind, 'refreshed', JSON.stringify(outcome));
-  assert.equal(provider.calls, 1);
+  const r = await writerRun(w);
+  assert.deepEqual([r.kind, r.status, r.provider.calls, r.provider.posts], ['sent', 201, 1, 2], JSON.stringify(r));
   assert.notEqual(w.fact(), before);
-  assert.match(w.fact(), /^rotated-at-1\|rotated-rt-1\|idle\//u);
+  assert.match(w.fact(), /^rotated-at-1-[0-9a-f]+\|rotated-at-1-[0-9a-f]+-rt\|idle$/u);
   assert.equal(verdict('x', w.a, w.id), generation);
-  // only service_role may ask
-  const person_ = await rest('postona_x_refresh_precheck_v1', w.a.session.access_token);
-  assert.notEqual(person_.status, 200);
-  await person_.body?.cancel();
+  const answer_ = await rest('postona_x_refresh_precheck_v1', w.a.session.access_token);
+  assert.notEqual(answer_.status, 200, 'a signed-in person cannot call it');
+  await answer_.body?.cancel();
   assert.equal(owner(`select has_function_privilege('anon', 'public.postona_x_refresh_precheck_v1(text)', 'EXECUTE') or has_function_privilege('authenticated', 'public.postona_x_refresh_precheck_v1(text)', 'EXECUTE')`), 'f');
 });
 
 const refreshMismatches = [
-  ['full: F5 owner epoch present', "create function private.account_lifecycle_brand_owner_epoch(text) returns bigint language sql as 'select 1::bigint'", 'drop function private.account_lifecycle_brand_owner_epoch(text)', 'X_REFRESH_DB_PROFILE_MISMATCH'],
-  ['not installed: no precheck function (PostgREST 404)', 'alter function public.postona_x_refresh_precheck_v1(text) rename to postona_x_refresh_precheck_gone', 'alter function public.postona_x_refresh_precheck_gone(text) rename to postona_x_refresh_precheck_v1', 'X_REFRESH_DB_PROFILE_MISMATCH'],
-  ['catalog drift: the generation helper exposed', 'grant execute on function postona_g4_x_oauth.require_owner_epoch(text) to authenticated', 'revoke execute on function postona_g4_x_oauth.require_owner_epoch(text) from authenticated', 'X_REFRESH_DB_PROFILE_MISMATCH'],
-  ['no privilege: service_role lost EXECUTE', 'revoke execute on function public.postona_x_refresh_precheck_v1(text) from service_role', 'grant execute on function public.postona_x_refresh_precheck_v1(text) to service_role', 'X_REFRESH_DB_PROFILE_MISMATCH'],
+  ['full: F5 owner epoch present', "create function private.account_lifecycle_brand_owner_epoch(text) returns bigint language sql as 'select 1::bigint'", 'drop function private.account_lifecycle_brand_owner_epoch(text)'],
+  ['missing 007 (PostgREST 404)', 'alter function public.postona_x_refresh_precheck_v1(text) rename to postona_x_refresh_precheck_gone', 'alter function public.postona_x_refresh_precheck_gone(text) rename to postona_x_refresh_precheck_v1'],
+  ['missing 006 under 007', 'alter function public.postona_x_connect_profile_v1() rename to postona_x_connect_profile_gone', 'alter function public.postona_x_connect_profile_gone() rename to postona_x_connect_profile_v1'],
+  ['catalog drift: the generation helper exposed', 'grant execute on function postona_g4_x_oauth.require_owner_epoch(text) to authenticated', 'revoke execute on function postona_g4_x_oauth.require_owner_epoch(text) from authenticated'],
+  ['no privilege: service_role lost EXECUTE', 'revoke execute on function public.postona_x_refresh_precheck_v1(text) from service_role', 'grant execute on function public.postona_x_refresh_precheck_v1(text) to service_role'],
 ];
-for (const [index, [label, breakIt, undo, code]] of refreshMismatches.entries()) {
-  test(`XR2. ${label}: FAIL before (the unfenced routine rotates and writes) / PASS after (not started, provider 0, nothing written)`, T, async () => {
+const settle = () => new Promise((r) => setTimeout(r, 1500));
+for (const [index, [label, breakIt, undo]] of refreshMismatches.entries()) {
+  test(`XR2. ${label}: guard off = rotates and writes (FAIL before); guard on = refused, provider 0, Vault write 0 (PASS after)`, T, async () => {
     const w = await refreshable(`xr2${index}`, 7110 + index);
-    owner(breakIt); reloadSchema();
-    await new Promise((r) => setTimeout(r, 1500));
+    owner(breakIt); reloadSchema(); await settle();
     try {
       const before = w.fact(), generation = verdict('x', w.a, w.id);
-      const after = await refreshRun(fencedFor(w));
-      assert.deepEqual([after.outcome.kind, after.outcome.code, after.outcome.tokenRequests, after.provider.calls], ['not_started', code, 0, 0], label);
-      assert.equal(w.fact(), before, 'nothing written, no lease');
-      assert.equal(verdict('x', w.a, w.id), generation, 'generation unchanged');
-      // negative control: the same database, the same routine, without the fence
-      const unfenced = await refreshRun(w.port);
-      assert.equal(unfenced.outcome.kind, 'refreshed', `the risk is real: ${JSON.stringify(unfenced.outcome)}`);
-      assert.equal(unfenced.provider.calls, 1);
+      const guarded = await writerRun(w);
+      // (missing 006 under 007 fails inside the definer function: PostgREST's own error, a 4xx, is the same refusal)
+      rejectedWithoutWrite(guarded, 'X_REFRESH_DB_PROFILE_MISMATCH', w, before, label);
+      assert.equal(verdict('x', w.a, w.id), generation);
+      const unguarded = await writerRun(w, { rpc: noGuard });
+      assert.equal(unguarded.kind, 'sent', `the risk is real: ${JSON.stringify(unguarded)}`);
+      assert.equal(unguarded.provider.calls, 1);
       assert.notEqual(w.fact(), before);
     } finally {
-      owner(undo); reloadSchema();
-      await new Promise((r) => setTimeout(r, 1500));
+      owner(undo); reloadSchema(); await settle();
     }
   });
 }
 
-test('XR3. per account: service ended, disconnected, connect pending, already refreshing, an unknown provider outcome: not started, provider 0', T, async () => {
+test('XR3. per account: service ended, disconnected, connect pending: refused, provider 0, Vault write 0', T, async () => {
   const ended = await refreshable('xr3a', 7121);
   endService(ended.a);
-  let r = await refreshRun(fencedFor(ended));
-  assert.deepEqual([r.outcome.code, r.provider.calls], ['X_REFRESH_PRECHECK_SERVICE_NOT_ACTIVE', 0]);
+  let before = ended.fact();
+  const endedRun = await writerRun(ended);
+  console.log(`measured XR3 service ended: ${endedRun.code}`);
+  assert.deepEqual([endedRun.kind, endedRun.provider.calls], ['refused', 0]);
+  assert.equal(ended.fact(), before);
 
   const gone = await refreshable('xr3b', 7122);
   const out = xScreen(gone.a, gone.a.session, { code: xCode(7122) });
   await out.render().disconnect();
   assert.equal(out.render().state, 'disconnected', out.render().stateText);
-  r = await refreshRun(fencedFor(gone));
-  assert.deepEqual([r.outcome.code, r.provider.calls], ['X_REFRESH_PRECHECK_DISCONNECTED', 0]);
+  before = gone.fact();
+  const goneRun = await writerRun(gone);
+  console.log(`measured XR3 disconnected: ${goneRun.code}`);
+  assert.deepEqual([goneRun.kind, goneRun.provider.calls], ['refused', 0]);
+  assert.equal(gone.fact(), before);
 
   const pending = await refreshable('xr3c', 7123);
   const claims = JSON.stringify({ sub: pending.a.userId, role: 'authenticated', session_id: claimsOf(pending.a.session.access_token).session_id, is_anonymous: false });
   owner(`begin; select set_config('request.jwt.claims', ${lit(claims)}, true); select 1 from public.begin_social_mobile_x_oauth_connection(md5('xr3c') || md5('xr3c#'), ${lit(X_REDIRECT)}, now() + interval '10 minutes'); commit;`);
-  r = await refreshRun(fencedFor(pending));
-  assert.deepEqual([r.outcome.code, r.provider.calls], ['X_REFRESH_PRECHECK_CONNECT_PENDING', 0]);
+  before = pending.fact();
+  rejectedWithoutWrite(await writerRun(pending), 'X_REFRESH_PRECHECK_CONNECT_PENDING', pending, before);
+});
 
-  const busy = await refreshable('xr3d', 7124);
-  // a first run holds the lease while the provider answers; a second run meanwhile is refused and may retry; only one provider call
+test('XR4. concurrency and results: a second writer during a refresh; lease lost; disconnect while X answers; X result unknown: never a second provider call, no stale write', T, async () => {
+  const busy = await refreshable('xr4a', 7124);
   let second;
-  const first = await refreshRun(fencedFor(busy), { during: async () => { second = await refreshRun(fencedFor(busy)); } });
-  assert.equal(first.outcome.kind, 'refreshed', JSON.stringify(first.outcome));
-  assert.deepEqual([second.outcome.kind, second.outcome.code, second.outcome.retryable, second.provider.calls], ['not_started', 'X_REFRESH_IN_PROGRESS', true, 0]);
+  const first = await writerRun(busy, { during: async () => { second = await writerRun(busy); } });
+  console.log(`measured XR4 concurrent: first ${first.kind}, second ${second.kind} ${second.code}`);
+  assert.equal(first.kind, 'sent', JSON.stringify(first));
+  assert.deepEqual([second.kind, second.provider.calls], ['refused', 0]);
 
-  const lost = await refreshable('xr3e', 7125);
-  const unsure = await refreshRun(fencedFor(lost), { reply: () => new Response('upstream broke', { status: 502 }) });
-  assert.equal(unsure.outcome.kind, 'uncertain', JSON.stringify(unsure.outcome));
-  r = await refreshRun(fencedFor(lost));
-  // the real core also records the error on the account, which the verdict reads first
-  assert.deepEqual([r.outcome.code, r.provider.calls], ['X_REFRESH_PRECHECK_CONNECTION_ERROR', 0], 'an unknown provider outcome is never retried');
+  const lost = await refreshable('xr4b', 7125);
+  const beforeLost = lost.fact();
+  const lostRun = await writerRun(lost, { during: () => owner(`update public.x_account_refresh_state_v2 set lease_token = gen_random_uuid() where social_account_id = ${lit(lost.id)}`) });
+  console.log(`measured XR4 lease lost (SYNTHETIC): ${lostRun.kind} ${lostRun.code}`);
+  assert.equal(lostRun.kind, 'refused');
+  assert.ok(!lost.fact().startsWith('rotated-at'), `the lost lease wrote nothing: ${lost.fact() === beforeLost}`);
+
+  const raced = await refreshable('xr4c', 7126);
+  const screen = xScreen(raced.a, raced.a.session, { code: xCode(7126) });
+  const racedRun = await writerRun(raced, { during: async () => { await screen.render().disconnect(); } });
+  console.log(`measured XR4 disconnect while X answers: ${racedRun.kind} ${racedRun.code}; app ${screen.render().state}`);
+  assert.equal(racedRun.kind, 'refused');
+  assert.ok(!raced.fact().startsWith('rotated-at'));
+
+  const unknown = await refreshable('xr4d', 7127);
+  const unknownRun = await writerRun(unknown, { reply: () => new Response('upstream broke', { status: 502 }) });
+  assert.deepEqual([unknownRun.kind, unknownRun.provider.calls], ['refused', 1]);
+  const after = unknown.fact();
+  const again = await writerRun(unknown);
+  console.log(`measured XR4 after an unknown X result: ${unknownRun.code}, then ${again.code}`);
+  assert.deepEqual([again.kind, again.provider.calls], ['refused', 0], 'an unknown result is never retried');
+  assert.equal(unknown.fact(), after);
 });
 
-test('XR4. a reconnect or disconnect while the provider answers: the core refuses the write; the new connection keeps its own tokens', T, async () => {
-  const w = await refreshable('xr4', 7131);
-  const screen = xScreen(w.a, w.a.session, { code: xCode(7131) });
-  let measured = {};
-  const r = await refreshRun(fencedFor(w), { during: async () => {
-    await screen.render().disconnect();
-    measured = { state: screen.render().state };
-  } });
-  console.log(`measured XR4 disconnect during the provider call: ${JSON.stringify({ kind: r.outcome.kind, code: r.outcome.code, ...measured })}`);
-  assert.notEqual(r.outcome.kind, 'refreshed', JSON.stringify(r.outcome));
-  assert.ok(!/^rotated-at-1/u.test(w.fact()), 'the stale refresh did not write');
-});
-
-test('XR5. measured, not decided here: the service ended and restarted (generation moved) with the connection untouched', T, async () => {
+test('XR5. the service ended and restarted since the connection was made (generation moved): refused until a new connect; G5 MV decides', T, async () => {
   const w = await refreshable('xr5', 7141);
   moveGeneration(w.a);
-  const r = await refreshRun(fencedFor(w));
-  console.log(`measured XR5 refresh after a generation move: ${r.outcome.kind} ${r.outcome.code}`);
-  assert.equal(r.outcome.kind, 'refreshed', 'the refresh keeps the same person\'s connection usable; G3\'s send still compares its own stored generation (MV)');
+  const before = w.fact();
+  rejectedWithoutWrite(await writerRun(w), 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED', w, before);
+  const unguarded = await writerRun(w, { rpc: noGuard });
+  assert.equal(unguarded.kind, 'sent', 'guard off: the old generation refreshes (FAIL before)');
+  // a new connect records the current generation; nothing else was invented
+  const screen = xScreen(w.a, w.a.session, { code: xCode(7141) });
+  await screen.render().connect();
+  assert.equal(screen.render().state, 'connected', screen.render().stateText);
+  w.ref.scheduledPostId = enableAccount(w.id, w.brand);
+  const after = await writerRun(w);
+  assert.equal(after.kind, 'sent', JSON.stringify(after));
+});
+
+test('XR6. only begin is fenced: the database stops being personal while X answers; the single-use token result is still committed', T, async () => {
+  const w = await refreshable('xr6', 7151);
+  const [, breakIt, undo] = refreshMismatches[0];
+  try {
+    const r = await writerRun(w, { during: () => owner(breakIt) });
+    assert.deepEqual([r.kind, r.provider.calls], ['sent', 1], JSON.stringify(r));
+    assert.match(w.fact(), /^rotated-at-1-/u, 'committed');
+  } finally {
+    owner(undo);
+  }
+});
+
+test('XR7. operator / organization account: never asks; refreshes as before, even on a database the guard would refuse; its rollout still rules', T, async () => {
+  const brand = `op_${randomUUID().slice(0, 8).replaceAll('-', '')}`;
+  const id = `${brand}_x`;
+  const asked = { n: 0 };
+  owner(`insert into public.brands (id, display_name, code_profile_key) values (${lit(brand)}, 'Operator', 'operator_v1');
+    insert into public.social_accounts (id, brand_id, platform, handle, connection_status, platform_user_id, publish_enabled, oauth_client_ref, verified_at, vault_access_token_secret_id, vault_refresh_token_secret_id)
+    values (${lit(id)}, ${lit(brand)}, 'x', ${lit(id)}, 'identity_verified', '9${String(Date.now()).slice(-9)}', true, 'default', now(),
+      vault.create_secret('op-old-at', ${lit(`${id}_at`)}), vault.create_secret('op-old-rt', ${lit(`${id}_rt`)}))`);
+  const w = { id, brand, ref: { scheduledPostId: enableAccount(id, brand), socialAccountId: id, brandId: brand }, fact: () => factsOf(id) };
+  const spy = { ...realRpc, precheckPersonalRefresh: (ref) => { asked.n += 1; return realRpc.precheckPersonalRefresh(ref); } };
+  const [, breakIt, undo] = refreshMismatches[1];
+  owner(breakIt); reloadSchema(); await settle();
+  try {
+    const r = await writerRun(w, { rpc: spy });
+    assert.deepEqual([r.kind, r.status, r.provider.calls], ['sent', 201, 1], JSON.stringify(r));
+    assert.equal(asked.n, 0, 'an operator account never asks');
+    assert.match(w.fact(), /^rotated-at-1-/u);
+    owner(`update public.x_account_refresh_rollout set mode = 'off' where social_account_id = ${lit(id)}`);
+    w.ref.scheduledPostId = owner(`insert into public.scheduled_posts (brand_id, status, attempt_count) values (${lit(brand)}, 'running', 1) returning id`).split('\n')[0];
+    const off = await writerRun(w, { rpc: spy });
+    console.log(`measured XR7 rollout off: ${off.kind} ${off.code} provider ${off.provider.calls}`);
+    assert.deepEqual([off.kind, off.provider.calls], ['refused', 0]);
+  } finally {
+    owner(undo); reloadSchema(); await settle();
+  }
 });

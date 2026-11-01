@@ -132,7 +132,11 @@ echo "OK world: G4's personal world on the real local schema (as postgres)"
 # G4-02 #8: the REAL X refresh core (main 20260925140000) instead of the deletion fixture's stand-in table, as G4-40's runner tests it
 own -c "drop trigger social_accounts_x_refresh_reset_on_reconnect on public.social_accounts; drop function public.x_account_refresh_reset_on_reconnect(); drop table public.x_account_refresh_state_v2 cascade" >/dev/null
 need "$m/20260925140000_x_account_credential_refresh_core.sql"
-echo "OK the real X refresh core"
+# G4-02 #9: the rest of what the real writer (VaultAccountXAuth) calls: the pre-send permission check and the per-account rollout authority
+need "$m/20261003090000_social_mobile_publish_permission_boundary.sql"
+own -c "drop table public.x_account_refresh_rollout cascade" >/dev/null   # the deletion fixture's stand-in
+need "$m/20260926032054_x_account_refresh_rollout_authority.sql"
+echo "OK the real X refresh core + publish permission + rollout authority"
 ATTESTATION="$(openssl rand -hex 32)"
 own -v k="$ATTESTATION" >/dev/null <<'SQL'
 delete from vault.secrets where name = 'postona_threads_connect_attestation_v1';
@@ -154,7 +158,11 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 [ -n "$ready" ] || { tail -20 "$WORK/serve.log"; fail "functions serve not ready: $answer"; }
-echo "OK functions served"
+# Each function's first request loads its dependencies (a cold start, not what is tested): warm them first, answers ignored.
+for fn in g4ls-threads-connect/default g4ls-x-connect/__x_calls g4ls-threads-disconnect social-mobile-threads-disconnect x-oauth-connect-user; do
+  curl -s -o /dev/null --max-time 150 -X POST "http://127.0.0.1:$API_PORT/functions/v1/$fn" -H "apikey: $PUBLISHABLE" -H 'Content-Type: application/json' -d '{}' || true
+done
+echo "OK functions served and warmed"
 
 t0=$SECONDS
 if out="$(cd "$REPO/apps/social-mobile" && env FLOW_DEBUG="${FLOW_DEBUG:-}" LS_API="http://127.0.0.1:$API_PORT" LS_PUBLISHABLE="$PUBLISHABLE" LS_SERVICE_KEY="$SERVICE_KEY" LS_DB_PORT="$DB_PORT" \

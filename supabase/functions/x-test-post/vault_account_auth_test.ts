@@ -36,10 +36,16 @@ type Account = {
  * In-memory mirror of the core RPCs (read / begin / commit / release /
  * record*). Each brand has exactly one X account; the post is the authority.
  */
+const PERSONAL_BRAND = "u_0123456789abcdef01234567";
 class FakeCoreDb implements VaultAccountCredentialRpc {
   accounts: Record<string, Account> = {
     ai_salaryman_lab_x: {
       brand: "ai_salaryman_lab", clientRef: "default", access: "tok_AI_expired", refresh: "rt_AI_1", expiresAt: null,
+      state: "idle", lease: null, connection: "identity_verified", errorCode: null, publish: true,
+      rolloutRefusal: null,
+    },
+    acct_personal: {
+      brand: PERSONAL_BRAND, clientRef: "default", access: "tok_P_expired", refresh: "rt_P_1", expiresAt: null,
       state: "idle", lease: null, connection: "identity_verified", errorCode: null, publish: true,
       rolloutRefusal: null,
     },
@@ -54,11 +60,13 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
   posts: Record<string, { brand: string; running: boolean; attempt: number }> = {
     post_ai: { brand: "ai_salaryman_lab", running: true, attempt: 1 },
     post_future: { brand: "brand_future", running: true, attempt: 1 },
+    post_personal: { brand: PERSONAL_BRAND, running: true, attempt: 1 },
   };
   /** Brand publish state and account deletions, as the pre-send permission check sees them. */
   brands: Record<string, { active: boolean; mode: "live" | "dry_run" | "disabled" }> = {
     ai_salaryman_lab: { active: true, mode: "live" },
     brand_future: { active: true, mode: "live" },
+    [PERSONAL_BRAND]: { active: true, mode: "live" },
   };
   deleting = new Set<string>();
   /** Every RPC and (when a test records them) every X request, in order. */
@@ -104,6 +112,12 @@ class FakeCoreDb implements VaultAccountCredentialRpc {
     if (a.state === "uncertain") throw new Error("X_REFRESH_BLOCKED_UNCERTAIN");
     if (a.state === "reauth_required") throw new Error("X_REFRESH_REAUTH_REQUIRED");
     return { accessToken: a.access, accessExpiresAt: a.expiresAt };
+  }
+  precheckRefusal: Error | null = null;
+  async precheckPersonalRefresh(_ref: VaultAccountRef) {
+    this.calls.push("precheck");
+    this.timeline.push("precheck");
+    if (this.precheckRefusal) throw this.precheckRefusal;
   }
   async begin(ref: VaultAccountRef) {
     this.calls.push("begin");
@@ -824,4 +838,72 @@ test("source: every request() call in send() has the permission check as the sta
     while (lines[previous] === "}") previous -= 1;
     assert.equal(lines[previous], "await this.#assertPublishPermission();", lines[index]);
   }
+});
+
+// --- G4-02 #9: the personal-workspace precheck in the real writer ---------------------------------------------------------
+const PERSONAL: VaultAccountRef = { scheduledPostId: "post_personal", socialAccountId: "acct_personal", brandId: PERSONAL_BRAND };
+const refreshed = () => Response.json({ access_token: "tok_P_new", refresh_token: "rt_P_2", expires_in: 7200, token_type: "bearer" });
+
+test("G4-02 #9 personal workspace: the precheck runs before begin, once; commit and the retry follow", async () => {
+  const db = new FakeCoreDb();
+  const x = fakeX([refreshed()], new Set(["tok_P_new"]));
+  const auth = await load(db, PERSONAL, x.fetchImpl);
+  assert.equal((await auth.send(x.request)).status, 201);
+  const refresh = db.timeline.filter((step) => step === "precheck" || step === "begin" || step === "commit");
+  assert.deepEqual(refresh, ["precheck", "begin", "commit"]);
+  assert.equal(x.tokenCalls.length, 1);
+});
+
+test("G4-02 #9 personal workspace refused: no lease, no provider call, no write, no replay; the fixed code surfaces", async () => {
+  for (const code of ["X_REFRESH_DB_PROFILE_MISMATCH", "X_REFRESH_PRECHECK_SERVICE_NOT_ACTIVE", "X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED", "X_REFRESH_UNAVAILABLE"]) {
+    const db = new FakeCoreDb();
+    db.precheckRefusal = new Error(code);
+    const x = fakeX([refreshed()], new Set(["tok_P_new"]));
+    const auth = await load(db, PERSONAL, x.fetchImpl);
+    await rejects(auth.send(x.request), code);
+    assert.equal(x.tokenCalls.length, 0, code);
+    assert.deepEqual(x.creates, ["tok_P_expired"], "the first attempt only, never a replay");
+    assert.equal(db.calls.includes("begin"), false, code);
+    assert.equal(db.calls.some((call) => call.startsWith("commit")), false, code);
+    assert.equal(db.accounts.acct_personal.access, "tok_P_expired");
+    assert.equal(db.accounts.acct_personal.state, "idle");
+  }
+});
+
+test("G4-02 #9 proactive refresh refused on a personal workspace: it fails closed; the token is not used either", async () => {
+  const db = new FakeCoreDb();
+  db.accounts.acct_personal.expiresAt = "2026-01-01T00:00:00.000Z";
+  db.precheckRefusal = new Error("X_REFRESH_DB_PROFILE_MISMATCH");
+  const x = fakeX([refreshed()], new Set(["tok_P_expired"]));
+  const auth = await load(db, PERSONAL, x.fetchImpl, true, () => Date.parse("2026-06-01T00:00:00.000Z"));
+  await rejects(auth.send(x.request), "X_REFRESH_DB_PROFILE_MISMATCH");
+  assert.deepEqual(x.creates, []);
+  assert.equal(x.tokenCalls.length, 0);
+});
+
+test("G4-02 #9 operator / organization accounts: never asked, even with a refusing precheck; refresh works as before", async () => {
+  for (const ref of [AI, FUTURE]) {
+    const db = new FakeCoreDb();
+    db.precheckRefusal = new Error("X_REFRESH_DB_PROFILE_MISMATCH");
+    const account = db.accounts[ref.socialAccountId];
+    const x = fakeX([Response.json({ access_token: "tok_new", refresh_token: "rt_2", expires_in: 7200, token_type: "bearer" })], new Set(["tok_new"]));
+    const auth = await load(db, ref, x.fetchImpl);
+    assert.equal((await auth.send(x.request)).status, 201, ref.brandId);
+    assert.equal(db.calls.includes("precheck"), false, ref.brandId);
+    assert.equal(x.tokenCalls.length, 1);
+    assert.equal(account.access, "tok_new");
+  }
+});
+
+test("G4-02 #9 the RPC adapter asks the precheck function with the exact account", async () => {
+  const asked: string[] = [];
+  const rpc = createVaultAccountCredentialRpc({
+    supabaseUrl: "https://e.supabase.co/", serviceRoleKey: "srk",
+    fetchImpl: (async (url: string, init: RequestInit) => {
+      asked.push(`${url} ${init.body}`);
+      return Response.json("allow");
+    }) as typeof fetch,
+  });
+  await rpc.precheckPersonalRefresh(PERSONAL);
+  assert.deepEqual(asked, ['https://e.supabase.co/rest/v1/rpc/postona_x_refresh_precheck_v1 {"p_social_account_id":"acct_personal"}']);
 });
