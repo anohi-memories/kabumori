@@ -313,7 +313,7 @@ test('another person: B\'s screen shows none of A\'s rows; a spoofed account obj
   assert.equal(wire.writes.length, calls);
 });
 
-test('service ended (SYNTHETIC) -> the write is refused with the way out; writes stay off; reads stay; a good read after the restart clears it', async () => {
+test('service ended (SYNTHETIC) -> the write is refused with the way out; after the restart the old connection -> "reconnect X" (G3-02 #14); after G4 reconnect an earlier-generation row is final', async () => {
   const row = await saved('f6', 40);
   const h = aScreen();
   await h.render();
@@ -331,9 +331,19 @@ test('service ended (SYNTHETIC) -> the write is refused with the way out; writes
   }
   await press(h, '最新の状態を読み込む');
   typeTime(h, at(41));
-  await press(h, '時刻を変更');
+  let after = await press(h, '時刻を変更');
   assert.deepEqual(writes(), 'reschedule');
-  assert.equal(await rowState(row.reservationId), 'planned/2/needs_reconfirm', 'after the restart the same screen works');
+  assert.equal(await rowState(row.reservationId), 'planned/1/confirmed', 'G3-02 #14: the old connection writes nothing after a restart');
+  assert.ok(has(after, view.actionView('reconnect_x', 'x').message), texts(after).join(' / '));
+  assert.equal(await xConnect(a, 'a1b', '62101'), a.account);
+  await press(h, '最新の状態を読み込む');
+  typeTime(h, at(41));
+  after = await press(h, '時刻を変更');
+  assert.deepEqual(writes(), 'reschedule');
+  assert.equal(await rowState(row.reservationId), 'planned/1/confirmed', 'a row of the earlier generation is never moved');
+  assert.ok(has(after, view.actionView('final', 'x').message), texts(after).join(' / '));
+  const fresh = await saved('f6b', 41);
+  assert.equal(await rowState(fresh.reservationId), 'planned/1/confirmed', 'after the reconnect a new row is accepted');
 });
 
 test('G4 disconnect (real SQL) -> the write is refused with "reconnect X", then G4 reconnect + a read -> the write works', async () => {
