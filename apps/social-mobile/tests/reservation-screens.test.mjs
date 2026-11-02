@@ -197,6 +197,7 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
     'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
     'expo-router': { useRouter: () => ({ push: (href) => world.pushes.push(href), dismissTo: (href) => { world.pushes.push(href); world.dismissed.push(href); } }) },
     '@/constants/theme': { colors: { primary: 'p', primarySoft: 'ps', surface: 's', border: 'b', ink: 'i' } },
+    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {} } },
     '@/domain/service-enrollment': enrollment,
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: world.workspace, retry() {} }) },
@@ -243,7 +244,7 @@ test('gates OFF (G3\'s real disabled stores): the reason is shown, nothing is of
   assert.ok(has(tree, 'Xの予約の保存・変更・取消は、公開前の準備中のため、まだ使えません'));
   assert.equal(button(tree, '最新の状態を読み込む').disabled, true);
   assert.ok(!texts(tree).some((t) => t === '予約済み'));
-  button(tree, '作成画面を開く').onPress();
+  button(tree, '投稿予定タブを開く').onPress();
   assert.deepEqual(h.world.pushes, ['/(tabs)/schedule'], 'X reservations are made in the existing composer');
   assert.deepEqual(h.world.dismissed, ['/(tabs)/schedule'], 'T33: the tabs already open, so the preview there stays');
   assert.ok(has(tree, '「投稿予定」タブ'), 'T33: the tab has this name');
@@ -408,6 +409,32 @@ test('G1 T33 a restart observed in this app: the rows stay readable, X writes ar
   assert.equal(store.count('x.reschedule'), 0);
   reconnectSignal.clearXServiceRestarted(h.world.userId);
   assert.equal(button(await h.render(), '時刻を変更').disabled, false);
+});
+
+test('T34 RESV-1 on this screen: a failed read is not 「予約はありません」; a good read says it again; RESV-7: the reader\'s press clears the old warning, not a success', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: false, code: 'NETWORK_ERROR' });
+  const h = await mount({ store });
+  let tree = await h.render();
+  tree = await h.render();
+  assert.ok(!has(tree, 'このアカウントの予約はありません'), 'not known to be empty');
+  assert.ok(has(tree, '予約があるかどうかを確認できていません'));
+  const warnings = () => texts(tree).filter((t) => t.includes('確認できません') || t.includes('確認できませんでした'));
+  store.answer('x.list', { ok: true, value: [] });
+  tree = await press(h, '最新の状態を読み込む');
+  assert.ok(has(tree, 'このアカウントの予約はありません'));
+  assert.ok(!has(tree, '予約があるかどうかを確認できていません'));
+  assert.deepEqual(warnings(), [], 'the failed read\'s warning does not stay after a good read');
+});
+
+test('T34 RESV-4: the 401 card has the sign-out right there', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: false, code: 'POSTONA_RESV_AUTH_REQUIRED' });
+  const h = await mount({ store });
+  await h.render();
+  const tree = await h.render();
+  let signOut = 0; walk(tree, (n) => { if (n.type === 'SignOutButton') signOut += 1; });
+  assert.equal(signOut, 1);
 });
 
 test('X cancel asks twice; a double tap sends once; the revision last read is sent', async () => {
@@ -634,7 +661,7 @@ test('boundary: the screen reaches the stores only through use-reservation-ports
   const contract = code(await read('features/reservations/reservation-ports.ts'));
   const rules = code(await read('features/reservations/reservation-view.ts'));
   const importsOf = (source) => [...source.matchAll(/from ['"]([^'"]+)['"]/gu)].map((m) => m[1]).sort();
-  assert.deepEqual(importsOf(screen), ['@/components/ui', '@/constants/theme', '@/domain/service-enrollment', '@/features/personal-workspace/personal-workspace-provider',
+  assert.deepEqual(importsOf(screen), ['@/components/sign-out-button', '@/components/ui', '@/constants/theme', '@/domain/service-enrollment', '@/features/personal-workspace/personal-workspace-provider',
     '@/features/reservations/reservation-ports', '@/features/reservations/reservation-view', '@/features/reservations/use-reservation-ports',
     '@/features/reservations/x-reconnect-signal', '@/features/reservations/x-write-view',
     '@/providers/active-account-provider', '@/providers/auth-provider', 'expo-router', 'react', 'react-native']);

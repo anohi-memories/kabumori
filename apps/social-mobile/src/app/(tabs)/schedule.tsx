@@ -5,6 +5,7 @@ import { mockRepository } from '@/data/mock-repository';
 import { SupabaseContentSettingsRepository } from '@/data/content-settings-repository';
 import { getSupabaseConfig, supabase } from '@/lib/supabase';
 import { colors } from '@/constants/theme';
+import { SignOutButton } from '@/components/sign-out-button';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { isSendNowRow, type ActionButtonKind } from '@/features/reservations/reservation-view';
 import { useXWriteGuard } from '@/features/reservations/use-x-write-guard';
@@ -115,6 +116,8 @@ export default function ScheduleScreen() {
   const [rowRetiming, setRowRetiming] = useState<{ id: string; date: string; time: string } | null>(null);
   // One save at a time; an answer for another person / login / account does not reach the screen.
   const xGuard = useXWriteGuard(activeAccount);
+  // The saved row whose cancel asked once: the second press is the cancel (as on the reservations screen).
+  const [askingCancel, setAskingCancel] = useState<string | null>(null);
   const saving = useRef(false);
   const liveScope = useRef<string | null>(xGuard.scope);
   useEffect(() => { liveScope.current = xGuard.scope; }, [xGuard.scope]);
@@ -179,6 +182,8 @@ export default function ScheduleScreen() {
   const serverRows: ServerReservation[] = serverList?.state === 'ready' ? serverList.rows : [];
   // A "post now" row is not a reservation: its state and its cancel are on the reservations screen.
   const reservationRows = serverRows.filter((row) => !isSendNowRow(row));
+  // With the store on, the saved reservations are part of the answer: not read yet or not readable is not "none".
+  const serverAnswered = !reservationStore.enabled || serverList?.state === 'ready';
   // Planning is offered for an X account whose own brand is known. In the sample-data preview there is no
   // production brand (and nothing is read), so the demo account's brand -- or 'preview' -- is used.
   // A real account without a known brand cannot plan: the first workspace is never a fallback.
@@ -401,9 +406,12 @@ export default function ScheduleScreen() {
     setEditing(null);
   }
 
+  // A failed batch already says it on its own row.
+  const batchFailureTexts = myBatches.flatMap((batch) => (pendingSaves[batch.id]?.phase === 'failed' ? [xAnswerView(pendingSaves[batch.id].code ?? '', reservationErrorAction).text] : []));
+
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: 16 }} keyboardShouldPersistTaps="handled">
+      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: 16 }} keyboardShouldPersistTaps="handled">
         <SectionTitle detail="日時が近い順に表示しています">投稿予定</SectionTitle>
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
           {FILTERS.map((item) => (
@@ -418,6 +426,7 @@ export default function ScheduleScreen() {
           <ScheduleComposer
             context={{ owner, now: new Date(), occupied: occupiedExcept() }}
             ai={ai}
+            saveAvailable={reservationStore.enabled}
             onClose={() => setComposing(false)}
             onPlanned={(result) => {
               setDrafts((current) => [...current, ...result.drafts]);
@@ -436,7 +445,7 @@ export default function ScheduleScreen() {
         {myDrafts.length ? (
           <Card>
             <Pill tone="warning">{PREVIEW_LABEL}</Pill>
-            <Text style={styles.muted}>プレビューは、この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）。実際の予約と投稿は、まだ利用できません。</Text>
+            <Text style={styles.muted}>プレビューは、この画面を閉じたりアプリを再起動したりすると消えます（端末にもサーバーにも保存しません）。{reservationStore.enabled ? '予約になるのは「サーバーに保存」のあとです。' : '実際の予約と投稿は、まだ利用できません。'}</Text>
             {overall.manualTotal ? (
               <View style={{ gap: 4 }}>
                 <Pill tone={overall.complete ? 'success' : 'warning'}>{`確認済み ${overall.confirmed}/${overall.manualTotal}件`}</Pill>
@@ -493,14 +502,15 @@ export default function ScheduleScreen() {
             <ActionButton label="競合を解消（プレビュー内）" onPress={resolve} />
           </Card>
         ) : null}
-        {notice ? <Pill tone={notice.tone}>{notice.text}</Pill> : null}
-        {reservationStore.enabled && xGuard.refusal && xGuard.refusal.text !== notice?.text ? <Pill tone="warning">{xGuard.refusal.text}</Pill> : null}
+        {notice && !batchFailureTexts.includes(notice.text) ? <Pill tone={notice.tone}>{notice.text}</Pill> : null}
+        {reservationStore.enabled && xGuard.refusal && xGuard.refusal.text !== notice?.text && xGuard.refusal.button !== notice?.button ? <Pill tone="warning">{xGuard.refusal.text}</Pill> : null}
         {reservationStore.enabled && !xGuard.refusal ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
         {reservationStore.enabled ? (notice?.button ?? xGuard.refusal?.button) === 'accounts'
           ? <ActionButton label="アカウント画面を開く" onPress={() => router.push('/accounts')} />
           : (notice?.button ?? xGuard.refusal?.button) === 'settings'
             ? <ActionButton label="設定画面を開く" onPress={() => router.push('/(tabs)/settings')} />
             : null : null}
+        {reservationStore.enabled && !xGuard.canRead ? <SignOutButton /> : null}
         <ActionButton label="予約の管理を開く" onPress={() => router.push('/reservations')} />
 
         {serverList && accountId ? (
@@ -511,7 +521,7 @@ export default function ScheduleScreen() {
             {serverList.state === 'error' ? (
               <View style={{ gap: 4 }}>
                 <Pill tone="danger">{`サーバーの予約を読み込めませんでした。${reservationMessage(serverList.code)}`}</Pill>
-                <SmallButton label="読み込み直す" onPress={() => reloadServer(accountId)} />
+                <SmallButton label="読み込み直す" onPress={() => { setNotice(null); reloadServer(accountId); }} />
               </View>
             ) : null}
             {serverList.state === 'ready' && !serverList.rows.length ? <Text style={styles.muted}>まだありません。</Text> : null}
@@ -524,7 +534,12 @@ export default function ScheduleScreen() {
                 onRetimeApply={() => void changeReservation(row, 'reschedule')}
                 onRetimeCancel={() => setRowRetiming(null)}
                 onReconfirm={() => void changeReservation(row, 'reconfirm')}
-                onCancel={() => void changeReservation(row, 'cancel')} />
+                confirmingCancel={askingCancel === row.reservationId}
+                onCancel={() => {
+                  if (askingCancel !== row.reservationId) { setAskingCancel(row.reservationId); return; }
+                  setAskingCancel(null);
+                  void changeReservation(row, 'cancel');
+                }} />
             ))}
           </View>
         ) : null}
@@ -561,7 +576,8 @@ export default function ScheduleScreen() {
                 onCancel={() => cancelPosts([item.id])}
                 onConfirm={() => confirm(item.id)}
                 onUnconfirm={() => setConfirmations((current) => withoutConfirmations(current, [item.id]))} />))
-          : view.kind === 'posts' ? <EmptyState title="投稿予定はありません" detail="「投稿を作成」から、プレビューを作れます。" /> : null}
+          : view.kind === 'posts' && serverAnswered && !reservationRows.length && !classified.brandLevel.length && !classified.unattributable.length
+            ? <EmptyState title="投稿予定はありません" detail="「投稿を作成」から、プレビューを作れます。" /> : null}
       </ScrollView>
     </Screen>
   );

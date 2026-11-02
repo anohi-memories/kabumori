@@ -19,7 +19,7 @@ const toneOf = (row: ServerReservation): 'neutral' | 'success' | 'warning' | 'da
  * and each one is applied only after the server's read-back: time change (the consent of a manual post then
  * needs a new confirmation), reconfirmation of the exact text / time / account shown, and cancellation.
  */
-export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel }: {
+export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false }: {
   row: ServerReservation;
   account: PreviewAccount | null;
   busy: boolean;
@@ -30,6 +30,8 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
   onRetimeCancel: () => void;
   onReconfirm: () => void;
   onCancel: () => void;
+  /** The first press only asks; the label says what the next one does. */
+  confirmingCancel?: boolean;
 }) {
   const manual = row.origin === 'user_authored';
   const planned = row.status === 'planned';
@@ -67,7 +69,7 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {retiming === null ? <SmallButton label="日時を変更" disabled={busy} onPress={onRetime} /> : null}
           {manual && row.consentState === 'needs_reconfirm' ? <SmallButton label="この内容で再確認" disabled={busy} onPress={onReconfirm} /> : null}
-          <SmallButton label="予約を取り消す" disabled={busy} onPress={onCancel} />
+          <SmallButton label={confirmingCancel ? '本当に取り消す' : '予約を取り消す'} disabled={busy} onPress={onCancel} />
         </View>
       ) : null}
       {busy ? <Text style={styles.muted}>サーバーに確認しています…</Text> : null}
