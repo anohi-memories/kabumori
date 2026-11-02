@@ -163,6 +163,14 @@ test('T35 connection steps of an existing account offer the app; the choice is t
   }
 });
 
+test('T36 measured on the real runtime: a real disconnect leaves unconnected; the step does not say a connection was left unfinished, and the app can be opened', async () => {
+  const h = await gateHarness({ input: loaded({ xAccounts: [account('unconnected')] }) });
+  const tree = h.render();
+  assert.ok(texts(tree).some((t) => t.includes('現在接続されていません')));
+  assert.equal(texts(tree).some((t) => t.includes('完了していません')), false);
+  assert.ok(openApp(tree));
+});
+
 test('T35 measured on iOS 27: the gate clears the status bar; the login form makes room for the keyboard', async () => {
   const gate = await readFile(new URL('../src/features/onboarding/onboarding-gate.tsx', import.meta.url), 'utf8');
   assert.equal(gate.match(/<ScrollView contentInsetAdjustmentBehavior="always"/gu)?.length, 2);
