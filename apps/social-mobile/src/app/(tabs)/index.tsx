@@ -5,7 +5,7 @@ import { colors, typography } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { BrandPostPreview } from '@/features/brand-preview/brand-post-preview';
 import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { connectionPill, restartAppliesTo } from '@/features/reservations/x-write-view';
+import { connectionPill, restartAppliesTo, X_NOT_CONNECTED_HOME_TEXT } from '@/features/reservations/x-write-view';
 import { resolvePostsView, statusHeadline, summarizeHome } from '@/domain/data-view';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { useActiveAccount } from '@/providers/active-account-provider';
@@ -53,6 +53,13 @@ export default function HomeScreen() {
           <Text style={{ color: colors.muted, ...typography.body }}>AI運用担当者と、今日の発信を整えましょう。</Text>
         </View>
 
+        {status !== 'mock_preview' && activeAccount?.platform === 'x' && connection.tone === 'warning' ? (
+          <Card>
+            <Pill tone="warning">{X_NOT_CONNECTED_HOME_TEXT}</Pill>
+            <Link href="/reservations" asChild><ActionButton label="予約の管理を開く" onPress={() => {}} /></Link>
+            <Link href="/accounts" asChild><ActionButton label="アカウント画面を開く" onPress={() => {}} /></Link>
+          </Card>
+        ) : null}
         {status !== 'mock_preview' ? (
           <Card
             style={{

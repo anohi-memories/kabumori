@@ -437,6 +437,100 @@ test('T34 RESV-4: the 401 card has the sign-out right there', async () => {
   assert.equal(signOut, 1);
 });
 
+test('T35 disconnected X account of the person: rows are read, 「ありません」 only for an answered empty list, time changes stay off, a cancel goes; the way out is the accounts screen', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('a')] });
+  const h = await mount({ store });
+  const connected = h.world.accounts;
+  h.world.accounts = connected.map((item) => ({ ...item, connectionStatus: 'needs_attention' }));
+  await h.render();
+  let tree = await h.render();
+  assert.equal(store.count('x.list'), 1, 'the read goes');
+  assert.ok(has(tree, '既存の予約の確認と取消はできます'));
+  assert.ok(!has(tree, 'このアカウントの予約はありません'));
+  assert.ok(button(tree, 'アカウント画面を開く'));
+  assert.ok(!has(tree, '接続済みと表示されていても'));
+  tree = await open(h, '予約 2026-11-02 09:30');
+  assert.equal(button(tree, '時刻を変更').disabled, true);
+  assert.equal(button(tree, '予約を取り消す').disabled, false);
+  tree = await press(h, '予約を取り消す');
+  assert.equal(store.count('x.cancel'), 0, 'the first press asks');
+  store.answer('x.cancel', { ok: true, value: row('a', { status: 'cancelled', revision: 2 }) });
+  await press(h, '本当に取り消す');
+  assert.equal(store.count('x.cancel'), 1);
+});
+
+test('T35 disconnected: a failed read is not 「ありません」; an empty answer is; a 401 stops reads and the cancel; another workspace is not read at all', async () => {
+  let store = scriptedPorts();
+  store.answer('x.list', { ok: false, code: 'NETWORK_ERROR' });
+  let h = await mount({ store });
+  h.world.accounts = h.world.accounts.map((item) => ({ ...item, connectionStatus: 'needs_attention' }));
+  await h.render();
+  let tree = await h.render();
+  assert.ok(!has(tree, 'このアカウントの予約はありません'));
+  assert.ok(has(tree, '予約があるかどうかを確認できていません'));
+  store.answer('x.list', { ok: true, value: [] });
+  tree = await press(h, '最新の状態を読み込む');
+  assert.ok(has(tree, 'このアカウントの予約はありません'));
+
+  store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('a')] });
+  h = await mount({ store });
+  h.world.accounts = h.world.accounts.map((item) => ({ ...item, connectionStatus: 'needs_attention' }));
+  await h.render();
+  await h.render();
+  await open(h, '予約 2026-11-02 09:30');
+  await press(h, '予約を取り消す');
+  store.answer('x.cancel', { ok: false, code: 'POSTONA_RESV_AUTH_REQUIRED' });
+  tree = await press(h, '本当に取り消す');
+  assert.equal(button(tree, '最新の状態を読み込む').disabled, true, '401: no read with that token');
+  assert.equal(button(tree, '予約を取り消す')?.disabled ?? true, true, '401: no cancel with that token');
+
+  store = scriptedPorts();
+  h = await mount({ store });
+  h.world.accounts = h.world.accounts.map((item) => ({ ...item, brandId: 'shared', connectionStatus: 'needs_attention' }));
+  await h.render();
+  tree = await h.render();
+  assert.equal(store.count('x.list'), 0, 'another workspace');
+  assert.ok(has(tree, 'ご自身の個人ワークスペース'));
+});
+
+test('T35 a cancel also goes during a server\'s reconnect refusal, an observed restart and a service refusal; time changes do not', async () => {
+  for (const setup of [
+    (h) => reconnectSignal.markXReconnectRequired(h.world.accounts[0].id),
+    (h) => reconnectSignal.markXServiceRestarted(h.world.userId),
+  ]) {
+    const store = scriptedPorts();
+    store.answer('x.list', { ok: true, value: [row('a')] });
+    const h = await mount({ store });
+    await h.render();
+    await h.render();
+    setup(h);
+    const tree = await open(h, '予約 2026-11-02 09:30');
+    assert.equal(button(tree, '時刻を変更').disabled, true);
+    assert.equal(button(tree, '予約を取り消す').disabled, false);
+    await press(h, '予約を取り消す');
+    store.answer('x.cancel', { ok: true, value: row('a', { status: 'cancelled', revision: 2 }) });
+    await press(h, '本当に取り消す');
+    assert.equal(store.count('x.cancel'), 1);
+    assert.equal(reconnectSignal.isXReconnectRequired(h.world.accounts[0].id) || reconnectSignal.isXServiceRestarted(h.world.userId), true, 'a cancel clears neither');
+    reconnectSignal.clearAllXReconnectRequired();
+    reconnectSignal.clearXServiceRestarted(h.world.userId);
+  }
+});
+
+test('T35 Threads is not widened: a disconnected Threads account is refused before a request, as before', async () => {
+  const store = scriptedPorts();
+  const h = await mount({ store, accounts: [xAccount('acc-t', { platform: 'threads', connectionStatus: 'needs_attention' })] });
+  chip(await h.render(), 'Threads').onPress();
+  const tree = await h.render();
+  assert.ok(has(tree, 'Threadsアカウントの接続を確認できません'));
+  assert.equal(store.calls.length, 0);
+  assert.match(view.accountRefusal({ brandId: 'me', connectionStatus: 'needs_attention', platform: 'threads' }, 'threads', 'me'), /接続し直して/u);
+  assert.equal(view.accountRefusal({ brandId: 'me', connectionStatus: 'needs_attention', platform: 'x' }, 'x', 'me', false), null);
+  assert.match(view.accountRefusal({ brandId: 'other', connectionStatus: 'needs_attention', platform: 'x' }, 'x', 'me', false), /個人ワークスペース/u);
+});
+
 test('X cancel asks twice; a double tap sends once; the revision last read is sent', async () => {
   const store = scriptedPorts();
   store.answer('x.list', { ok: true, value: [row('a', { revision: 7 })] });
@@ -528,12 +622,11 @@ test('switching accounts: the old account\'s rows and notices are not shown, and
   assert.equal(button(tree, '最新の状態を読み込む').disabled, false);
 });
 
-test('fail-closed before any request: another workspace\'s account, W0 not ready, a disconnected account, no account', async () => {
+test('fail-closed before any request: another workspace\'s account, W0 not ready, no account (a disconnected own account is read: T35)', async () => {
   for (const [options, words] of [
     [{ accounts: [xAccount('acc-s', { brandId: 'shared-brand' })] }, '個人ワークスペースのアカウントだけ'],
     [{ workspace: { kind: 'preparing' } }, '個人ワークスペースのアカウントだけ'],
     [{ workspace: { kind: 'unconfirmed' } }, '個人ワークスペースのアカウントだけ'],
-    [{ accounts: [xAccount('acc-n', { connectionStatus: 'needs_attention' })] }, '接続し直してください'],
     [{ accounts: [] }, 'まだ接続されていません'],
   ]) {
     const store = scriptedPorts();

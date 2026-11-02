@@ -73,7 +73,8 @@ async function gateHarness({ input, userId = 'user-1', acknowledged = false, ide
   render(); first = false; effects.forEach((effect) => effect());
   await new Promise((resolve) => setImmediate(resolve));
   if (acknowledged) state.acknowledged = true;
-  return { render, state, isHome: (tree) => tree === CHILD || tree?.props?.children === CHILD };
+  const reload = async () => { effects.forEach((effect) => effect()); await new Promise((resolve) => setImmediate(resolve)); };
+  return { render, state, reload, isHome: (tree) => tree === CHILD || tree?.props?.children === CHILD };
 }
 
 const entryOf = (tree) => pressables(tree).find((p) => label(p).includes('アカウントの削除について'));
@@ -137,4 +138,35 @@ test('the deletion screen needs no Home providers, so it works before Home and k
   assert.match(screen, /ACCOUNT_DELETION_CONFIRM_PHRASE/u, 'typed confirmation unchanged');
   const gate = await readFile(new URL('../src/features/onboarding/onboarding-gate.tsx', import.meta.url), 'utf8');
   assert.equal((gate.match(/<DeletionEntry onOpen=\{openDeletion\} \/>/gu) ?? []).length, 2, 'both non-Home screens carry the entry');
+});
+
+const openApp = (tree) => { let found = null; walk(tree, (n) => { if (n.type === 'ActionButton' && n.props.label === '接続せずにアプリを開く') found = n; }); return found; };
+
+test('T35 connection steps of an existing account offer the app; the choice is this user\'s and goes away with another; a first connection and the other steps never offer it', async () => {
+  for (const status of ['disconnected', 'failed', 'authorization_pending']) {
+    const h = await gateHarness({ input: loaded({ xAccounts: [account(status)] }) });
+    assert.equal(h.isHome(h.render()), false, status);
+    const button = openApp(h.render());
+    assert.ok(button, status);
+    button.props.onPress();
+    assert.equal(h.isHome(h.render()), true, `${status}: the app opens`);
+    h.state.userId = 'user-2';
+    assert.equal(h.isHome(h.render()), false, 'another person, still loading');
+    await h.reload();
+    const other = h.render();
+    assert.ok(openApp(other), 'another person, loaded: the same step');
+    assert.equal(h.isHome(other), false, 'another person does not inherit the choice');
+  }
+  for (const name of ['connect_x', 'settings']) {
+    const h = await gateHarness({ input: STATES[name] });
+    assert.equal(openApp(h.render()), null, name);
+  }
+});
+
+test('T35 measured on iOS 27: the gate clears the status bar; the login form makes room for the keyboard', async () => {
+  const gate = await readFile(new URL('../src/features/onboarding/onboarding-gate.tsx', import.meta.url), 'utf8');
+  assert.equal(gate.match(/<ScrollView contentInsetAdjustmentBehavior="always"/gu)?.length, 2);
+  const login = await readFile(new URL('../src/components/auth-screen.tsx', import.meta.url), 'utf8');
+  assert.match(login, /<ScrollView automaticallyAdjustKeyboardInsets/u);
+  assert.doesNotMatch(login, /KeyboardAvoidingView/u, 'not both: they push the form twice');
 });

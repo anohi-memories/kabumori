@@ -23,7 +23,7 @@ import {
 } from '@/features/reservations/reservation-view';
 import { contentSha256, newClientRequestId, useReservationPorts } from '@/features/reservations/use-reservation-ports';
 import { isXReconnectRequired, isXServiceRestarted, markXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { CONNECTED_NOT_PROOF_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
+import { CONNECTED_NOT_PROOF_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, X_NOT_CONNECTED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -57,7 +57,7 @@ export default function ReservationsScreen() {
   const candidates = accounts.filter((item) => item.platform === platform);
   const account = candidates.find((item) => item.id === accountId) ?? candidates[0] ?? null;
   const personalId = workspace.kind === 'ready' ? workspace.workspaceId : null;
-  const refusal = !userId || !loginId ? 'ログインが確認できないため、予約を操作できません。ログインし直してください。' : accountRefusal(account, platform, personalId);
+  const refusal = !userId || !loginId ? 'ログインが確認できないため、予約を操作できません。ログインし直してください。' : accountRefusal(account, platform, personalId, platform !== 'x');
   const scope = refusal === null && account ? `${userId}\n${loginId}\n${platform}\n${account.id}` : null;
   const enabled = platform === 'x' ? ports.x.enabled : ports.threads.enabled;
 
@@ -73,7 +73,9 @@ export default function ReservationsScreen() {
   const reconnectRequired = platform === 'x' && isXReconnectRequired(account?.id);
   // This person restarted the service from this app: a connection made before it may not refresh. Reads stay possible here too.
   const restartObserved = platform === 'x' && isXServiceRestarted(userId) && !reconnectRequired;
-  const usable = canRead && blockedScope !== scope && !reconnectRequired && !restartObserved;
+  // The person's own X account without a connection: G3 still serves its rows and their cancel.
+  const notConnected = platform === 'x' && refusal === null && account?.connectionStatus !== 'connected';
+  const usable = canRead && blockedScope !== scope && !reconnectRequired && !restartObserved && !notConnected;
 
   const [xList, setXList] = useState<{ scope: string; rows: ServerReservation[]; failed?: boolean } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -133,8 +135,8 @@ export default function ReservationsScreen() {
   const rereadX = () => setReads((value) => value + 1);
 
   /** One X edit at a time, for the row as last read (its revision). */
-  const editX = async (op: () => Promise<StoreResult<ServerReservation>>, done: (row: ServerReservation) => string) => {
-    if (inFlight.current || !usable || scope === null) return;
+  const editX = async (op: () => Promise<StoreResult<ServerReservation>>, done: (row: ServerReservation) => string, isCancel = false) => {
+    if (inFlight.current || !(isCancel ? canRead : usable) || scope === null) return;
     inFlight.current = true;
     setBusy(true);
     const mine = scope;
@@ -172,7 +174,7 @@ export default function ReservationsScreen() {
   };
   const cancelX = (row: ServerReservation) => {
     if (confirmCancel !== row.reservationId) { setConfirmCancel(row.reservationId); return; }
-    void editX(() => ports.x.cancel(row.reservationId, row.revision), () => (isSendNowRow(row) ? '即時投稿を取り消しました。' : '予約を取り消しました。'));
+    void editX(() => ports.x.cancel(row.reservationId, row.revision), () => (isSendNowRow(row) ? '即時投稿を取り消しました。' : '予約を取り消しました。'), true);
   };
 
   // Threads: one create per press, with a new client request id; the request is kept (memory) so its receipt can be read.
@@ -258,6 +260,7 @@ export default function ReservationsScreen() {
   const rows = xList && xList.scope === scope ? xList.rows : [];
   const mineRequests = threadsRequests.filter((item) => item.scope === scope);
   const disabled = !usable || busy;
+  const cancelDisabled = !canRead || busy;
   const readDisabled = !canRead || busy;
   const go = (button: ActionButtonKind) => {
     if (button === 'accounts') router.push('/accounts');
@@ -292,8 +295,9 @@ export default function ReservationsScreen() {
           </Card>
         ) : null}
         {reconnectRequired && !refusal ? <Card><Pill tone="warning">{RECONNECT_REQUIRED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
+        {notConnected ? <Card><Pill tone="warning">{X_NOT_CONNECTED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
         {restartObserved && !refusal ? <Card><Pill tone="warning">{RESTART_OBSERVED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
-        {enabled && platform === 'x' && !refusal && !reconnectRequired && !restartObserved ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
+        {enabled && platform === 'x' && !refusal && !reconnectRequired && !restartObserved && !notConnected ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
         {loginRefused ? <Card><Pill tone="warning">{actionView('sign_in', platform).message}</Pill><ActionButton label="設定画面を開く" onPress={() => go('settings')} /><SignOutButton /></Card> : null}
         {shownNotice ? (
           <Card>
@@ -338,7 +342,7 @@ export default function ReservationsScreen() {
                       ) : null}
                       {view.needsReconfirm ? <ActionButton label="この本文で再確認する" disabled={disabled} onPress={() => reconfirm(row)} /> : null}
                       {view.canCancel ? (
-                        <ActionButton label={confirmCancel === row.reservationId ? '本当に取り消す' : sendNow ? '即時投稿を取り消す' : '予約を取り消す'} disabled={disabled} onPress={() => cancelX(row)} />
+                        <ActionButton label={confirmCancel === row.reservationId ? '本当に取り消す' : sendNow ? '即時投稿を取り消す' : '予約を取り消す'} disabled={cancelDisabled} onPress={() => cancelX(row)} />
                       ) : null}
                     </View>
                   ) : null}
