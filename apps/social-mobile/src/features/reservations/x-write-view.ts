@@ -13,6 +13,13 @@ const GENERATION_CHANGED = 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED';
 
 export const RECONNECT_REQUIRED_LABEL = '再接続が必要';
 export const RECONNECT_REQUIRED_TEXT = 'Xの再接続が必要です。再接続するまで、このアカウントの予約は保存・変更できません。アカウント画面でXを接続し直してください。';
+/** This person restarted the service from this app and has not connected since. Not a server's refusal, so it does not say 「再接続が必要」. */
+export const RESTART_OBSERVED_LABEL = '要確認';
+const RESTART_OBSERVED = 'X自動投稿を再開しました。再開前のXの接続は更新できないことがあるため、接続し直すまで、このアカウントの予約は保存・変更できません。';
+export const RESTART_OBSERVED_TEXT = `${RESTART_OBSERVED}アカウント画面でXを接続し直してください。`;
+export const RESTART_OBSERVED_ACCOUNTS_TEXT = `${RESTART_OBSERVED}下のボタンから接続し直してください。`;
+/** Beside a write when nothing was observed: 接続済み is the stored connection, not a promise that it can still be refreshed. */
+export const CONNECTED_NOT_PROOF_TEXT = '接続済みと表示されていても、X自動投稿を終了して再開したあとは接続を更新できないことがあります。予定どおりに投稿されないときは、アカウント画面で接続し直してください。';
 /** Not a statement about this account: nothing in the app can tell whether its connection predates a restart. */
 export const RESTART_HELP_TEXT = 'X自動投稿を終了して再開したあとは、接続の更新が止まることがあります。投稿が失敗したり、予約で接続のエラーが出たりしたら、ここから再接続してください。';
 
@@ -41,6 +48,11 @@ export function xAnswerView(code: string, actionOf: (code: string) => Reservatio
   return { action, text, tone: action === 'check' ? 'warning' : 'danger', button: next.button, blocks: next.blocks, reread: next.reread };
 }
 
+/** A restart moves the person's own generation: another workspace's X account is not touched by it. Workspace not known yet: it may be this one. */
+export function restartAppliesTo(account: { brandId?: string; platform: string }, personalId: string | null): boolean {
+  return account.platform === 'x' && (personalId === null || account.brandId === personalId);
+}
+
 export type XWriteRefusal = { text: string; button: ActionButtonKind };
 
 /** Why an X write is refused before a request is made: the same rule as the reservations screen, plus a confirmed reconnect. */
@@ -49,15 +61,18 @@ export function xWriteRefusal(input: {
   account: { brandId?: string; connectionStatus: string; platform: string } | null;
   personalId: string | null;
   reconnectRequired: boolean;
+  restartObserved?: boolean;
 }): XWriteRefusal | null {
   if (!input.loginId) return { text: 'ログインが確認できないため、予約を保存できません。ログインし直してください。', button: 'settings' };
   const refusal = accountRefusal(input.account, 'x', input.personalId);
   if (refusal) return { text: refusal, button: 'accounts' };
-  return input.reconnectRequired ? { text: RECONNECT_REQUIRED_TEXT, button: 'accounts' } : null;
+  if (input.reconnectRequired) return { text: RECONNECT_REQUIRED_TEXT, button: 'accounts' };
+  return input.restartObserved ? { text: RESTART_OBSERVED_TEXT, button: 'accounts' } : null;
 }
 
-/** The connection pill: 「再接続が必要」 only for a server's refusal; otherwise the server's connection_status, in each screen's wording. */
-export function connectionPill(connectionStatus: string, reconnectRequired: boolean, otherLabel: string): { label: string; tone: 'success' | 'warning' } {
+/** The connection pill: 「再接続が必要」 only for a server's refusal; 接続済み is not shown after an observed restart; otherwise the server's connection_status, in each screen's wording. */
+export function connectionPill(connectionStatus: string, reconnectRequired: boolean, otherLabel: string, restartObserved = false): { label: string; tone: 'success' | 'warning' } {
   if (reconnectRequired) return { label: RECONNECT_REQUIRED_LABEL, tone: 'warning' };
+  if (restartObserved && connectionStatus === 'connected') return { label: RESTART_OBSERVED_LABEL, tone: 'warning' };
   return connectionStatus === 'connected' ? { label: '接続済み', tone: 'success' } : { label: otherLabel, tone: 'warning' };
 }

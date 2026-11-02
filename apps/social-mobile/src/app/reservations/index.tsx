@@ -21,8 +21,8 @@ import {
   type Tone,
 } from '@/features/reservations/reservation-view';
 import { contentSha256, newClientRequestId, useReservationPorts } from '@/features/reservations/use-reservation-ports';
-import { isXReconnectRequired, markXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { RECONNECT_REQUIRED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
+import { isXReconnectRequired, isXServiceRestarted, markXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { CONNECTED_NOT_PROOF_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -70,7 +70,9 @@ export default function ReservationsScreen() {
   useXReconnectSignal();
   // A server said this X connection must be made again: only a new connect (the accounts screen) turns the writes back on.
   const reconnectRequired = platform === 'x' && isXReconnectRequired(account?.id);
-  const usable = canRead && blockedScope !== scope && !reconnectRequired;
+  // This person restarted the service from this app: a connection made before it may not refresh. Reads stay possible here too.
+  const restartObserved = platform === 'x' && isXServiceRestarted(userId) && !reconnectRequired;
+  const usable = canRead && blockedScope !== scope && !reconnectRequired && !restartObserved;
 
   const [xList, setXList] = useState<{ scope: string; rows: ServerReservation[] } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -258,7 +260,8 @@ export default function ReservationsScreen() {
   const readDisabled = !canRead || busy;
   const go = (button: ActionButtonKind) => {
     if (button === 'accounts') router.push('/accounts');
-    if (button === 'settings') router.push('/(tabs)/settings');
+    // Back to the tabs already open: a push would open a second set, and the composer's preview would be gone.
+    if (button === 'settings') router.dismissTo('/(tabs)/settings');
   };
 
   return (
@@ -288,6 +291,8 @@ export default function ReservationsScreen() {
           </Card>
         ) : null}
         {reconnectRequired && !refusal ? <Card><Pill tone="warning">{RECONNECT_REQUIRED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
+        {restartObserved && !refusal ? <Card><Pill tone="warning">{RESTART_OBSERVED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
+        {enabled && platform === 'x' && !refusal && !reconnectRequired && !restartObserved ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
         {loginRefused ? <Card><Pill tone="warning">{actionView('sign_in', platform).message}</Pill><ActionButton label="設定画面を開く" onPress={() => go('settings')} /></Card> : null}
         {shownNotice ? (
           <Card>
@@ -300,8 +305,8 @@ export default function ReservationsScreen() {
           <>
             <Card>
               <Text style={{ color: colors.ink, fontWeight: '800' }}>新しいXの予約</Text>
-              <Text style={styles.muted}>Xの予約は「予約」タブの作成画面で作ります。プレビューを確認してから保存します。</Text>
-              <ActionButton label="作成画面を開く" onPress={() => router.push('/(tabs)/schedule')} />
+              <Text style={styles.muted}>Xの予約は「投稿予定」タブの作成画面で作ります。プレビューを確認してから保存します。</Text>
+              <ActionButton label="作成画面を開く" onPress={() => router.dismissTo('/(tabs)/schedule')} />
             </Card>
             <ActionButton label="最新の状態を読み込む" disabled={readDisabled} onPress={rereadX} />
             {canRead && xList?.scope === scope && rows.length === 0 ? <Card><Text style={styles.muted}>このアカウントの予約はありません。</Text></Card> : null}

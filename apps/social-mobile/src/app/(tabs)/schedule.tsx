@@ -9,7 +9,7 @@ import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } fr
 import { isSendNowRow, type ActionButtonKind } from '@/features/reservations/reservation-view';
 import { useXWriteGuard } from '@/features/reservations/use-x-write-guard';
 import { clearXReconnectRequired, markXReconnectRequired } from '@/features/reservations/x-reconnect-signal';
-import { xAnswerView } from '@/features/reservations/x-write-view';
+import { CONNECTED_NOT_PROOF_TEXT, xAnswerView } from '@/features/reservations/x-write-view';
 import { resolvePostsView } from '@/domain/data-view';
 import { buildSaveRequest, type SaveRequest, type ServerReservation } from '@/domain/reservation-flow';
 import {
@@ -100,7 +100,7 @@ export default function ScheduleScreen() {
   // What the user confirmed, post by post (session-only). Validity is recomputed from the current draft on
   // every render, so an edit, time change, re-roll or conflict move invalidates it at once.
   const [confirmations, setConfirmations] = useState<ConfirmationMap>(EMPTY_CONFIRMATIONS);
-  const [notice, setNotice] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string; button?: ActionButtonKind } | null>(null);
+  const [scopedNotice, setScopedNotice] = useState<{ scope: string | null; tone: 'success' | 'warning' | 'danger'; text: string; button?: ActionButtonKind } | null>(null);
   // The AI plan uses the frequency confirmed in AI consultation (read only; nothing is written from here).
   // The values are bound to the exact brand they were read for: a workspace switch drops them at once, a late
   // answer for a previous brand/load is discarded, and an unreadable brand is labelled instead of inheriting.
@@ -118,6 +118,9 @@ export default function ScheduleScreen() {
   const saving = useRef(false);
   const liveScope = useRef<string | null>(xGuard.scope);
   useEffect(() => { liveScope.current = xGuard.scope; }, [xGuard.scope]);
+  // A notice is about the login and account it was shown for: it does not follow the person to another one.
+  const notice = scopedNotice && scopedNotice.scope === xGuard.scope ? scopedNotice : null;
+  const setNotice = (next: { tone: 'success' | 'warning' | 'danger'; text: string; button?: ActionButtonKind } | null) => setScopedNotice(next && { ...next, scope: liveScope.current });
   useEffect(() => {
     // Not ready / no brand: nothing to load. aiPlanningFor() already returns the unloaded default for any
     // brand the state was not read for, so a previous brand's values are never shown here.
@@ -356,7 +359,10 @@ export default function ScheduleScreen() {
     if (!target) return;
     // Records exactly what the card shows now; an edit made while the hash is computed leaves it invalid.
     void confirmDraft(target, sha256Hex).then((confirmed) => {
-      if (confirmed) setConfirmations((current) => withConfirmation(current, confirmed));
+      if (!confirmed) return;
+      setConfirmations((current) => withConfirmation(current, confirmed));
+      // 「確認が無効になりました」 and the like are out of date once the person has confirmed again.
+      setNotice(null);
     });
   }
 
@@ -489,6 +495,7 @@ export default function ScheduleScreen() {
         ) : null}
         {notice ? <Pill tone={notice.tone}>{notice.text}</Pill> : null}
         {reservationStore.enabled && xGuard.refusal && xGuard.refusal.text !== notice?.text ? <Pill tone="warning">{xGuard.refusal.text}</Pill> : null}
+        {reservationStore.enabled && !xGuard.refusal ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
         {reservationStore.enabled ? (notice?.button ?? xGuard.refusal?.button) === 'accounts'
           ? <ActionButton label="アカウント画面を開く" onPress={() => router.push('/accounts')} />
           : (notice?.button ?? xGuard.refusal?.button) === 'settings'

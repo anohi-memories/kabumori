@@ -40,7 +40,7 @@ test.after(() => {
   }
   assert.equal(trapped, 0);
 });
-test.beforeEach(() => signal.clearAllXReconnectRequired());
+test.beforeEach(() => { signal.clearAllXReconnectRequired(); signal.clearXServiceRestarted('person-1'); });
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -367,6 +367,81 @@ test('another login / account while a save is out: its answer reaches nobody els
   assert.doesNotMatch(onScreen(h), /Xの再接続が必要です/u, 'its words are not shown on the other account');
 });
 
+test('T33 real-tap finding: confirming removes the notice it made out of date; the header back label is not the route group', async () => {
+  const h = await screen({});
+  await planOne(h);
+  assert.match(onScreen(h), /プレビューを作りました/u);
+  await confirmAll(h);
+  assert.doesNotMatch(onScreen(h), /プレビューを作りました/u);
+  const layout = await readFile(new URL('../src/app/_layout.tsx', import.meta.url), 'utf8');
+  assert.match(layout, /headerBackTitle: '戻る'/u);
+});
+
+test('T33 not observable: a connected account can save, and the supplement says 接続済み is no promise; no reconnect is claimed', async () => {
+  const { h } = await ready({ create: () => no(429, 'POSTONA_RESV_RATE_LIMITED') });
+  assert.equal(saveButton(h).disabled, false);
+  assert.match(onScreen(h), /接続済みと表示されていても/u);
+  assert.doesNotMatch(onScreen(h), /再接続が必要|Xの再接続/u);
+  assert.equal(ofAction(h, 'create').length, 0);
+});
+
+test('T33 observed: after this person\'s restart nothing is sent, the words and the way out are shown; another person is not affected; only the connect turns it back on', async () => {
+  const { h } = await ready();
+  signal.markXServiceRestarted('person-9');
+  await h.update();
+  assert.equal(saveButton(h).disabled, false, 'another person\'s restart');
+  signal.clearXServiceRestarted('person-9');
+  signal.markXServiceRestarted('person-1');
+  await h.update();
+  assert.equal(saveButton(h).disabled, true);
+  assert.match(onScreen(h), /X自動投稿を再開しました/u);
+  assert.doesNotMatch(onScreen(h), /Xの再接続が必要です|接続済みと表示されていても/u);
+  labelled(h.render(), 'ActionButton', 'アカウント画面を開く').onPress();
+  assert.deepEqual(h.world.pushes, ['/accounts']);
+  assert.equal(ofAction(h, 'create').length, 0);
+  signal.clearAllXReconnectRequired();
+  await h.update();
+  assert.equal(saveButton(h).disabled, true, 'clearing a server\'s refusal does not clear the restart');
+  signal.clearXServiceRestarted('person-1');
+  await h.update();
+  assert.equal(saveButton(h).disabled, false);
+});
+
+test('T33 observable: G4\'s generation code, if a server answer carries it, says 再接続が必要 and stops the writes; not a retry', async () => {
+  const { h } = await ready({ create: () => no(403, 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED') });
+  await pressSave(h);
+  assert.equal(signal.isXReconnectRequired(ACCOUNT.id), true);
+  assert.match(onScreen(h), /Xの再接続が必要です/u);
+  assert.equal(saveButton(h).disabled, true);
+  assert.equal(ofAction(h, 'create').length, 1);
+});
+
+test('T33 A-B-A: a refusal stays with its account; B can save; back on A the writes are off again and no answer crossed', async () => {
+  const other = { ...ACCOUNT, id: '22222222-2222-4222-8222-222222222222' };
+  const { h } = await ready({ create: () => no(403, 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED') });
+  await pressSave(h);
+  assert.equal(saveButton(h).disabled, true);
+  h.world.account = other;
+  await h.update();
+  assert.doesNotMatch(onScreen(h), /Xの再接続が必要です/u, 'A\'s words do not follow the person to B');
+  assert.equal(signal.isXReconnectRequired(other.id), false);
+  h.world.account = ACCOUNT;
+  await h.update();
+  assert.match(onScreen(h), /Xの再接続が必要です/u);
+  assert.equal(ofAction(h, 'create').length, 1, 'nothing was re-sent on the way back');
+});
+
+test('T33 gate OFF: with or without a recorded restart, nothing is sent, no token is read, and no supplement is shown (nothing is being saved)', async () => {
+  const h = await screen({ gate: false });
+  await h.update();
+  assert.doesNotMatch(onScreen(h), /接続済みと表示されていても/u);
+  signal.markXServiceRestarted('person-1');
+  await h.update();
+  assert.doesNotMatch(onScreen(h), /接続済みと表示されていても/u);
+  assert.equal(h.world.calls.length, 0);
+  assert.equal(h.world.sessionReads, 0);
+});
+
 test('refused before any request: no login, another person\'s workspace, W0 not ready, a disconnected account', async () => {
   for (const [change, words] of [
     [(world) => { world.token = null; }, /ログインが確認できない/u],
@@ -421,6 +496,32 @@ test('connectionPill: 「再接続が必要」 only for a server\'s refusal; a r
   assert.doesNotMatch(xWriteView.RESTART_HELP_TEXT, /必要です/u, 'the help does not state it for this account');
 });
 
+test('T33 connectionPill: an observed restart hides 接続済み without saying 再接続が必要; a refusal and connection_status keep their words', () => {
+  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', true), { label: '要確認', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('connected', true, '要再接続', true), { label: '再接続が必要', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要再接続', true), { label: '要再接続', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', false), { label: '接続済み', tone: 'success' });
+  const account = { brandId: 'me', connectionStatus: 'connected', platform: 'x' };
+  assert.equal(xWriteView.xWriteRefusal({ loginId: 'l', account, personalId: 'me', reconnectRequired: false, restartObserved: true }).text, xWriteView.RESTART_OBSERVED_TEXT);
+  assert.equal(xWriteView.xWriteRefusal({ loginId: 'l', account, personalId: 'me', reconnectRequired: true, restartObserved: true }).text, xWriteView.RECONNECT_REQUIRED_TEXT);
+  assert.equal(xWriteView.xWriteRefusal({ loginId: 'l', account, personalId: 'me', reconnectRequired: false, restartObserved: false }), null);
+});
+
+test('T33 the restart signal: per person, null is nobody, an accepted write or a refusal clear does not touch it', () => {
+  signal.markXServiceRestarted('p');
+  assert.deepEqual([signal.isXServiceRestarted('p'), signal.isXServiceRestarted('q'), signal.isXServiceRestarted(null)], [true, false, false]);
+  signal.markXReconnectRequired('r');
+  signal.clearXReconnectRequired('r');
+  signal.markXReconnectRequired('r');
+  signal.clearAllXReconnectRequired();
+  assert.equal(signal.isXReconnectRequired('r'), false);
+  assert.equal(signal.isXServiceRestarted('p'), true);
+  signal.clearXServiceRestarted('q');
+  assert.equal(signal.isXServiceRestarted('p'), true);
+  signal.clearXServiceRestarted('p');
+  assert.equal(signal.isXServiceRestarted('p'), false);
+});
+
 test('the signal: set by a refusal, per account; cleared by the connect or by one account\'s accepted write; memory only', async () => {
   signal.markXReconnectRequired('a');
   signal.markXReconnectRequired('b');
@@ -459,6 +560,8 @@ test('accounts screen (real): 接続済み until a server\'s refusal; then 再�
     '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: connectState, stateText: '', verifiedHandle: null, connect() {} }) },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: [ACCOUNT], activeAccount: ACCOUNT, selectAccount() {} }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reload() {} }) },
+    '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },
+    '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: ME } }) },
   });
   let text = textOf(render({}));
   assert.match(text, /接続済み/u);
@@ -475,6 +578,70 @@ test('accounts screen (real): 接続済み until a server\'s refusal; then 再�
   render({});
   effects.forEach((effect) => effect());
   assert.equal(signal.isXReconnectRequired(ACCOUNT.id), false);
+  // T33: a restart observed in this app, with no refusal: not 接続済み, not 再接続が必要, the reconnect button; the connect clears it, for this person only
+  connectState = 'idle';
+  signal.markXServiceRestarted('person-1');
+  signal.markXServiceRestarted('person-9');
+  text = textOf(render({}));
+  assert.doesNotMatch(text, /接続済み|再接続が必要/u);
+  assert.match(text, /要確認/u);
+  assert.match(text, /X自動投稿を再開しました/u);
+  assert.match(text, /下のボタンから接続し直してください/u);
+  assert.match(text, /Xアカウントの再接続/u);
+  effects.length = 0;
+  render({});
+  effects.forEach((effect) => effect());
+  assert.equal(signal.isXServiceRestarted('person-1'), true, 'opening the screen is not a connect');
+  connectState = 'connected';
+  effects.length = 0;
+  render({});
+  effects.forEach((effect) => effect());
+  assert.equal(signal.isXServiceRestarted('person-1'), false);
+  assert.equal(signal.isXServiceRestarted('person-9'), true);
+  signal.clearXServiceRestarted('person-9');
+});
+
+test('T33 another workspace\'s X account: a restart does not touch it, on the accounts screen or at home; an unknown workspace may be this one', async () => {
+  const SHARED = { ...ACCOUNT, id: '33333333-3333-4333-8333-333333333333', brandId: 'shared-org' };
+  let view = { kind: 'ready', workspaceId: ME };
+  const common = {
+    ...baseStubs(),
+    '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view }) },
+    '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },
+  };
+  const accounts = await loadScreen('../src/app/accounts/index.tsx', {
+    ...common,
+    react: { useEffect() {} },
+    'expo-router': { useRouter: () => ({ push() {} }) },
+    '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: 'idle', stateText: '', verifiedHandle: null, connect() {} }) },
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: [SHARED], activeAccount: SHARED, selectAccount() {} }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reload() {} }) },
+  });
+  const home = await loadScreen('../src/app/(tabs)/index.tsx', {
+    ...common,
+    'expo-router': { Link: 'Link' },
+    '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getHistory: () => [] } },
+    '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
+    '@/domain/data-view': dataView,
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: SHARED }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
+    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
+  });
+  signal.markXServiceRestarted('person-1');
+  let text = textOf(accounts({}));
+  assert.match(text, /接続済み/u);
+  assert.doesNotMatch(text, /要確認|X自動投稿を再開しました|Xアカウントの再接続/u);
+  assert.match(textOf(home({})), /^接続済み$/mu);
+  view = { kind: 'preparing' };
+  text = textOf(accounts({}));
+  assert.match(text, /要確認/u);
+  assert.match(textOf(home({})), /^要確認$/mu);
+  assert.deepEqual([
+    xWriteView.restartAppliesTo({ platform: 'x', brandId: 'me' }, 'me'),
+    xWriteView.restartAppliesTo({ platform: 'x', brandId: 'other' }, 'me'),
+    xWriteView.restartAppliesTo({ platform: 'threads', brandId: 'me' }, 'me'),
+    xWriteView.restartAppliesTo({ platform: 'x', brandId: 'other' }, null),
+  ], [true, false, false, true]);
 });
 
 test('home (real): 再接続が必要 replaces 接続済み for the selected X account after a server\'s refusal', async () => {
@@ -487,8 +654,18 @@ test('home (real): 再接続が必要 replaces 接続済み for the selected X a
     '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: ACCOUNT }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
+    '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },
+    '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: ME } }) },
   });
   assert.match(textOf(render({})), /^接続済み$/mu);
+  signal.markXServiceRestarted('person-9');
+  assert.match(textOf(render({})), /^接続済み$/mu, 'another person\'s restart');
+  signal.clearXServiceRestarted('person-9');
+  signal.markXServiceRestarted('person-1');
+  const restarted = textOf(render({}));
+  assert.match(restarted, /^要確認$/mu, 'an observed restart hides 接続済み');
+  assert.doesNotMatch(restarted, /^接続済み$|再接続が必要/mu);
+  signal.clearXServiceRestarted('person-1');
   signal.markXReconnectRequired(ACCOUNT.id);
   const text = textOf(render({}));
   assert.match(text, /再接続が必要/u);
