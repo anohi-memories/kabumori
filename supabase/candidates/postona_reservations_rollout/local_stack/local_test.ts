@@ -249,6 +249,9 @@ Deno.test("G3-02 reservations on the real local Supabase runtime (create decided
     assert.deepStrictEqual(rows(await http(X, { action: "cancel", payload: { reservationId: r5, expectedRevision: 1 } }, a.token)).map((r) => r.status), ["cancelled"]);
     await owner("update public.service_entitlements set status = 'active', ended_at = null where user_id = :'u' and service_key = 'x_autopost'", { u: a.userId });
     assert.deepStrictEqual(await xVerdict(a), "true|VERIFIED");
+    // G3-02 #14: the end + restore moved G5's generation, so the old connection writes nothing until it is made again
+    assert.deepStrictEqual(code(await http(X, await createPayload(a, "r6b", at(12)), a.token)), "403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED");
+    assert.deepStrictEqual(await xConnect(a, "a2b", "62001"), a.account);
   });
 
   await t.step("L9 nothing is sent: the worker entry claims nothing (credential source deny); an uncertain row is never re-sent nor cancelled", async () => {
@@ -544,6 +547,9 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const cancelled = await appX(a.token).cancel(id, 1);
     assert.ok(cancelled.ok && cancelled.value.status === "cancelled", JSON.stringify(cancelled));
     assert.deepStrictEqual([counts((await deliver()).report), await xCalls()], [zero, 1]);
+    // G3-02 #14: the end + restore moved G5's generation: the connection is made again before the next steps write
+    assert.deepStrictEqual(await xConnect(a, "a6", "62001"), a.account);
+    await snapshot(a.account!, await generationOf(a.account!));
   });
 
   await t.step("L22 E2E an unknown X answer -> uncertain, never re-sent, not cancellable (final)", async () => {
@@ -738,5 +744,96 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     for (const o of ["NOT_CONFIGURED", "HTTP/503", "HTTP/401", "HTTP/200", "PREVIOUS_IN_FLIGHT", "TICK_BUSY"]) assert.ok(outcomes.split(",").includes(o), `${o} in ${outcomes}`);
     assert.ok(outcomes.includes("TRANSPORT_ERROR") || outcomes.includes("TIMED_OUT"), outcomes);
     await target(`${KONG_FN}/${WK2}`);   // left for run.sh's pg_cron step
+  });
+
+  // ---- G3-02 #14: a service end + restart moves G5's lifecycle generation; the X connection made before it must not write or send.
+  const d = await signUp("d");
+  const rpcAs = async (p: Person, fn: string, body: unknown) => {
+    const r = await fetch(`${API}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: PUBLISHABLE, authorization: `Bearer ${p.token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+    return { status: r.status, body: await r.json() };
+  };
+  const dSave = async (name: string, days: number) => {
+    const made = await appX(d.token).save(await saveRequest(d, name, at(days)));
+    assert.ok(made.kind === "saved", JSON.stringify(made));
+    return made.reservations[0];
+  };
+  const precheck = () => owner("select public.postona_x_refresh_precheck_v1(:'a')", { a: d.account! });
+  const NOT_VERIFIED = { ok: false, code: "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED" };
+  let rEdit: { reservationId: string; revision: number }; let rConfirm: { reservationId: string; revision: number }; let rDue: { reservationId: string; revision: number };
+
+  await t.step("L32 restart, old connection: create / reschedule / reconfirm 403 (reconnect), nothing written, nothing sent; list / get / cancel go on; others 404; bad JWT 401", async () => {
+    await firstRun(d);
+    d.account = await xConnect(d, "d1", "62301");
+    assert.deepStrictEqual(await precheck(), "allow");
+    rEdit = await dSave("r1", 77);
+    const toCancel = await dSave("r2", 78);
+    const pending = await dSave("r3", 79);
+    rDue = await dSave("r4", 80);
+    const moved = await appX(d.token).reschedule(pending.reservationId, pending.revision, at(81));
+    assert.ok(moved.ok);
+    rConfirm = moved.value;
+    const life = () => owner("select lifecycle_version from public.common_accounts where user_id = :'u'", { u: d.userId });
+    const before = Number(await life());
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: d.userId });   // SYNTHETIC end
+    const asked = await rpcAs(d, "start_x_autopost_service", {});
+    assert.deepStrictEqual(asked.body.status, "reenroll_required");
+    const back = await rpcAs(d, "reactivate_x_autopost_service", { p_expected_lifecycle_version: asked.body.lifecycle_version });
+    assert.deepStrictEqual(back.body.status, "active", JSON.stringify(back.body));
+    assert.ok(Number(await life()) > before, "G5's generation moved");
+    assert.deepStrictEqual(await owner("select connection_status from public.social_accounts where id = :'a'", { a: d.account! }), "identity_verified", "G1's measurement: the connection still reads verified");
+    assert.deepStrictEqual(await xVerdict(d), "true|VERIFIED", "and so does G4's verdict");
+    assert.deepStrictEqual(await precheck(), "SERVICE_GENERATION_CHANGED", "G4's generation check");
+    const s = appX(d.token);
+    const n0 = await countOf("select count(*) from postona_x_resv.reservations");
+    const created = await s.save(await saveRequest(d, "stale", at(82)));
+    assert.deepStrictEqual([created, reservationErrorAction(created.kind === "failed" ? created.code : "")], [{ kind: "failed", code: "POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED" }, "reconnect_x"]);
+    assert.deepStrictEqual(await countOf("select count(*) from postona_x_resv.reservations"), n0, "nothing written");
+    assert.deepStrictEqual(await s.reschedule(rEdit.reservationId, rEdit.revision, at(83)), NOT_VERIFIED);
+    assert.deepStrictEqual(await s.reconfirm(rConfirm.reservationId, rConfirm.revision, await sha256("G3-02 app r3")), NOT_VERIFIED);
+    assert.deepStrictEqual([await rowState(rEdit.reservationId), await rowState(rConfirm.reservationId)], ["planned/1/-", "planned/2/-"]);
+    const listed = await s.list(d.account!);
+    assert.ok(listed.ok && listed.value.length === 4, JSON.stringify(listed));
+    assert.ok((await s.get(rEdit.reservationId)).ok);
+    const cancelled = await s.cancel(toCancel.reservationId, toCancel.revision);
+    assert.ok(cancelled.ok && cancelled.value.status === "cancelled", JSON.stringify(cancelled));
+    assert.deepStrictEqual(await appX(b.token).get(rEdit.reservationId), { ok: false, code: "POSTONA_RESV_NOT_FOUND" });
+    assert.deepStrictEqual(await appX(b.token).reschedule(rEdit.reservationId, 1, at(84)), { ok: false, code: "POSTONA_RESV_NOT_FOUND" });
+    const foreign = await appX(b.token).save(await saveRequest(d, "foreign", at(85)));
+    assert.deepStrictEqual(foreign, { kind: "failed", code: "POSTONA_RESV_ACCOUNT_NOT_FOUND" }, "another workspace's account");
+    assert.deepStrictEqual(await appX("not.a.jwt.at-all-0000").list(d.account!), { ok: false, code: "AUTH_REQUIRED" });
+    // the worker: a row of the new generation over the old connection (SYNTHETIC: this fix refuses to create one) is not claimed, not sent
+    const fresh = await owner("select lifecycle_version from public.common_accounts where user_id = :'u'", { u: d.userId });
+    await owner("update postona_x_resv.reservations set bound_lifecycle_version = :'l' where id = :'i'", { l: fresh, i: rDue.reservationId });
+    await makeDue(rDue.reservationId);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const calls = await xCalls();
+    const run = await deliver();
+    assert.deepStrictEqual([run.report?.claimed, run.report?.sends, await xCalls(), await rowState(rDue.reservationId)], [0, 0, calls, "planned/1/-"], JSON.stringify(run));
+  });
+
+  await t.step("L33 after an explicit reconnect: create and send work once; rows of the earlier generation stay unmovable (final) but cancellable; never sent", async () => {
+    assert.deepStrictEqual(await appX(d.token).cancel(rDue.reservationId, rDue.revision).then((r) => r.ok), true);
+    assert.deepStrictEqual(await xConnect(d, "d2", "62301"), d.account);
+    assert.deepStrictEqual(await precheck(), "allow", "a new connect records the current generation");
+    const s = appX(d.token);
+    const moved = await s.reschedule(rEdit.reservationId, rEdit.revision, at(83));
+    assert.deepStrictEqual([moved, reservationErrorAction(moved.ok ? "" : moved.code)], [{ ok: false, code: "POSTONA_RESV_NOT_PLANNED" }, "final"]);
+    assert.deepStrictEqual(await s.reconfirm(rConfirm.reservationId, rConfirm.revision, await sha256("G3-02 app r3")), { ok: false, code: "POSTONA_RESV_NOT_PLANNED" });
+    assert.deepStrictEqual([await rowState(rEdit.reservationId), await rowState(rConfirm.reservationId)], ["planned/1/-", "planned/2/-"]);
+    const cancelled = await s.cancel(rConfirm.reservationId, rConfirm.revision);
+    assert.ok(cancelled.ok && cancelled.value.status === "cancelled", JSON.stringify(cancelled));
+    const made = await s.save(await saveRequest(d, "after", at(86)));
+    assert.ok(made.kind === "saved", JSON.stringify(made));
+    const id = made.reservations[0].reservationId;
+    await makeDue(id);
+    await makeDue(rEdit.reservationId);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const calls = await xCalls();
+    const run = await deliver();
+    assert.deepStrictEqual([run.report?.sends, run.report?.published, await xCalls()], [1, 1, calls + 1], JSON.stringify(run));
+    assert.match(await outcome(id), /^published\/PUBLISHED\/9[0-9]{9}$/u);
+    assert.deepStrictEqual(await outcome(rEdit.reservationId), "failed/SERVICE_GENERATION_CHANGED/-", "the earlier generation's row is closed, never sent");
+    const again = await deliver();
+    assert.deepStrictEqual([again.report?.claimed, await xCalls()], [0, calls + 1], "not re-sent");
   });
 });

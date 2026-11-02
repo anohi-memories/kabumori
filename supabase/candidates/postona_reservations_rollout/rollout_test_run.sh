@@ -69,6 +69,10 @@ suffix="${owner##*_}"
 work="$g4w/g3_work"; mkdir -p "$work"
 own() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db" "$@"; }
 sval() { "${S[@]}" -d "$db" "$@"; }
+# G3-02 #14: the connection-generation check 014 calls, from G4 PR #617 (read only)
+for f in 006_x_connect_profile_fence 007_x_refresh_precheck; do
+  git -C "$repo" show "1d020c406cc982eedfa29a8b682c96db31888a68:supabase/candidates/postona_g4_x_oauth_personal_mvp/$f.sql" | own -f - >/dev/null || fail "G4 $f"
+done
 echo "OK world: G4's personal world at $g4head (G4's runner, G4T_VERDICT), owner $owner"
 
 # the bundle under test (a copy only when a mutated preflight is given; the manifest's paths still resolve to this checkout)
@@ -176,6 +180,9 @@ sval -c "alter role $owner nosuperuser" >/dev/null
 own -c "grant execute on function postona_g4_credential.x_publish_credential_verdict(uuid,text) to authenticated" >/dev/null
 expect_ro "RP2 G4 X verdict granted to authenticated" "G3_ROLLOUT_PREFLIGHT_G4_VERDICT: postona_g4_credential.x_publish_credential_verdict" preflight
 own -c "revoke execute on function postona_g4_credential.x_publish_credential_verdict(uuid,text) from authenticated" >/dev/null
+own -c "grant execute on function public.postona_x_refresh_precheck_v1(text) to authenticated" >/dev/null
+expect_ro "RP2b G4 connection-generation check granted to authenticated" "G3_ROLLOUT_PREFLIGHT_G4_VERDICT: public.postona_x_refresh_precheck_v1" preflight
+own -c "revoke execute on function public.postona_x_refresh_precheck_v1(text) from authenticated" >/dev/null
 own -c "select pg_get_functiondef('postona_g4_credential.threads_publish_credential_verdict(uuid,text)'::regprocedure)" > "$work/g4t.sql"
 grep -q 'CREATE OR REPLACE FUNCTION' "$work/g4t.sql" || fail "RP3 probe: no definition"
 own -c "select set_config('g3ro.t', '1', false)" -c "do \$\$ declare d text := pg_get_functiondef('postona_g4_credential.threads_publish_credential_verdict(uuid,text)'::regprocedure);

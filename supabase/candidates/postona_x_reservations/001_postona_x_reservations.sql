@@ -513,6 +513,8 @@ declare v_row postona_x_resv.reservations%rowtype; v_band jsonb;
 begin
   v_row := postona_x_resv.lock_own(p_reservation_id, p_expected_revision);
   if v_row.status <> 'planned' or v_row.draft_id ~ '^single:' then raise exception 'POSTONA_RESV_NOT_PLANNED' using errcode = 'P0001'; end if;
+  -- G3-02 #14: a row of an earlier service generation is never sent (claim closes it); moving it must not read as done
+  if postona_x_resv.g5_bound_state(v_row) is distinct from 'active' then raise exception 'POSTONA_RESV_NOT_PLANNED' using errcode = 'P0001'; end if;
   if p_new_at is null or p_new_at < pg_catalog.now() + interval '5 minutes' or p_new_at > pg_catalog.now() + interval '90 days' then
     raise exception 'POSTONA_RESV_TIME_OUT_OF_RANGE' using errcode = 'P0001';
   end if;
@@ -540,8 +542,8 @@ language plpgsql volatile security definer set search_path = '' as $$
 declare v_row postona_x_resv.reservations%rowtype;
 begin
   v_row := postona_x_resv.lock_own(p_reservation_id, p_expected_revision);
-  if v_row.status <> 'planned' or v_row.origin <> 'user_authored' then
-    raise exception 'POSTONA_RESV_NOT_PLANNED' using errcode = 'P0001';
+  if v_row.status <> 'planned' or v_row.origin <> 'user_authored' or postona_x_resv.g5_bound_state(v_row) is distinct from 'active' then
+    raise exception 'POSTONA_RESV_NOT_PLANNED' using errcode = 'P0001';  -- G3-02 #14: a row of an earlier service generation is never sent
   end if;
   if p_content_sha256 is distinct from v_row.content_sha256 then
     raise exception 'POSTONA_RESV_CONSENT_REQUIRED' using errcode = 'P0001';

@@ -85,6 +85,10 @@ expect_err() {
   || fail "G4's verdicts are not the pinned bodies"
 [ "$(sval -c "select (select rolsuper from pg_roles where rolname = '$owner')::text || '/' || (select proowner::regrole::text from pg_proc where oid = 'postona_g4_credential.x_publish_credential_verdict(uuid,text)'::regprocedure)")" = "false/$owner" ] \
   || fail "G4's verdict owner is not the non-superuser lifecycle owner"
+# G3-02 #14: the connection-generation check 014 calls, from G4 PR #617 (read only)
+for f in 006_x_connect_profile_fence 007_x_refresh_precheck; do
+  git -C "$repo" show "1d020c406cc982eedfa29a8b682c96db31888a68:supabase/candidates/postona_g4_x_oauth_personal_mvp/$f.sql" | own -f - >/dev/null || fail "G4 $f"
+done
 echo "OK world: G4's personal world at $g4head (G4's runner, G4T_VERDICT) with G4's verdicts (md5 pinned), owner $owner"
 
 # --- G3 base --------------------------------------------------------------------------------------------------------------------------

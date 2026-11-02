@@ -226,6 +226,19 @@ What it showed, for the operator:
   - an owner change A → B → A (PG17 EP / W1);
   - the hosted gateway, Cron.
 
+**A service restart and the old X connection** (G3-02 #14):
+- **The contract** (G5, Issue #561 6560219373): `lifecycle_version` is the generation authority. After a service end + restart, an older X connection fails closed until an explicit reconnect, and VERIFIED alone is no assurance. G3 owns the scheduled-send protection.
+- **Measured before** (real local runtime, lifecycle 2 → 4; the connection and G4's verdict still read verified): create, reschedule and reconfirm were accepted, and a new row was sent over the old connection (TEST ONLY snapshot, fake X). A pre-restart row's edits were accepted although it can never be sent.
+- **Now**:
+  - `g4_x_account_verified` (014) also needs G4's `public.postona_x_refresh_precheck_v1(account) = 'allow'` (G4 PR #617 `1d020c40`, read only, md5 pinned, same owner). So every write and send check refuses the old connection: `POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED` → `reconnect_x`; at send time `NOT_PUBLISHABLE_AT_SEND`.
+  - `reschedule` / `reconfirm` (001) refuse a row of an earlier generation: `POSTONA_RESV_NOT_PLANNED` → `final`.
+  - Unchanged: list, get, cancel; another person's 404; 401; claim closing an earlier generation's row (`SERVICE_GENERATION_CHANGED`).
+- **Rollout dependency**: G4's 006 + 007 must be installed first. 014 and `preflight.sql` refuse otherwise.
+- **Still open**:
+  - a pre-restart row keeps reading 「予約済み」 in the list until its due time closes it (G3's list has no generation field);
+  - the app cannot read "this connection is stale" before a write is refused (G1's request; no read port exists).
+- **Proof**: `local_stack/` L32–L33, L8, L21, `g1_screen_integration.test.mjs` (service restart); PG17 `g4_verdict_run.sh`, `rollout_test_run.sh`.
+
 **The reservations screen on this runtime** (G3-02 #13; `local_stack/g1_screen_integration.test.mjs`):
 - **Real here**: G1's screen and view rules (PR #606, pinned, read only), G3's stores and error actions, GoTrue JWTs, Kong, the Edge handlers, Postgres, G5 W0, G4's connect / disconnect SQL and verdict.
 - **Reached, pressed in order**:

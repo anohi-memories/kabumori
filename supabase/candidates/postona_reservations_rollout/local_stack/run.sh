@@ -32,6 +32,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 bundle="$(cd "$here/.." && pwd)"
 REPO="$(git -C "$here" rev-parse --show-toplevel)"
 G4=c6df19cc612ad586126e80b009589ef3456b215f      # G4 PR #580 HEAD (personal X + verdicts)
+G4RP=1d020c406cc982eedfa29a8b682c96db31888a68    # G4 PR #617 HEAD: 006 + 007 (the connection-generation check 014 calls, G3-02 #14)
 PR178=83334a091ded5571cf595fd99d7a035627564735   # G5 write guard chain, as G4's runner overlays it
 G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982   # G5 MVP_INSTALL (blob eebaabf2, as G4's runner pins it)
 G5CHAIN=21a5cad4b71de63265db8517da93c6efc60cdde8 # G5 lifecycle chain (MVP P1)
@@ -44,7 +45,7 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 for image in postgres:17.6.1.165 gotrue:v2.196.0 postgrest:v16.1 kong:2.8.1 edge-runtime:v1.74.3 storage-api:v1.70.3; do
   "$ENGINE" image exists "public.ecr.aws/supabase/$image" || { echo "G3LS_IMAGE_MISSING: $image (this script does not pull)"; exit 2; }
 done
-for commit in "$G4" "$PR178" "$G5MVP" "$G5CHAIN" "$G5W0"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G3LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
+for commit in "$G4" "$G4RP" "$PR178" "$G5MVP" "$G5CHAIN" "$G5W0"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G3LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
 [ "$(git -C "$REPO" rev-parse "$G5MVP:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] || fail "G5 MVP_INSTALL blob moved"
 if lsof -nP -iTCP:"$API_PORT" -iTCP:"$DB_PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "G3LS_PORTS_BUSY: $API_PORT / $DB_PORT (another stack?)"; exit 2; fi
 
@@ -177,6 +178,10 @@ for f in "$WORK"/t/g5chain_20261013140000_common_account_service_reconciliation_
          "$c/postona_g4_x_oauth_personal_epoch/003_x_disconnect_user_rpc.sql" "$c/postona_g4_x_oauth_personal_epoch/004_x_consume_preexchange_recheck.sql" \
          "$c/postona_g4_x_oauth_personal_mvp/005_x_connect_lifecycle_t13_g5pv.sql" "$c/postona_g4_credential_verdict/002_x_publish_credential_verdict.sql"; do
   need "$f"
+done
+for f in 006_x_connect_profile_fence 007_x_refresh_precheck; do   # G3-02 #14: the check 014 calls, from G4 PR #617 (read only)
+  git -C "$REPO" show "$G4RP:supabase/candidates/postona_g4_x_oauth_personal_mvp/$f.sql" > "$WORK/t/$f.sql"
+  need "$WORK/t/$f.sql"
 done
 echo "OK world: G4's personal world at ${G4:0:8} on the real local schema (as postgres)"
 w0dir=supabase/candidates/postona_personal_mvp_auth
