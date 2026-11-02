@@ -383,6 +383,82 @@ test('T33 real-tap finding: confirming removes the notice it made out of date; t
 const emptyTitles = (h) => { const out = []; walk(h.render(), (n) => { if (n.type === 'EmptyState') out.push(n.props.title); }); return out; };
 const ROW = { reservationId: 'k', batchId: 'b', draftId: 'd2', scheduledAt: '2026-12-01T00:30:00.000Z', status: 'planned', revision: 1, consentState: 'confirmed', body: 'x', mode: 'manual_exact', origin: 'user_authored' };
 
+const DISCONNECTED = { ...ACCOUNT, connectionStatus: 'needs_attention' };
+test('T35 disconnected: the rows are read and shown, new saves and time changes stop before a request, a cancel still goes (two presses), and its success says nothing about the connection', async () => {
+  const seen = [];
+  let current = ROW;
+  const h = await screen({ account: DISCONNECTED, reply: async (call) => {
+    seen.push(call.body.action);
+    if (call.body.action === 'cancel') current = { ...ROW, status: 'cancelled', revision: 2 };
+    return ok([current]);
+  } });
+  await h.update();
+  assert.match(onScreen(h), /既存の予約の確認と取消はできます/u);
+  signal.markXReconnectRequired(DISCONNECTED.id);
+  await h.update();
+  assert.deepEqual(seen, ['list']);
+  const cards = () => { const out = []; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') out.push(n.props); }); return out; };
+  assert.equal(cards().length, 1);
+  assert.deepEqual(emptyTitles(h), []);
+  cards()[0].onRetime(); await h.update();
+  cards()[0].onRetimeApply(); await settle(); await h.update();
+  assert.equal(seen.includes('reschedule'), false, 'a time change stops before a request');
+  cards()[0].onCancel(); await h.update();
+  cards()[0].onCancel(); await settle(); await h.update();
+  assert.deepEqual(seen.filter((a) => a === 'cancel'), ['cancel']);
+  assert.equal(signal.isXReconnectRequired(DISCONNECTED.id), true, 'the signal stays');
+  assert.match(onScreen(h), /予約を取り消しました/u);
+});
+
+test('T35 what still stops a cancel: a refused token, and an account that is not the person\'s own', async () => {
+  const calls = [];
+  const shared = { ...DISCONNECTED, brandId: 'shared' };
+  let h = await screen({ account: shared, reply: async (call) => { calls.push(call.body.action); return ok([ROW]); } });
+  await h.update();
+  const cards = () => { const out = []; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') out.push(n.props); }); return out; };
+  cards()[0]?.onCancel(); await h.update();
+  cards()[0]?.onCancel(); await settle(); await h.update();
+  assert.equal(calls.includes('cancel'), false, 'another workspace');
+  const seen = [];
+  let refused = false;
+  h = await screen({ account: DISCONNECTED, reply: async (call) => { seen.push(call.body.action); return refused ? no(401, 'POSTONA_RESV_AUTH_REQUIRED') : ok([ROW]); } });
+  await h.update();
+  refused = true;
+  labelled(h.render(), 'ActionButton', '投稿を作成');
+  cards2(h)[0].onCancel(); await h.update();
+  cards2(h)[0].onCancel(); await settle(); await h.update();
+  const after = seen.length;
+  cards2(h)[0].onCancel(); await h.update();
+  cards2(h)[0].onCancel(); await settle(); await h.update();
+  assert.equal(seen.length, after, 'nothing more with that token');
+});
+const cards2 = (h) => { const out = []; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') out.push(n.props); }); return out; };
+
+test('T35 home (real): the card and the ways out for a disconnected X account only', async () => {
+  const stubsFor = (account) => ({
+    ...baseStubs(),
+    'expo-router': { Link: 'Link' },
+    '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getHistory: () => [] } },
+    '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
+    '@/domain/data-view': dataView,
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: account }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
+    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
+    '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },
+    '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: ME } }) },
+  });
+  const links = (tree) => { const out = []; walk(tree, (n) => { if (n.type === 'Link') out.push(n.props.href); }); return out; };
+  let render = await loadScreen('../src/app/(tabs)/index.tsx', stubsFor(DISCONNECTED));
+  let tree = render({});
+  assert.match(textOf(tree), /接続を確認できないため/u);
+  assert.equal(links(tree).filter((href) => href === '/reservations').length, 2, 'the card and the existing entry');
+  render = await loadScreen('../src/app/(tabs)/index.tsx', stubsFor(ACCOUNT));
+  tree = render({});
+  assert.doesNotMatch(textOf(tree), /接続を確認できないため/u);
+  render = await loadScreen('../src/app/(tabs)/index.tsx', stubsFor({ ...DISCONNECTED, platform: 'instagram' }));
+  assert.doesNotMatch(textOf(render({})), /接続を確認できないため/u);
+});
+
 test('T34 RESV-1: 「投稿予定はありません」 only for an answered, empty list: loading, rows, a read error, a refused login and another account never show it', async () => {
   let h = await screen({ reply: async () => ok([]) });
   await h.update();
@@ -585,7 +661,7 @@ test('refused before any request: no login, another person\'s workspace, W0 not 
     [(world) => { world.token = null; }, /ログインが確認できない/u],
     [(world) => { world.account = { ...ACCOUNT, brandId: 'shared' }; }, /個人ワークスペース/u],
     [(world) => { world.workspaceId = null; }, /個人ワークスペース/u],
-    [(world) => { world.account = { ...ACCOUNT, connectionStatus: 'needs_attention' }; }, /接続し直して/u],
+    [(world) => { world.account = { ...ACCOUNT, connectionStatus: 'needs_attention' }; }, /接続を確認できない/u],
   ]) {
     const { h } = await ready();
     change(h.world);

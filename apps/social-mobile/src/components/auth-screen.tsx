@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { PROVIDER_LABELS, SIGN_UP_CHECK_EMAIL_MESSAGE } from '@/domain/auth-flows';
 import { emailSubmitView, type EmailMode } from '@/domain/auth-submit';
@@ -92,8 +92,8 @@ export function AuthScreen() {
   };
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <View style={styles.root}>
+      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={typography.title}>Social Operations</Text>
           <Text style={styles.subtitle}>AI運用担当者とSNS発信を整える</Text>
@@ -146,7 +146,7 @@ export function AuthScreen() {
           <Text style={styles.caption}>ここでのログインはアプリを使うためのものです。自動投稿に使うXアカウントは、ログイン後に別の手順で接続します。</Text>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

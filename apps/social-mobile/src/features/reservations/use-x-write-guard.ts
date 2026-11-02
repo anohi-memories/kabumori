@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { loginSessionIdOf } from '@/domain/service-enrollment';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { xWriteRefusal, type XWriteRefusal } from '@/features/reservations/x-write-view';
+import { xOwnRefusal, xWriteRefusal, type XWriteRefusal } from '@/features/reservations/x-write-view';
 import { useAuth } from '@/providers/auth-provider';
 
 export type XWriteGuard = {
@@ -12,6 +12,8 @@ export type XWriteGuard = {
   /** Reads stop only for a token the server answered 401 to. */
   canRead: boolean;
   refusal: XWriteRefusal | null;
+  /** Only what stops a cancel: not the connection, the restart or a service refusal (G3 asks for the session and ownership). */
+  cancelRefusal: XWriteRefusal | null;
   refuseToken: (token: string | null) => void;
   block: (scope: string | null, refusal: XWriteRefusal) => void;
   unblock: (scope: string | null) => void;
@@ -29,14 +31,17 @@ export function useXWriteGuard(account: { id: string; brandId?: string; connecti
   const [refusedToken, setRefusedToken] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<{ scope: string; refusal: XWriteRefusal } | null>(null);
   const loginRefused = refusedToken !== null && refusedToken === token;
-  const refusal = xWriteRefusal({ loginId, account, personalId: workspace.kind === 'ready' ? workspace.workspaceId : null, reconnectRequired: isXReconnectRequired(account?.id), restartObserved: isXServiceRestarted(userId) })
-    ?? (loginRefused ? { text: 'ログインの有効期限が切れたため、ログインし直すまで予約を保存できません。', button: 'settings' as const } : null)
+  const loginExpired = { text: 'ログインの有効期限が切れたため、ログインし直すまで予約を保存できません。', button: 'settings' as const };
+  const personalId = workspace.kind === 'ready' ? workspace.workspaceId : null;
+  const refusal = xWriteRefusal({ loginId, account, personalId, reconnectRequired: isXReconnectRequired(account?.id), restartObserved: isXServiceRestarted(userId) })
+    ?? (loginRefused ? loginExpired : null)
     ?? (blocked && blocked.scope === scope ? blocked.refusal : null);
   return {
     scope,
     token,
     canRead: !loginRefused,
     refusal,
+    cancelRefusal: xOwnRefusal({ loginId, account, personalId }) ?? (loginRefused ? loginExpired : null),
     refuseToken: setRefusedToken,
     block: (mine, why) => { if (mine) setBlocked({ scope: mine, refusal: why }); },
     unblock: (mine) => setBlocked((current) => (current && current.scope === mine ? null : current)),

@@ -6,7 +6,7 @@ import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/compon
 import { SignOutButton } from '@/components/sign-out-button';
 import { selectDataSource } from '@/data/repository-selection';
 import { SupabaseOnboardingRepository } from '@/data/onboarding-repository';
-import { deriveOnboardingStep, inputForCurrentUser, onboardingStorageKey, type OnboardingInput } from '@/domain/onboarding';
+import { canBrowseWithoutConnection, deriveOnboardingStep, inputForCurrentUser, onboardingStorageKey, type OnboardingInput } from '@/domain/onboarding';
 import { shouldShowNewAccountNotice } from '@/domain/auth-flows';
 import { useAuth } from '@/providers/auth-provider';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
@@ -83,6 +83,8 @@ export function OnboardingGate({ children }: PropsWithChildren) {
   const [generation, setGeneration] = useState(0);
   // The deletion view is opened for one user only; another user never inherits it.
   const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
+  // Going in without connecting is for one user and this run of the app only; the connection steps come back on the next start.
+  const [browsingFor, setBrowsingFor] = useState<string | null>(null);
   const refresh = useCallback(() => setGeneration((value) => value + 1), []);
 
   useEffect(() => {
@@ -123,6 +125,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
 
   const step = deriveOnboardingStep(input);
   if (step.step === 'preview' || step.step === 'done') return <>{children}</>;
+  if (currentUserId !== null && browsingFor === currentUserId && canBrowseWithoutConnection(step)) return <>{children}</>;
   if (currentUserId !== null && deletionOpenFor === currentUserId) {
     return (
       <View style={{ flex: 1 }}>
@@ -145,7 +148,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
   if (showNewAccountNotice) {
     return (
       <Screen>
-        <ScrollView contentContainerStyle={{ gap: 16 }}>
+        <ScrollView contentInsetAdjustmentBehavior="always" contentContainerStyle={{ gap: 16 }}>
           <Card>
             <SectionTitle detail="新しいアカウントでこのアプリを始めます。">新しいアカウントを作成しました</SectionTitle>
             <Text style={styles.muted}>以前にメールアドレスなど別の方法で登録していた場合は、いったんログアウトして元の方法でログインし、「アカウント → ログイン方法」からこの方法を追加してください。別々のアカウントは自動ではまとめられません。</Text>
@@ -160,7 +163,7 @@ export function OnboardingGate({ children }: PropsWithChildren) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: 16 }}>
+      <ScrollView contentInsetAdjustmentBehavior="always" contentContainerStyle={{ gap: 16 }}>
         <View style={{ gap: 6 }}>
           <Text style={typography.caption}>はじめての設定</Text>
           <Text style={typography.title}>Xアカウントとつなげましょう</Text>
@@ -197,6 +200,12 @@ export function OnboardingGate({ children }: PropsWithChildren) {
               <Text style={styles.buttonText}>{step.step === 'reconnect_x' ? 'Xアカウントを再接続' : 'Xで認証する'}</Text>
             </Pressable>
             <Text style={styles.muted}>接続しても、投稿が勝手に始まることはありません。</Text>
+            {canBrowseWithoutConnection(step) ? (
+              <View style={{ gap: 8 }}>
+                <Text style={styles.muted}>接続し直さなくても、アプリを開いて既存の予約を確認できます。新しい予約と時刻の変更には接続が必要です。</Text>
+                <ActionButton label="接続せずにアプリを開く" onPress={() => setBrowsingFor(currentUserId)} />
+              </View>
+            ) : null}
           </Card>
         ) : null}
         {step.step === 'settings' ? (

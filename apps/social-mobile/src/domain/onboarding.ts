@@ -72,10 +72,21 @@ export function deriveOnboardingStep(input: OnboardingInput): OnboardingStep {
   if (account.connectionStatus === 'failed') {
     return { step: 'reconnect_x', account, reason: reconnectReason(account.lastConnectionErrorCode) };
   }
+  if (account.connectionStatus === 'disconnected') {
+    return { step: 'reconnect_x', account, reason: 'Xアカウントの接続は解除されています。' };
+  }
   if (account.connectionStatus !== 'identity_verified') return { step: 'connect_x', resume: true };
 
   if (input.settings === 'saved' || input.settingsDeferred) return { step: 'done', account };
   return { step: 'settings', account, backendAvailable: input.settings === 'not_saved' };
+}
+
+/**
+ * This person's workspace has an X account whose connection is not usable now. G3 serves its reservations on the session and
+ * row ownership alone, so the connection steps must not hide them. The first connection has nothing to look at.
+ */
+export function canBrowseWithoutConnection(step: OnboardingStep): boolean {
+  return step.step === 'reconnect_x' || (step.step === 'connect_x' && step.resume);
 }
 
 /** Local "settings later" flag, scoped to one signed-in user id. */

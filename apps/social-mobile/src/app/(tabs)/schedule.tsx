@@ -296,8 +296,9 @@ export default function ScheduleScreen() {
   /** One change of a saved reservation (CAS on its revision), applied only after the server's read-back. */
   async function changeReservation(row: ServerReservation, kind: 'reschedule' | 'reconfirm' | 'cancel') {
     if (!reservationStore.enabled || !accountId) return;
-    if (xGuard.refusal) {
-      setNotice({ tone: 'danger', text: xGuard.refusal.text, button: xGuard.refusal.button });
+    const refusal = kind === 'cancel' ? xGuard.cancelRefusal : xGuard.refusal;
+    if (refusal) {
+      setNotice({ tone: 'danger', text: refusal.text, button: refusal.button });
       return;
     }
     const account = accountId;
@@ -322,7 +323,8 @@ export default function ScheduleScreen() {
       applyRefusal(result.code, account, scope, sentToken);
       return;
     }
-    clearXReconnectRequired(account);
+    // A cancel needs no connection, so its success says nothing about one.
+    if (kind !== 'cancel') clearXReconnectRequired(account);
     if (liveScope.current !== scope) return;
     setServerSnapshot((current) => replaceRow(current, account, result.value));
     if (kind === 'reschedule') setRowRetiming(null);

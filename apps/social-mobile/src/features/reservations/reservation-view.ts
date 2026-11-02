@@ -137,6 +137,7 @@ export function accountRefusal(
   account: { brandId?: string; connectionStatus: string; platform: string } | null,
   platform: 'x' | 'threads',
   personalWorkspaceId: string | null,
+  requireConnection = true,
 ): string | null {
   const name = platform === 'x' ? 'X' : 'Threads';
   if (!account) return `${name}アカウントがまだ接続されていません。アカウント画面から接続してください。`;
@@ -144,6 +145,6 @@ export function accountRefusal(
   if (!personalWorkspaceId || !account.brandId || account.brandId !== personalWorkspaceId) {
     return 'ご自身の個人ワークスペースのアカウントだけ、予約を操作できます（このアカウントのワークスペースは確認できません）。';
   }
-  if (account.connectionStatus !== 'connected') return `${name}アカウントの接続を確認できません。アカウント画面で接続し直してください。`;
+  if (requireConnection && account.connectionStatus !== 'connected') return `${name}アカウントの接続を確認できません。アカウント画面で接続し直してください。`;
   return null;
 }

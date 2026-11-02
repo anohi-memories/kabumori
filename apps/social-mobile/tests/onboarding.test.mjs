@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveOnboardingStep, onboardingStorageKey, reconnectReason } from '../src/domain/onboarding.ts';
+import { canBrowseWithoutConnection, deriveOnboardingStep, onboardingStorageKey, reconnectReason } from '../src/domain/onboarding.ts';
 
 const account = (overrides = {}) => ({ id: 'sa_1', brandId: 'u_1', handle: 'me', connectionStatus: 'identity_verified', lastConnectionErrorCode: null, ...overrides });
 const loaded = (overrides = {}) => ({ kind: 'loaded', brandIds: ['u_1'], xAccounts: [account()], settings: 'not_saved', settingsDeferred: false, ...overrides });
@@ -47,4 +47,19 @@ test('the local "settings later" flag is scoped to one user id', () => {
   assert.equal(onboardingStorageKey(id), `social-mobile:onboarding:v1:${id}`);
   assert.throws(() => onboardingStorageKey('../../etc'), /ONBOARDING_USER_ID_INVALID/u);
   assert.throws(() => onboardingStorageKey(''), /ONBOARDING_USER_ID_INVALID/u);
+});
+
+test('T35 a disconnected account: says it was disconnected, not an unfinished connection; going in without connecting is for an account that exists', () => {
+  const step = deriveOnboardingStep(loaded({ xAccounts: [account({ connectionStatus: 'disconnected' })] }));
+  assert.equal(step.step, 'reconnect_x');
+  assert.match(step.reason, /接続は解除されています/u);
+  assert.doesNotMatch(step.reason, /完了していません/u);
+  const can = (input) => canBrowseWithoutConnection(deriveOnboardingStep(input));
+  assert.equal(can(loaded({ xAccounts: [account({ connectionStatus: 'disconnected' })] })), true);
+  assert.equal(can(loaded({ xAccounts: [account({ connectionStatus: 'failed' })] })), true);
+  assert.equal(can(loaded({ xAccounts: [account({ connectionStatus: 'authorization_pending' })] })), true);
+  assert.equal(can(loaded({ xAccounts: [] })), false, 'the first connection');
+  assert.equal(can(loaded({ brandIds: [], xAccounts: [] })), false);
+  assert.equal(can({ kind: 'loading' }), false);
+  assert.equal(can({ kind: 'error', reason: 'x' }), false);
 });
