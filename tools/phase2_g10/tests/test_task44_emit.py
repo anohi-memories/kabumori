@@ -89,14 +89,39 @@ class EmitRefusesWithoutWritingAJob(EmitBase):
             emit.emit_job(self.env.control, self.body, TRUSTED_ISSUE, time.time(), go, self.hin, approve=False)
         self.assertEqual(set(os.listdir(self.hin)), before)   # ジョブは書かれていない（部分ファイルも無い）
 
-    def test_second_emit_for_same_approval_is_refused_by_go_reuse(self):
-        from g10runner.control import GoReuseError
+    def test_second_emit_for_same_claimed_approval_is_refused(self):
         bundle = self.make_bundle()
         go1 = self.build_go(bundle)
         emit.emit_job(self.env.control, self.body, TRUSTED_ISSUE, time.time(), go1, self.hin)
-        go2 = self.build_go(bundle, go_id="go-second-1")       # 同じ approval_id・別 go_id
-        with self.assertRaises((GoReuseError, ValueError)):
+        before = set(os.listdir(self.hin))
+        go2 = self.build_go(bundle, go_id="go-second-1")       # 同じ approval（GOは再利用される）
+        with self.assertRaises(emit.EmitError):                # try_claim: approval_id already used（at-most-once）
             emit.emit_job(self.env.control, self.body, TRUSTED_ISSUE, time.time(), go2, self.hin)
+        self.assertEqual(set(os.listdir(self.hin)), before)    # 2本目のジョブは書かれない
+
+
+class EmitAuthorization(EmitBase):
+    def test_establishes_confirm_when_no_envelope_or_confirm(self):
+        # env の ENVELOPE を取り消し、CONFIRM/ENVELOPE 無しの本番相当にする
+        env_id = self.env.control.read_state().envelope["envelope_id"]
+        self.env.control.revoke_envelope(env_id)
+        self.assertIsNone(self.env.control.read_state().envelope)
+        bundle = self.make_bundle()
+        go = self.build_go(bundle)
+        out = emit.emit_job(self.env.control, self.body, TRUSTED_ISSUE, time.time(), go, self.hin)
+        c = self.env.control.read_state().confirms.get(go["approval_id"]) or {}
+        self.assertEqual(c.get("task_sha256"), go["task_sha256"])   # per-run CONFIRM が張られた
+        self.assertEqual(self.loop().step()["decision"], "ran")     # CLAIM→実行まで通る
+        self.assertEqual(out["job_id"], out["run_id"])
+
+    def test_reuses_existing_go_instead_of_reapproving(self):
+        bundle = self.make_bundle()
+        go = self.build_go(bundle)
+        self.env.control.approve_real_claude_go(go)            # 先に GO だけ承認（孤立GO相当）
+        # approve=True でも再承認せず（GoReuseError を出さず）CLAIM まで通る
+        out = emit.emit_job(self.env.control, self.body, TRUSTED_ISSUE, time.time(), go, self.hin)
+        self.assertEqual(out["job_id"], out["run_id"])
+        self.assertEqual(self.loop().step()["decision"], "ran")
 
 
 class SourceBundleBuild(EmitBase):

@@ -67,14 +67,43 @@ def _write_job_atomically(in_dir, filename, doc):
     fsync_dir(in_dir)
 
 
-def emit_job(control, body, issue_meta, now, go, in_dir, job_ttl=1800.0, approve=True):
-    """承認 → try_claim → request 読取 → human 署名ジョブを handoff/in へ。戻り値 dict(run_id, job_id, job_path, go_id)。
+def _usable_go_present(st, go, now):
+    """この approval・TASK・本文に一致する、期限内の REAL_CLAUDE_GO が既にあるか（再発行で孤立した GO の再利用判定）。"""
+    for g in getattr(st, "real_gos", []):
+        if (g.get("approval_id") == go["approval_id"] and g.get("task_sha256") == go["task_sha256"]
+                and g.get("body_sha256") == go["body_sha256"] and now < g.get("expires_at", 0)):
+            return True
+    return False
 
-    approve=True のとき GO を承認する（同じ approval_id の GO が既にあれば approve_real_claude_go が拒否＝EmitError では
-    なく GoReuseError をそのまま上げる。発行のやり直しは取消が先）。try_claim が拒否したら EmitError（握りつぶさない）。
+
+def _ensure_claim_authorization(control, st, go):
+    """try_claim の CLAIM 認可（CONFIRM か ENVELOPE）を確かめ、どちらも無ければ **この approval 限定の CONFIRM** を張る。
+
+    CONFIRM は human 署名の per-run 認可（approval_id＋task_sha256＋policy を固定）。日次の広い ENVELOPE より狭く、
+    「この1本だけ」という人の GO をそのまま表す。既に一致する CONFIRM か有効な ENVELOPE があれば何もしない。
     """
-    if approve:
+    c = getattr(st, "confirms", {}).get(go["approval_id"])
+    if c and c.get("task_sha256") == go["task_sha256"] and c.get("policy_sha256") == control.policy["_digest"]:
+        return "confirm_exists"
+    if getattr(st, "envelope", None):
+        return "envelope_exists"
+    control.confirm(go["approval_id"], go["task_sha256"])
+    return "confirm_created"
+
+
+def emit_job(control, body, issue_meta, now, go, in_dir, job_ttl=1800.0, approve=True, confirm=True):
+    """承認 → CLAIM認可 → try_claim → request 読取 → human 署名ジョブを handoff/in へ。戻り値 dict(run_id, job_id, job_path, go_id)。
+
+    approve=True のとき REAL_CLAUDE_GO を承認する（ただし同じ approval・TASK・本文の期限内 GO が既にあれば**再利用**して張り直さない
+    ＝ try_claim が別事由で失敗して GO だけ残った場合の再実行を妨げない）。confirm=True のとき、CONFIRM も ENVELOPE も無ければ
+    この approval 限定の CONFIRM を張る（try_claim の CLAIM 認可。テスト env は envelope を用意するが本番は無いので producer が張る）。
+    try_claim が拒否したら EmitError（握りつぶさない）。
+    """
+    st = control.read_state()
+    if approve and not _usable_go_present(st, go, control.now()):
         control.approve_real_claude_go(go)          # GoReuseError / ValueError はそのまま上げる
+    if confirm:
+        _ensure_claim_authorization(control, st, go)
     run_id, reason = control.try_claim(body, issue_meta, now)
     if run_id is None:
         raise EmitError("try_claim refused: " + str(reason))
