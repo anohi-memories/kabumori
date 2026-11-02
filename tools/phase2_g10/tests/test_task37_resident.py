@@ -93,6 +93,22 @@ class Cycle(LoopBase):
         self.assertEqual(disp["status"], "ended_checks_passed")
         self.assertEqual(disp["run_id"], "run-x")
 
+    def test_not_accepted_disposition_records_the_reason_and_is_readable(self):
+        """起動を断った run の disposition に『なぜ』(reason) を残し、out を yuya が ingest で読めるよう他者読みに広げる。
+        umask 077 の 0600・理由欠落で B5 の失敗原因が out に出なかった回帰を防ぐ。"""
+        self.write_job("j1.json", "job-1")
+        reason = "issue binding: issue evidence is stale or from the future"
+        rec = self.loop(dispatch=FakeDispatch(
+            {"run_id": "run-x", "status": "not_accepted", "reason": reason})).step()
+        self.assertEqual(rec["reason"], reason)             # resident ログにも本当の理由が出る
+        path = os.path.join(self.out, "job-1.json")
+        disp = json.load(open(path))
+        self.assertEqual(disp["status"], "not_accepted")
+        self.assertEqual(disp["reason"], reason)            # out に『なぜ』が残る
+        m = os.stat(path).st_mode
+        self.assertTrue(m & 0o004, "readable by yuya (other)")
+        self.assertFalse(m & 0o022, "no group/other write")
+
     def test_no_jobs_is_idle(self):
         rec = self.loop().step()
         self.assertEqual(rec["decision"], "idle")

@@ -108,6 +108,23 @@ class RoundTrip(unittest.TestCase):
             result_handoff.ingest_result(self.out, self.run_id, self.dst, self.verifier)
 
 
+    def test_exported_bundle_is_readable_across_the_handoff_boundary(self):
+        """out は _kaburun 所有。yuya が ingest で読めるよう、束の dir=他者 read+traverse・file=他者 read に広げる
+        （group/other 書き込みは与えない）。umask 077 の 0600/0700 のまま出すと yuya が読めず ingest が詰まる回帰を防ぐ。"""
+        self.export()
+        bundle = os.path.join(self.out, self.run_id)
+        self.assertEqual(os.stat(bundle).st_mode & 0o005, 0o005)
+        for dirpath, dirnames, filenames in os.walk(bundle):
+            for name in dirnames:
+                m = os.stat(os.path.join(dirpath, name)).st_mode
+                self.assertEqual(m & 0o005, 0o005, "dir readable+traversable: " + name)
+                self.assertFalse(m & 0o022, "no group/other write on dir: " + name)
+            for name in filenames:
+                m = os.stat(os.path.join(dirpath, name)).st_mode
+                self.assertTrue(m & 0o004, "file readable by other: " + name)
+                self.assertFalse(m & 0o022, "no group/other write on file: " + name)
+
+
 class JobIdPattern(unittest.TestCase):
     def test_pure_dot_names_are_rejected(self):
         self.assertIsNone(handoff._JOB_ID.fullmatch("."))

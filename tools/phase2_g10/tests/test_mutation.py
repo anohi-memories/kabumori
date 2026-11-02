@@ -871,6 +871,16 @@ MUTANTS = [
      '    problem = real_claude.go_problem(go)\n    if problem:\n        raise EmitError("REAL_CLAUDE_GO invalid: " + problem)',
      '    problem = real_claude.go_problem(go)\n    if False:\n        raise EmitError("REAL_CLAUDE_GO invalid: " + problem)',
      "test_task44_emit.BuildGoValidation.test_max_turns_out_of_range_is_refused"),
+    # --- B5 handoff: disposition の理由保存と out の境界越え権限 ---
+    ("disposition drops the reject reason", "g10runner/resident.py",
+     '"reason": result.get("reason"), "ts": self.now()}', '"reason": None, "ts": self.now()}',
+     "test_task37_resident.Cycle.test_not_accepted_disposition_records_the_reason_and_is_readable"),
+    ("disposition file stays owner-only", "g10runner/resident.py",
+     "        os.chmod(path, 0o644)", "        os.chmod(path, 0o600)",
+     "test_task37_resident.Cycle.test_not_accepted_disposition_records_the_reason_and_is_readable"),
+    ("exported bundle files stay owner-only", "g10runner/result_handoff.py",
+     "os.chmod(os.path.join(dirpath, name), 0o644)", "os.chmod(os.path.join(dirpath, name), 0o600)",
+     "test_task39_result_handoff.RoundTrip.test_exported_bundle_is_readable_across_the_handoff_boundary"),
 ]
 
 

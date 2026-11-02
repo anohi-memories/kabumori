@@ -78,7 +78,9 @@ class ResidentLoop:
 
     def _write_out(self, job_id, disposition):
         """handoff/out に結果を1件書く（本文・秘密・メール不可）。job_id は accept で検証済み（_JOB_ID）。"""
-        atomic_write_json(os.path.join(self.out_dir, job_id + ".json"), disposition)
+        path = os.path.join(self.out_dir, job_id + ".json")
+        atomic_write_json(path, disposition)
+        os.chmod(path, 0o644)  # yuya が ingest で読む。umask 077 の 0600 を境界越え用に読み取り可へ広げる（書き込みは与えない）
 
     def _record(self, entry):
         keep = {k: entry[k] for k in ("decision", "reason", "job", "job_id", "run_id", "status", "logged_in",
@@ -117,14 +119,14 @@ class ResidentLoop:
         except Exception as exc:  # dispatch の失敗は「このジョブは終わり」。CLAIM 済みなので再実行しない
             result = {"run_id": None, "status": "dispatch_failed", "reason": type(exc).__name__}
         disposition = {"job_id": job_id, "status": result.get("status"), "run_id": result.get("run_id"),
-                       "ts": self.now()}
+                       "reason": result.get("reason"), "ts": self.now()}
         # export の成否も out の disposition に残す（束が無いときの原因が分かるように）
         if "exported" in result:
             disposition["exported"] = result["exported"]
         if result.get("export_error"):
             disposition["export_error"] = result["export_error"]
         self._write_out(job_id, disposition)
-        return self._record({"decision": "ran", "reason": result.get("status"), "job": filename,
+        return self._record({"decision": "ran", "reason": result.get("reason") or result.get("status"), "job": filename,
                              "job_id": job_id, "run_id": result.get("run_id"), "status": result.get("status"),
                              "exported": result.get("exported"), "export_error": result.get("export_error")})
 

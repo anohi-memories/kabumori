@@ -78,6 +78,18 @@ def _copy_tree(src_root, bundle, prefix, files, dirs):
             _copy_file(full, bundle, os.path.join(prefix, os.path.relpath(full, src_root)), files)
 
 
+def _grant_readable(bundle):
+    """ハンドオフ out は yuya が ingest で読む。umask 077 の下で作られた束を、境界越え用に読み取り可へ広げる
+    （dir=0755・file=0644。group/other には読み/traverse のみで書き込みは与えない＝ _safe_source_dir と両立。
+    検証は内容 SHA で見るのでコピーの mode を広げても verify は通る）。"""
+    os.chmod(bundle, 0o755)
+    for dirpath, dirnames, filenames in os.walk(bundle):
+        for name in dirnames:
+            os.chmod(os.path.join(dirpath, name), 0o755)
+        for name in filenames:
+            os.chmod(os.path.join(dirpath, name), 0o644)
+
+
 def export_result(layout, run_id, out_dir, signer, now=time.time):
     """実行プレーンの成果物を out_dir/<run_id>/ に agent 署名つきで書き出す。"""
     handoff._safe_owned_dir(out_dir)  # _kaburun 所有・group/other 書き込み不可
@@ -97,6 +109,7 @@ def export_result(layout, run_id, out_dir, signer, now=time.time):
     manifest = {"run_id": run_id, "created_at": now(), "files": files, "dirs": dirs}
     atomic_write_json(os.path.join(bundle, MANIFEST),
                       {"manifest": manifest, "sig": signer.sign(MANIFEST_ROLE, canonical(manifest))})
+    _grant_readable(bundle)
     return manifest
 
 
