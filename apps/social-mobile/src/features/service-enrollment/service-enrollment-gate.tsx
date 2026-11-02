@@ -18,6 +18,7 @@ import {
   type EnrollmentContext,
   type EnrollmentOutcome,
 } from '@/domain/service-enrollment';
+import { markXServiceRestarted } from '@/features/reservations/x-reconnect-signal';
 import { getSupabaseConfig } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import AccountDeletionScreen from '@/app/account-deletion';
@@ -118,6 +119,7 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
         reactivateServiceExplicitly(transportFor(context), 'x_autopost', lifecycleVersion, signal))
       .then(
         (outcome) => {
+          if (outcome.kind === 'ready' && clicked.userId) markXServiceRestarted(clicked.userId);
           if (mine === request.current && isOwner(currentOwner.current, clicked.userId, clicked.loginId)) {
             setView({ ...clicked, request: mine, kind: 'outcome', outcome, noticeAcknowledged: false });
           }

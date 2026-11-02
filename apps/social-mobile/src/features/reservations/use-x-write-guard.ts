@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { loginSessionIdOf } from '@/domain/service-enrollment';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
-import { isXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
 import { xWriteRefusal, type XWriteRefusal } from '@/features/reservations/x-write-view';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -29,7 +29,7 @@ export function useXWriteGuard(account: { id: string; brandId?: string; connecti
   const [refusedToken, setRefusedToken] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<{ scope: string; refusal: XWriteRefusal } | null>(null);
   const loginRefused = refusedToken !== null && refusedToken === token;
-  const refusal = xWriteRefusal({ loginId, account, personalId: workspace.kind === 'ready' ? workspace.workspaceId : null, reconnectRequired: isXReconnectRequired(account?.id) })
+  const refusal = xWriteRefusal({ loginId, account, personalId: workspace.kind === 'ready' ? workspace.workspaceId : null, reconnectRequired: isXReconnectRequired(account?.id), restartObserved: isXServiceRestarted(userId) })
     ?? (loginRefused ? { text: 'ログインの有効期限が切れたため、ログインし直すまで予約を保存できません。', button: 'settings' as const } : null)
     ?? (blocked && blocked.scope === scope ? blocked.refusal : null);
   return {

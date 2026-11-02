@@ -25,7 +25,7 @@ test.before(() => {
     globalThis[name] = function forbidden() { trapped += 1; throw new Error(`network entry point ${name} must not be used`); };
   }
 });
-test.beforeEach(() => reconnectSignal.clearAllXReconnectRequired());
+test.beforeEach(() => { reconnectSignal.clearAllXReconnectRequired(); reconnectSignal.clearXServiceRestarted('person-1'); });
 test.after(() => {
   for (const name of NETWORK) {
     if (savedGlobals.get(name) === undefined) delete globalThis[name];
@@ -190,12 +190,12 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
       if (!previous || !deps || deps.length !== previous.deps.length || deps.some((d, k) => !Object.is(d, previous.deps[k]))) pendingEffects.push({ i, effect, deps });
     },
   };
-  const world = { token, userId, accounts, workspace, pushes: [], ports: store.value, ids: 0 };
+  const world = { token, userId, accounts, workspace, pushes: [], dismissed: [], ports: store.value, ids: 0 };
   const stubs = {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), Fragment: 'Fragment' },
     'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
-    'expo-router': { useRouter: () => ({ push: (href) => world.pushes.push(href) }) },
+    'expo-router': { useRouter: () => ({ push: (href) => world.pushes.push(href), dismissTo: (href) => { world.pushes.push(href); world.dismissed.push(href); } }) },
     '@/constants/theme': { colors: { primary: 'p', primarySoft: 'ps', surface: 's', border: 'b', ink: 'i' } },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {} } },
     '@/domain/service-enrollment': enrollment,
@@ -245,6 +245,8 @@ test('gates OFF (G3\'s real disabled stores): the reason is shown, nothing is of
   assert.ok(!texts(tree).some((t) => t === '予約済み'));
   button(tree, '作成画面を開く').onPress();
   assert.deepEqual(h.world.pushes, ['/(tabs)/schedule'], 'X reservations are made in the existing composer');
+  assert.deepEqual(h.world.dismissed, ['/(tabs)/schedule'], 'T33: the tabs already open, so the preview there stays');
+  assert.ok(has(tree, '「投稿予定」タブ'), 'T33: the tab has this name');
   chip(tree, 'Threads').onPress();
   tree = await h.render();
   assert.ok(has(tree, 'Threadsの予約は、公開前の準備中のため'));
@@ -330,6 +332,7 @@ test('X 401: "sign in again", no write and no read with that token; a new token 
   assert.equal(button(tree, '予約を取り消す')?.disabled ?? true, true);
   button(tree, '設定画面を開く').onPress();
   assert.deepEqual(h.world.pushes, ['/(tabs)/settings']);
+  assert.deepEqual(h.world.dismissed, ['/(tabs)/settings'], 'T33: not a second set of tabs');
   await h.render();
   assert.equal(store.count('x.list'), 1, 'nothing more with the refused token');
   h.world.token = jwt('user-A', S1, 2); // refreshed
@@ -382,6 +385,28 @@ test('X not verified: the new connect alone turns the writes back on (no read ne
   tree = await press(h, '時刻を変更');
   assert.equal(button(tree, '時刻を変更').disabled, true);
   reconnectSignal.clearAllXReconnectRequired();
+  assert.equal(button(await h.render(), '時刻を変更').disabled, false);
+});
+
+test('G1 T33 a restart observed in this app: the rows stay readable, X writes are off and the way out is the accounts screen, for this person only', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('a')] });
+  const h = await mount({ store });
+  await h.render();
+  let tree = await open(h, '予約 2026-11-02 09:30');
+  assert.ok(has(tree, '接続済みと表示されていても'), 'nothing observed: the supplement, not a refusal');
+  assert.equal(button(tree, '時刻を変更').disabled, false);
+  reconnectSignal.markXServiceRestarted('someone-else');
+  assert.equal(button(await h.render(), '時刻を変更').disabled, false, 'another person\'s restart changes nothing here');
+  reconnectSignal.clearXServiceRestarted('someone-else');
+  reconnectSignal.markXServiceRestarted(h.world.userId);
+  tree = await h.render();
+  assert.equal(button(tree, '時刻を変更').disabled, true);
+  assert.ok(has(tree, 'X自動投稿を再開しました'));
+  assert.ok(!has(tree, '再接続が必要'), 'not a server\'s refusal, so it does not say so');
+  assert.ok(button(tree, 'アカウント画面を開く'));
+  assert.equal(store.count('x.reschedule'), 0);
+  reconnectSignal.clearXServiceRestarted(h.world.userId);
   assert.equal(button(await h.render(), '時刻を変更').disabled, false);
 });
 
@@ -599,7 +624,7 @@ test('navigation: home → /reservations; the route is registered in the stack; 
   const layout = await read('app/_layout.tsx');
   assert.match(layout, /<Stack\.Screen name="reservations\/index" options=\{\{ headerShown: true, title: '予約の管理' \}\} \/>/u);
   const screen = await read('app/reservations/index.tsx');
-  assert.match(screen, /router\.push\('\/\(tabs\)\/schedule'\)/u);
+  assert.match(screen, /router\.dismissTo\('\/\(tabs\)\/schedule'\)/u);
 });
 
 test('boundary: the screen reaches the stores only through use-reservation-ports; the hook passes G3\'s own gates, never a literal; no network, storage or post of its own', async () => {

@@ -4,10 +4,12 @@ import { mockRepository } from '@/data/mock-repository';
 import { colors, typography } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { BrandPostPreview } from '@/features/brand-preview/brand-post-preview';
-import { isXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { connectionPill } from '@/features/reservations/x-write-view';
+import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { connectionPill, restartAppliesTo } from '@/features/reservations/x-write-view';
 import { resolvePostsView, statusHeadline, summarizeHome } from '@/domain/data-view';
+import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { useActiveAccount } from '@/providers/active-account-provider';
+import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
 import { SignOutButton } from '@/components/sign-out-button';
 
@@ -20,7 +22,9 @@ export default function HomeScreen() {
   const { status, reason, snapshot } = useDataStatus();
   const headline = statusHeadline(status);
   useXReconnectSignal();
-  const connection = connectionPill(activeAccount?.connectionStatus ?? '', activeAccount?.platform === 'x' && isXReconnectRequired(activeAccount.id), '要確認');
+  const { session } = useAuth();
+  const { view: personal } = usePersonalWorkspace();
+  const connection = connectionPill(activeAccount?.connectionStatus ?? '', activeAccount?.platform === 'x' && isXReconnectRequired(activeAccount.id), '要確認', activeAccount != null && isXServiceRestarted(session?.user?.id) && restartAppliesTo(activeAccount, personal.kind === 'ready' ? personal.workspaceId : null));
 
   // Mock data is filtered to the selected demo account so switching accounts
   // still demonstrates the per-account view; real scheduled_posts rows have

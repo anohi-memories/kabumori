@@ -13,6 +13,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 import * as enrollmentModule from '../src/domain/service-enrollment.ts';
+import * as xSignal from '../src/features/reservations/x-reconnect-signal.ts';
 
 const {
   createEnrollmentGate, createSessionBoundTransport, EnrollmentCancelledError, EnrollmentUnavailableError,
@@ -167,6 +168,7 @@ async function gateHarness(server) {
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
     '@/data/repository-selection': { selectDataSource: () => ({ kind: 'supabase' }) },
     '@/domain/service-enrollment': enrollmentModule,
+    '@/features/reservations/x-reconnect-signal': xSignal,
     '@/lib/supabase': { getSupabaseConfig: () => ({ ok: true, config: { url: 'https://fixture.supabase.co', publishableKey: 'sb_publishable_fixture' } }) },
     '@/providers/auth-provider': { useAuth: () => ({ session }) },
     '@/app/account-deletion': { __esModule: true, default: 'AccountDeletionScreen' },
@@ -264,6 +266,46 @@ test('R2: a click restarts exactly the clicking person, once, and opens the app 
     assert.deepEqual(server.requests.map((r) => [r.fn, r.token]), [['start_x_autopost_service', tokenOf('A')], ['reactivate_x_autopost_service', tokenOf('A')]]);
     assert.equal(h.isApp(), true);
   } finally { h.unmount(); h.restore(); }
+});
+
+test('G1 T33: only a restart the server accepted records the X signal, for the person who clicked', async () => {
+  const ACTIVE_ANSWER = { body: { status: 'active', service: 'x_autopost', started: true, shared_account: false } };
+  for (const [answer, recorded] of [
+    [ACTIVE_ANSWER, true],
+    [{ body: { status: 'active', service: 'x_autopost', started: false, shared_account: false } }, true], // already restarted elsewhere: the generation moved too
+    [{ body: { status: 'lifecycle_changed', service: 'x_autopost', lifecycle_version: 6 } }, false],
+    [{ body: { status: 'blocked', reason: 'ACCOUNT_LOCKED' } }, false],
+    [{ body: { status: 'active', service: 'kabumori', started: true, shared_account: false } }, false],
+    [{ error: { message: 'boom' } }, false],
+  ]) {
+    xSignal.clearXServiceRestarted('user-A');
+    const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? answer : ENDED(5)));
+    const h = await gateHarness(server);
+    try {
+      h.setSession(sessionOf('A'));
+      await h.settle();
+      assert.equal(xSignal.isXServiceRestarted('user-A'), false, 'being ended, without the click, records nothing');
+      h.button('利用登録する').props.onPress();
+      await h.settle();
+      assert.equal(xSignal.isXServiceRestarted('user-A'), recorded, JSON.stringify(answer));
+      assert.equal(xSignal.isXServiceRestarted('user-B'), false);
+    } finally { h.unmount(); h.restore(); }
+  }
+  xSignal.clearXServiceRestarted('user-A');
+});
+
+test('G1 T33: A clicks, the session moves to B before the answer: B is never recorded', async () => {
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? 'hold' : (entry.token === tokenOf('B') ? { body: { status: 'active', service: 'x_autopost', started: false, shared_account: false } } : ENDED(5))));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    h.button('利用登録する').props.onPress();
+    await h.settle();
+    h.setSession(sessionOf('B'));
+    await h.settle();
+    assert.equal(xSignal.isXServiceRestarted('user-B'), false);
+  } finally { h.unmount(); h.restore(); xSignal.clearXServiceRestarted('user-A'); }
 });
 
 test('R4: delayed A start -> switch to B -> release A: no request with B\'s token for A, A cannot open the app for B', async () => {
