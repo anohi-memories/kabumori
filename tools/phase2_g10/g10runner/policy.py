@@ -23,11 +23,11 @@ DEFAULT_POLICY = {
         "s2_redundancy_loss_age": 120.0,
         "starting_timeout": 30.0,
         "deadline_slack": 30.0,
-        "request_ttl": 120.0,
+        "request_ttl": 600.0,  # 署名 request の有効時間。分割ハンドオフは常駐 poll(>=300s)越しなので poll+余裕を見込む
         "halt_sync_wait": 30.0,
         "halt_escalation": 10.0,
         "minute_seconds": 60.0,
-        "issue_evidence_max_age": 120.0,  # Issue #323 の取得証拠の有効時間（H4 P1）
+        "issue_evidence_max_age": 600.0,  # Issue #323 取得証拠の有効時間。分割ハンドオフの poll(>=300s)+余裕（課金直前は spawn_evidence_max_age=10s で別途再取得）
         "spawn_evidence_max_age": 10.0,  # 起動直前・終了時の再取得証拠の有効時間（TASK 5）
         "issue_fetch_timeout": 5.0,  # 再取得の打ち切り（TASK 5）
         "issue_monitor_interval": 5.0,  # 実行中の Issue の再取得の間隔（TASK 7。S1。S2 は S1 が途絶えたときの予備）

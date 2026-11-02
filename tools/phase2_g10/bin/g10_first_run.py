@@ -193,6 +193,31 @@ def cmd_code_edit_policy(a):
     return 0
 
 
+def cmd_migrate_policy(a):
+    """（B5）ライブ制御の policy を、このリリースの first_run_policy()（＝現行コードの timing）へ移行する。
+    構造は変えず、分割ハンドオフ向けの timing 調整などを反映する用途。--write のときだけ置き換える
+    （run 中は拒否・正本/公開の両方を書いて read-back で確認）。exec 側の policy 控え(priv) は exec-init の
+    再実行で更新する（watchdog は pub≠priv なら旧版を保つ fail-safe のため）。"""
+    layout = Layout(os.path.realpath(a.root))
+    current = policy_mod.load(layout.policy_pub)
+    new = policy_mod.with_digest(first_run_policy())
+    changes = {k: [current["timing"].get(k), new["timing"].get(k)]
+               for k in sorted(set(current["timing"]) | set(new["timing"]))
+               if current["timing"].get(k) != new["timing"].get(k)}
+    out = {"current_version": current["version"], "current_policy_sha256": current["_digest"],
+           "new_version": new["version"], "new_policy_sha256": new["_digest"],
+           "timing_changes": changes, "written": False}
+    if a.write:
+        if registry.non_terminal(layout):
+            raise SystemExit("a run is in progress; policy not changed")
+        Control.install_policy(layout, new)
+        if policy_mod.load_current(layout)["_digest"] != new["_digest"]:  # 正本と公開の両方
+            raise SystemExit("policy read-back differs")
+        out["written"] = True
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_install(a):
     """（TASK 22）この開発 worktree から固定版を作る（元に未コミットの変更があれば作らない）。登録はしない。"""
     dest, digest = release.install(PACKAGE, os.path.realpath(a.dest))
@@ -354,6 +379,9 @@ def main(argv=None):
     ce.add_argument("--root", required=True)
     ce.add_argument("--config", required=True, help="code_edit の節の JSON ファイル")
     ce.add_argument("--write", action="store_true", help="表示した候補でポリシーを置き換える（要 GO）")
+    mp = sub.add_parser("migrate-policy")
+    mp.add_argument("--root", required=True)
+    mp.add_argument("--write", action="store_true", help="このリリースの policy へ置き換える（要 GO。run 中は拒否）")
     c = sub.add_parser("auth-check")
     c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
@@ -381,7 +409,8 @@ def main(argv=None):
     return {"init": cmd_init, "approve": cmd_approve, "run": cmd_run, "halt": cmd_halt, "unhalt": cmd_unhalt,
             "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check,
             "jobrunner-plist": cmd_jobrunner_plist, "watchdog-plist": cmd_watchdog_plist, "exec-init": cmd_exec_init,
-            "code-edit-policy": cmd_code_edit_policy}[a.cmd](a)
+            "code-edit-policy": cmd_code_edit_policy,
+            "migrate-policy": cmd_migrate_policy}[a.cmd](a)
 
 
 if __name__ == "__main__":

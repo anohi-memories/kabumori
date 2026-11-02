@@ -881,6 +881,9 @@ MUTANTS = [
     ("exported bundle files stay owner-only", "g10runner/result_handoff.py",
      "os.chmod(os.path.join(dirpath, name), 0o644)", "os.chmod(os.path.join(dirpath, name), 0o600)",
      "test_task39_result_handoff.RoundTrip.test_exported_bundle_is_readable_across_the_handoff_boundary"),
+    ("migrate-policy keeps the current policy (no real migration)", "bin/g10_first_run.py",
+     "    new = policy_mod.with_digest(first_run_policy())", "    new = policy_mod.with_digest(current)",
+     "test_task45_migrate_policy.MigratePolicy.test_write_migrates_to_the_release_policy_and_reads_back"),
 ]
 
 
