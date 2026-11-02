@@ -12,17 +12,27 @@ import { accountRefusal, actionView, REREAD_TEXT, type ActionButtonKind } from '
 const GENERATION_CHANGED = 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED';
 
 export const RECONNECT_REQUIRED_LABEL = '再接続が必要';
-export const RECONNECT_REQUIRED_TEXT = 'Xの再接続が必要です。再接続するまで、このアカウントの予約は保存・変更できません。アカウント画面でXを接続し直してください。';
+/** G3's list has no connection generation: 「予約済み」 is what is stored, and the app cannot tell more about one row. */
+const STORED_ROWS_MAY_NOT_SEND = '保存済みの予約は、接続し直すまで投稿されないことがあります。';
+export const RECONNECT_REQUIRED_TEXT = `Xの再接続が必要です。再接続するまで、このアカウントの予約は保存・変更できません。${STORED_ROWS_MAY_NOT_SEND}アカウント画面でXを接続し直してください。`;
 /** This person restarted the service from this app and has not connected since. Not a server's refusal, so it does not say 「再接続が必要」. */
 export const RESTART_OBSERVED_LABEL = '要確認';
-const RESTART_OBSERVED = 'X自動投稿を再開しました。再開前のXの接続は更新できないことがあるため、接続し直すまで、このアカウントの予約は保存・変更できません。';
+const RESTART_OBSERVED = `X自動投稿を再開しました。再開前のXの接続は更新できないことがあるため、接続し直すまで、このアカウントの予約は保存・変更できません。${STORED_ROWS_MAY_NOT_SEND}`;
+/** After the reconnect: true of rows saved before the restart, and the app cannot tell which those are (G3-02 #14). */
+export const RESTART_RECONNECTED_TEXT = 'X自動投稿の再開前に保存した予約は、「予約済み」と表示されていても投稿されません。どの予約が該当するかは、この画面では判別できません。心当たりがあれば取り消して、作り直してください。';
 export const RESTART_OBSERVED_TEXT = `${RESTART_OBSERVED}アカウント画面でXを接続し直してください。`;
 export const RESTART_OBSERVED_ACCOUNTS_TEXT = `${RESTART_OBSERVED}下のボタンから接続し直してください。`;
 /** The account is the person's own but not connected: what is still possible, and the way back. */
-export const X_NOT_CONNECTED_TEXT = 'Xアカウントの接続を確認できないため、新しい予約と時刻の変更はできません。既存の予約の確認と取消はできます。接続し直すときは、アカウント画面を開いてください。';
-export const X_NOT_CONNECTED_HOME_TEXT = 'Xアカウントの接続を確認できないため、新しい予約と時刻の変更はできません。既存の予約は「予約の管理」で確認できます。';
+export const X_NOT_CONNECTED_TEXT = `Xアカウントの接続を確認できないため、新しい予約と時刻の変更はできません。既存の予約の確認と取消はできます。${STORED_ROWS_MAY_NOT_SEND}接続し直すときは、アカウント画面を開いてください。`;
+export const X_NOT_CONNECTED_HOME_TEXT = `Xアカウントの接続を確認できないため、新しい予約と時刻の変更はできません。${STORED_ROWS_MAY_NOT_SEND}既存の予約は「予約の管理」で確認できます。`;
 /** Beside a write when nothing was observed: 接続済み is the stored connection, not a promise that it can still be refreshed. */
-export const CONNECTED_NOT_PROOF_TEXT = '接続済みと表示されていても、X自動投稿を終了して再開したあとは接続を更新できないことがあります。予定どおりに投稿されないときは、アカウント画面で接続し直してください。';
+export const CONNECTED_NOT_PROOF_TEXT = '「予約済み」は保存されていることを示すもので、投稿を保証するものではありません。接続済みと表示されていても、X自動投稿を終了して再開したあとは接続を更新できないことがあります。予定どおりに投稿されないときは、アカウント画面で接続し直してください。';
+/** G3 answers this for a row of an earlier generation, and for a row that is no longer plannable. Unlike other final answers, it can still be cancelled. */
+const NOT_EDITABLE = 'POSTONA_RESV_NOT_PLANNED';
+export const NOT_EDITABLE_LABEL = '変更できない予約';
+export const NOT_EDITABLE_TEXT = 'サーバーがこの予約の変更を受け付けませんでした。予定どおりに投稿されないことがあります。取り消して、作り直すことができます。';
+export const isNotEditableCode = (code: string) => code === NOT_EDITABLE;
+
 /** Not a statement about this account: nothing in the app can tell whether its connection predates a restart. */
 export const RESTART_HELP_TEXT = 'X自動投稿を終了して再開したあとは、接続の更新が止まることがあります。投稿が失敗したり、予約で接続のエラーが出たりしたら、ここから再接続してください。';
 
@@ -47,7 +57,7 @@ export function xAnswerView(code: string, actionOf: (code: string) => Reservatio
   const next = actionView(action, 'x');
   const specific = reservationMessage(code);
   const known = specific !== reservationMessage(undefined);
-  const text = action === 'reconnect_x' ? RECONNECT_REQUIRED_TEXT : known ? specific : next.reread ? `${next.message}${REREAD_TEXT}` : next.message;
+  const text = action === 'reconnect_x' ? RECONNECT_REQUIRED_TEXT : isNotEditableCode(code) ? NOT_EDITABLE_TEXT : known ? specific : next.reread ? `${next.message}${REREAD_TEXT}` : next.message;
   return { action, text, tone: action === 'check' ? 'warning' : 'danger', button: next.button, blocks: next.blocks, reread: next.reread };
 }
 

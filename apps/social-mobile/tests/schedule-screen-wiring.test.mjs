@@ -104,7 +104,7 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
     '@/features/schedule/reservation-error-actions': { reservationErrorAction },
     '@/features/reservations/reservation-view': reservationView,
     '@/features/reservations/x-write-view': xWriteView,
-    '@/features/reservations/x-reconnect-signal': { markXReconnectRequired: () => {}, clearXReconnectRequired: () => {} },
+    '@/features/reservations/x-reconnect-signal': { isXRowNotEditable: () => false, markXRowNotEditable() {}, markXReconnectRequired: () => {}, clearXReconnectRequired: () => {} },
     // The guard's own behaviour is tests/x-reservation-composer.test.mjs; here every X write may proceed.
     '@/features/reservations/use-x-write-guard': { useXWriteGuard: (account) => ({ scope: account?.id ?? null, token: 't', canRead: true, refusal: null, refuseToken: () => {}, block: () => {}, unblock: () => {} }) },
     '@/features/schedule/server-reservation-card': { ServerReservationCard: function ServerReservationCard(props) { return { type: 'ServerReservationCard', props }; } },

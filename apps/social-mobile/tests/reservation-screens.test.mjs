@@ -25,7 +25,7 @@ test.before(() => {
     globalThis[name] = function forbidden() { trapped += 1; throw new Error(`network entry point ${name} must not be used`); };
   }
 });
-test.beforeEach(() => { reconnectSignal.clearAllXReconnectRequired(); reconnectSignal.clearXServiceRestarted('person-1'); });
+test.beforeEach(() => { reconnectSignal.clearAllXReconnectRequired(); reconnectSignal.clearXServiceRestarted('person-1'); reconnectSignal.forgetXReconnectedAfterRestart('person-1'); });
 test.after(() => {
   for (const name of NETWORK) {
     if (savedGlobals.get(name) === undefined) delete globalThis[name];
@@ -529,6 +529,88 @@ test('T35 Threads is not widened: a disconnected Threads account is refused befo
   assert.match(view.accountRefusal({ brandId: 'me', connectionStatus: 'needs_attention', platform: 'threads' }, 'threads', 'me'), /接続し直して/u);
   assert.equal(view.accountRefusal({ brandId: 'me', connectionStatus: 'needs_attention', platform: 'x' }, 'x', 'me', false), null);
   assert.match(view.accountRefusal({ brandId: 'other', connectionStatus: 'needs_attention', platform: 'x' }, 'x', 'me', false), /個人ワークスペース/u);
+});
+
+test('T37 NOT_PLANNED on the manage screen: no false 確定; the row stops being 予約済み, no time change, the cancel stays and goes; it is not offered again after a re-read; ALREADY_FINAL keeps its own words', async () => {
+  const store = scriptedPorts();
+  const id = 't37-a';
+  store.answer('x.list', { ok: true, value: [row(id)] });
+  const h = await mount({ store });
+  await h.render();
+  let tree = await open(h, '予約 2026-11-02 09:30');
+  assert.ok(has(tree, '予約済み'));
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  store.answer('x.reschedule', { ok: false, code: 'POSTONA_RESV_NOT_PLANNED' });
+  store.answer('x.list', { ok: true, value: [row(id)] });
+  tree = await press(h, '時刻を変更');
+  assert.equal(store.count('x.reschedule'), 1);
+  assert.ok(has(tree, 'サーバーがこの予約の変更を受け付けませんでした'));
+  assert.ok(!has(tree, '変更・取消はできません'), 'the cancel is still there');
+  assert.ok(has(tree, '変更できない予約'));
+  assert.ok(!texts(tree).includes('予約済み'));
+  assert.equal(buttons(tree, '時刻を変更').length, 0);
+  assert.equal(button(tree, '予約を取り消す').disabled, false);
+  await press(h, '予約を取り消す');
+  store.answer('x.cancel', { ok: true, value: row(id, { status: 'cancelled', revision: 2 }) });
+  tree = await press(h, '本当に取り消す');
+  assert.ok(has(tree, '取消済み'));
+  assert.ok(!has(tree, '変更できない予約'), 'a cancelled row reads cancelled');
+
+  const final = scriptedPorts();
+  final.answer('x.list', { ok: true, value: [row('t37-b')] });
+  const g = await mount({ store: final });
+  await g.render();
+  tree = await open(g, '予約 2026-11-02 09:30');
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  final.answer('x.reschedule', { ok: false, code: 'POSTONA_RESV_ALREADY_FINAL' });
+  final.answer('x.list', { ok: true, value: [row('t37-b', { status: 'cancelled' })] });
+  tree = await press(g, '時刻を変更');
+  assert.ok(has(tree, '変更・取消はできません'));
+  assert.equal(reconnectSignal.isXRowNotEditable('t37-b'), false);
+});
+
+test('T37 a cancel answered NOT_PLANNED is not recorded as a row left to cancel', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('t37-c')] });
+  const h = await mount({ store });
+  await h.render();
+  await open(h, '予約 2026-11-02 09:30');
+  await press(h, '予約を取り消す');
+  store.answer('x.cancel', { ok: false, code: 'POSTONA_RESV_NOT_PLANNED' });
+  store.answer('x.list', { ok: true, value: [row('t37-c', { status: 'claimed' })] });
+  const tree = await press(h, '本当に取り消す');
+  assert.equal(reconnectSignal.isXRowNotEditable('t37-c'), false);
+  assert.ok(!has(tree, '取り消して、作り直すことができます'), 'the words do not offer a cancel that was just refused');
+});
+
+test('T37 after a restart + reconnect on the manage screen: writes back on, one note, only with rows, only for this person; a failed read says nothing about rows', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('n')] });
+  const h = await mount({ store });
+  reconnectSignal.markXServiceRestarted(h.world.userId);
+  await h.render();
+  let tree = await h.render();
+  assert.ok(has(tree, 'X自動投稿を再開しました'));
+  assert.ok(!has(tree, '再開前に保存した予約は'));
+  reconnectSignal.clearXServiceRestarted(h.world.userId);
+  tree = await open(h, '予約 2026-11-02 09:30');
+  assert.ok(has(tree, '再開前に保存した予約は'));
+  assert.ok(!has(tree, '接続済みと表示されていても'), 'one note');
+  assert.equal(button(tree, '時刻を変更').disabled, false);
+  assert.ok(texts(tree).includes('予約済み'), 'no row is singled out or called failed');
+  const other = scriptedPorts();
+  other.answer('x.list', { ok: false, code: 'NETWORK_ERROR' });
+  const g = await mount({ store: other });
+  await g.render();
+  assert.ok(!has(await g.render(), '再開前に保存した予約は'));
+  reconnectSignal.forgetXReconnectedAfterRestart(h.world.userId);
+  const third = scriptedPorts();
+  third.answer('x.list', { ok: true, value: [row('n')] });
+  const j = await mount({ store: third, userId: 'someone-else' });
+  reconnectSignal.markXServiceRestarted(h.world.userId);
+  reconnectSignal.clearXServiceRestarted(h.world.userId);
+  assert.ok(!has(await j.render(), '再開前に保存した予約は'));
+  reconnectSignal.forgetXReconnectedAfterRestart(h.world.userId);
 });
 
 test('X cancel asks twice; a double tap sends once; the revision last read is sent', async () => {

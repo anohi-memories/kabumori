@@ -40,7 +40,7 @@ test.after(() => {
   }
   assert.equal(trapped, 0);
 });
-test.beforeEach(() => { signal.clearAllXReconnectRequired(); signal.clearXServiceRestarted('person-1'); });
+test.beforeEach(() => { signal.clearAllXReconnectRequired(); signal.clearXServiceRestarted('person-1'); signal.forgetXReconnectedAfterRestart('person-1'); });
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -457,6 +457,69 @@ test('T35 home (real): the card and the ways out for a disconnected X account on
   assert.doesNotMatch(textOf(tree), /接続を確認できないため/u);
   render = await loadScreen('../src/app/(tabs)/index.tsx', stubsFor({ ...DISCONNECTED, platform: 'instagram' }));
   assert.doesNotMatch(textOf(render({})), /接続を確認できないため/u);
+});
+
+test('T37 NOT_PLANNED on the tab: not a success, the words say a cancel is left, no retry; the row stops being 予約済み with no time change; a cancel still goes; another row is untouched', async () => {
+  const other = { ...ROW, reservationId: 'm', draftId: 'd3', scheduledAt: '2026-12-02T00:30:00.000Z' };
+  const mine = { ...ROW, reservationId: 't37-k' };
+  let current = mine;
+  const seen = [];
+  const h = await screen({ reply: async (call) => {
+    seen.push(call.body.action);
+    if (call.body.action === 'reschedule') return no(409, 'POSTONA_RESV_NOT_PLANNED');
+    if (call.body.action === 'cancel') { current = { ...mine, status: 'cancelled', revision: 2 }; return ok([current]); }
+    if (call.body.action === 'get') return ok([current]);
+    return ok([current, other]);
+  } });
+  await h.update();
+  const card = (id) => { let hit = null; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard' && n.props.row.reservationId === id) hit = n.props; }); return hit; };
+  assert.equal(card('t37-k').notEditable, null);
+  card('t37-k').onRetime(); await h.update();
+  card('t37-k').onRetimeApply(); await settle(); await h.update();
+  assert.deepEqual(seen.filter((a) => a === 'reschedule'), ['reschedule'], 'once');
+  assert.match(onScreen(h), /サーバーがこの予約の変更を受け付けませんでした/u);
+  assert.doesNotMatch(onScreen(h), /日時を変更しました|もう変更できません/u);
+  assert.equal(card('t37-k').notEditable.label, '変更できない予約');
+  assert.equal(card('m').notEditable, null);
+  card('t37-k').onCancel(); await h.update();
+  card('t37-k').onCancel(); await settle(); await h.update();
+  assert.equal(seen.filter((a) => a === 'cancel').length, 1);
+  assert.match(onScreen(h), /予約を取り消しました/u);
+});
+
+test('T37 after a restart + reconnect: writes are back, and the words say what is true of rows saved before it; nothing is called failed; no rows, no words; another person sees none of it', async () => {
+  signal.markXServiceRestarted('person-1');
+  signal.clearXServiceRestarted('person-1');
+  assert.equal(signal.isXReconnectedAfterRestart('person-1'), true);
+  const h = await screen({ reply: async () => ok([ROW]) });
+  await h.update();
+  assert.match(onScreen(h), /再開前に保存した予約は/u);
+  assert.match(onScreen(h), /判別できません/u);
+  assert.doesNotMatch(onScreen(h), /接続済みと表示されていても/u, 'one note');
+  let label = null; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') label = n.props.notEditable; });
+  assert.equal(label, null, 'no row is singled out');
+  const none = await screen({ reply: async () => ok([]) });
+  await none.update();
+  assert.doesNotMatch(onScreen(none), /再開前に保存した予約は/u);
+  h.world.userId = 'person-9';
+  await h.update();
+  assert.doesNotMatch(onScreen(h), /再開前に保存した予約は/u);
+});
+
+test('T37 the words: a stored row may not be sent while the connection is off; 接続済み and 予約済み are no promise; a code the app cannot place is not called not-editable', () => {
+  for (const text of [xWriteView.RECONNECT_REQUIRED_TEXT, xWriteView.RESTART_OBSERVED_TEXT, xWriteView.X_NOT_CONNECTED_TEXT, xWriteView.X_NOT_CONNECTED_HOME_TEXT]) assert.match(text, /投稿されないことがあります/u);
+  assert.match(xWriteView.CONNECTED_NOT_PROOF_TEXT, /投稿を保証するものではありません/u);
+  assert.equal(xWriteView.isNotEditableCode('POSTONA_RESV_NOT_PLANNED'), true);
+  assert.equal(xWriteView.isNotEditableCode('POSTONA_RESV_ALREADY_FINAL'), false);
+  assert.match(xWriteView.xAnswerView('POSTONA_RESV_NOT_PLANNED', reservationErrorAction).text, /受け付けませんでした/u);
+  assert.equal(xWriteView.xAnswerView('POSTONA_RESV_NOT_PLANNED', reservationErrorAction).reread, true);
+  assert.match(xWriteView.xAnswerView('POSTONA_RESV_ALREADY_FINAL', reservationErrorAction).text, /もう変更できません/u);
+  signal.markXServiceRestarted('p37');
+  signal.clearXServiceRestarted('p37');
+  assert.deepEqual([signal.isXReconnectedAfterRestart('p37'), signal.isXReconnectedAfterRestart('q37'), signal.isXReconnectedAfterRestart(null)], [true, false, false]);
+  signal.forgetXReconnectedAfterRestart('p37');
+  signal.markXRowNotEditable('z');
+  assert.deepEqual([signal.isXRowNotEditable('z'), signal.isXRowNotEditable('y')], [true, false]);
 });
 
 test('T34 RESV-1: 「投稿予定はありません」 only for an answered, empty list: loading, rows, a read error, a refused login and another account never show it', async () => {

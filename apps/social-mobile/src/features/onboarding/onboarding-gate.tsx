@@ -9,6 +9,7 @@ import { SupabaseOnboardingRepository } from '@/data/onboarding-repository';
 import { canBrowseWithoutConnection, deriveOnboardingStep, inputForCurrentUser, onboardingStorageKey, type OnboardingInput } from '@/domain/onboarding';
 import { shouldShowNewAccountNotice } from '@/domain/auth-flows';
 import { useAuth } from '@/providers/auth-provider';
+import { clearAllXReconnectRequired, clearXServiceRestarted } from '@/features/reservations/x-reconnect-signal';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import AccountDeletionScreen from '@/app/account-deletion';
 import { supabase } from '@/lib/supabase';
@@ -112,6 +113,13 @@ export function OnboardingGate({ children }: PropsWithChildren) {
 
   const onConnected = useCallback(() => { refresh(); reloadData(); }, [refresh, reloadData]);
   const { state: connectState, stateText, verifiedHandle, connect } = useXConnect(onConnected);
+  // The same as the accounts screen: a new connect here answers a reconnect refusal and an observed restart.
+  useEffect(() => {
+    if (connectState !== 'connected') return;
+    clearAllXReconnectRequired();
+    clearXServiceRestarted(currentUserId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectState]);
 
   const deferSettings = useCallback(async () => {
     if (userId) await writeProgress(userId, { settingsDeferred: true });

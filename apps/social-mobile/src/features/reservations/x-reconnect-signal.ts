@@ -35,6 +35,8 @@ export function isXReconnectRequired(accountId: string | null | undefined): bool
 // before a restart and no server status shows it, so this is the only evidence the app holds. Same limits as above: memory only, this
 // device only. Cleared by a new connect only: G3 does not read the generation, so an accepted write says nothing about it.
 const restarted = new Set<string>();
+const reconnectedAfterRestart = new Set<string>();
+const notEditableRows = new Set<string>();
 
 export function markXServiceRestarted(userId: string) {
   if (restarted.has(userId)) return;
@@ -43,7 +45,30 @@ export function markXServiceRestarted(userId: string) {
 }
 
 export function clearXServiceRestarted(userId: string | null | undefined) {
-  if (typeof userId === 'string' && restarted.delete(userId)) changed();
+  if (typeof userId !== 'string' || !restarted.delete(userId)) return;
+  reconnectedAfterRestart.add(userId);
+  changed();
+}
+
+/** Connected again after a restart this app saw: rows saved before the restart are still listed, and G3 will not send them. */
+export function isXReconnectedAfterRestart(userId: string | null | undefined): boolean {
+  return typeof userId === 'string' && reconnectedAfterRestart.has(userId);
+}
+
+/** The person looked at it: not raised again in this run of the app. */
+export function forgetXReconnectedAfterRestart(userId: string | null | undefined) {
+  if (typeof userId === 'string' && reconnectedAfterRestart.delete(userId)) changed();
+}
+
+/** The server answered that this row can no longer be edited, while it still reads planned. G3's list cannot say so. Same limits as above. */
+export function markXRowNotEditable(reservationId: string) {
+  if (notEditableRows.has(reservationId)) return;
+  notEditableRows.add(reservationId);
+  changed();
+}
+
+export function isXRowNotEditable(reservationId: string): boolean {
+  return notEditableRows.has(reservationId);
 }
 
 export function isXServiceRestarted(userId: string | null | undefined): boolean {

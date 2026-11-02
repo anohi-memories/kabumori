@@ -18,12 +18,13 @@ import {
   THREADS_MEMORY_NOTE,
   threadsReceiptView,
   xRowView,
+  xRowViewOf,
   type ActionButtonKind,
   type Tone,
 } from '@/features/reservations/reservation-view';
 import { contentSha256, newClientRequestId, useReservationPorts } from '@/features/reservations/use-reservation-ports';
-import { isXReconnectRequired, isXServiceRestarted, markXReconnectRequired, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { CONNECTED_NOT_PROOF_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, X_NOT_CONNECTED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
+import { isXReconnectedAfterRestart, isXReconnectRequired, isXRowNotEditable, isXServiceRestarted, markXReconnectRequired, markXRowNotEditable, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, RESTART_RECONNECTED_TEXT, X_NOT_CONNECTED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -135,7 +136,7 @@ export default function ReservationsScreen() {
   const rereadX = () => setReads((value) => value + 1);
 
   /** One X edit at a time, for the row as last read (its revision). */
-  const editX = async (op: () => Promise<StoreResult<ServerReservation>>, done: (row: ServerReservation) => string, isCancel = false) => {
+  const editX = async (edited: ServerReservation, op: () => Promise<StoreResult<ServerReservation>>, done: (row: ServerReservation) => string, isCancel = false) => {
     if (inFlight.current || !(isCancel ? canRead : usable) || scope === null) return;
     inFlight.current = true;
     setBusy(true);
@@ -151,7 +152,10 @@ export default function ReservationsScreen() {
         setConfirmCancel(null);
         say(mine, done(row), xRowView(row).needsReconfirm ? 'warning' : 'success');
       } else {
+        const stillCancellable = !isCancel && isNotEditableCode(result.code);
+        if (stillCancellable) markXRowNotEditable(edited.reservationId);
         fail(result.code, mine, sentToken, rereadX);
+        if (stillCancellable) say(mine, `${NOT_EDITABLE_TEXT}${REREAD_TEXT}`);
       }
     } finally {
       inFlight.current = false;
@@ -163,18 +167,18 @@ export default function ReservationsScreen() {
     if (scope === null) return;
     const parsed = parseJstInput(timeText, new Date());
     if (!parsed.ok) { say(scope, parsed.message); return; }
-    void editX(() => ports.x.reschedule(row.reservationId, row.revision, parsed.iso),
+    void editX(row, () => ports.x.reschedule(row.reservationId, row.revision, parsed.iso),
       (next) => (xRowView(next).needsReconfirm ? '時刻を変更しました。この本文で投稿してよいか、再確認してください。確認するまで投稿されません。' : '時刻を変更しました。'));
   };
   const reconfirm = (row: ServerReservation) => {
     if (scope === null) return;
     const body = row.body;
     if (typeof body !== 'string' || body.length === 0) { say(scope, '本文を読み込めないため、再確認できません。最新の状態を読み込んでください。'); return; }
-    void editX(async () => ports.x.reconfirm(row.reservationId, row.revision, await contentSha256(body)), () => 'この本文で再確認しました。');
+    void editX(row, async () => ports.x.reconfirm(row.reservationId, row.revision, await contentSha256(body)), () => 'この本文で再確認しました。');
   };
   const cancelX = (row: ServerReservation) => {
     if (confirmCancel !== row.reservationId) { setConfirmCancel(row.reservationId); return; }
-    void editX(() => ports.x.cancel(row.reservationId, row.revision), () => (isSendNowRow(row) ? '即時投稿を取り消しました。' : '予約を取り消しました。'), true);
+    void editX(row, () => ports.x.cancel(row.reservationId, row.revision), () => (isSendNowRow(row) ? '即時投稿を取り消しました。' : '予約を取り消しました。'), true);
   };
 
   // Threads: one create per press, with a new client request id; the request is kept (memory) so its receipt can be read.
@@ -259,6 +263,7 @@ export default function ReservationsScreen() {
   const shownNotice = notice && notice.scope === scope ? notice : null;
   const rows = xList && xList.scope === scope ? xList.rows : [];
   const mineRequests = threadsRequests.filter((item) => item.scope === scope);
+  const reconnectedNote = platform === 'x' && refusal === null && !restartObserved && !reconnectRequired && !notConnected && rows.length > 0 && isXReconnectedAfterRestart(userId);
   const disabled = !usable || busy;
   const cancelDisabled = !canRead || busy;
   const readDisabled = !canRead || busy;
@@ -297,7 +302,8 @@ export default function ReservationsScreen() {
         {reconnectRequired && !refusal ? <Card><Pill tone="warning">{RECONNECT_REQUIRED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
         {notConnected ? <Card><Pill tone="warning">{X_NOT_CONNECTED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
         {restartObserved && !refusal ? <Card><Pill tone="warning">{RESTART_OBSERVED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
-        {enabled && platform === 'x' && !refusal && !reconnectRequired && !restartObserved && !notConnected ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
+        {enabled && platform === 'x' && !refusal && !reconnectRequired && !restartObserved && !notConnected && !reconnectedNote ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
+        {reconnectedNote ? <Card><Pill tone="warning">{RESTART_RECONNECTED_TEXT}</Pill></Card> : null}
         {loginRefused ? <Card><Pill tone="warning">{actionView('sign_in', platform).message}</Pill><ActionButton label="設定画面を開く" onPress={() => go('settings')} /><SignOutButton /></Card> : null}
         {shownNotice ? (
           <Card>
@@ -317,7 +323,7 @@ export default function ReservationsScreen() {
             {canRead && xList?.scope === scope && xList.failed ? <Card><Text style={styles.muted}>予約を読み込めなかったため、予約があるかどうかを確認できていません。「最新の状態を読み込む」でもう一度確かめてください。</Text></Card> : null}
             {canRead && xList?.scope === scope && !xList.failed && rows.length === 0 ? <Card><Text style={styles.muted}>このアカウントの予約はありません。</Text></Card> : null}
             {rows.map((row) => {
-              const view = xRowView(row);
+              const view = xRowViewOf(row, isXRowNotEditable(row.reservationId), NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT);
               const open = selected === row.reservationId;
               const sendNow = isSendNowRow(row);
               return (

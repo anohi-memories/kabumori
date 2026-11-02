@@ -41,6 +41,13 @@ export function xRowView(row: ServerReservation): RowView {
   }
 }
 
+/** A planned row the server refused to edit (x-reconnect-signal.ts): it is not called 予約済み any more; a cancel is all that is left. */
+export function xRowViewOf(row: ServerReservation, notEditable: boolean, label: string, detail: string): RowView {
+  const view = xRowView(row);
+  if (!notEditable || row.status !== 'planned') return view;
+  return { label, tone: 'warning', detail, canReschedule: false, needsReconfirm: false, canCancel: true };
+}
+
 export type ReceiptView = { label: string; tone: Tone; detail: string | null; canCancel: boolean };
 
 export function threadsReceiptView(state: ThreadsReceiptState | null): ReceiptView {

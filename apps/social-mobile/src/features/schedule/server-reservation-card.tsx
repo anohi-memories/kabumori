@@ -19,7 +19,7 @@ const toneOf = (row: ServerReservation): 'neutral' | 'success' | 'warning' | 'da
  * and each one is applied only after the server's read-back: time change (the consent of a manual post then
  * needs a new confirmation), reconfirmation of the exact text / time / account shown, and cancellation.
  */
-export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false }: {
+export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false, notEditable = null }: {
   row: ServerReservation;
   account: PreviewAccount | null;
   busy: boolean;
@@ -32,19 +32,23 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
   onCancel: () => void;
   /** The first press only asks; the label says what the next one does. */
   confirmingCancel?: boolean;
+  /** The server refused to edit this planned row: it is not called 予約済み any more, and a cancel is all that is left. */
+  notEditable?: { label: string; text: string } | null;
 }) {
   const manual = row.origin === 'user_authored';
   const planned = row.status === 'planned';
+  const refused = planned && notEditable !== null;
   return (
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatJst(row.scheduledAt)}</Text>
-        <Pill tone={toneOf(row)}>{row.status === 'planned' && row.consentState === 'ai_owner_opt_in' ? 'AI自動予約' : serverReservationLabel(row)}</Pill>
+        <Pill tone={refused ? 'warning' : toneOf(row)}>{refused ? notEditable.label : row.status === 'planned' && row.consentState === 'ai_owner_opt_in' ? 'AI自動予約' : serverReservationLabel(row)}</Pill>
       </View>
       <Text style={styles.muted}>{account ? `投稿先: ${account.displayName}（${account.handle}）・日本時間` : '投稿先: 確認できません'}</Text>
       <Text style={{ color: colors.ink }}>{manual ? (row.body ?? '') : 'AIが投稿の直前に本文を作成します（現在はAIの枠は投稿されません）'}</Text>
       <Text style={styles.muted}>サーバーで確認した予約・X への投稿はまだ行われません</Text>
-      {planned && manual && row.consentState === 'needs_reconfirm' ? (
+      {refused ? <Text style={styles.muted}>{notEditable.text}</Text> : null}
+      {planned && !refused && manual && row.consentState === 'needs_reconfirm' ? (
         <Text style={styles.muted}>日時が変わったため、この本文・日時・投稿先でよいか、もう一度確認してください。確認するまで投稿の対象になりません。</Text>
       ) : null}
       {retiming !== null ? (
@@ -67,8 +71,8 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
       ) : null}
       {planned ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {retiming === null ? <SmallButton label="日時を変更" disabled={busy} onPress={onRetime} /> : null}
-          {manual && row.consentState === 'needs_reconfirm' ? <SmallButton label="この内容で再確認" disabled={busy} onPress={onReconfirm} /> : null}
+          {retiming === null && !refused ? <SmallButton label="日時を変更" disabled={busy} onPress={onRetime} /> : null}
+          {manual && !refused && row.consentState === 'needs_reconfirm' ? <SmallButton label="この内容で再確認" disabled={busy} onPress={onReconfirm} /> : null}
           <SmallButton label={confirmingCancel ? '本当に取り消す' : '予約を取り消す'} disabled={busy} onPress={onCancel} />
         </View>
       ) : null}
