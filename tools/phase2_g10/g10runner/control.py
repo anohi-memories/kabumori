@@ -530,6 +530,21 @@ class Control:
             self.halt("soft", "breaker: consecutive failures", wait_sync=0)
         return status, end
 
+    def close_absent(self, run_id, reason, status="not_accepted"):
+        """結果バンドルが無く（exec が受理せず一度も走っていない）CLAIM を END(absence_confirmed) で閉じ、同時実行枠を解放する。
+        finalize と違い registry/result を要求しない（走っていない run の後始末）。制御側に run_dir が無い＝不在を確認してから打つ。
+        既に END 済みなら何もしない（冪等）。既定 status=not_accepted は FAILURES/NEUTRAL のどちらでもなく breaker に影響しない。"""
+        if os.path.exists(self.layout.run_dir(run_id)):
+            raise ValueError("run has a result dir; use finalize, not close_absent: " + run_id)
+        recs = self.ledger.read_all()
+        if not any(r["payload"]["run_id"] == run_id for r in self._claims(recs)):
+            raise ValueError("no CLAIM for run: " + run_id)
+        if any(r["type"] == "END" and r["payload"]["run_id"] == run_id for r in recs):
+            return None
+        return self.ledger.append("END", {"run_id": run_id, "status": status, "checks": {},
+                                          "absence_confirmed": True, "safety_violations": [reason]},
+                                  self.signer, "runner", self.now())
+
     def _finalize_code_edit(self, fields, work_dir, run_dir, parsed, req, checks, violations):
         """限定コード編集の終了判定（TASK 26）。スタブの記録は信用せず、実行前の一覧から再計算する。"""
         problems, spec = code_edit.spec_from_fields(fields or {}, self.policy)

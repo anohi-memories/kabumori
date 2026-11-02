@@ -31,9 +31,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import autorun, code_edit, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, registry, release, signing, wiring  # noqa: E402
+from g10runner import autorun, code_edit, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, registry, release, result_handoff, signing, wiring  # noqa: E402
 from g10runner.control import Control, GoReuseError  # noqa: E402
-from g10runner.fsutil import sha256_hex  # noqa: E402
+from g10runner.fsutil import read_json, sha256_hex  # noqa: E402
 from g10runner.layout import Layout, SplitLayout  # noqa: E402
 
 # 初回の監督付き1回のためのポリシー（認証なしの REST の 60回/時×0.5 に収まる間隔・1時間に1回だけの起動）
@@ -218,6 +218,46 @@ def cmd_migrate_policy(a):
     return 0
 
 
+def cmd_collect(a):
+    """（B5）handoff/out を回収し、CLAIM 済みで未終了の run を閉じる。結果バンドルがあれば ingest→finalize→REPORT。
+    バンドルが無く disposition だけある（exec 拒否/不在）なら END(absence_confirmed) で枠を解放。disposition も無い
+    （まだ処理中）run は触らない。--write のときだけ台帳に書く（それ以外は予定を表示するだけ）。"""
+    control, _policy = open_control(a.root)
+    out_dir = os.path.realpath(a.out)
+    recs = control.ledger.read_all()
+    ended = {r["payload"]["run_id"] for r in recs if r["type"] == "END"}
+    claimed = [r["payload"]["run_id"] for r in control._claims(recs) if r["payload"]["run_id"] not in ended]
+    results = []
+    for run_id in claimed:
+        bundle_manifest = os.path.join(out_dir, run_id, result_handoff.MANIFEST)
+        disposition = os.path.join(out_dir, run_id + ".json")
+        if os.path.exists(bundle_manifest):
+            if a.write:
+                result_handoff.ingest_result(out_dir, run_id, control.layout, control.verifier)
+                status, _end = control.finalize(run_id)
+                results.append({"run_id": run_id, "action": "ingest_finalize", "status": status,
+                                "report": os.path.join(control.layout.reports, run_id + ".md")})
+            else:
+                results.append({"run_id": run_id, "action": "ingest_finalize", "written": False})
+        elif os.path.exists(disposition):
+            reason = "no result bundle in handoff/out (exec did not accept)"
+            try:
+                d = read_json(disposition)
+                if isinstance(d, dict) and d.get("reason"):
+                    reason = "exec %s: %s" % (d.get("status"), d.get("reason"))
+            except Exception:
+                pass
+            if a.write:
+                control.close_absent(run_id, reason)
+                results.append({"run_id": run_id, "action": "reconcile_absent", "reason": reason})
+            else:
+                results.append({"run_id": run_id, "action": "reconcile_absent", "reason": reason, "written": False})
+        else:
+            results.append({"run_id": run_id, "action": "pending", "note": "no disposition yet"})
+    print(json.dumps({"written": bool(a.write), "closed": results}, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_install(a):
     """（TASK 22）この開発 worktree から固定版を作る（元に未コミットの変更があれば作らない）。登録はしない。"""
     dest, digest = release.install(PACKAGE, os.path.realpath(a.dest))
@@ -382,6 +422,10 @@ def main(argv=None):
     mp = sub.add_parser("migrate-policy")
     mp.add_argument("--root", required=True)
     mp.add_argument("--write", action="store_true", help="このリリースの policy へ置き換える（要 GO。run 中は拒否）")
+    co = sub.add_parser("collect")
+    co.add_argument("--root", required=True)
+    co.add_argument("--out", required=True, help="handoff/out（_kaburun 所有・yuya 読み）")
+    co.add_argument("--write", action="store_true", help="台帳に END を書く（ingest+finalize / reconcile）")
     c = sub.add_parser("auth-check")
     c.add_argument("--cli", required=True, help="Claude CLI の実体（版の名前のファイル）")
     c.add_argument("--with-env", action="append", default=[], choices=real_claude.DIAG_ENV_NAMES)
@@ -410,7 +454,8 @@ def main(argv=None):
             "install": cmd_install, "plists": cmd_plists, "auth-check": cmd_auth_check,
             "jobrunner-plist": cmd_jobrunner_plist, "watchdog-plist": cmd_watchdog_plist, "exec-init": cmd_exec_init,
             "code-edit-policy": cmd_code_edit_policy,
-            "migrate-policy": cmd_migrate_policy}[a.cmd](a)
+            "migrate-policy": cmd_migrate_policy,
+            "collect": cmd_collect}[a.cmd](a)
 
 
 if __name__ == "__main__":

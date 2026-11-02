@@ -884,6 +884,13 @@ MUTANTS = [
     ("migrate-policy keeps the current policy (no real migration)", "bin/g10_first_run.py",
      "    new = policy_mod.with_digest(first_run_policy())", "    new = policy_mod.with_digest(current)",
      "test_task45_migrate_policy.MigratePolicy.test_write_migrates_to_the_release_policy_and_reads_back"),
+    ("close_absent does not confirm absence (slot stays taken)", "g10runner/control.py",
+     '"absence_confirmed": True, "safety_violations": [reason]}',
+     '"absence_confirmed": False, "safety_violations": [reason]}',
+     "test_task46_collect.CloseAbsent.test_closes_and_frees_the_slot"),
+    ("collect never reconciles rejected runs", "bin/g10_first_run.py",
+     "        elif os.path.exists(disposition):", "        elif False:",
+     "test_task46_collect.Collect.test_reconciles_absent_run_with_disposition_only"),
 ]
 
 
