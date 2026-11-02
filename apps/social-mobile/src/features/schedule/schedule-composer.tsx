@@ -75,11 +75,14 @@ type AssistPanel = {
 export function ScheduleComposer({
   context,
   ai,
+  saveAvailable = false,
   onPlanned,
   onClose,
 }: {
   context: Omit<PlanContext, "batchId" | "seed">;
   ai: AiPlanningInput;
+  /** The store is on: what the person makes here can be saved from this screen. */
+  saveAvailable?: boolean;
   onPlanned: (result: Extract<PlanResult, { ok: true }>) => void;
   onClose: () => void;
 }) {
@@ -296,7 +299,7 @@ export function ScheduleComposer({
   return (
     <Card>
       <Text style={{ color: colors.ink, fontWeight: "800" }}>投稿を作成（プレビュー）</Text>
-      <Text style={styles.muted}>ここで作るのは、この画面だけのプレビューです。保存も投稿もされません。</Text>
+      <Text style={styles.muted}>{saveAvailable ? 'ここで作るのは、まだ保存されていないプレビューです。確認のあと「サーバーに保存」で予約になります。' : 'ここで作るのは、この画面だけのプレビューです。保存も投稿もされません。'}</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {MODES.map((item) => (
           <Choice key={item.mode} label={item.label} selected={mode === item.mode} onPress={() => {

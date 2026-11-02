@@ -75,6 +75,7 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
     'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }) },
     'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
     '@/constants/theme': { colors: { primary: 'p', primarySoft: 'ps', surface: 's', border: 'b', ink: 'i', danger: 'd' } },
+    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {}, buttonPressed: {} } },
     '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getAccounts: () => world.accounts } },
     '@/data/content-settings-repository': { SupabaseContentSettingsRepository: Repository },
@@ -634,10 +635,14 @@ test('server wiring: reschedule -> needs reconfirmation -> reconfirm -> cancel, 
   // Someone else changed the row: our revision is stale -> message + reload, nothing assumed.
   backend.rows.find((row) => row.body === '昼の投稿').revision = 9;
   const listsBefore = backend.calls.filter(([kind]) => kind === 'list').length;
+  serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').onCancel(); // asks
+  await settle();
   serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').onCancel();
   await settle();
   assert.match(collectText(h.render()), /ほかの操作で予約が変わっていました/u);
   assert.equal(backend.calls.filter(([kind]) => kind === 'list').length, listsBefore + 1);
+  serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').onCancel(); // asks
+  await settle();
   serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').onCancel();
   await settle();
   assert.equal(serverCardsOf(h.render()).find((card) => card.row.body === '昼の投稿').row.status, 'cancelled');

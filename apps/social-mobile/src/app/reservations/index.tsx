@@ -1,3 +1,4 @@
+import { SignOutButton } from '@/components/sign-out-button';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -74,7 +75,7 @@ export default function ReservationsScreen() {
   const restartObserved = platform === 'x' && isXServiceRestarted(userId) && !reconnectRequired;
   const usable = canRead && blockedScope !== scope && !reconnectRequired && !restartObserved;
 
-  const [xList, setXList] = useState<{ scope: string; rows: ServerReservation[] } | null>(null);
+  const [xList, setXList] = useState<{ scope: string; rows: ServerReservation[]; failed?: boolean } | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [timeText, setTimeText] = useState('');
@@ -121,7 +122,7 @@ export default function ReservationsScreen() {
         setBlockedScope((value) => (value === mine ? null : value));
         setXList({ scope: mine, rows: [...result.value].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)) });
       } else {
-        setXList({ scope: mine, rows: [] });
+        setXList({ scope: mine, rows: [], failed: true });
         fail(result.code, mine, sentToken, null);
       }
     });
@@ -266,7 +267,7 @@ export default function ReservationsScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: 16 }}>
+      <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={{ gap: 16 }}>
         <SectionTitle detail="予約の状態の確認と、時刻の変更・取消をここで行います。投稿の実行はここからは行いません。">X・Threadsの予約</SectionTitle>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['x', 'threads'] as const).map((item) => (
@@ -293,7 +294,7 @@ export default function ReservationsScreen() {
         {reconnectRequired && !refusal ? <Card><Pill tone="warning">{RECONNECT_REQUIRED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
         {restartObserved && !refusal ? <Card><Pill tone="warning">{RESTART_OBSERVED_TEXT}</Pill><ActionButton label="アカウント画面を開く" onPress={() => go('accounts')} /></Card> : null}
         {enabled && platform === 'x' && !refusal && !reconnectRequired && !restartObserved ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
-        {loginRefused ? <Card><Pill tone="warning">{actionView('sign_in', platform).message}</Pill><ActionButton label="設定画面を開く" onPress={() => go('settings')} /></Card> : null}
+        {loginRefused ? <Card><Pill tone="warning">{actionView('sign_in', platform).message}</Pill><ActionButton label="設定画面を開く" onPress={() => go('settings')} /><SignOutButton /></Card> : null}
         {shownNotice ? (
           <Card>
             <Pill tone={shownNotice.tone}>{shownNotice.text}</Pill>
@@ -305,11 +306,12 @@ export default function ReservationsScreen() {
           <>
             <Card>
               <Text style={{ color: colors.ink, fontWeight: '800' }}>新しいXの予約</Text>
-              <Text style={styles.muted}>Xの予約は「投稿予定」タブの作成画面で作ります。プレビューを確認してから保存します。</Text>
-              <ActionButton label="作成画面を開く" onPress={() => router.dismissTo('/(tabs)/schedule')} />
+              <Text style={styles.muted}>Xの予約は「投稿予定」タブの「投稿を作成」から作ります。プレビューを確認してから保存します。</Text>
+              <ActionButton label="投稿予定タブを開く" onPress={() => router.dismissTo('/(tabs)/schedule')} />
             </Card>
-            <ActionButton label="最新の状態を読み込む" disabled={readDisabled} onPress={rereadX} />
-            {canRead && xList?.scope === scope && rows.length === 0 ? <Card><Text style={styles.muted}>このアカウントの予約はありません。</Text></Card> : null}
+            <ActionButton label="最新の状態を読み込む" disabled={readDisabled} onPress={() => { setNotice((current) => (current?.tone === 'success' ? current : null)); rereadX(); }} />
+            {canRead && xList?.scope === scope && xList.failed ? <Card><Text style={styles.muted}>予約を読み込めなかったため、予約があるかどうかを確認できていません。「最新の状態を読み込む」でもう一度確かめてください。</Text></Card> : null}
+            {canRead && xList?.scope === scope && !xList.failed && rows.length === 0 ? <Card><Text style={styles.muted}>このアカウントの予約はありません。</Text></Card> : null}
             {rows.map((row) => {
               const view = xRowView(row);
               const open = selected === row.reservationId;

@@ -55,7 +55,9 @@ const sha = (text) => createHash('sha256').update(text, 'utf8').digest('hex');
 const jwt = (sub, sid, n = 1) => { const part = (o) => Buffer.from(JSON.stringify(o)).toString('base64url'); return `${part({ alg: 'none' })}.${part({ sub, session_id: sid, n })}.x`; };
 
 const ME = 'u_me';
+const held2 = new Promise(() => {});
 const ACCOUNT = { id: '11111111-1111-4111-8111-111111111111', brandId: ME, platform: 'x', profile: { displayName: 'me', handle: '@me', avatarColor: '#000' }, connectionStatus: 'connected', postingState: 'active' };
+const OTHER_ACCOUNT = { ...ACCOUNT, id: '44444444-4444-4444-8444-444444444444' };
 
 /**
  * The real schedule screen. `gate`: G3's store is built by G3's factory with this argument; the live deps are the ones the screen
@@ -106,6 +108,7 @@ async function screen({ gate = true, reply = null, account = ACCOUNT, workspaceI
     'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), Fragment: 'Fragment' },
     'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },
     '@/constants/theme': { colors: { primary: 'p', primarySoft: 'ps', surface: 's', border: 'b', ink: 'i', danger: 'd' } },
+    '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: {}, buttonPressed: {} } },
     '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getAccounts: () => [world.account] } },
     '@/data/content-settings-repository': { SupabaseContentSettingsRepository: Repository },
@@ -375,6 +378,141 @@ test('T33 real-tap finding: confirming removes the notice it made out of date; t
   assert.doesNotMatch(onScreen(h), /プレビューを作りました/u);
   const layout = await readFile(new URL('../src/app/_layout.tsx', import.meta.url), 'utf8');
   assert.match(layout, /headerBackTitle: '戻る'/u);
+});
+
+const emptyTitles = (h) => { const out = []; walk(h.render(), (n) => { if (n.type === 'EmptyState') out.push(n.props.title); }); return out; };
+const ROW = { reservationId: 'k', batchId: 'b', draftId: 'd2', scheduledAt: '2026-12-01T00:30:00.000Z', status: 'planned', revision: 1, consentState: 'confirmed', body: 'x', mode: 'manual_exact', origin: 'user_authored' };
+
+test('T34 RESV-1: 「投稿予定はありません」 only for an answered, empty list: loading, rows, a read error, a refused login and another account never show it', async () => {
+  let h = await screen({ reply: async () => ok([]) });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), ['投稿予定はありません'], 'answered and empty');
+
+  let release; const held = new Promise((resolve) => { release = resolve; });
+  h = await screen({ reply: async () => { await held; return ok([]); } });
+  assert.deepEqual(emptyTitles(h), [], 'loading');
+  release(); await settle(); await h.update();
+  assert.deepEqual(emptyTitles(h), ['投稿予定はありません'], 'then answered');
+
+  h = await screen({ reply: async () => ok([ROW]) });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), [], 'a saved reservation');
+
+  h = await screen({ reply: async () => no(503, 'NETWORK_ERROR') });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), [], 'a read error');
+  assert.match(onScreen(h), /サーバーの予約を読み込めませんでした/u);
+
+  h = await screen({ reply: async () => no(401, 'POSTONA_RESV_AUTH_REQUIRED') });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), [], 'a refused login');
+
+  h = await screen({ reply: async (call) => (call.body.payload?.socialAccountId === OTHER_ACCOUNT.id ? held2 : ok([])) });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), ['投稿予定はありません']);
+  h.world.account = OTHER_ACCOUNT;
+  await h.update();
+  assert.deepEqual(emptyTitles(h), [], 'another account: not read yet');
+});
+
+test('T34 RESV-1: with only a send-now row the tab can say none (it is not a reservation), and it says where that row is', async () => {
+  const send = { ...ROW, reservationId: 's1', draftId: 'single:1' };
+  const h = await screen({ reply: async () => ok([send]) });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), ['投稿予定はありません']);
+  assert.match(onScreen(h), /即時投稿が1件あります/u);
+});
+
+test('T34 gate OFF: the empty card stays as it was, no read, no token; the words say nothing can be saved', async () => {
+  const h = await screen({ gate: false });
+  await h.update();
+  assert.deepEqual(emptyTitles(h), ['投稿予定はありません']);
+  assert.deepEqual([h.world.calls.length, h.world.sessionReads], [0, 0]);
+  await planOne(h);
+  assert.match(onScreen(h), /実際の予約と投稿は、まだ利用できません/u);
+  assert.doesNotMatch(onScreen(h), /「サーバーに保存」のあとです/u);
+});
+
+test('T34 RESV-2: with the gate on, the words match the save button; the composer is told', async () => {
+  const h = await screen();
+  labelled(h.render(), 'ActionButton', '投稿を作成').onPress();
+  await h.update();
+  let composer = null; walk(h.render(), (n) => { if (n.type === 'ScheduleComposer') composer = n.props; });
+  assert.equal(composer.saveAvailable, true);
+  composer.onClose();
+  await h.update();
+  await planOne(h);
+  assert.match(onScreen(h), /「サーバーに保存」のあとです/u);
+  assert.doesNotMatch(onScreen(h), /実際の予約と投稿は、まだ利用できません/u);
+  const source = await readFile(new URL('../src/features/schedule/schedule-composer.tsx', import.meta.url), 'utf8');
+  assert.match(source, /saveAvailable \? 'ここで作るのは、まだ保存されていないプレビューです/u);
+  const off = await screen({ gate: false });
+  labelled(off.render(), 'ActionButton', '投稿を作成').onPress();
+  await off.update();
+  walk(off.render(), (n) => { if (n.type === 'ScheduleComposer') composer = n.props; });
+  assert.equal(composer.saveAvailable, false);
+});
+
+test('T34 RESV-3: on the tab a cancel asks first; the second press sends one cancel; another row does not inherit the question', async () => {
+  const second = { ...ROW, reservationId: 'm', draftId: 'd3' };
+  const h = await screen({ reply: async (call) => {
+    if (call.body.action === 'cancel') return { status: 200, json: { ok: true, reservations: [{ ...ROW, status: 'cancelled', revision: 2 }] } };
+    return ok([ROW, second]);
+  } });
+  await h.update();
+  const cards = () => { const out = []; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') out.push(n.props); }); return out; };
+  cards()[0].onCancel();
+  await h.update();
+  assert.equal(ofAction(h, 'cancel').length, 0, 'the first press only asks');
+  assert.deepEqual(cards().map((c) => c.confirmingCancel), [true, false]);
+  cards()[1].onCancel();
+  await h.update();
+  assert.deepEqual(cards().map((c) => c.confirmingCancel), [false, true], 'the question moved with the press');
+  cards()[0].onCancel();
+  await h.update();
+  cards()[0].onCancel();
+  await settle(); await h.update();
+  assert.equal(ofAction(h, 'cancel').length, 1);
+  assert.equal(ofAction(h, 'cancel')[0].body.payload.reservationId, 'k');
+});
+
+test('T34 RESV-4 + 7: a 401 says it once, with the settings and the sign-out right there; a new token removes them', async () => {
+  const { h } = await ready({ create: () => no(401, 'POSTONA_RESV_AUTH_REQUIRED') });
+  await pressSave(h);
+  const said = []; walk(h.render(), (n) => { if (n.type === 'Pill' && /ログイン/u.test(textOf(n))) said.push(textOf(n)); });
+  assert.equal(said.length, 1, `said once, on the batch row: ${said.join(' / ')}`);
+  assert.ok(labelled(h.render(), 'ActionButton', '設定画面を開く'));
+  const signOuts = () => { let n = 0; walk(h.render(), (x) => { if (x.type === 'SignOutButton') n += 1; }); return n; };
+  assert.equal(signOuts(), 1);
+  h.world.token = jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2');
+  await h.update();
+  assert.equal(signOuts(), 0);
+});
+
+test('T34 RESV-7: 読み込み直す clears an old warning; once the read is good, no yellow or red is left', async () => {
+  let down = false;
+  const h = await screen({ reply: async (call) => {
+    if (call.body.action === 'cancel') { down = true; return no(503, 'NETWORK_ERROR'); }
+    return down ? no(503, 'NETWORK_ERROR') : ok([ROW]);
+  } });
+  await h.update();
+  const cards = () => { const out = []; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') out.push(n.props); }); return out; };
+  cards()[0].onCancel(); await h.update();
+  cards()[0].onCancel(); await settle(); await h.update();
+  const warnings = () => { const out = []; walk(h.render(), (n) => { if (n.type === 'Pill' && n.props.tone !== 'success') out.push(textOf(n)); }); return out; };
+  assert.ok(warnings().length > 0, 'the failed cancel and the failed read');
+  down = false;
+  labelled(h.render(), 'SmallButton', '読み込み直す').onPress();
+  await settle(); await h.update();
+  assert.deepEqual(warnings(), []);
+  assert.equal(cards().length, 1, 'the row is back');
+});
+
+test('T34 RESV-8 + 9: the keyboard insets and the tab scene inset are set in the source', async () => {
+  const read = (rel) => readFile(new URL(rel, import.meta.url), 'utf8');
+  assert.match(await read('../src/app/(tabs)/schedule.tsx'), /<ScrollView automaticallyAdjustKeyboardInsets/u);
+  assert.match(await read('../src/app/reservations/index.tsx'), /<ScrollView automaticallyAdjustKeyboardInsets/u);
+  assert.match(await read('../src/app/(tabs)/_layout.tsx'), /sceneStyle: \{ backgroundColor: colors\.background, paddingTop: insets\.top \}/u);
 });
 
 test('T33 not observable: a connected account can save, and the supplement says 接続済み is no promise; no reconnect is claimed', async () => {
