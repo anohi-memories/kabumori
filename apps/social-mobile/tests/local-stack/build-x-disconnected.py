@@ -29,6 +29,8 @@ head = sub(head, "const settle = async () => { for (let i = 0; i < 8; i += 1) aw
 head = sub(head, "import test from 'node:test';\n", "import test from 'node:test';\n" + STACK_IMPORT + "import * as onboarding from '../src/domain/onboarding.ts';\n")
 if os.environ.get('G1T36_MUTANT') == 'reads_need_connection':  # negative control: this check must fail without the client change
     head = sub(head, "const source = await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8');", "const source = (await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8')).replace(\"platform !== 'x')\", 'true)');")
+if os.environ.get('G1T36_MUTANT') == 'refused_row_not_recorded':  # negative control: the row must stop reading 予約済み
+    head = sub(head, "const source = await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8');", "const source = (await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8')).replace('if (stillCancellable) markXRowNotEditable(edited.reservationId);', '');")
 with open(os.path.join(TESTS, 'zz-x-disconnected-manage.generated.mjs'), 'w', encoding='utf-8') as f:
     f.write(head + read(os.path.join(HERE, 'x-disconnected-manage.tail.mjs')))
 

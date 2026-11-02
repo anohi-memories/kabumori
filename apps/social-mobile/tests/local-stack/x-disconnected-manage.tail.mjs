@@ -285,6 +285,57 @@ test('stack: service end (SYNTHETIC row): list / get / cancel answer, create / r
   reconnectSignal.clearXServiceRestarted(a.userId);
 });
 
+test('stack, with G3 #624: after a restart, before and after a reconnect: 403 then 409 for a pre-restart row; the real screen says so, keeps the cancel; a new row works', { skip: process.env.G1T37_G3_624 === '1' ? false : 'needs G3 PR #624 in the tree' }, async () => {
+  const a = await stack.person('m10');
+  const row = await stack.saveRow(a, a.account, 'before restart');
+  const gone = await stack.saveRow(a, a.account, 'before restart cancel');
+  await stack.endService(a);
+  const asked = await stack.rpc('start_x_autopost_service', a.token);
+  assert.equal((await stack.rpc('reactivate_x_autopost_service', a.token, { p_expected_lifecycle_version: asked.body.lifecycle_version })).body.status, 'active');
+  assert.equal(await stack.connectionStatus(a, a.account), 'identity_verified', 'the column cannot say');
+  const notVerified = '403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED';
+  const moved = { reservationId: row.reservationId, expectedRevision: 1, scheduledAt: soon(12) };
+  const sum = { reservationId: row.reservationId, expectedRevision: 1, contentSha256: stack.sha256('before restart') };
+  assert.equal((await stack.http('reschedule', moved, a.token)).code, notVerified);
+  assert.equal((await stack.http('reconfirm', sum, a.token)).code, notVerified);
+  assert.equal((await stack.http('list', { socialAccountId: a.account }, a.token)).code, '200 ok');
+
+  // Another device restarted: this screen saw nothing, still says connected, and the server's 403 is what it learns from.
+  const h = await onScreenFor(a);
+  let tree = await openRowOf(h, 'before restart cancel');
+  field(tree, '新しい日時').onChangeText('2026-11-20 10:00');
+  tree = await pressButton(h, '時刻を変更');
+  assert.ok(has(tree, 'Xの再接続が必要です'), shown(tree));
+  assert.ok(!has(tree, '時刻を変更しました'), shown(tree));
+  assert.equal(await stack.rowState(gone.reservationId), 'planned/1/confirmed');
+  reconnectSignal.clearAllXReconnectRequired();
+
+  await stack.xConnect(a, 'm10b', a.puid);
+  assert.equal((await stack.http('reschedule', moved, a.token)).code, '409 POSTONA_RESV_NOT_PLANNED');
+  assert.equal((await stack.http('reconfirm', sum, a.token)).code, '409 POSTONA_RESV_NOT_PLANNED');
+  assert.equal(await stack.rowState(row.reservationId), 'planned/1/confirmed', 'still reads planned: the list cannot say');
+
+  const after = await onScreenFor(a);
+  tree = await openRowOf(after, 'before restart cancel');
+  assert.ok(texts(tree).includes('予約済み'), 'nothing to tell it by yet');
+  field(tree, '新しい日時').onChangeText('2026-11-20 10:00');
+  netlog.actions = [];
+  tree = await pressButton(after, '時刻を変更');
+  assert.deepEqual(writesSent(), ['reschedule'], 'once');
+  assert.ok(has(tree, 'サーバーがこの予約の変更を受け付けませんでした'), shown(tree));
+  assert.ok(has(tree, '変更できない予約'), shown(tree));
+  assert.equal(buttons(tree, '時刻を変更').length, 0);
+  await pressButton(after, '予約を取り消す');
+  tree = await pressButton(after, '本当に取り消す');
+  assert.match(await stack.rowState(gone.reservationId), /^cancelled\/2\//u, 'the old row can still be cancelled');
+  assert.ok(has(tree, '取消済み'), shown(tree));
+  assert.equal(await stack.rowState(row.reservationId), 'planned/1/confirmed');
+  const fresh = await stack.saveRow(a, a.account, 'after reconnect');
+  assert.equal((await stack.http('reschedule', { reservationId: fresh.reservationId, expectedRevision: 1, scheduledAt: soon(13) }, a.token)).code, '200 ok', 'a new row works');
+  const b = await stack.person('m10c');
+  assert.equal((await stack.http('cancel', { reservationId: row.reservationId, expectedRevision: 1 }, b.token)).code, '404 POSTONA_RESV_NOT_FOUND');
+});
+
 test('stack: gates OFF (the build\'s stores) on a real session: no fetch, no token read, no write', async () => {
   const a = await stack.person('m9');
   const h = await onScreenFor(a, { gates: { x: POSTONA_RESERVATION_PERSISTENCE_ENABLED, threads: POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED } });

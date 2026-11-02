@@ -9,8 +9,8 @@ import { SignOutButton } from '@/components/sign-out-button';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { isSendNowRow, type ActionButtonKind } from '@/features/reservations/reservation-view';
 import { useXWriteGuard } from '@/features/reservations/use-x-write-guard';
-import { clearXReconnectRequired, markXReconnectRequired } from '@/features/reservations/x-reconnect-signal';
-import { CONNECTED_NOT_PROOF_TEXT, xAnswerView } from '@/features/reservations/x-write-view';
+import { clearXReconnectRequired, isXRowNotEditable, markXReconnectRequired, markXRowNotEditable } from '@/features/reservations/x-reconnect-signal';
+import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT, RESTART_RECONNECTED_TEXT, xAnswerView } from '@/features/reservations/x-write-view';
 import { resolvePostsView } from '@/domain/data-view';
 import { buildSaveRequest, type SaveRequest, type ServerReservation } from '@/domain/reservation-flow';
 import {
@@ -320,6 +320,7 @@ export default function ScheduleScreen() {
         : await reservationStore.cancel(row.reservationId, row.revision);
     setRowBusy(null);
     if (!result.ok) {
+      if (kind !== 'cancel' && isNotEditableCode(result.code)) markXRowNotEditable(row.reservationId);
       applyRefusal(result.code, account, scope, sentToken);
       return;
     }
@@ -408,6 +409,7 @@ export default function ScheduleScreen() {
     setEditing(null);
   }
 
+  const reconnectedNote = reservationStore.enabled && !xGuard.refusal && reservationRows.length > 0 && xGuard.reconnectedAfterRestart;
   // A failed batch already says it on its own row.
   const batchFailureTexts = myBatches.flatMap((batch) => (pendingSaves[batch.id]?.phase === 'failed' ? [xAnswerView(pendingSaves[batch.id].code ?? '', reservationErrorAction).text] : []));
 
@@ -506,7 +508,8 @@ export default function ScheduleScreen() {
         ) : null}
         {notice && !batchFailureTexts.includes(notice.text) ? <Pill tone={notice.tone}>{notice.text}</Pill> : null}
         {reservationStore.enabled && xGuard.refusal && xGuard.refusal.text !== notice?.text && xGuard.refusal.button !== notice?.button ? <Pill tone="warning">{xGuard.refusal.text}</Pill> : null}
-        {reservationStore.enabled && !xGuard.refusal ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
+        {reservationStore.enabled && !xGuard.refusal && !reconnectedNote ? <Text style={styles.muted}>{CONNECTED_NOT_PROOF_TEXT}</Text> : null}
+        {reconnectedNote ? <Pill tone="warning">{RESTART_RECONNECTED_TEXT}</Pill> : null}
         {reservationStore.enabled ? (notice?.button ?? xGuard.refusal?.button) === 'accounts'
           ? <ActionButton label="アカウント画面を開く" onPress={() => router.push('/accounts')} />
           : (notice?.button ?? xGuard.refusal?.button) === 'settings'
@@ -537,6 +540,7 @@ export default function ScheduleScreen() {
                 onRetimeCancel={() => setRowRetiming(null)}
                 onReconfirm={() => void changeReservation(row, 'reconfirm')}
                 confirmingCancel={askingCancel === row.reservationId}
+                notEditable={isXRowNotEditable(row.reservationId) ? { label: NOT_EDITABLE_LABEL, text: NOT_EDITABLE_TEXT } : null}
                 onCancel={() => {
                   if (askingCancel !== row.reservationId) { setAskingCancel(row.reservationId); return; }
                   setAskingCancel(null);

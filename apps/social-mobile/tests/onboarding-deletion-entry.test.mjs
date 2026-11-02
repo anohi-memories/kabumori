@@ -1,6 +1,7 @@
 // The real onboarding-gate.tsx (transpiled) rendered with stubbed React/RN/data.
 // Proves account deletion stays reachable from every unfinished onboarding state,
 // without Home, and that the deletion view is per user and truthful.
+import * as xSignal from '../src/features/reservations/x-reconnect-signal.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -36,7 +37,7 @@ const texts = (tree) => { const out = []; walk(tree, (n) => { if (['Text', 'Acti
 const pressables = (tree) => { const out = []; walk(tree, (n) => { if (n.type === 'Pressable' && typeof n.props.onPress === 'function') out.push(n); }); return out; };
 const label = (node) => texts(node).join('');
 
-async function gateHarness({ input, userId = 'user-1', acknowledged = false, identities = [{ provider: 'email' }] }) {
+async function gateHarness({ input, userId = 'user-1', acknowledged = false, identities = [{ provider: 'email' }], connectState = 'idle' }) {
   const slots = []; let cursor = 0, first = true;
   const effects = [];
   const react = {
@@ -45,7 +46,7 @@ async function gateHarness({ input, userId = 'user-1', acknowledged = false, ide
     useCallback: (cb) => cb,
     useMemo: (factory) => factory(),
   };
-  const state = { userId, input, identities };
+  const state = { userId, input, identities, connectState };
   const stubs = {
     react, 'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, fn: type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, fn: type, props }) },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => {} } },
@@ -58,7 +59,8 @@ async function gateHarness({ input, userId = 'user-1', acknowledged = false, ide
     '@/domain/onboarding': onboarding,
     '@/domain/auth-flows': flows,
     '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: state.userId, identities: state.identities } } }) },
-    '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: 'idle', stateText: '', verifiedHandle: null, connect: async () => {} }) },
+    '@/features/reservations/x-reconnect-signal': xSignal,
+    '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: state.connectState ?? 'idle', stateText: '', verifiedHandle: null, connect: async () => {} }) },
     '@/lib/supabase': { supabase: {} },
     '@/providers/data-provider': { useDataStatus: () => ({ reload() {} }) },
     // The deletion screen is stubbed to prove WHICH component is shown; it never needs Home providers.
@@ -161,6 +163,19 @@ test('T35 connection steps of an existing account offer the app; the choice is t
     const h = await gateHarness({ input: STATES[name] });
     assert.equal(openApp(h.render()), null, name);
   }
+});
+
+test('T37 a connect from the connection step answers a refusal and a restart, like the accounts screen; another state does not', async () => {
+  xSignal.markXReconnectRequired('acc');
+  xSignal.markXServiceRestarted('user-1');
+  let h = await gateHarness({ input: loaded({ xAccounts: [account('unconnected')] }) });
+  assert.equal(xSignal.isXServiceRestarted('user-1'), true, 'idle');
+  assert.equal(xSignal.isXReconnectRequired('acc'), true);
+  h = await gateHarness({ input: loaded({ xAccounts: [account('unconnected')] }), connectState: 'connected' });
+  assert.equal(xSignal.isXServiceRestarted('user-1'), false);
+  assert.equal(xSignal.isXReconnectedAfterRestart('user-1'), true);
+  assert.equal(xSignal.isXReconnectRequired('acc'), false);
+  assert.ok(h);
 });
 
 test('T36 measured on the real runtime: a real disconnect leaves unconnected; the step does not say a connection was left unfinished, and the app can be opened', async () => {
