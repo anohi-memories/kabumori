@@ -1,0 +1,6 @@
+    id    |  status   | rev |     jst     |         body          | created  | updated  
+----------+-----------+-----+-------------+-----------------------+----------+----------
+ d0a6ada7 | cancelled |   2 | 11-03 09:00 | 2TASK4reservationoneG | 10:51:46 | 10:53:37
+ 1fcecb18 | planned   |   1 | 11-03 09:00 | ourthf                | 11:02:23 | 11:02:23
+(2 rows)
+
