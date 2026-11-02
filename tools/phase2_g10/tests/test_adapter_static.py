@@ -77,7 +77,8 @@ class TestAdapterFixed(unittest.TestCase):
         allowed = {"procs.py", "agent.py", "stub.py", "fake_claude.py", "ecdsa_signing.py", "launchd_plan.py",
                    "real_claude.py",  # TASK 17: 作業フォルダの用意の /usr/bin/git だけ（下で固定を確認）
                    "release.py",  # TASK 22: 固定版の元の確認の /usr/bin/git だけ（下で固定を確認）
-                   "code_edit.py"}  # TASK 26: 承認されたテストを /usr/bin/sandbox-exec で包んで起動するだけ（下で固定を確認）
+                   "code_edit.py",  # TASK 26: 承認されたテストを /usr/bin/sandbox-exec で包んで起動するだけ（下で固定を確認）
+                   "source_bundle.py"}  # B0-4: source bundle 作成の /usr/bin/git（real_claude.GIT）だけ
         for path, text in sources():
             if re.search(r"\bsubprocess\.(run|Popen|call|check_output)\b", text):
                 with self.subTest(path=os.path.basename(path)):

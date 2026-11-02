@@ -862,6 +862,15 @@ MUTANTS = [
     ('home .config.json may be written', 'g10runner/code_edit.py',
      '".claude/keybindings.json", ".claude/.config.json")', '".claude/keybindings.json")',
      'test_task30_home_postrun.HomeAndApprovedNameRules.test_home_rename_bypasses_are_denied_and_needed_state_still_works'),
+    # --- B0-4 producer（emit）の発行時ゲート ---
+    ("emit does not check source_bundle exists", "g10runner/emit.py",
+     '    if not (isinstance(source_bundle, str) and os.path.isabs(source_bundle) and os.path.isfile(source_bundle)):\n        raise EmitError("source_bundle must be an existing absolute file: %r" % (source_bundle,))',
+     '    if False:\n        raise EmitError("source_bundle must be an existing absolute file: %r" % (source_bundle,))',
+     "test_task44_emit.BuildGoValidation.test_missing_source_bundle_is_refused"),
+    ("emit skips go_problem self-check", "g10runner/emit.py",
+     '    problem = real_claude.go_problem(go)\n    if problem:\n        raise EmitError("REAL_CLAUDE_GO invalid: " + problem)',
+     '    problem = real_claude.go_problem(go)\n    if False:\n        raise EmitError("REAL_CLAUDE_GO invalid: " + problem)',
+     "test_task44_emit.BuildGoValidation.test_max_turns_out_of_range_is_refused"),
 ]
 
 
