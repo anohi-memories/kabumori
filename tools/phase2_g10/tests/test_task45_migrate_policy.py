@@ -98,5 +98,33 @@ class ApproveWiring(unittest.TestCase):
         self.assertEqual(self._approved()["generation"], before["generation"])
 
 
+
+class ApproveEnvelope(unittest.TestCase):
+    """無人 producer の同意の窓 approve-envelope。--write で readonly_trial 限定の日次窓が立ち、dry-run は立たない。"""
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.fr = load_first_run()
+        self.root = os.path.join(self.tmp, "control")
+        self.assertEqual(_run(self.fr, ["init", "--root", self.root, "--issue-source", "file"])[0], 0)
+
+    def _envelope(self):
+        return self.fr.open_control(self.root)[0].read_state().envelope
+
+    def test_write_approves_a_readonly_trial_envelope(self):
+        code, out = _run(self.fr, ["approve-envelope", "--root", self.root, "--write"])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(json.loads(out)["written"])
+        env = self._envelope()
+        self.assertEqual(env["scopes"], ["readonly_trial"])
+        self.assertIsNotNone(env["expires_at"])
+
+    def test_dry_run_does_not_approve(self):
+        code, out = _run(self.fr, ["approve-envelope", "--root", self.root])
+        self.assertEqual(code, 0, out)
+        self.assertFalse(json.loads(out)["written"])
+        self.assertIsNone(self._envelope())
+
+
 if __name__ == "__main__":
     unittest.main()

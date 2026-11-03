@@ -925,6 +925,10 @@ MUTANTS = [
      "    if approval_id in autorun.claimed_approvals(control):",
      "    if False and approval_id in autorun.claimed_approvals(control):",
      "test_task47_producer.ProducerEvaluate.test_idle_when_approval_already_claimed"),
+    ("approve-envelope widens the scope beyond readonly_trial", "bin/g10_first_run.py",
+     '"scopes": ["readonly_trial"], "models": dict(policy["models"]),',
+     '"scopes": [], "models": dict(policy["models"]),',
+     "test_task45_migrate_policy.ApproveEnvelope.test_write_approves_a_readonly_trial_envelope"),
 ]
 
 

@@ -235,6 +235,26 @@ def cmd_approve_wiring(a):
     return 0
 
 
+def cmd_approve_envelope(a):
+    """（B6）無人 producer の同意の窓（ENVELOPE）を人の署名で承認する。readonly_trial 限定の日次窓（翌04:00 JST 失効）。
+    この窓の中でだけ producer は per-run GO 無しで自律 emit する（消費するのは MAX 利用枠）。--write のときだけ承認し、
+    dry-run は窓の内容を表示するだけ。scope は readonly_trial 固定（変更・書き込み・本番は窓に入れない）。"""
+    control, policy = open_control(a.root)
+    params = {"scopes": ["readonly_trial"], "models": dict(policy["models"]),
+              "efforts": ["low", "medium", "high"], "max_minutes_cap": int(a.max_minutes),
+              "max_budget_cap": float(a.max_budget), "base_ref_prefixes": ["refs/heads/"],
+              "policy_sha256": policy["_digest"]}
+    out = {"envelope": params, "written": False}
+    if a.write:
+        control.approve_envelope(params)
+        env = control.read_state().envelope
+        out["written"] = True
+        out["envelope_id"] = env["envelope_id"]
+        out["expires_at"] = env["expires_at"]
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_collect(a):
     """（B5）handoff/out を回収し、CLAIM 済みで未終了の run を閉じる。結果バンドルがあれば ingest→finalize→REPORT。
     バンドルが無く disposition だけある（exec 拒否/不在）なら END(absence_confirmed) で枠を解放。disposition も無い
@@ -415,6 +435,11 @@ def main(argv=None):
     aw = sub.add_parser("approve-wiring")
     aw.add_argument("--root", required=True)
     aw.add_argument("--write", action="store_true", help="今の wiring を承認し直す（要 GO。世代+1）")
+    ae = sub.add_parser("approve-envelope")
+    ae.add_argument("--root", required=True)
+    ae.add_argument("--write", action="store_true", help="readonly_trial の日次窓を承認する（要 GO）")
+    ae.add_argument("--max-minutes", type=int, default=120)
+    ae.add_argument("--max-budget", type=float, default=0.50)
     co = sub.add_parser("collect")
     co.add_argument("--root", required=True)
     co.add_argument("--out", required=True, help="handoff/out（_kaburun 所有・yuya 読み）")
@@ -449,7 +474,8 @@ def main(argv=None):
             "code-edit-policy": cmd_code_edit_policy,
             "migrate-policy": cmd_migrate_policy,
             "collect": cmd_collect,
-            "approve-wiring": cmd_approve_wiring}[a.cmd](a)
+            "approve-wiring": cmd_approve_wiring,
+            "approve-envelope": cmd_approve_envelope}[a.cmd](a)
 
 
 if __name__ == "__main__":
