@@ -39,12 +39,13 @@ def _applescript_str(s):
 
 
 class MacNotifier:
-    """macOS 通知。(1) 通知センターに残るバナー（display notification）、(2) 任意でテキストダイアログ
-    （display dialog・giving up で自動で閉じる）を**切り離して**出す（collector を止めない）。GUI(aqua) セッションの
-    プロセスからのみ画面に出る（LaunchAgent gui/501）。osascript をリスト形式で呼ぶのでシェルは介さない。失敗しても
-    False を返すだけ（notify() が NEEDS_ATTENTION に残す）。"""
+    """macOS 通知。(1) 通知センターに残るバナー（display notification。スリープしても残る）、(2) 任意でテキストダイアログ
+    （display dialog）を**切り離して**出す（collector を止めない）。ダイアログは既定で **押すまで消えない**
+    （dialog_timeout=0。スリープに入っても、起きたとき出たまま待つ）。dialog_timeout>0 を渡したときだけ
+    `giving up after` で自動クローズする。GUI(aqua) セッションのプロセスからのみ画面に出る（LaunchAgent gui/501）。
+    osascript をリスト形式で呼ぶのでシェルは介さない。失敗しても False を返すだけ（notify() が NEEDS_ATTENTION に残す）。"""
 
-    def __init__(self, dialog=True, dialog_timeout=60):
+    def __init__(self, dialog=True, dialog_timeout=0):
         self.dialog = dialog
         self.dialog_timeout = int(dialog_timeout)
 
@@ -63,9 +64,10 @@ class MacNotifier:
             return False
 
     def _open_dialog(self, title, message):
-        script = 'display dialog %s with title %s buttons {"OK"} default button "OK" giving up after %d' % (
-            _applescript_str(message), _applescript_str(title), self.dialog_timeout)
-        try:  # fire-and-forget: モーダルだが待たない（collector のループを止めない）
+        giveup = (" giving up after %d" % self.dialog_timeout) if self.dialog_timeout > 0 else ""
+        script = ('display dialog %s with title %s buttons {"OK"} default button "OK" with icon note%s'
+                  % (_applescript_str(message), _applescript_str(title), giveup))
+        try:  # fire-and-forget: timeout=0 なら押すまで残る（スリープ後も出たまま）。collector は待たない
             subprocess.Popen([OSASCRIPT, "-e", script],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:

@@ -51,6 +51,22 @@ class MacNotifierTest(unittest.TestCase):
         self.assertIn('\\\\', script)                          # \\ は二重化
         self.assertNotIn("\n", script)                         # 改行は除去（1行スクリプト）
 
+    def test_dialog_persists_by_default_no_auto_close(self):
+        calls, fake_run, FakePopen = self._capture()
+        with mock.patch.object(notify.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(notify.subprocess, "Popen", FakePopen):
+            notify.MacNotifier()("t", "m")                     # 既定 dialog_timeout=0
+        script = calls["popen"][0][2]
+        self.assertIn("display dialog", script)
+        self.assertNotIn("giving up after", script)            # 自動で閉じない＝押すまで残る
+
+    def test_dialog_timeout_is_honored_when_set(self):
+        calls, fake_run, FakePopen = self._capture()
+        with mock.patch.object(notify.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(notify.subprocess, "Popen", FakePopen):
+            notify.MacNotifier(dialog_timeout=90)("t", "m")
+        self.assertIn("giving up after 90", calls["popen"][0][2])  # >0 のときだけ自動クローズ
+
     def test_dialog_can_be_disabled(self):
         calls, fake_run, FakePopen = self._capture()
         with mock.patch.object(notify.subprocess, "run", side_effect=fake_run), \

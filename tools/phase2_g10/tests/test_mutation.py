@@ -943,6 +943,11 @@ MUTANTS = [
      'return \'"\' + str(s).replace("\\\\", "\\\\\\\\").replace(\'"\', \'\\\\"\').replace("\\n", " ").replace("\\r", " ") + \'"\'',
      'return \'"\' + str(s).replace("\\\\", "\\\\\\\\").replace("\\n", " ").replace("\\r", " ") + \'"\'',
      "test_mac_notifier.MacNotifierTest.test_strings_are_escaped_for_applescript"),
+    # --- Mac 通知: ダイアログは既定で押すまで残る（自動クローズを戻すと検出） ---
+    ("MacNotifier dialog auto-closes by default", "g10runner/notify.py",
+     'giveup = (" giving up after %d" % self.dialog_timeout) if self.dialog_timeout > 0 else ""',
+     'giveup = " giving up after 60"',
+     "test_mac_notifier.MacNotifierTest.test_dialog_persists_by_default_no_auto_close"),
 ]
 
 
