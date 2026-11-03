@@ -7,10 +7,28 @@
 冪等: 既に claim 済みの approval は出さない（同じ TASK を二重に走らせない）。HALT/STOP・ENVELOPE 無しでは何もしない。
 実 Claude は呼ばない（起動は exec）。autorun（単一プロセス）の評価を流用し、launch の代わりに emit する。
 """
+import json
+import os
 import time
 
 from . import autorun, emit, meta, source_bundle, state
 from .fsutil import sha256_hex
+
+MIN_INTERVAL = 300.0  # 認証なし REST の枠に S1/S2 と合わせて収める下限（autorun と同じ）
+
+
+def log_path(layout):
+    return os.path.join(layout.root, "control", "priv", "producer.log")
+
+
+def record(layout, entry):
+    """判定・emit の記録（本文・秘密・メールアドレスを含めない項目だけ）。"""
+    keep = {k: entry[k] for k in ("decision", "reason", "approval_id", "body_sha256", "run_id", "job_path", "error")
+            if k in entry}
+    keep["ts"] = time.time()
+    with open(log_path(layout), "a", encoding="utf-8") as f:
+        f.write(json.dumps(keep, ensure_ascii=False, sort_keys=True) + "\n")
+    return keep
 
 
 def _probe(fields):
@@ -49,6 +67,45 @@ def evaluate(control, policy, now=None):
     if not state.envelope_covers(st.envelope, _probe(fields)):
         return dict(out, decision="idle", reason="task is outside the active envelope")
     return dict(out, decision="emit", reason="ready", snap=snap, fields=fields)
+
+
+def collect_once(control, out_dir, write):
+    """handoff/out を1回走査し、CLAIM 済み未終了の run を閉じる。結果バンドルがあれば ingest→finalize(ingested)、
+    disposition だけ（exec 拒否/不在）なら close_absent で枠を解放、どちらも無ければ pending。結果の dict リストを返す。
+    write=False は予定の表示のみ（台帳に書かない）。cmd_collect と無人 collector の共通処理。"""
+    from . import result_handoff
+    from .fsutil import read_json
+    recs = control.ledger.read_all()
+    ended = {r["payload"]["run_id"] for r in recs if r["type"] == "END"}
+    claimed = [r["payload"]["run_id"] for r in control._claims(recs) if r["payload"]["run_id"] not in ended]
+    results = []
+    for run_id in claimed:
+        bundle_manifest = os.path.join(out_dir, run_id, result_handoff.MANIFEST)
+        disposition = os.path.join(out_dir, run_id + ".json")
+        if os.path.exists(bundle_manifest):
+            if write:
+                result_handoff.ingest_result(out_dir, run_id, control.layout, control.verifier)
+                status, _end = control.finalize(run_id, ingested=True)
+                results.append({"run_id": run_id, "action": "ingest_finalize", "status": status,
+                                "report": os.path.join(control.layout.reports, run_id + ".md")})
+            else:
+                results.append({"run_id": run_id, "action": "ingest_finalize", "written": False})
+        elif os.path.exists(disposition):
+            reason = "no result bundle in handoff/out (exec did not accept)"
+            try:
+                d = read_json(disposition)
+                if isinstance(d, dict) and d.get("reason"):
+                    reason = "exec %s: %s" % (d.get("status"), d.get("reason"))
+            except Exception:
+                pass
+            if write:
+                control.close_absent(run_id, reason)
+                results.append({"run_id": run_id, "action": "reconcile_absent", "reason": reason})
+            else:
+                results.append({"run_id": run_id, "action": "reconcile_absent", "reason": reason, "written": False})
+        else:
+            results.append({"run_id": run_id, "action": "pending", "note": "no disposition yet"})
+    return results
 
 
 def emit_ready(control, policy, in_dir, bundles_dir, source_repo, cli_realpath, home,

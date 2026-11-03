@@ -1,10 +1,14 @@
 """B6 無人 producer の判定: 有効な ENVELOPE（人の日次同意）の下で #323 の ready・未claim・窓内 TASK を emit 判定する。
 ENVELOPE 無し・claim 済み・窓外では emit しない。実 Claude は呼ばない（起動は exec の resident）。"""
+import contextlib
+import io
+import os
 import time
 import unittest
 
 from g10runner import producer
 from helpers import EnvTestCase, TRUSTED_ISSUE, make_body
+from test_task17_real_adapter import load_first_run
 
 
 class ProducerEvaluate(EnvTestCase):
@@ -40,6 +44,45 @@ class ProducerEvaluate(EnvTestCase):
         d = producer.evaluate(self.env.control, self.env.policy)
         self.assertEqual(d["decision"], "idle")
         self.assertIn("outside the active envelope", d["reason"])
+
+
+class BinSmoke(unittest.TestCase):
+    """bin/g10_producer.py・g10_collector.py の --once dry-run が、初期化した control で 0 を返し判定を記録する。"""
+    def _load(self, name):
+        import importlib.util
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(name, os.path.join(here, "bin", name + ".py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def setUp(self):
+        import tempfile, shutil
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.fr = load_first_run()
+        self.root = os.path.join(self.tmp, "control")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(self.fr.main(["init", "--root", self.root, "--issue-source", "file"]), 0)
+
+    def test_producer_once_dry_run_returns_zero(self):
+        prod = self._load("g10_producer")
+        d = os.path.join(self.tmp, "x"); os.makedirs(d)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = prod.main(["--root", self.root, "--in", d, "--bundles-dir", d, "--source-repo", d,
+                            "--cli", "/opt/claude/2.1.305", "--home", "/Users/_kaburun", "--once"])
+        self.assertEqual(rc, 0, buf.getvalue())
+        self.assertIn("decision", buf.getvalue())  # 判定を1件出す（ENVELOPE 無しなら idle）
+
+    def test_collector_once_dry_run_returns_zero(self):
+        coll = self._load("g10_collector")
+        out = os.path.join(self.tmp, "out"); os.makedirs(out)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = coll.main(["--root", self.root, "--out", out, "--once"])
+        self.assertEqual(rc, 0, buf.getvalue())
 
 
 if __name__ == "__main__":

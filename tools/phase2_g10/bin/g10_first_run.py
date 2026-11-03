@@ -239,38 +239,9 @@ def cmd_collect(a):
     """（B5）handoff/out を回収し、CLAIM 済みで未終了の run を閉じる。結果バンドルがあれば ingest→finalize→REPORT。
     バンドルが無く disposition だけある（exec 拒否/不在）なら END(absence_confirmed) で枠を解放。disposition も無い
     （まだ処理中）run は触らない。--write のときだけ台帳に書く（それ以外は予定を表示するだけ）。"""
+    from g10runner import producer
     control, _policy = open_control(a.root)
-    out_dir = os.path.realpath(a.out)
-    recs = control.ledger.read_all()
-    ended = {r["payload"]["run_id"] for r in recs if r["type"] == "END"}
-    claimed = [r["payload"]["run_id"] for r in control._claims(recs) if r["payload"]["run_id"] not in ended]
-    results = []
-    for run_id in claimed:
-        bundle_manifest = os.path.join(out_dir, run_id, result_handoff.MANIFEST)
-        disposition = os.path.join(out_dir, run_id + ".json")
-        if os.path.exists(bundle_manifest):
-            if a.write:
-                result_handoff.ingest_result(out_dir, run_id, control.layout, control.verifier)
-                status, _end = control.finalize(run_id, ingested=True)
-                results.append({"run_id": run_id, "action": "ingest_finalize", "status": status,
-                                "report": os.path.join(control.layout.reports, run_id + ".md")})
-            else:
-                results.append({"run_id": run_id, "action": "ingest_finalize", "written": False})
-        elif os.path.exists(disposition):
-            reason = "no result bundle in handoff/out (exec did not accept)"
-            try:
-                d = read_json(disposition)
-                if isinstance(d, dict) and d.get("reason"):
-                    reason = "exec %s: %s" % (d.get("status"), d.get("reason"))
-            except Exception:
-                pass
-            if a.write:
-                control.close_absent(run_id, reason)
-                results.append({"run_id": run_id, "action": "reconcile_absent", "reason": reason})
-            else:
-                results.append({"run_id": run_id, "action": "reconcile_absent", "reason": reason, "written": False})
-        else:
-            results.append({"run_id": run_id, "action": "pending", "note": "no disposition yet"})
+    results = producer.collect_once(control, os.path.realpath(a.out), bool(a.write))
     print(json.dumps({"written": bool(a.write), "closed": results}, ensure_ascii=False, indent=1))
     return 0
 

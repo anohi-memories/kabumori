@@ -888,7 +888,7 @@ MUTANTS = [
      '"absence_confirmed": True, "safety_violations": [reason]}',
      '"absence_confirmed": False, "safety_violations": [reason]}',
      "test_task46_collect.CloseAbsent.test_closes_and_frees_the_slot"),
-    ("collect never reconciles rejected runs", "bin/g10_first_run.py",
+    ("collect never reconciles rejected runs", "g10runner/producer.py",
      "        elif os.path.exists(disposition):", "        elif False:",
      "test_task46_collect.Collect.test_reconciles_absent_run_with_disposition_only"),
     ("wiring binding leaks key paths (not portable)", "g10runner/wiring.py",
