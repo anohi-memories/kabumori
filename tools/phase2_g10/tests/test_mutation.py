@@ -938,6 +938,11 @@ MUTANTS = [
     ("unhalt ignores explicit agent_halt_ids (split cannot clear exec)", "g10runner/control.py",
      "            if agent_halt_ids is None:", "            if True:  # agent_halt_ids is None",
      "test_task24_blockers.AgentHaltFlag.test_unhalt_uses_explicit_agent_halt_ids_over_self"),
+    # --- Mac 通知: AppleScript 文字列エスケープ（" を素通しすると注入／スクリプト破損） ---
+    ("MacNotifier does not escape quotes for AppleScript", "g10runner/notify.py",
+     'return \'"\' + str(s).replace("\\\\", "\\\\\\\\").replace(\'"\', \'\\\\"\').replace("\\n", " ").replace("\\r", " ") + \'"\'',
+     'return \'"\' + str(s).replace("\\\\", "\\\\\\\\").replace("\\n", " ").replace("\\r", " ") + \'"\'',
+     "test_mac_notifier.MacNotifierTest.test_strings_are_escaped_for_applescript"),
 ]
 
 

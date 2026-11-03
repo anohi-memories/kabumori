@@ -15,7 +15,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import autorun, producer, release  # noqa: E402
+from g10runner import autorun, notify, producer, release  # noqa: E402
 from g10runner.fsutil import FileLock, touch  # noqa: E402
 
 
@@ -44,6 +44,7 @@ def main(argv=None):
         if not lock.acquired:
             raise SystemExit("another collector is already running for this root")
         control, _policy = autorun.open_control(root)
+        control.notifier = notify.MacNotifier()  # 完了/HALT を Mac の通知センター＋ダイアログに出す
         out_dir = os.path.realpath(a.out)
         while True:
             try:
