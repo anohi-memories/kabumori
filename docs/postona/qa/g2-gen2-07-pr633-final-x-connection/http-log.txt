@@ -1,0 +1,11 @@
+[G2HTTP] list 200 - gens=current,current
+[G2HTTP] list 200 - gens=earlier,earlier
+[G2HTTP] list 200 - gens=earlier,earlier
+[G2HTTP] list 200 - gens=earlier,earlier,current
+[G2HTTP] list 200 - gens=earlier,earlier,current
+[G2HTTP] reschedule 409 POSTONA_RESV_STALE_REVISION gens=
+[G2HTTP] list 200 - gens=earlier,earlier,current
+[G2HTTP] list 200 - gens=earlier,earlier,current
+[G2HTTP] list 200 - gens=earlier,earlier,current
+[G2HTTP] list 200 - gens=earlier,earlier,unknown
+[G2HTTP] list 200 - gens=earlier,earlier,unknown
