@@ -323,8 +323,10 @@ test('gate OFF (G3\'s constant) and the sample data: nothing read, no token, no 
   assert.match(off.text(), /予定されている投稿はありません/u);
   const sample = await home({ status: 'mock_preview' });
   assert.equal(sample.world.calls.length, 0);
+  assert.doesNotMatch(sample.text(), /要確認を除く候補・投稿の保証なし/u);
   const threads = await home({ account: { ...ACCOUNT, platform: 'threads' } });
   assert.equal(threads.world.calls.length, 0);
+  assert.doesNotMatch(threads.text(), /要確認を除く候補・投稿の保証なし/u);
   assert.deepEqual(threads.counts(), ['0件', '0件']);
 });
 

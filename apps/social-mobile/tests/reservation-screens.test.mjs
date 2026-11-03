@@ -243,6 +243,40 @@ async function threadsScreen(store) {
 const press = async (h, label, index = 0) => { const b = button(h.renderOnce(), label, index); assert.ok(b, `button ${label}`); assert.notEqual(b.disabled, true, `${label} enabled`); b.onPress(); await settle(); return h.render(); };
 const open = async (h, label) => { rowPress(h.renderOnce(), label).onPress(); return h.render(); };
 
+test('H5-14 P3 409: one request was sent, so the interruption must not claim it was never sent', async () => {
+  const store = scriptedPorts(); store.answer('x.list', { ok: true, value: [row('h14', { revision: 7 })] });
+  const h = await mount({ store }); await h.render();
+  let tree = await open(h, '予約 2026-11-02 09:30'); field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  store.answer('x.reschedule', { ok: false, code: 'POSTONA_RESV_STALE_REVISION' });
+  store.answer('x.list', { ok: true, value: [row('h14', { revision: 8 })] });
+  tree = await press(h, '時刻を変更');
+  assert.equal(store.count('x.reschedule'), 1); assert.ok(has(tree, '内容が更新されていました'));
+  assert.ok(has(tree, '編集を中断')); assert.ok(has(tree, '2026-11-05 10:00'));
+  assert.ok(!has(tree, '送信していません')); assert.equal(field(tree, '新しい日時'), undefined);
+});
+
+test('H5-14 mutation manage_no_success_clear: an applied edit is not reported as interrupted', async () => {
+  const store = scriptedPorts(); store.answer('x.list', { ok: true, value: [row('h14', { revision: 7 })] });
+  const h = await mount({ store }); await h.render(); let tree = await open(h, '予約 2026-11-02 09:30');
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  store.answer('x.reschedule', { ok: true, value: row('h14', { revision: 8, scheduledAt: '2026-11-05T01:00:00Z', consentState: 'needs_reconfirm' }) });
+  tree = await press(h, '時刻を変更'); assert.equal(store.count('x.reschedule'), 1);
+  assert.ok(has(tree, '時刻を変更しました')); assert.ok(!has(tree, '編集を中断'));
+  assert.equal(field(tree, '新しい日時'), undefined); assert.ok(button(tree, '日時の編集を始める'));
+});
+
+test('H5-14 mutation manage_no_scope_clear: person A to B to A never revives A’s unsaved edit', async () => {
+  const store = scriptedPorts(); store.answer('x.list', { ok: true, value: [row('h14', { revision: 7 })] });
+  const h = await mount({ store }); await h.render(); let tree = await open(h, '予約 2026-11-02 09:30');
+  field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+  const original = { userId: h.world.userId, token: h.world.token, accounts: h.world.accounts, workspace: h.world.workspace };
+  Object.assign(h.world, { userId: 'other', token: jwt('other', S2), accounts: [xAccount('other-x', { brandId: 'u_other' })], workspace: { kind: 'ready', workspaceId: 'u_other' } });
+  store.answer('x.list', { ok: true, value: [] }); await h.render();
+  Object.assign(h.world, original); store.answer('x.list', { ok: true, value: [row('h14', { revision: 7 })] }); tree = await h.render();
+  assert.equal(field(tree, '新しい日時'), undefined); assert.ok(button(tree, '日時の編集を始める'));
+  assert.ok(!has(tree, '2026-11-05 10:00')); assert.equal(store.count('x.reschedule'), 0);
+});
+
 test('H5 U1 manage: newer revision or time interrupts editing; the stale input never writes using the new revision', async () => {
   for (const patch of [{ revision: 8 }, { scheduledAt: '2026-11-04T00:30:00Z' }]) {
     const store = scriptedPorts();

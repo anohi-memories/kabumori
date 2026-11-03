@@ -21,7 +21,7 @@ export function serverTimeEditMatches(edit: ServerTimeEditBase, row: { reservati
   return scope !== null && edit.scope === scope && row !== undefined && row.status === 'planned' && edit.id === row.reservationId && edit.revision === row.revision && edit.scheduledAt === row.scheduledAt;
 }
 export function interruptedTimeEditText(input: string): string {
-  return `予約の更新を検知したため、日時の編集を中断しました。未保存の入力「${input}」は送信していません。最新の予約から編集し直してください。`;
+  return `予約の更新を検知したため、日時の編集を中断しました。未保存の入力「${input}」の適用を、この画面では確認できていません。最新の予約から編集し直してください。`;
 }
 
 /** JST date ('YYYY-MM-DD') and time ('HH:MM') of an ISO instant, as the edit fields show them. */

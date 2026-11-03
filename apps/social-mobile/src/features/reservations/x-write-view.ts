@@ -101,5 +101,6 @@ export function connectionPill(connectionStatus: string, reconnectRequired: bool
   if (reconnectRequired) return { label: RECONNECT_REQUIRED_LABEL, tone: 'warning' };
   if (restartObserved && connectionStatus === 'connected') return { label: RESTART_OBSERVED_LABEL, tone: 'warning' };
   if (platform === 'x' && connectionStatus === 'connected') return { label: X_CONNECTION_UNVERIFIED_LABEL, tone: 'warning' };
+  if (platform === 'x') return { label: connectionStatus === 'not_connected' ? '未接続' : connectionStatus === 'needs_attention' ? '要再接続' : '確認できません', tone: 'warning' };
   return connectionStatus === 'connected' ? { label: '接続済み', tone: 'success' } : { label: otherLabel, tone: 'warning' };
 }

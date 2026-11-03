@@ -13,6 +13,9 @@ import { supabase } from '@/lib/supabase';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
+import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
+import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { connectionPill, restartAppliesTo, X_CONNECTION_UNVERIFIED_LABEL, X_CONNECTION_UNVERIFIED_TEXT } from '@/features/reservations/x-write-view';
 
 function label(provider: string): string {
   return (PROVIDER_LABELS as Record<string, string>)[provider] ?? provider;
@@ -31,6 +34,8 @@ export default function LoginMethodsScreen() {
   const { session, linkProvider, readiness, email, requestPasswordReset, releaseReport, accountDeletion } = useAuth();
   const { accounts } = useActiveAccount();
   const { status: dataStatus } = useDataStatus();
+  const { view: workspace } = usePersonalWorkspace();
+  useXReconnectSignal();
   const [identities, setIdentities] = useState<UserIdentity[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'warning'; text: string } | null>(null);
@@ -73,6 +78,11 @@ export default function LoginMethodsScreen() {
   const linked = new Set((identities ?? []).map((identity) => identity.provider));
   const extra = (identities ?? []).filter((identity) => !(RELEASE_PROVIDERS as readonly string[]).includes(identity.provider));
   const postingX = postingXStatus(dataStatus, accounts);
+  const postingAccount = accounts.find((account) => account.platform === 'x');
+  // The posting-connection record is independent of the authenticated login identities above.
+  const postingPill = postingX === 'unknown'
+    ? { label: POSTING_X_STATUS_LABELS.unknown, tone: 'neutral' as const }
+    : connectionPill(postingAccount ? postingAccount.connectionStatus : 'not_connected', isXReconnectRequired(postingAccount?.id), '要確認', postingAccount != null && isXServiceRestarted(userId) && restartAppliesTo(postingAccount, workspace.kind === 'ready' ? workspace.workspaceId : null));
 
   return (
     <Screen>
@@ -139,8 +149,9 @@ export default function LoginMethodsScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Text style={{ color: colors.ink }}>投稿用のX接続</Text>
-            <Pill tone={postingX === 'connected' ? 'success' : postingX === 'needs_reconnect' ? 'warning' : 'neutral'}>{POSTING_X_STATUS_LABELS[postingX]}</Pill>
+            <Pill tone={postingPill.tone}>{postingPill.label}</Pill>
           </View>
+          {postingPill.label === X_CONNECTION_UNVERIFIED_LABEL ? <Text style={styles.muted}>{X_CONNECTION_UNVERIFIED_TEXT}</Text> : null}
           {/* Navigate with onPress, not <Link asChild>: Slot merges `style` by spreading it, which drops a function-valued Pressable style (the white label then renders on no background). */}
           <Pressable accessibilityRole="button" onPress={() => router.push('/accounts')} style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
             <Text style={styles.buttonText}>投稿用のX接続を確認する</Text>

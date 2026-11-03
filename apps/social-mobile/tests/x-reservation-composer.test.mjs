@@ -1035,7 +1035,7 @@ test('connectionPill: a stored X connection is unverified; 「再接続が必要
   assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', false, 'threads'), { label: '接続済み', tone: 'success' });
   assert.deepEqual(xWriteView.connectionPill('connected', true, '要再接続'), { label: '再接続が必要', tone: 'warning' });
   assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要再接続'), { label: '要再接続', tone: 'warning' });
-  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要確認'), { label: '要確認', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要確認'), { label: '要再接続', tone: 'warning' });
   assert.deepEqual(xWriteView.connectionPill('needs_attention', true, '要確認'), { label: '再接続が必要', tone: 'warning' });
   assert.doesNotMatch(xWriteView.RESTART_HELP_TEXT, /必要です/u, 'the help does not state it for this account');
 });

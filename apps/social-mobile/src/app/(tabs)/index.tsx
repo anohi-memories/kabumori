@@ -180,7 +180,7 @@ export default function HomeScreen() {
           <Card style={{ flex: 1 }}>
             <Text style={styles.muted}>今後の予定</Text>
             <Text style={{ color: colors.ink, fontSize: 28, fontWeight: '800' }}>{upcomingCount === null ? '－' : `${upcomingCount}件`}</Text>
-            <Text style={styles.muted}>要確認を除く候補・投稿の保証なし</Text>
+            {status !== 'mock_preview' && activeAccount?.platform === 'x' ? <Text style={styles.muted}>要確認を除く候補・投稿の保証なし</Text> : null}
           </Card>
           <Card style={{ flex: 1 }}>
             <Text style={styles.muted}>要確認</Text>
