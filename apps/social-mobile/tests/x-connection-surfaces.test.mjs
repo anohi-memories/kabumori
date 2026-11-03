@@ -33,6 +33,10 @@ async function mount(path, { selected = account(), status = 'ready' } = {}) {
     'react-native': { Text: 'Text', View: 'View', ScrollView: 'ScrollView', Pressable: 'Pressable', ActivityIndicator: 'ActivityIndicator', Linking: {} },
     '@/constants/theme': { colors: {} }, '@/components/ui': { Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', ActionButton: 'ActionButton', styles: {} },
     '@/features/publish-setting/publish-setting-card': { PublishSettingCard: 'PublishSettingCard' },
+    // G4 PR 617's Threads cards (RC #42): mounted as names, never run here.
+    '@/features/threads-connect/threads-connect-card': { ThreadsConnectCard: 'ThreadsConnectCard' },
+    '@/features/threads-disconnect/threads-disconnect-card': { ThreadsDisconnectCard: 'ThreadsDisconnectCard' },
+    '@/features/threads-publish/threads-publish-card': { ThreadsPublishCard: 'ThreadsPublishCard' },
     '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: 'idle', stateText: '', verifiedHandle: null, connect() { throw new Error('no OAuth'); } }) },
     '@/features/reservations/x-write-view': xWrite,
     '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
@@ -88,6 +92,20 @@ test('H5-14 P2 surface states: reconnect, explicit disconnect, unknown, preview 
   assert.equal(linePill(await loading.render(), '投稿用のX接続').label, '確認できません');
   const previewLogin = await mount('../src/app/login-methods.tsx', { status: 'mock_preview' });
   assert.equal(linePill(await previewLogin.render(), '投稿用のX接続').label, '確認できません', 'a demo is not a real authenticated posting connection');
+});
+
+test('RC #42 G4 PR 617 + H5 #633 on the account screens: Threads keeps its cards, X keeps the unverified display', async () => {
+  const kinds = (tree) => { const out = []; walk(tree, (n) => { if (typeof n.type === 'string' && n.type.startsWith('Threads')) out.push(n.type); }); return out; };
+  let tree = await (await mount('../src/app/accounts/[id].tsx', { selected: account({ id: 'th-one', platform: 'threads', connectionStatus: 'not_connected' }) })).render();
+  assert.deepEqual(kinds(tree), ['ThreadsPublishCard', 'ThreadsConnectCard']);
+  tree = await (await mount('../src/app/accounts/[id].tsx', { selected: account({ id: 'th-one', platform: 'threads' }) })).render();
+  assert.deepEqual(kinds(tree), ['ThreadsPublishCard'], 'a connected Threads account is not offered a connect');
+  tree = await (await mount('../src/app/accounts/[id].tsx')).render();
+  assert.deepEqual(kinds(tree), [], 'no Threads card on an X account');
+  assert.ok(pills(tree).some((p) => p.label === xWrite.X_CONNECTION_UNVERIFIED_LABEL && p.tone === 'warning'));
+  tree = await (await mount('../src/app/accounts/index.tsx')).render();
+  assert.deepEqual(kinds(tree), ['ThreadsConnectCard', 'ThreadsDisconnectCard'], 'the list keeps G4\'s Threads connect and disconnect');
+  assert.match(text(tree), /現在の接続は未確認/u);
 });
 
 test('H5-14 mutation accounts_unverified_line: the list explains what is not verified', async () => {

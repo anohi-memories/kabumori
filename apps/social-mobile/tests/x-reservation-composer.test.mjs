@@ -1095,6 +1095,9 @@ const baseStubs = () => ({
   '@/features/reservations/x-row-generation': xRowGeneration,
   '@/features/reservations/home-reservations': { homeCount: (fromPosts) => fromPosts, homeHasNoReservations: () => true, homeHeadline: (headline) => headline },
   '@/features/reservations/use-home-reservations': { useHomeReservations: () => ({ view: { kind: 'not_applicable' }, reload() {} }) },
+  // G4 PR 617's Threads cards on the account screens (RC #42).
+  '@/features/threads-connect/threads-connect-card': { ThreadsConnectCard: 'ThreadsConnectCard' },
+  '@/features/threads-disconnect/threads-disconnect-card': { ThreadsDisconnectCard: 'ThreadsDisconnectCard' },
 });
 
 test('accounts screen (real): stored connection is unverified; a server refusal requires reconnect, which clears that refusal only', async () => {
