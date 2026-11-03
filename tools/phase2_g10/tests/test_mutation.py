@@ -918,6 +918,13 @@ MUTANTS = [
      "            if entry.get(\"uid\") != os.getuid() and run_id in confirmed_ended:",
      "            if False and run_id in confirmed_ended:",
      "test_task39_result_handoff.IngestedFinalize.test_completion_problems_skips_confirmed_ended_ingested_run"),
+    ("producer emits without a human envelope", "g10runner/producer.py",
+     '    if not st.envelope:  # \u7121\u4eba\u8ab2\u91d1', '    if False:  # \u7121\u4eba\u8ab2\u91d1',
+     "test_task47_producer.ProducerEvaluate.test_idle_without_an_envelope"),
+    ("producer re-emits an already-claimed approval", "g10runner/producer.py",
+     "    if approval_id in autorun.claimed_approvals(control):",
+     "    if False and approval_id in autorun.claimed_approvals(control):",
+     "test_task47_producer.ProducerEvaluate.test_idle_when_approval_already_claimed"),
 ]
 
 
