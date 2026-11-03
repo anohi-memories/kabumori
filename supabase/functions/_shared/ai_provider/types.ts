@@ -36,16 +36,18 @@ export type AiUsageContext = {
 /**
  * Transport retry contract. The caller states how many HTTP attempts this layer may make, so a caller that keeps
  * its own transport retry (for example market-report-analysis/transport_retry.ts) passes `maxAttempts: 1` and the
- * two retry layers can never multiply.
+ * two retry layers can never multiply. Only a rate limit or an overload the provider reported as not processed is
+ * retried (retry.ts); a timeout, a lost connection, a 504 / timeout_error or any other possibly billed failure is
+ * never sent again, whatever maxAttempts says.
  */
 export type AiTransportPolicy = {
   /** Total HTTP attempts, 1 to 3. 1 means no retry in this layer. */
   readonly maxAttempts: number;
   /**
-   * Retry after a client-side timeout. Off by default: a timed-out request may still have been billed, so a
-   * retry can pay twice. Every timed-out attempt is charged at its upper-bound cost either way.
+   * Kept so existing callers can state it; only `false` is accepted. A timed-out request may still have been billed,
+   * so it is never retried; `true` is refused as REQUEST_INVALID before any key read, reservation or request.
    */
-  readonly retryOnTimeout?: boolean;
+  readonly retryOnTimeout?: false;
 };
 
 export type AiRequest = {

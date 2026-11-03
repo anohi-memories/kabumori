@@ -8,7 +8,8 @@
 //      price its usage (or charge the upper bound when usage is unknown);
 //   4. a response is a result only if its text parses as JSON AND passes the ORIGINAL schema;
 //   5. settle the guard with the cost and what happened (for the ledger row);
-//   6. retry only transient transport failures, within the request's transport policy and the deadline.
+//   6. retry only a rate limit / overload the provider reported as not processed, within the request's transport
+//      policy and the deadline; a timeout, lost connection, 504 or other possibly billed failure ends the call.
 //
 // There is no fallback: the request's provider is the only provider called. A refusal is returned as a failure and
 // never retried. Business regeneration (rewriting after a content rejection) belongs to the caller.
