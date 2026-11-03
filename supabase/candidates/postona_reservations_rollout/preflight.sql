@@ -72,6 +72,16 @@ begin
       raise exception 'G3_ROLLOUT_PREFLIGHT_G4_VERDICT: %', pg_catalog.split_part(v_fn, '=', 1);
     end if;
   end loop;
+  -- G4's connection-generation check (G3-02 #14; PR #617 007): G4 grants it to service_role, and G3 calls it as the same owner
+  v_oid := pg_catalog.to_regprocedure('public.postona_x_refresh_precheck_v1(text)');
+  if v_oid is null
+     or (select p.proowner from pg_catalog.pg_proc p where p.oid = v_oid) is distinct from v_me
+     or not (select p.prosecdef from pg_catalog.pg_proc p where p.oid = v_oid)
+     or pg_catalog.md5((select p.prosrc from pg_catalog.pg_proc p where p.oid = v_oid)) is distinct from 'd1dc5883450182ad32e2746d4516e951'
+     or (select p.proacl from pg_catalog.pg_proc p where p.oid = v_oid) is null
+     or exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a where p.oid = v_oid and a.grantee <> v_me and a.grantee::regrole::text <> 'service_role') then
+    raise exception 'G3_ROLLOUT_PREFLIGHT_G4_VERDICT: public.postona_x_refresh_precheck_v1(text)';
+  end if;
 
   -- tables G3 reads
   foreach v_t in array array['public.social_accounts', 'public.brands', 'public.brand_memberships', 'public.x_account_refresh_state_v2',

@@ -6,7 +6,7 @@
 #   RP  preflight refusals, each with the WHOLE database fingerprint unchanged: superuser (also the owner itself); G4's X verdict ACL widened;
 #       G4's Threads verdict body altered; a G5 function widened / of another owner; U8 CHECK dropped; a default privilege for authenticated;
 #       a partial G3 schema; no CREATEROLE; rollback mode on a fresh database;
-#   RI  install (15 steps) + postcheck; a second install / preflight refused, nothing changed; postcheck refuses an exposed function / a
+#   RI  install (16 steps) + postcheck; a second install / preflight refused, nothing changed; postcheck refuses an exposed function / a
 #       LOGIN worker role;
 #   RS  smoke.sql (person reserve / read / cancel, another person sees nothing, claim pins G4's generation, bound check, outcome; Threads
 #       create refused by U8; authenticated / anon reach nothing);
@@ -69,6 +69,10 @@ suffix="${owner##*_}"
 work="$g4w/g3_work"; mkdir -p "$work"
 own() { psql -X -q -A -t -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$owner" -d "$db" "$@"; }
 sval() { "${S[@]}" -d "$db" "$@"; }
+# G3-02 #14: the connection-generation check 014 calls, from G4 PR #617 (read only)
+for f in 006_x_connect_profile_fence 007_x_refresh_precheck; do
+  git -C "$repo" show "1d020c406cc982eedfa29a8b682c96db31888a68:supabase/candidates/postona_g4_x_oauth_personal_mvp/$f.sql" | own -f - >/dev/null || fail "G4 $f"
+done
 echo "OK world: G4's personal world at $g4head (G4's runner, G4T_VERDICT), owner $owner"
 
 # the bundle under test (a copy only when a mutated preflight is given; the manifest's paths still resolve to this checkout)
@@ -176,6 +180,9 @@ sval -c "alter role $owner nosuperuser" >/dev/null
 own -c "grant execute on function postona_g4_credential.x_publish_credential_verdict(uuid,text) to authenticated" >/dev/null
 expect_ro "RP2 G4 X verdict granted to authenticated" "G3_ROLLOUT_PREFLIGHT_G4_VERDICT: postona_g4_credential.x_publish_credential_verdict" preflight
 own -c "revoke execute on function postona_g4_credential.x_publish_credential_verdict(uuid,text) from authenticated" >/dev/null
+own -c "grant execute on function public.postona_x_refresh_precheck_v1(text) to authenticated" >/dev/null
+expect_ro "RP2b G4 connection-generation check granted to authenticated" "G3_ROLLOUT_PREFLIGHT_G4_VERDICT: public.postona_x_refresh_precheck_v1" preflight
+own -c "revoke execute on function public.postona_x_refresh_precheck_v1(text) from authenticated" >/dev/null
 own -c "select pg_get_functiondef('postona_g4_credential.threads_publish_credential_verdict(uuid,text)'::regprocedure)" > "$work/g4t.sql"
 grep -q 'CREATE OR REPLACE FUNCTION' "$work/g4t.sql" || fail "RP3 probe: no definition"
 own -c "select set_config('g3ro.t', '1', false)" -c "do \$\$ declare d text := pg_get_functiondef('postona_g4_credential.threads_publish_credential_verdict(uuid,text)'::regprocedure);
@@ -208,13 +215,13 @@ sval -c "alter role $owner createrole" >/dev/null
 expect_ro "RP9 rollback on a fresh database" "G3_ROLLOUT_PREFLIGHT_NOT_INSTALLED: fresh" rollback
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RP: G3's catalog moved"
 o="$(ro preflight)" || fail "RP10 preflight on the restored world: $o"
-printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=15$' || fail "RP10: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=16$' || fail "RP10: $o"
 echo "OK RP: preflight refusals (superuser, also the owner itself; G4 X verdict widened; G4 Threads verdict altered; G5 function widened / of another owner; U8 dropped; a default privilege; a partial schema; no CREATEROLE; rollback on fresh), each with the whole database unchanged; restored world passes"
 
 # --- RI -------------------------------------------------------------------------------------------------------------------------------
 pre_install="$(dbfp)"
 o="$(ro install 2>&1)" || fail "RI1 install: $o"
-printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALLED steps=15 ' || fail "RI1: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALLED steps=16 ' || fail "RI1: $o"
 installed_g3="$(g3fp)"
 [ "$installed_g3" != "$fresh_g3" ] || fail "RI1 nothing installed"
 [ "$(sval -c "select count(*) from pg_constraint where conname = 'social_accounts_meta_publish_disabled'")" = 1 ] || fail "RI1 U8 touched"
@@ -233,7 +240,7 @@ printf '%s\n' "$o" | grep -q G3_ROLLOUT_PREFLIGHT_POSTCHECK_ROLES || fail "RI5: 
 own -c "alter role postona_resv_worker nologin" >/dev/null
 postcheck | grep -q '^G3_ROLLOUT_PREFLIGHT_OK postcheck installed$' || fail "RI6 postcheck after restore"
 [ "$(g3fp)" = "$installed_g3" ] || fail "RI4-RI6 G3's catalog moved"
-echo "OK RI: 15 steps installed, postcheck (nothing exposed to PUBLIC / anon / authenticated / service_role, roles NOLOGIN, G4 verdicts owner-only, U8 kept); install / preflight again refused, nothing changed; postcheck refuses an exposed function / a LOGIN role"
+echo "OK RI: 16 steps installed, postcheck (nothing exposed to PUBLIC / anon / authenticated / service_role, roles NOLOGIN, G4 verdicts owner-only, U8 kept); install / preflight again refused, nothing changed; postcheck refuses an exposed function / a LOGIN role"
 
 # --- RS -------------------------------------------------------------------------------------------------------------------------------
 # TEST WORLD only: the owner may act as the API / worker / client roles to drive the smoke (the real logins are members of one role each)
@@ -286,7 +293,7 @@ expect_ro "RX6 a body-only Threads consumer not stated" "G3_ROLLOUT_ROLLBACK_THR
 own -c "drop function public.g3rx_tc()" >/dev/null
 echo "OK RX: rollback refused before any step, nothing changed, the external object kept: an external view on Threads (H4's case) / on X, a foreign key to Threads, a function taking an X row type, a view calling a Threads function; a body-only Threads consumer not stated"
 o="$(ro rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers" 2>&1)" || fail "RB5 rollback: $o"
-printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=15$' || fail "RB5: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=16$' || fail "RB5: $o"
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RB5 G3's catalog is not the fresh one"
 expect_ro "RB6 rollback twice" "G3_ROLLOUT_PREFLIGHT_NOT_INSTALLED: fresh" rollback
 echo "OK RB: rollback refused with a live row, unstated / wrong finished-row counts, unstated X / Threads consumers, a member that can SET the roles (nothing changed); full rollback = G3's fresh catalog; twice refused"
@@ -312,7 +319,7 @@ o="$(ro install 2>&1)" || fail "RA re-install: $o"
 echo "OK RA: re-install = the first install"
 
 # --- RT (G3-02 #4): Threads 007's rollback file itself (no rollout.sh) refuses an external dependent instead of CASCADE-dropping it ------
-for step in x015 x014 t013 t009 t011; do
+for step in x017 x015 x014 t013 t009 t011; do
   rel="$(awk -F '\t' -v s="$step" '$1 == "rollback" && $2 == s { print $3 }' "$here/MANIFEST.tsv")"
   own -c "set postona_resv_rollback.discard_rows = '0:0:0'" -f "$here/../$rel" >/dev/null || fail "RT rollback $step"
 done

@@ -3,7 +3,12 @@
 -- (supabase/candidates/postona_g4_credential_verdict/, G4 head c6df19cc612ad586126e80b009589ef3456b215f, PR #579 / #580); rolled back with
 -- 014_..._rollback.sql (before G4's verdict rollback and before 006's / 001's rollbacks).
 --   g4_x_account_verified(user, account): G4's X verdict `verified` for exactly this person and account; anything else -> false. Only
---     `verified` is acted on.
+--     `verified` is acted on. G3-02 #14: AND G4's public.postona_x_refresh_precheck_v1(account) = 'allow' (G4 PR #617 007, head 1d020c40):
+--     G5's MV still answers 'active' for the lifecycle generation recorded when this connection was made. The verdict alone stays VERIFIED
+--     across a service end + restart (measured: lifecycle 2 -> 4, create / reschedule / reconfirm accepted and a new row sent over the old
+--     connection), while G5's contract (Issue #561 6560219373) is that such a connection fails closed until an explicit reconnect. Every
+--     write (assert_account_access) and every send check (row_publishable) goes through this function, so all of them refuse
+--     (POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED; a row claimed meanwhile: NOT_PUBLISHABLE_AT_SEND). No reconnect policy is made here.
 --   x_credential_generation(account): for the account's workspace owner, sha256 hex of 'g3x1|' || G4's credential_generation
 --     (g4x1:<connection_epoch>: +1 on every completed connect and every disconnect) when `verified`, else NULL. 64 hex, so single post's
 --     binding (006) stays as it is: bound at begin, compared in post_now_preflight (CREDENTIAL_CHANGED, never sent).
@@ -15,7 +20,7 @@
 -- No GRANT: G4's function is owner-only and is called as the owner of these SECURITY DEFINER functions (the same non-superuser
 -- lifecycle owner, checked).
 -- Refuses (nothing changed) when: 001's / 006's three functions are not there byte for byte (already applied, another version, a test
--- double); G4's verdict is not the reviewed one; the caller is a superuser or does not own the schema, the table and the functions.
+-- double); G4's verdict or precheck is not the reviewed one; the caller is a superuser or does not own the schema, the table and the functions.
 -- Postconditions: owners and ACLs unchanged; the trigger function reachable by no API / worker role.
 
 begin;
@@ -53,6 +58,15 @@ begin
      or exists (select 1 from pg_catalog.pg_proc p, pg_catalog.aclexplode(p.proacl) a where p.oid = v_g4 and a.grantee <> v_owner) then
     raise exception 'G3_X_VERDICT_G4_VERDICT_UNKNOWN';
   end if;
+  -- G4's connection-generation check (G3-02 #14): G4 grants it to service_role only, so it is called as its owner; same owner required.
+  v_g4 := pg_catalog.to_regprocedure('public.postona_x_refresh_precheck_v1(text)');
+  if v_g4 is null
+     or (select p.proowner from pg_catalog.pg_proc p where p.oid = v_g4) is distinct from v_owner
+     or not (select p.prosecdef from pg_catalog.pg_proc p where p.oid = v_g4)
+     or (select p.provolatile from pg_catalog.pg_proc p where p.oid = v_g4) is distinct from 's'
+     or pg_catalog.md5((select p.prosrc from pg_catalog.pg_proc p where p.oid = v_g4)) is distinct from 'd1dc5883450182ad32e2746d4516e951' then
+    raise exception 'G3_X_VERDICT_G4_PRECHECK_UNKNOWN';
+  end if;
   perform pg_catalog.set_config('postona_x_verdict.acl', (
     select pg_catalog.string_agg(x, '|' order by x) from (
       select p.oid::pg_catalog.regprocedure::text || ':' || p.proowner::text || ':' || coalesce(p.proacl::text, '-') as x from pg_catalog.pg_proc p
@@ -70,8 +84,9 @@ alter table postona_x_resv.reservations add column claim_credential_generation t
 /** G4's X verdict for exactly this person and account (G3-48): true only when G4 answers verified. */
 create or replace function postona_x_resv.g4_x_account_verified(p_user_id uuid, p_social_account_id text) returns boolean
 language sql stable security definer set search_path = '' as $$
-  -- G3_G4_VERDICT (G3-48)
+  -- G3_G4_VERDICT (G3-48; G3-02 #14: and the connection's generation is still G5's current one)
   select coalesce((select v.verified from postona_g4_credential.x_publish_credential_verdict(p_user_id, p_social_account_id) v), false) is true
+     and coalesce(public.postona_x_refresh_precheck_v1(p_social_account_id) = 'allow', false)
 $$;
 
 /** The credential generation of one X account (64 lowercase hex) from G4's verdict, or NULL when it is not verified. Internal. */

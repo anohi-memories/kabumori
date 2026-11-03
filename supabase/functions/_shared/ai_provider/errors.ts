@@ -23,7 +23,7 @@ export type ClassifiedError = {
   readonly httpStatus: number | null;
   /** Delay the provider asked for, if any. */
   readonly retryAfterMs: number | null;
-  /** The request may have been processed and billed although no usage is known (timeouts, lost connections). */
+  /** The request may have been processed and billed although no usage is known (timeouts, lost connections, 5xx). */
   readonly maybeBilled: boolean;
   /** Sanitised provider error type / code, refusal category or reason. Never free text. */
   readonly detail: string | null;
@@ -82,6 +82,15 @@ function classified(code: AiErrorCode, retryable: boolean, httpStatus: number | 
   return { code, retryable, httpStatus, retryAfterMs: null, maybeBilled: false, detail, ...extra };
 }
 
+/**
+ * HTTP statuses each API documents as a refusal of the request itself: nothing was generated, so nothing was billed.
+ * Only the status decides (F6 J1 A1, 2026-10-16). Every other status (500 / 502 / 503 / 504 and other 5xx, and any
+ * status not documented here) may follow processing, so it is possibly billed: its usage is unknown and the attempt is
+ * charged at its upper bound. An error type or message can make a response more uncertain, never "not billed".
+ */
+const ANTHROPIC_REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 401, 402, 403, 404, 413, 429, 529]);
+const OPENAI_REFUSED_STATUSES: ReadonlySet<number> = new Set([400, 401, 403, 404, 429, 503]);
+
 function anthropicError(status: number, body: unknown, headers: Headers | null, nowMs: number): ClassifiedError {
   const error = isRecord(body) && isRecord(body.error) ? body.error : {};
   const type = typeof error.type === "string" ? error.type : null;
@@ -90,21 +99,22 @@ function anthropicError(status: number, body: unknown, headers: Headers | null, 
   const errorCode = typeof details.error_code === "string" ? details.error_code : null;
   const detail = safeToken(errorCode ?? type);
   const retryAfterMs = retryAfterMsFrom(headers, nowMs);
+  const maybeBilled = !ANTHROPIC_REFUSED_STATUSES.has(status);
 
-  if (/^Your credit balance is too low/u.test(message)) return classified("CREDIT_EXHAUSTED", false, status, "credit_balance_too_low");
-  if (status === 402 || type === "billing_error") return classified("CREDIT_EXHAUSTED", false, status, detail);
-  if (errorCode === "enforced_spend_limit_reached") return classified("SPEND_LIMIT", false, status, detail);
+  if (/^Your credit balance is too low/u.test(message)) return classified("CREDIT_EXHAUSTED", false, status, "credit_balance_too_low", { maybeBilled });
+  if (status === 402 || type === "billing_error") return classified("CREDIT_EXHAUSTED", false, status, detail, { maybeBilled });
+  if (errorCode === "enforced_spend_limit_reached") return classified("SPEND_LIMIT", false, status, detail, { maybeBilled });
   if (status === 400 && /^You have reached your specified (workspace )?API usage limits/u.test(message)) {
-    return classified("SPEND_LIMIT", false, status, "specified_spend_limit");
+    return classified("SPEND_LIMIT", false, status, "specified_spend_limit", { maybeBilled });
   }
-  if (status === 401 || status === 403 || type === "authentication_error" || type === "permission_error") return classified("AUTH", false, status, detail);
-  if (status === 429 || type === "rate_limit_error") return classified("RATE_LIMITED", true, status, detail, { retryAfterMs });
-  if (status === 529 || type === "overloaded_error") return classified("OVERLOADED", true, status, detail, { retryAfterMs });
-  if (status === 504 || type === "timeout_error") {
-    return classified("SERVER_ERROR", true, status, detail, { retryAfterMs, maybeBilled: true });
-  }
-  if (status >= 500) return classified("SERVER_ERROR", true, status, detail, { retryAfterMs });
-  return classified("INVALID_REQUEST", false, status, detail);
+  if (status === 401 || status === 403 || type === "authentication_error" || type === "permission_error") return classified("AUTH", false, status, detail, { maybeBilled });
+  // Retried only on the documented status (retry.ts): a rate_limit_error / overloaded_error type on another status is
+  // not a known refusal.
+  if (status === 429) return classified("RATE_LIMITED", true, status, detail, { retryAfterMs, maybeBilled });
+  if (status === 529) return classified("OVERLOADED", true, status, detail, { retryAfterMs, maybeBilled });
+  if (status === 504 || type === "timeout_error") return classified("SERVER_ERROR", true, status, detail, { retryAfterMs, maybeBilled: true });
+  if (status >= 500) return classified("SERVER_ERROR", true, status, detail, { retryAfterMs, maybeBilled });
+  return classified("INVALID_REQUEST", false, status, detail, { maybeBilled });
 }
 
 function openAiError(status: number, body: unknown, headers: Headers | null, nowMs: number): ClassifiedError {
@@ -113,14 +123,14 @@ function openAiError(status: number, body: unknown, headers: Headers | null, now
   const code = typeof error.code === "string" ? error.code : null;
   const detail = safeToken(code ?? type);
   const retryAfterMs = retryAfterMsFrom(headers, nowMs);
+  const maybeBilled = !OPENAI_REFUSED_STATUSES.has(status);
 
-  if (code === "insufficient_quota" || type === "insufficient_quota") return classified("CREDIT_EXHAUSTED", false, status, "insufficient_quota");
-  if (status === 401 || status === 403) return classified("AUTH", false, status, detail);
-  if (status === 429) return classified("RATE_LIMITED", true, status, detail, { retryAfterMs });
-  if (status === 503) return classified("OVERLOADED", true, status, detail, { retryAfterMs });
-  if (status === 504) return classified("SERVER_ERROR", true, status, detail, { retryAfterMs, maybeBilled: true });
-  if (status >= 500) return classified("SERVER_ERROR", true, status, detail, { retryAfterMs });
-  return classified("INVALID_REQUEST", false, status, detail);
+  if (code === "insufficient_quota" || type === "insufficient_quota") return classified("CREDIT_EXHAUSTED", false, status, "insufficient_quota", { maybeBilled });
+  if (status === 401 || status === 403) return classified("AUTH", false, status, detail, { maybeBilled });
+  if (status === 429) return classified("RATE_LIMITED", true, status, detail, { retryAfterMs, maybeBilled });
+  if (status === 503) return classified("OVERLOADED", true, status, detail, { retryAfterMs, maybeBilled });
+  if (status >= 500) return classified("SERVER_ERROR", true, status, detail, { retryAfterMs, maybeBilled });
+  return classified("INVALID_REQUEST", false, status, detail, { maybeBilled });
 }
 
 /** Classify a non-2xx HTTP response from a provider. `body` is the parsed JSON body, or null if unreadable. */

@@ -1,0 +1,11 @@
+# F5 M1 archive manifest
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/files/.agent_v2/tasks/F5.md
+- bytes: 28694
+- sha256: 58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54
+- original_commit: c34070ccea65498bc1bfa10109cb6e5adf63c416 (L5 TASK state update, GitHub source content)
+- original_blob: 0def34270d24a39510b21a78b803e9ba0905f160
+- archive_blob: 0def34270d24a39510b21a78b803e9ba0905f160
+- restore_check: source/archive exact Git blob and UTF-8 content equality PASS
+- PR: #275 HEAD ec0b3a6f4432c1d01ba3671f57d8a508c06d8777 (Draft)
+- append_only: true

@@ -2,7 +2,13 @@
 //
 // Client: the API key is passed explicitly, `authToken: null` and a fixed `baseURL` (so no ANTHROPIC_AUTH_TOKEN /
 // ANTHROPIC_BASE_URL environment value can redirect or double the credentials), `maxRetries: 0` (the SDK's own
-// retries are OFF: execute.ts counts every attempt), an explicit timeout and `logLevel: "off"`.
+// retries are OFF: execute.ts counts every attempt), an explicit timeout, `logLevel: "off"` and `webhookKey: null`
+// (so ANTHROPIC_LOG / ANTHROPIC_WEBHOOK_SIGNING_KEY are never read).
+// SDK 0.132.1 still reads ANTHROPIC_CUSTOM_HEADERS on every construction and merges it into the request headers; a
+// value there could add headers (Authorization, ...) or replace x-api-key with another key. The fetch handed to the
+// SDK therefore forwards only the headers the SDK itself sends (FORWARDED_HEADERS, x-stainless-*) and pins x-api-key,
+// anthropic-version, accept and content-type to this adapter's own values. Only user-agent (and x-stainless-*) can
+// still carry such a value, and only to the fixed Anthropic host.
 //
 // Request: model, max_tokens, system, one user message, thinking {type:"adaptive"} and output_config {effort,
 // format: json_schema}. Adaptive thinking is the documented on-mode of all catalog Claude models (Claude Opus 5.5
@@ -20,6 +26,31 @@ import { safeToken } from "./redact.ts";
 import type { AiRequest, AiTokenUsage, JsonSchema } from "./types.ts";
 
 export const ANTHROPIC_BASE_URL = "https://api.anthropic.com";
+
+/** The Messages API version SDK 0.132.1 sends; pinned so ANTHROPIC_CUSTOM_HEADERS cannot change it. */
+export const ANTHROPIC_API_VERSION = "2023-06-01";
+
+/** Headers the SDK sends for a Messages request (besides its x-stainless-* telemetry); everything else is dropped. */
+export const ANTHROPIC_FORWARDED_HEADERS: ReadonlySet<string> = new Set(["accept", "anthropic-version", "content-type", "user-agent", "x-api-key"]);
+
+/**
+ * The fetch the SDK uses: only FORWARDED_HEADERS and x-stainless-* go out, and x-api-key / anthropic-version / accept / content-type are
+ * this adapter's own values, whatever the SDK merged in from its environment (ANTHROPIC_CUSTOM_HEADERS).
+ */
+export function containAnthropicHeaders(base: AdapterCall["fetch"], apiKey: string): AdapterCall["fetch"] {
+  return (input, init) => {
+    const merged = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    const headers = new Headers();
+    for (const [name, value] of merged) {
+      if (ANTHROPIC_FORWARDED_HEADERS.has(name) || name.startsWith("x-stainless-")) headers.set(name, value);
+    }
+    headers.set("x-api-key", apiKey);
+    headers.set("anthropic-version", ANTHROPIC_API_VERSION);
+    headers.set("accept", "application/json");
+    headers.set("content-type", "application/json");
+    return base(input, { ...init, headers });
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -119,14 +150,16 @@ export async function callAnthropic(call: AdapterCall): Promise<AdapterOutcome> 
     controller.abort();
   }, call.timeoutMs);
   try {
+    const apiKey = call.key.reveal();
     const client = new Anthropic({
-      apiKey: call.key.reveal(),
+      apiKey,
       authToken: null,
       baseURL: ANTHROPIC_BASE_URL,
       maxRetries: 0,
       timeout: call.timeoutMs,
-      fetch: call.fetch as unknown as typeof fetch,
+      fetch: containAnthropicHeaders(call.fetch, apiKey) as unknown as typeof fetch,
       logLevel: "off",
+      webhookKey: null,
     });
     const { data, request_id } = await client.messages
       .create(buildAnthropicParams(call.request, call.providerSchema), { signal: controller.signal, timeout: call.timeoutMs, maxRetries: 0 })

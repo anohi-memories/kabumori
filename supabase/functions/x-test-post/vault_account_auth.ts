@@ -47,6 +47,7 @@ import {
   type XOAuthClientResolver,
   XRefreshLease,
 } from "../_shared/x_v2_account_refresh.ts";
+import { createXRefreshPrecheck, isPersonalXWorkspaceId } from "../_shared/x_refresh_db_profile_fence.ts";
 
 const CODE = /^[A-Z][A-Z0-9_]{1,99}$/u;
 /** Refusals of the account's rollout authority (Stage 3A): no refresh, record the 401. */
@@ -64,6 +65,8 @@ export type VaultAccountCredentialRpc = {
   read(ref: VaultAccountRef): Promise<VaultAccountCredential>;
   /** Resolves only if a new X write for this post + account is permitted right now; otherwise throws a fixed code. */
   assertPublishPermission(ref: VaultAccountRef): Promise<void>;
+  /** G4-02 #9: personal workspaces only, before begin: may this database and this account refresh now? Throws a fixed code otherwise. */
+  precheckPersonalRefresh(ref: VaultAccountRef): Promise<void>;
   begin(ref: VaultAccountRef): Promise<XRefreshLease>;
   commit(lease: XRefreshLease, ref: VaultAccountRef, accessToken: string, refreshToken: string | null, expiresIn: number | null): Promise<string>;
   release(lease: XRefreshLease, ref: VaultAccountRef, outcome: "not_rotated" | "reauth_required" | "uncertain", code: string): Promise<string>;
@@ -189,7 +192,12 @@ export class VaultAccountXAuth {
   async #refresh(trigger: "proactive" | "reactive"): Promise<void> {
     const ref = this.#ref;
     const outcome = await runXTokenRefresh({
-      begin: () => this.#rpc.begin(ref),
+      begin: async () => {
+        // G4-02 #9: before the lease and the provider. Commit and release below are never fenced (single-use refresh tokens).
+        // Operator / organization accounts are not personal workspaces: their path is exactly as before.
+        if (isPersonalXWorkspaceId(ref.brandId)) await this.#rpc.precheckPersonalRefresh(ref);
+        return await this.#rpc.begin(ref);
+      },
       commit: (lease, access, refresh, expiresIn) => this.#rpc.commit(lease, ref, access, refresh, expiresIn),
       release: (lease, result, code) => this.#rpc.release(lease, ref, result, code),
     }, this.#resolveClient, { fetchImpl: this.#fetchImpl, timeoutMs: this.#timeoutMs });
@@ -264,6 +272,7 @@ export function createVaultAccountCredentialRpc(
     }
     return payload;
   };
+  const precheck = createXRefreshPrecheck({ supabaseUrl, serviceRoleKey, fetchImpl });
   const post = (ref: VaultAccountRef) => ({
     p_scheduled_post_id: ref.scheduledPostId, p_social_account_id: ref.socialAccountId, p_brand_id: ref.brandId,
   });
@@ -283,6 +292,7 @@ export function createVaultAccountCredentialRpc(
       const out = await rpc("assert_x_publish_permission_for_legacy_post", post(ref), "X_PUBLISH_PERMISSION_UNAVAILABLE");
       if (out !== "authorized") throw new Error("X_PUBLISH_PERMISSION_UNAVAILABLE");
     },
+    precheckPersonalRefresh: (ref) => precheck(ref.socialAccountId),
     async begin(ref) {
       const row = single(await rpc("begin_x_account_refresh_legacy_post", post(ref), "X_REFRESH_UNAVAILABLE"));
       if (!row || typeof row.lease_token !== "string" || typeof row.oauth_client_ref !== "string"

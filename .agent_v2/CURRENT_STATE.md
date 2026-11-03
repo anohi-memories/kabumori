@@ -1,3 +1,31 @@
+## F2 POSTONA手入力X投稿UI iPhone Simulator QA登録（2026-10-19）
+- F2 `postona-f2-manual-x-ui-iphone-simulator-offline-qa-20261019` を ready/claude、Sonnet5（中）、F2→L2、返却先 かぶモリアプリG2のちゃ（POSTONA QA担当）として登録。対象 F1 Draft PR #274→#277→#283→#288（HEAD `c41e20ce508530328570d22c4a0cbc0a43fb2a2e`）。独立worktree・専用Simulator・未コミットrigのみ、F1/F3/F4/F5ソース不変更、実X/OAuth/managed/EAS NO_GO。
+- 旧F2 `kabumori-f2-pause-delivery-runtime-candidate-20261015`（done/none、USER_DEFERRED、セキュリティPASSではない）の最終クローズ版を `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md` に追記保存。7960 bytes、SHA256 `2a1a59341e25f97b7bdf99020088bb8ff7e91c01adfd05a2f09788c9975e47c1`、原本/復元Git blob `c4fa1a28c98863fbf27d78c64518ff2daa7ab213`、原commit `61c34f63a1e1bafafa60249b136b81530b22f2c1`、MANIFEST.json/SHA256SUMS/HISTORY_INDEX 追記・復元確認済み。PR213は引き続きDraft/未マージ。
+
+## F1 M3 simulated / afterFreeze 結果契約のUI・アダプター反映（2026-10-19）
+- G1 指示により F1 `postona-f1-m3-simulated-afterfreeze-ui-contract-20261019` を ready/claude、Sonnet5（高）、F1→L1、返却先 かぶモリアプリG1のちゃ（新F1担当）として登録。F3 PR #278 の simulated（印が無ければ true）／afterFreeze を F1 の手入力X投稿画面と単発投稿アダプターに反映するソース限定TASK。送信ボタンは常時disabled、実接続・実SNS・DB/Auth/Edge/Cron変更なし。
+- 前F1 M2 done TASK+Report は `.agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/` に保存。15796 bytes、SHA256 `2d22de9b43d6cd01747f02555084e2dba4f299ab446ebacae9a18c22970d9a78`、原本/復元Git blob `c8dffbda56cb181e13a748b3fac9885b1f024353`、原commit `bb709d38ec81113706926117834354a05e289945`、MANIFEST.json/SHA256SUMS/HISTORY_INDEX 記録済み（復元確認済み）。PR283 HEAD `b4b761c4dd43cc4c8c1ee1533413b46f088ba21f` Draft・未マージ（L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO）。
+
+## F5 shared owner epoch source-only TASK（2026-10-19）
+- 指令室 Issue #269 comment #6251536852 承認により `common-account-f5-shared-owner-epoch-monotonic-source-candidate-20261019` を F5 ready/claude、Opus5.5（高）、完了 L5 として登録。複数アプリ共通のブランド所有者epoch・ABA耐性・ACLのsource候補と隔離PG17のみ。G4 PR282のowner epochはTEST-ONLY stand-inであり本F5実装ではない。J2限定重点レビューSol（高）を実適用前の必須ゲートとする。
+- 前M2 done TASK+Reportは `.agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/` 保存。原本blob一致、24155 bytes、SHA256 `89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908`、MANIFEST/SHA256SUMS/HISTORY_INDEX更新・復元確認済み。fresh main／独立clean worktree／30枠変更path/owner競合は実装開始前に要検証。共有membership writer競合時はSTOP。
+- G6 AI認可Option B新RPC/handler接続はHOLD。全managed/prod/実SNS/有料AI/merge/deploy NO_GO。
+
+## F5 M2 — POSTONA AI相談認可の不足API・ACL source-only 設計（2026-10-18）
+- 指令室 Issue269 #6247635293/#6247652574 の限定自走第2工程。F5 `postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018` = ready/claude、Opus5.5（高）、F5→L5、返却先 共通アカウントG5のちゃ（新F5担当）。Issue266 #6247539818 のAI相談認可ACK_WITH_CONDITIONSに基づく。F5 M1 X投稿契約と別。F6/G6がAI handler・provider・ledgerを所有。
+- 前F5 M1 done TASK+Report archive `.agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/`; 28694 bytes、SHA256 `58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54`、原本/復元Git blob一致、MANIFEST/SHA256SUMS/HISTORY_INDEX記録済。新TASKは別のAuth/RPC/SECURITY DEFINER/GRANT実装を許可しない。独立worktree/fresh main/30枠競合はClaude着手時の必須STOPゲート。
+- ブロッカー: 統合AI認可の安全な呼出し口未証明；G6 handler接続HOLD、managed/prod/有料AI/実SNS/merge/deploy NO_GO。必要な新共有セキュリティ境界が見つかればsource設計までで停止し指令室に例外報告。PR233/265の別ゲート維持。
+
+## 2026-10-18 POSTONA F1 M1 UI→単発投稿API契約整合の新規TASK
+- F1 task_id `postona-f1-m1-manual-ui-single-post-contract-adapter-20261018`, ready/claude, Sonnet5（高）, F1→L1 / return_to かぶモリアプリG1のちゃ（新F1担当）。前F1 L1タスクは `.agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/` にSHA256/restore記録を保存。HISTORY_INDEX更新済み。
+- F3 PR #272 HEAD `559b3e54f04a89ffe23ebbf54d71857ad064b1e7`：single_post_contract.ts / docs §2。F1 PR #274 HEAD `007dc3d68bdb6c57e2cfb6831090f6544704a3c3`：UI。両者の変更ファイル重複0。clientRequestId/targetId、consent SHA256、sent/pending/failed/uncertain/refused/unavailable、durable readbackのオフライン一致を担当。実送信ボタンdisabled維持。
+- F3/F4/F5のAuth・credential・API・DBは変更しない。実SNS・managed・本番・merge/deploy/EAS/課金はNO_GO。個別成果はG1 L1確認後Issue269総合指令室へ報告し次TASK待機。
+
+## 2026-10-18 かぶモリ休止・F2/J3作業凍結（ユーザー指示）
+- POSTONA開発へ集中するため、F2 `kabumori-f2-pause-delivery-runtime-candidate-20261015` は `done/none`（L2=SOURCE_ONLY_FREEZE、セキュリティPASSではない）。J3 `kabumori-j3-f2-pr213-p1p2-focused-rereview-20261018` は `done/none`（V3=USER_CANCELLED_UNSTARTED、レビュー未実施）。
+- PR #213はDraft・未マージ・未deploy。R2(P1) 無認証AI入口／R3(P2) planner復旧所有者検証は未検証。かぶモリの全経路完全停止PASSは主張しない。
+- archive: `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/`（原本3件、MANIFEST/SHA256SUMS、Git blob・復元確認）。F1のPOSTONA現行TASKは継続。F2/J3の新規割当は総合指令室判断待ち。本番変更なし。
+
 ## F5 — POSTONA初回X手入力投稿 M1 Auth/entitlement/T13 source-only（2026-10-18）
 - 総合指令室 Issue #269 comment 6245437308 のオーナー管理GOを受け、F5新TASK `postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018` ready/claude、Opus5.5（高）、F5→L5、返却先 `共通アカウントG5のちゃ（新F5担当）`。JWT/session→POSTONA entitlement active→user/brand owner→G4 verified X/token owner→publish enabled/T13→送信直前再確認→模擬X結果とreadbackの契約/合成PG検証。G3/G4所有コードと共有migration/本番Auth改変禁止。Issue267はF5内部関数/Threads service keyの証拠付き契約確認を同TASKの読み取り枝で実施。Issue266 AI削除は初回手入力X投稿の先行条件にしない。
 - 旧F5 D3 done TASK+Report は `.agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/` に原本blob一致、20888 bytes SHA256 `8eeba0f79434dcd58e6d15cf078f77e2dd2fabb4113d12edf55e76124a26c4d2`、MANIFEST/SHA256SUMS/HISTORY_INDEX保存。旧G5はdone維持。PR233限定重点レビューとPR265 PG1-PG7は未承認、全production/managed/SNS/merge/deploy NO_GO。開始時にfresh main・独立worktree・新旧30枠変更対象競合を担当Claudeが再確認。

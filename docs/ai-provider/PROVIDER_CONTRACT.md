@@ -48,7 +48,7 @@ if (result.ok) {
 | `reasoningEffort` | そのモデルで公式に確認できた値だけを受け付ける（下表） |
 | `maxOutputTokens` | 1 からモデル上限（128,000）まで。思考・推論のトークンもここに含まれる |
 | `timeoutMs` | HTTP 1回あたり。1,000〜600,000 |
-| `transport` | `{ maxAttempts: 1〜3, retryOnTimeout?: boolean }`（§5） |
+| `transport` | `{ maxAttempts: 1〜3, retryOnTimeout?: false }`（§5。`true` は送信前に `REQUEST_INVALID`） |
 | `usageContext` | `{ application, feature }`。費用・予算の集計に使う |
 
 ### モデルカタログ（単一の管理箇所）
@@ -97,8 +97,8 @@ if (result.ok) {
 | 種類 | コード | Provider 層での再試行 |
 |---|---|---|
 | 送信前の拒否（課金なし） | `REQUEST_INVALID`、`MODEL_UNKNOWN`、`MODEL_PROVIDER_MISMATCH`、`CAPABILITY_UNSUPPORTED`、`SCHEMA_UNSUPPORTED`、`KEY_MISSING`、`KEY_INVALID`、`BUDGET_DENIED`、`DEADLINE_EXCEEDED` | しない |
-| 一時的な障害 | `RATE_LIMITED`（429）、`OVERLOADED`（529、OpenAI は 503）、`SERVER_ERROR`（5xx）、`NETWORK` | する（§5） |
-| タイムアウト | `TIMEOUT`（課金された可能性がある） | `retryOnTimeout: true` のときだけ |
+| 処理されなかったと分かる拒否 | `RATE_LIMITED`（429）、`OVERLOADED`（529、OpenAI は 503） | する（`maxAttempts` の範囲。§5） |
+| 処理されたか分からない失敗（課金された可能性がある） | `SERVER_ERROR`（500 / 502 / 504 `timeout_error` など）、`NETWORK`（送信後の切断を含む）、`TIMEOUT` | **しない**（`maxAttempts` が 2 以上でも 1 回で終える。J1 R2、2026-10-16） |
 | 再試行しても直らない | `AUTH`（401/403）、`CREDIT_EXHAUSTED`（クレジット不足・402・OpenAI insufficient_quota）、`SPEND_LIMIT`（上限への到達）、`INVALID_REQUEST`（その他の 4xx） | しない |
 | モデルの判断 | `REFUSAL`（安全上の拒否）、`INCOMPLETE`（max_tokens などで途切れた） | しない |
 | 応答の内容 | `PROTOCOL`（想定外の形）、`INVALID_JSON`、`SCHEMA_VIOLATION` | しない（作り直すかは呼び出し元が判断する） |
@@ -140,7 +140,12 @@ if (result.ok) {
   - または、実行ごとの `InMemoryBudgetGuard` に `maxCalls: 4` を設定すれば、再試行も含めて4回を超えない。
 - **待ち時間:** 指数バックオフ（1秒・2秒、最大8秒、揺らぎあり）。provider が `retry-after` を返せばそれに従う。ただし20秒を超える待ちは再試行せずに終える。
 - **期限:** `deps.deadlineAtMs`（Edge の実行時間の上限に合わせる）を超えて新しい試行は始めない。
-- **タイムアウトしたリクエストは課金された可能性がある。** そのため既定では再試行せず、最大額で計上する。
+- **処理されたか分からない失敗は、もう一度送らない（J1 R2、2026-10-16）。**
+  - 再試行するのは、provider が「処理していない」と返した失敗だけ: 429（`RATE_LIMITED`）と 529 / OpenAI 503（`OVERLOADED`）。`maybeBilled` が付いたものは除く（`retry.ts` の `isKnownUnsent`）
+  - 時間切れ（こちらの時間切れも、provider の 504 / `timeout_error` も）、送信後の切断、その他の 5xx は、`maxAttempts` が 2 以上でも 1 回で終える。課金された可能性があり、送り直すと二重に払うかもしれないため
+  - その 1 回は、使用量が分からなければ最大額で計上し、台帳には `unknown` で記録する。同じ `callId` で呼び直しても、台帳が同じ試行をもう一度送らせない（`ATTEMPT_FINALIZED` / `SEND_NOT_CONFIRMED`）
+  - `retryOnTimeout: true` は受け付けない（送信前に `REQUEST_INVALID`。黙って無視はしない）。曖昧な失敗を送り直したいなら、呼び出しごとの支出の上限を決めた別の方針を、別のレビューと承認で作る
+  - 分類（`retryable`）は変えていない。結果の `retryable: true` は「後で新しい操作としてやり直せば通るかもしれない」という意味で、この層が送り直すという意味ではない
 
 ## 6. Budget Guard（Phase 1a の範囲と限界）
 

@@ -1,0 +1,12 @@
+{
+  "task_id": "postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018",
+  "original_path": ".agent_v2/tasks/F3.md",
+  "archive_path": ".agent_v2/archive/2026-10-18-F3-postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018/files/.agent_v2/tasks/F3.md",
+  "size": 25007,
+  "sha256": "44eda7b2d975d979daaf6f24251d029b7e5e3096b850aa3a6c559e2a9a66e72c",
+  "original_git_blob": "2879a2bcfb7dfb646ce68b38c989281bc684fff7",
+  "source_commit": "4456712ba6413cc2533842bb33c283619bb7f082",
+  "archive_commit": "53107bbddb16c0940fd325b762ef0170efcdc035",
+  "restore": "byte-identical verified",
+  "status_note": "ACTIVE_TASK remains review_required owing to update blocked"
+}

@@ -1,5 +1,79 @@
 # Kabumori Project Rules
 
+## 2026-10-20 安全性チェック拒否時の正規再試行（最新ユーザー指示）
+
+全担当ちゃへの共通指令：[Issue #299 コメント6279552877](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6279552877)。**安全性チェックで一度拒否されたことを理由に、後日の通常の正規再試行まで一律禁止しない。** この節は下の「安全拒否ならSTOP／別経路禁止」を、以下の手順として具体化し最優先する。
+
+1. 拒否された呼び出しは直ちにSTOP。書込済み・完了済みと主張せず、公開可能なエラー・対象・直前状態を記録する。
+2. Issue/TASK/コメント・task_id・PR/HEADをfreshにread-back。書込成否、重複、競合、権限不足、具体的安全問題を再評価する。
+3. 対象作業が承認済みで、禁止事項がなく、ユーザーによる再試行の明示指示または現行TASKの権限内にあるとき、**通常の正規操作による再試行は可能**。重複防止、古い状態の再チェック、結果のread-backを厳守。
+4. 安全措置の意図的な迂回（別経路・代理投稿・分割や言換えによるチェック逃れ、権限偽装等）は禁止。再度拒否ならその試行をSTOPし、失敗内容・解除条件を報告する。安全審査の具体的な禁止事項には従う。
+5. 拒否原因が不明な場合に「恒久的に書込不能」「別チャットでも一律不可」と断定しない。管理TASKやproductionの安全ゲートを弱めない。
+
+2026-10-20のG5事例：#320の第3TASK全文HISTORYは[コメント6279391656](https://github.com/anohi-memories/kabumori/issues/320#issuecomment-6279391656)で保存/read-back成功、K5 ACCEPTは[コメント6279417367](https://github.com/anohi-memories/kabumori/issues/320#issuecomment-6279417367)で保存/read-back成功。判定はCHANGES_REQUIRED_P2／本番NO_GO。通常の再試行が成功したことは、以前の拒否を意図的に回避してよい根拠ではない。
+
+
+## 2026-10-19 単独FとG7〜G9担当変更（最新ユーザー指示）
+
+[全体指令 Issue #299 コメント6264872973](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6264872973)を最優先する。
+
+- **単独F/f**：現行15枠（G1〜G10、H1〜H5）の現役Issue/TASK状態・Report・競合だけを統括確認する。旧F1〜F10/J1〜J5を含む30枠の毎回の全件確認を廃止する。ただし移行中の旧TASKが直接関係する場合は、その対象に限り旧履歴・未受入・archiveを確認する。単独Fで他室のTASKを勝手に完了・再割当しない。
+- **G7・G8・G9の担当用途**：いずれも**ユーザー指示**。過去のMIC、ニュース改善A、API最適化Bへの案件固定は解除。ユーザーが用途・TASKを明示するまでは、idleを理由に別案件へ割り当てない。旧TASK・Report・pilot履歴は削除・変更しない。新規TASK前に旧新の競合と履歴を確認する。
+- G7 Issue #322、G8 Issue #304（pilot履歴あり）、G9 Issue #298（pilot継続中）。正式な新TASK登録時には世代と現役TASKの重複を確認する。
+- この節は下記の過去の30枠統括説明、およびG7〜G9の旧案件固定ルールより優先する。その他の安全・HISTORY/ACCEPT・return_to・完了コード規定は維持する。
+
+
+## 2026-10-19 H1〜H5 Issue正式移行指令（J残TASK中止）
+
+ユーザーはJ1〜J5の残作業を不要と判断し、次の新規TASKから全H系Issueへ移行することを明示指示。全担当ちゃ向け詳細指令：[Issue #299 コメント6263006191](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6263006191)。この節は旧J継続・旧H/V3・下の段階移行説明より優先。
+
+| H枠 | 固定Issue | 役割 |
+| --- | --- | --- |
+| H1 | #306 | Codexレビュー・修正・検証。旧pilot H1-02の世代契約を正式TASK登録前に整合 |
+| H2 | #329 | Codexレビュー・修正・検証 |
+| H3 | #330 | Codexレビュー・修正・検証 |
+| H4 | #331 | Codexレビュー・修正・検証 |
+| H5 | #332 | 臨時実装専用、原則空ける |
+
+旧J1〜J5の残TASK（J2 readyを含む）はユーザー判断で USER_CANCELLED_FOR_H_MIGRATION / NOT_ACCEPTED として扱い、再実行・次TASKのJ割当を行わない。既存の旧TASK/Report/ACTIVE・archive・PRは証拠として保持し、未受入をdone/PASSへ書換えない。旧Jのtask_idをHへ移動・再利用しない。旧Jの未処理V1〜V5を新Hへの割当の必須前提にしない。
+
+Hの新規TASKは開始Hn→完了Cn。担当ちゃが実際のreturn_to、completion_code、推薦モデル・tests・制約・対象Issue statusと他枠競合を確認した後に、H Issueへreadyとして登録・read-backする。`idle/task_id:none`からは開始不可。H1 #306はpilot履歴を保護し、正式移行前に50件世代の整合を取る。Issue本文は担当ちゃのみ編集、CodexはREPORT、ちゃはHISTORY→ACCEPT→次TASKをread-back。安全性チェック拒否時の停止・正規再試行は冒頭の2026-10-20最新指令に従う。
+
+main管理ルール更新および付随Vercel deployは既存のユーザー承認範囲内。製品PR merge・DB/Auth/Secrets・SNS実投稿・外部write等の承認ではない。
+
+
+## 2026-10-19 G枠Issue移行・V3 G10廃止（最新優先）
+
+### 全G担当ちゃ共通指令（次の新規TASKからIssue方式）
+
+ユーザーが全G担当ちゃ向けに明示承認した共通指令は [Issue #299 コメント6262613710](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6262613710) に記録・読み戻し済み。**G1〜G10の担当ちゃは、次の新規TASKを対応G番号の固定Issueへ登録することを優先**する。各G部屋はこの指令を個別に適用し、登録可能なら「登録しますか」と聞き返さず、担当ちゃ自身が登録・read-backまで実施する。G1=#316、G2=#317、G3=#318、G4=#319、G5=#320、G6=#321、G7=#322、G8=#304（pilot後整理要）、G9=#298（pilot中、正式世代へ切替時に整理要）、G10=#323。開始コードGn、完了コードKnは維持する。
+
+**現行TASKの途中移管は禁止**。旧F/V3の未完了TASKは元系統でL/K完了確認を終え、Report/最終archive、SHA256と復元、PR/HEAD、競合を確認する。idle Issueは指示登録まで開始不可。Issue本文のwriterは担当ちゃのみ。ClaudeはReport、担当ちゃは全文HISTORY→ACCEPT→次TASK更新をread-backする。移行が難しい枠だけ理由と解除条件を示し、他枠の安全な開発は止めない。G10旧V3 K10は廃止判定済み、旧Reportは未受入のまま保護。
+
+
+
+この節は下の旧.agent／.agent_v2／V3説明より優先する。ユーザーはG1〜G10の固定Issue管理への移行およびこの管理更新に伴うmain更新・Vercelデプロイを明示承認した。管理正本の実切替は対象枠の既存TASKが完了・受入・履歴保護され、新規TASKをIssueへ登録・読み戻した時点からとする。idle/task_id:none のIssueは開始不可。Issue本文は担当ちゃのみ更新、ClaudeはREPORTのみ、担当ちゃはHISTORY・ACCEPTを保存し読み戻す。1世代50件。推薦モデル・return_to・完了コードは毎TASK必須。
+
+| 枠 | 管理Issue | 切替条件・現状 |
+| --- | --- | --- |
+| G1 | #316 | F1 done／最新archive確認後、次新規TASKから |
+| G2 | #317 | F2 review_required：受入・archive後 |
+| G3 | #318 | F3 done／最新archive確認後 |
+| G4 | #319 | F4 done／最新archive確認後 |
+| G5 | #320 | F5 done／最新archive確認後 |
+| G6 | #321 | F6 done／最新archive確認後 |
+| G7 | #322 | F7 readyの既存TASKをF7/L7で完結後 |
+| G8 | #304 | pilot idle／F8 review_requiredの受入・archive後 |
+| G9 | #298 | G9 pilot task-002継続、F9 archive・pilot後処理後に正式新世代判断 |
+| G10 | #323 | V3は新規運用しない。旧K10は受入待ちから外す。Issue idle、次TASK未登録 |
+
+G10旧task_id orchestration-v3-g10-automation-readiness-default-deny-20261018 はユーザー判断により CANCELED_FOR_MIGRATION / NOT_ACCEPTED として棚上げする。旧V3 TASK/Report（review_required）とDraft PR #281は歴史証拠として原文保護し、PASS/doneと記録しない。下のV3切替表G10は過去の記録であり新規TASKの割当根拠にしない。K10の受入完了をIssue移行の前提としない。
+
+進行中の旧F/J task_idは移動しない。担当ちゃが元TASK/Report/未処理L/K・archive/SHA256/復元・PR HEAD・独立worktree/変更path競合・他枠Issue重複を確認してからIssue登録。条件不明ならidleのまま。F/J廃止、H正式切替は別工程。安全性チェック拒否時は冒頭の2026-10-20最新指令に従う。意図的な安全措置回避は禁止、正規の再試行を一律禁止しない。
+
+main更新と付随するVercelデプロイのユーザー許可は本管理ルール変更に限る。他PRのmerge、DB/Auth/Secret変更、SNS実投稿、アプリreleaseは未承認。main read-backと実際のデプロイ成否は別々に確認・記録する。
+
+
 ## この文書の位置づけ
 
 - このファイルを、長期的な方針・共通ルール・決定事項の唯一の正本とする。
@@ -71,7 +145,7 @@ Claude Code（くろちゃん）10枠（ReportはすべてTASK内）:
 
 | 枠 | 完了コード | 正本 | 対応するv2の枠 | 切り替えcommit | 状態 |
 | --- | --- | --- | --- | --- | --- |
-| （まだ無い。pilot候補はG10だが、ユーザーの明示割当まで載せない） | — | — | — | — | — |
+| G10 | K10 | `.agent_v3_gh/tasks/G10.md` | F10（L10完了済み） | 2026-10-18 G10試験運用承認 | pilot / ready |
 
 - **コード**: 表の枠は Gn→Kn、Hn→Cn の1対1。G / H / K / C の意味・開始条件（`ready` / `in_progress` だけ開始）・`return_to`・推薦モデル・H5（臨時実装専用）・G5〜G10（明示割当専用）・G7 / G8 / G9 の専属は変えない。
 - **二重割当の回避**:

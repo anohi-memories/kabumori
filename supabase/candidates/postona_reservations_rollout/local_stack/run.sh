@@ -7,7 +7,7 @@
 #           G4T_VERDICT personal path: G5 lifecycle + T13, G5 MVP_INSTALL, PR #124, Threads custody, G4's g5pv binding + stack, personal
 #           X 001-005, both verdicts), applied as `postgres` (the image's own non-superuser owner). The fixtures' stand-ins for auth /
 #           vault / storage fail on the real schema (measured lines); anything else must not.
-#   G3      this tree's rollout bundle: rollout.sh preflight / install over 127.0.0.1 (15 steps + postcheck) and, after the test,
+#   G3      this tree's rollout bundle: rollout.sh preflight / install over 127.0.0.1 (16 steps + postcheck) and, after the test,
 #           rollout.sh rollback (the test's login members revoked first, rows stated exactly); G3's schemas and roles must be gone.
 #   Edge    the real entries (release gates OFF: 503) and their localtest twins (gate passed as enabled; permission ports and the X
 #           credential source NOT overridden: deny), behind the real Kong / GoTrue.
@@ -32,6 +32,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 bundle="$(cd "$here/.." && pwd)"
 REPO="$(git -C "$here" rev-parse --show-toplevel)"
 G4=c6df19cc612ad586126e80b009589ef3456b215f      # G4 PR #580 HEAD (personal X + verdicts)
+G4RP=1d020c406cc982eedfa29a8b682c96db31888a68    # G4 PR #617 HEAD: 006 + 007 (the connection-generation check 014 calls, G3-02 #14)
 PR178=83334a091ded5571cf595fd99d7a035627564735   # G5 write guard chain, as G4's runner overlays it
 G5MVP=9846c0f062626db1dd4d9e8c10d5b1573e7f4982   # G5 MVP_INSTALL (blob eebaabf2, as G4's runner pins it)
 G5CHAIN=21a5cad4b71de63265db8517da93c6efc60cdde8 # G5 lifecycle chain (MVP P1)
@@ -44,7 +45,7 @@ fail() { echo "FAIL $*" >&2; exit 1; }
 for image in postgres:17.6.1.165 gotrue:v2.196.0 postgrest:v16.1 kong:2.8.1 edge-runtime:v1.74.3 storage-api:v1.70.3; do
   "$ENGINE" image exists "public.ecr.aws/supabase/$image" || { echo "G3LS_IMAGE_MISSING: $image (this script does not pull)"; exit 2; }
 done
-for commit in "$G4" "$PR178" "$G5MVP" "$G5CHAIN" "$G5W0"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G3LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
+for commit in "$G4" "$G4RP" "$PR178" "$G5MVP" "$G5CHAIN" "$G5W0"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G3LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
 [ "$(git -C "$REPO" rev-parse "$G5MVP:supabase/candidates/postona_personal_mvp_auth/MVP_INSTALL.sql")" = eebaabf2629575901947c0664d6f0002526d3273 ] || fail "G5 MVP_INSTALL blob moved"
 if lsof -nP -iTCP:"$API_PORT" -iTCP:"$DB_PORT" -sTCP:LISTEN >/dev/null 2>&1; then echo "G3LS_PORTS_BUSY: $API_PORT / $DB_PORT (another stack?)"; exit 2; fi
 
@@ -117,10 +118,12 @@ case "${G3LS_MUTANT:-}" in
   tick_no_lock) mutate16 "  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:worker_tick', 0)) then" "  if false then" ;;
   tick_short_secret) mutate16 " or pg_catalog.length(v_key) < 32 then" " then" ;;
   tick_key_in_header) mutate16 "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json'," "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json', 'x-postona-worker-secret', v_key," ;;
+  no_017) grep -v -E '^(install|rollback)\tx017\t' "$bundle/MANIFEST.tsv" > "$WORK/bundle/MANIFEST.tsv" ;;   # the state before G3-02 #15
   g1_writes_stay_on|g1_write_resent) ;;   # applied below, to the extracted G1 copy
   *) fail "unknown G3LS_MUTANT" ;;
 esac
-RO_SH="$bundle/rollout.sh"; [ "${G3LS_MUTANT:-}" = host_any ] && RO_SH="$WORK/bundle/rollout.sh"
+STEPS=16; [ "${G3LS_MUTANT:-}" = no_017 ] && STEPS=15
+RO_SH="$bundle/rollout.sh"; case "${G3LS_MUTANT:-}" in host_any|no_017) RO_SH="$WORK/bundle/rollout.sh" ;; esac
 for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest; do
   mkdir -p "$fns/$d"; cp "$here/$d/index.ts" "$fns/$d/"
   (cd "$WORK/p" && deno check --no-config --cached-only "supabase/functions/$d/index.ts" >/dev/null 2>&1) || fail "deno check $d"
@@ -178,6 +181,10 @@ for f in "$WORK"/t/g5chain_20261013140000_common_account_service_reconciliation_
          "$c/postona_g4_x_oauth_personal_mvp/005_x_connect_lifecycle_t13_g5pv.sql" "$c/postona_g4_credential_verdict/002_x_publish_credential_verdict.sql"; do
   need "$f"
 done
+for f in 006_x_connect_profile_fence 007_x_refresh_precheck; do   # G3-02 #14: the check 014 calls, from G4 PR #617 (read only)
+  git -C "$REPO" show "$G4RP:supabase/candidates/postona_g4_x_oauth_personal_mvp/$f.sql" > "$WORK/t/$f.sql"
+  need "$WORK/t/$f.sql"
+done
 echo "OK world: G4's personal world at ${G4:0:8} on the real local schema (as postgres)"
 w0dir=supabase/candidates/postona_personal_mvp_auth
 for pair in MVP_W0_INSTALL.sql:f68bc61f35b3041e2147f216da7ceb56c822105d MVP_W0_EXECUTE_GRANT.sql:c7c20852ce951fd1cdfe5eda538038232b1da85c; do
@@ -197,8 +204,8 @@ mode=preflight; o="$(env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=po
   && fail "a different attestation was accepted"
 grep -q G3_ROLLOUT_ATTESTATION_MISMATCH <<<"$o" || fail "attestation mismatch: $o"
 ro() { env G3RO_PGHOST=127.0.0.1 G3RO_PGPORT="$DB_PORT" G3RO_DB=postgres G3RO_OWNER=postgres G3RO_DB_ATTESTATION="$ATT" "$@" bash "$RO_SH" "$mode"; }
-mode=preflight; o="$(ro 2>&1)" || fail "preflight: $o"; grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=15$' <<<"$o" || fail "preflight: $o"
-mode=install; o="$(ro 2>&1)" || fail "install: $o"; grep -q '^G3_ROLLOUT_INSTALLED steps=15 ' <<<"$o" || fail "install: $o"
+mode=preflight; o="$(ro 2>&1)" || fail "preflight: $o"; grep -q "^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=$STEPS\$" <<<"$o" || fail "preflight: $o"
+mode=install; o="$(ro 2>&1)" || fail "install: $o"; grep -q "^G3_ROLLOUT_INSTALLED steps=$STEPS " <<<"$o" || fail "install: $o"
 # ---- G3-02 #10: the worker tick (016 candidate) on this throw-away stack only (a later, separately approved step in a real rollout) ----
 sa() { psql -X -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$DB_PORT" -U supabase_admin -d postgres "$@"; }
 sa -c "create extension if not exists pg_net" -c "create extension if not exists pg_cron" >/dev/null || fail "pg_net / pg_cron"
@@ -219,7 +226,7 @@ end $$;
 SQL
 echo "OK 016 worker tick installed (pg_net + Vault + pgcrypto; re-apply refused; production target rule measured); TEST ONLY target: this stack's kong"
 mode=install; o="$(ro 2>&1)" && fail "a second install succeeded"; grep -q G3_ROLLOUT_PREFLIGHT_REFUSED <<<"$o" || fail "second install: $o"
-echo "OK G3 rollout.sh preflight + install (15 steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
+echo "OK G3 rollout.sh preflight + install ($STEPS steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
 
 # the test's LOGIN members (stand-ins for the separately approved rollout step): random passwords, never printed, 0600 file only
 API_PW="$(openssl rand -hex 24)"; WORKER_PW="$(openssl rand -hex 24)"; WORKER_SECRET="$(openssl rand -hex 24)"; TEST_PW="$(openssl rand -hex 24)"
@@ -350,9 +357,9 @@ rb_refused "finished rows not stated" G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATED
 rb_refused "the test's login members" G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows"
 own -c "drop role g3ls_api_login" -c "drop role g3ls_worker_login" >/dev/null
 mode=rollback; o="$(ro G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows" 2>&1)" || fail "rollback: $o"
-grep -q '^G3_ROLLOUT_ROLLED_BACK steps=15$' <<<"$o" || fail "rollback: $o"
+grep -q "^G3_ROLLOUT_ROLLED_BACK steps=$STEPS\$" <<<"$o" || fail "rollback: $o"
 left="$(own -A -t -c "select (select count(*) from pg_namespace where nspname in ('postona_x_resv', 'postona_threads_resv')) || '/' || (select count(*) from pg_roles where rolname in ('postona_resv_api', 'postona_resv_worker'))")"
 [ "$left" = "0/0" ] || fail "G3 left after the rollback: $left"
 mode=preflight; o="$(ro 2>&1)" || fail "preflight after rollback: $o"; grep -q 'G3_ROLLOUT_PREFLIGHT_PASS fresh' <<<"$o" || fail "preflight after rollback: $o"
-echo "OK RB refused before any change: live rows, the uncertain rows alone, rows not stated, login members; then 15 steps rolled back (X $xrows, Threads $trows discarded), G3 schemas + roles gone, preflight fresh again"
+echo "OK RB refused before any change: live rows, the uncertain rows alone, rows not stated, login members; then $STEPS steps rolled back (X $xrows, Threads $trows discarded), G3 schemas + roles gone, preflight fresh again"
 echo "G3LS_LOCAL_STACK_PASS"
