@@ -1,0 +1,11 @@
+# F5 M2 archive manifest
+- original_path: .agent_v2/tasks/F5.md
+- archive_path: .agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/files/.agent_v2/tasks/F5.md
+- original_commit: 57f4cf9d2bac7a67998d7d768a9a9f1f72e296cd (L5 completion source)
+- original_blob: 3490b3dfe8d1a539cd3f6956e40045738f3a6a7b
+- archive_blob: 3490b3dfe8d1a539cd3f6956e40045738f3a6a7b
+- size_bytes: 24155
+- SHA256: 89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908
+- restore: source/archive blob and text equality PASS
+- PR279_HEAD: 9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12
+- append_only: true

@@ -1,0 +1,14 @@
+{
+  "slot": "G10",
+  "task_id": "orchestration-v3-gh-g10-pilot-lifecycle-verification-20261018",
+  "snapshot_commit": "4456712ba6413cc2533842bb33c283619bb7f082",
+  "files": [
+    {
+      "original_path": ".agent_v3_gh/tasks/G10.md",
+      "archive_path": ".agent_v3_gh/archive/2026-10-18-G10-orchestration-v3-gh-g10-pilot-lifecycle-verification-20261018/files/.agent_v3_gh/tasks/G10.md",
+      "size": 8099,
+      "sha256": "527af9649ec038ba45b55896c1e004c867c6ab6f92ffaeac34817f676910f58a",
+      "snapshot_commit": "4456712ba6413cc2533842bb33c283619bb7f082"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# F6 archive provenance — 2026-10-18
+- task_id: common-ai-f6-postona-openai-consult-offline-one-request-integration-20261018
+- original_path: .agent_v2/tasks/F6.md
+- archive_path: .agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md
+- source task's last recorded L6 decision commit: 6a63f96f0dd4af76898c4bbb0e2d8feca78a9f58 (original creation commit NOT_VERIFIED)
+- archive Git commit: 3ac0458f940ecf5748a9a696c059aa5900038c2c
+- source/archive Git blob: a92b67257fae6afcc01096ad6c376d7f6cc89150
+- size (UTF-8): 15014 bytes
+- SHA256 (archive content): cd3f98dd01f7ae8b8feb0ead74043a4529e9188dc2d08140160fe351f424ae4a
+- verification: fetched original and archived GitHub content; exact string and Git blob match. SHA256 via standalone JS SHA-256 with 'abc' known-vector self-test. Original creation commit not independently found. Archived task preserved byte-for-byte; never edit.
+- HISTORY_INDEX: indexed previously; append checksum verification entry separately.

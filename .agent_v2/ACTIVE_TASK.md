@@ -8,57 +8,59 @@
 
 ## F1
 - slot: F1
-- status: ready
-- task_id: postona-f1-x-manual-publish-ui-source-20261018
+- status: done
+- task_id: postona-f1-m3-simulated-afterfreeze-ui-contract-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（新F1担当）
 - completion_code: L1
 - recommended_model: Sonnet5（高）
 - current_task_path: .agent_v2/tasks/F1.md
 - current_report_path: .agent_v2/tasks/F1.md#report
-- previous_archive: .agent_v2/archive/2026-10-18-F1-kabumori-f1-ai-ask-b0-terminal-finish-auth-fix-20261014/
-- dependencies: POSTONA総合指令室 Issue269; F3 X manual publish/PR182/224/257/262; F4 G4 Issue131 X verified/token interface; F5 T13 service active; PR238 Auth UI protected
-- blocker: API real publish/actual verified credential/managed Auth remain unconnected; offline UI only. Must check independent clean F1 worktree and 30-slot conflicts before start; production/SNS/merge/deploy NO_GO.
-- slot_use: Implement POSTONA source-only X manual publish form/preview/safe disabled send and initial home navigation; no edits to schedule.tsx or F4/F5 Auth screens. Archive SHA256 7b601b2c01d982dc99aed3a45616bdd48349b6a02b10b30835898088b10ea1fc and restore verified before reassignment.
+- previous_archive: .agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/
+- dependencies: PR #274 UI → PR #277 adapter → PR #283 restart guard, F3 PR #278 simulated/afterFreeze contract, F3 PR #272
+- blocker: real send not connected (F3 publish switch OFF, F4 credential source / F5 entitlement not live); send disabled; independent clean worktree and fresh origin/main required
+- slot_use: G1 TASK 2026-10-19: apply F3 PR278 simulated/afterFreeze result marks to the manual X post screen and adapter, source-only, no API/DB/Auth/production operations
+
+- L1_acceptance: PR288 c41e20ce508530328570d22c4a0cbc0a43fb2a2e PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; 3 approved F1 milestones complete, next scope requires command.
 
 ## F2
 - slot: F2
 - status: review_required
-- task_id: kabumori-f2-pause-delivery-runtime-candidate-20261015
+- task_id: postona-f2-manual-x-ui-iphone-simulator-offline-qa-20261019
 - owner: claude
 - next_owner: chatgpt
-- return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
+- return_to: かぶモリアプリG2のちゃ（POSTONA QA担当）
 - completion_code: L2
-- recommended_model: Opus5.5（高）
+- recommended_model: Sonnet5（中）
 - current_task_path: .agent_v2/tasks/F2.md
 - current_report_path: .agent_v2/tasks/F2.md#report
-- dependencies: F2 design PR #210 merged; F8 news gate runtime; shared POSTONA/AI protected
-- blocker: L2 PASS_SOURCE_FIX / SECURITY_FOCUSED_REREVIEW_REQUIRED; Draft #213 head c10f1da593ba3dc365cf340e9569ae1caa9789b1; J2 R2(P1)/R3(P2) corrected in source candidate; production NO_GO; managed preflight pending
+- dependencies: F1 Draft PR #274/#277/#283/#288 (stack head c41e20ce508530328570d22c4a0cbc0a43fb2a2e); Issue #269 6251801894 / 6260001714
+- blocker: L2 review; Simulator QA done — keyboard avoidance FAIL(P2), dark status bar FAIL(P3) for F1 owner; real device NOT_VERIFIED
 - production_mutation_window: FORBIDDEN
-- previous_archive: .agent_v2/archive/2026-10-15-f2-pause-offline-design-accepted.md
-- slot_use: kabumori X gate/planner/queue/Push source-only candidate after L2 design archived
+- previous_archive: .agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md
+- slot_use: POSTONA manual X post UI iPhone Simulator offline/mock QA (no F1/F3/F4/F5 source edits)
 
 ## F3
 - slot: F3
-- status: in_progress
-- task_id: postona-f3-m1-single-text-post-offline-end-to-end-20261018
+- status: done
+- task_id: postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: POSTONA G3のちゃ（新F3担当・X投稿／予約担当）
 - completion_code: L3
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F3.md
 - current_report_path: .agent_v2/tasks/F3.md#report
-- dependencies: Issue269 M1, F1 hand-input UI, F4/G4 PR126 X identity/token, F5 entitlement/T13, F3 PR224→257→262 and PR182
-- blocker: real X identity/credential and managed Auth not integrated; source-only; real X/prod NO_GO
-- slot_use: M1 synthetic Auth/PG17/mock X single-text send with send-before guard, receipt durable readback; G1 UI, G4 token, G5 Auth protected
-- previous_archive: .agent_v2/archive/2026-10-18-F3-postona-f3-publish-enabled-t13-active-service-write-guard-20261017/
+- dependencies: Issue269 M1-F1 #6246561404, F5 PR275 live entitlement contract, F3 PR272/262/257/224/182, G4 PR126 verified/credential, F1 UI
+- blocker: real X token/verified and managed Auth absent; source-only mock X, real X/prod NO_GO
+- slot_use: Fix M1-F1 pre-send live F5 service state and G4 owner/credential generation + publish guard; unknown uncertain and after_freeze receipt; synthetic E2E only
+- previous_archive: .agent_v2/archive/2026-10-18-F3-postona-f3-m1-single-text-post-offline-end-to-end-20261018/
 
 ## F4
 - slot: F4
 - status: done
-- task_id: postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
+- task_id: postona-f4-pr276-j2-p2x2-provenance-owner-epoch-atomic-credential-fix-20261018
 - owner: claude
 - next_owner: none
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
@@ -66,46 +68,46 @@
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F4.md
 - current_report_path: .agent_v2/tasks/F4.md#report
-- dependencies: PR258 head 713955b5 and J2 V2 owner-fence race; F5 lifecycle interface coordinated
-- blocker: source candidate only, actual Vault and managed unapproved; production/pilot NO_GO
-- previous_archive: .agent_v2/archive/2026-10-17-F4-postona-f4-pr251-android-intent-filter-p2-fix-20261017/F4.md
-- slot_use: minimal CAS SQL owner race P2 correction and PG17 regression
+- dependencies: Issue269 comment6248764751 SOURCE_ONLY_SECURITY_FIX_GO; J2 PR276 V2 P2x2; PR276 head 39ab57ab; PR126 65f49f98; G3 PR278 atomic credentialFor 64hex; F5 owner lifecycle ACK
+- blocker: PR282 source candidate delivered; F5 owner epoch missing/ACK pending, G3 atomic port ACK pending, independent J2 focused security rereview required; real OAuth/X/managed/prod NO_GO
+- previous_archive: .agent_v2/archive/2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018/
+- slot_use: G4-owned source-only P2x2 repair + atomic provider contract, isolated PG17/mock no production
 
-
-- l4_verdict_20261018: PASS_SOURCE_FIX / F5_ACK_PENDING / LIMITED_SQL_R1_RECHECK_RECOMMENDED / PRODUCTION_AND_PILOT_NO_GO; PR263 HEAD a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705 Draft.
 ## F5
 - slot: F5
-- status: ready
-- task_id: postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018
+- status: done
+- task_id: common-account-f5-shared-owner-epoch-monotonic-source-candidate-20261019
 - owner: claude
-- next_owner: claude
+- next_owner: none
 - return_to: 共通アカウントG5のちゃ（新F5担当）
 - completion_code: L5
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F5.md
 - current_report_path: .agent_v2/tasks/F5.md#report
-- dependencies: POSTONA総合指令室 Issue269 comment6245437308; F3 PR224/257/262 and G4 token/verified owner; Issue267 ACK pending; PR233 pre-managed restricted recheck
-- blocker: real Auth/managed Supabase/production/migration/SNS unapproved; G4 credential owner and F3 sender contract still source-only
-- review_required: conditional only for new security boundary, Codex Sol（高）
-- previous_archive: .agent_v2/archive/2026-10-18-F5-common-account-f5-phase13-d3-hosted-sandbox-preflight-readiness-20261017/
-- slot_use: initial manual X Auth→POSTONA entitlement→owner→T13→publish-enabled→pre-send recheck source-only local synthetic integration and Issue267 read-only ACK; no actual X or DB
+- previous_archive: .agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/
+- dependencies: Issue269 comment 6251536852; G4 PR282 owner epoch; G3 PR278; J2 review
+- blocker: independent clean worktree and exact membership ownership/PR overlap need verification before coding
+- review_required: focused Codex Sol（高） before production application; no J slot assigned
+- slot_use: shared cross-app owner epoch source candidate, offline tests only; AI Option B remains HOLD
+- latest_result: 2026-10-19 JST OWNER_EPOCH_SOURCE_CANDIDATE_COMPLETE; Draft PR285 head 3a5eef3d6b981e0646683ce101a22542fd0a4e2f on PR279 9dee53c5; private.account_lifecycle_brand_owner_epoch(p_brand_id text)->bigint (owner-only STABLE definer, NULL=refuse unless exactly one owner and recorded owner matches), bumps on every committed owner-row write incl. cascade/truncate, never decreases, history survives the rollback file, reconciliation at install, bypass detected + owner-only resync; 14 PG17 tests + 24/24 mutants + provenance 9 + doc test 6, harness 183; findings: authenticated keeps TRUNCATE/TRIGGER/REFERENCES on brand_memberships (L-1), PR282 stand-in returns 0 for unknown and lacks cross-check/history guard (L-2); NOT applied, no API grant, no other slot file edited; apply needs Sol review + PR233 recheck + user approval; J2 PR282 re-review still ready (no PASS claimed); production NO_GO
+
+- l5_verdict: 2026-10-19 PASS_SOURCE_CANDIDATE / SECURITY_REVIEW_REQUIRED / PRODUCTION_NO_GO; PR285 HEAD 3a5eef3d6b981e0646683ce101a22542fd0a4e2f Draft; PG17 14, mutations24/24 reported; G3 TRUNCATE privilege L-1, G4 test stand-in NULL mismatch L-2, retained owner UUID privacy L-3; J2 G4 review ready—do not hijack; limited independent Sol（高） pending. Archive before reuse.
 
 ## F6
 - slot: F6
-- status: ready
-- task_id: common-ai-f6-postona-openai-consult-offline-one-request-integration-20261018
+- status: done
+- task_id: common-ai-f6-gateway-provider-ledger-callstore-conformance-gap-offline-20261019
 - owner: claude
-- next_owner: claude
-- blocker: AI consultation server-side POSTONA entitlement/stop enforcement missing, mock-only; F5 X M1 and F1 UI source changes protected; production NO_GO
+- next_owner: none
+- blocker: L6 PASS_OFFLINE_CONFORMANCE_WITH_GAPS; GAP-1/2/3 candidate F6 isolated ref fixes pending separate next TASK/archive; GAP-4 ledger source of truth; Auth/managed/production NO_GO.
 - return_to: 共通AI基盤のちゃ（OpenAI・Claude API専用チャット）
 - completion_code: L6
 - recommended_model: Opus5.5（高）
 - current_task_path: .agent_v2/tasks/F6.md
 - current_report_path: .agent_v2/tasks/F6.md#report
-- dependencies: Issue269 comment6245437658, existing OpenAI consult and PR239/241/249/264; F5 active X auth M1, F1 active X UI; no overlap
-- previous_archive: .agent_v2/archive/2026-10-18-f6-f5-account-deletion-cleanup-contract.md
-- slot_use: one offline mocked POSTONA OpenAI consult→shared provider/cost/authorization/dedupe E2E; no product runtime external calls
-
+- dependencies: PR284 HEAD 9c8421344f7a363b5e4b8a892eb4e9ff4dc8e8f7 (stack base), PR273, PR249 ai_calls migration, H5 bridge PR198; G5 PR279 design only / Option B not approved; POSTONA handler owner NOT_CONFIRMED.
+- previous_archive: .agent_v2/archive/2026-10-19-F6-common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019/MANIFEST.md
+- slot_use: completed isolated cross-app provider/ledger/CallStore conformance PR289; retain before archive and next approved F6 task
 ## F7
 - slot: F7
 - status: ready
@@ -155,18 +157,17 @@
 
 ## F10
 - slot: F10
-- status: review_required
-- task_id: orchestration-v3-gh-pilot-rule-integration-f10-20261018
+- status: idle
+- task_id: none
 - owner: claude
-- next_owner: chatgpt
-- return_to: かぶモリ30枠統括のちゃ（このチャット）
+- next_owner: none
+- return_to: none
 - completion_code: L10
-- recommended_model: Opus5.5（高）
+- recommended_model: none
 - current_task_path: .agent_v2/tasks/F10.md
 - current_report_path: .agent_v2/tasks/F10.md#report
-- dependencies: PR229 merged; PR252 merged; Issue244; Draft PR248/253; prior F10 task archived
-- blocker: pilot G/H activation, main rule merge and slot assignment not authorized
-- slot_use: V3 pilot rules integration candidate and protected 30-slot routing
+- blocker: G10 V3 cutover; do not assign F10
+- previous_archive: .agent_v2/archive/2026-10-18-F10-orchestration-f10-v3-automation-readiness-compat-source-20261018/
 
 ## J1
 - slot: J1
@@ -186,26 +187,26 @@
 
 ## J2
 - slot: J2
-- status: done
-- task_id: postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018
+- status: ready
+- task_id: postona-j2-pr282-r1-r2-atomic-credential-focused-rereview-20261018
 - owner: codex
-- next_owner: none
+- next_owner: codex
 - return_to: POSTONA｜マルチSNS化・開発統括（G4）のちゃ
 - completion_code: V2
 - recommended_model: Sol（高）
 - current_task_path: .agent_v2/tasks/J2.md
 - current_report_path: .agent_v2/reports/J2.md
-- dependencies: PR263 HEAD a1cc77e4cb3b09b0775a7e60c2c76fecd18f3705 and F5 checked-owner contract ACK
-- blocker: PASS_FOCUSED_REVIEW / F5_ACK_PENDING; private-helper contract ACK and managed/H5 integration remain; production/pilot NO_GO
-- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr260-android-intent-filter-p2-focused-rereview-20261017/
-- slot_use: PR263 narrow review complete; PG17 behavior14/races13/13/mutations26/26/independent synchronized9 PASS; no source edits or new P2+ finding; V2 accepted by G4; retain F5 ACK gate
+- dependencies: PR282 HEAD39b9064dc79ad52b430ba820006cd3310bf3140f on PR276 HEAD39ab57ab; prior J2 V2 P2x2; G3 PR278 and F5 owner epoch missing
+- blocker: Focused security rereview NOT_STARTED; F5 owner epoch unavailable in real source and G3 atomic ACK pending; no real OAuth/Vault/X/managed/production/merge/deploy
+- previous_archive: .agent_v2/archive/2026-10-18-J2-postona-j2-pr276-x-oauth-credential-security-review-20261018/
+- slot_use: independent restricted source-only security retest P2x2 + atomic token generation, no product edits
 
 ## J3
 - slot: J3
-- status: ready
+- status: done
 - task_id: kabumori-j3-f2-pr213-p1p2-focused-rereview-20261018
 - owner: codex
-- next_owner: codex
+- next_owner: none
 - return_to: かぶモリアプリG1のちゃ（運用休止・全体統括）
 - completion_code: V3
 - recommended_model: Sol（高）
@@ -215,6 +216,9 @@
 - blocker: Previous J3 cancelled worktree/uncommitted state NOT_VERIFIED. MUST use a verified independent clean checkout/worktree without touching old one; source-only/no real X/AI/managed/production.
 - previous_archive: .agent_v2/archive/2026-10-17-J3-duplicate-review-cancelled/
 - slot_use: Independent narrow review of F2 R2 P1 unauthenticated AI-generation entry and R3 P2 wrong-owner planner restore, POSTONA/other-brand nonregression only. No broad review; G1 receives V3 before F2 L2 closure. No edits to F2 source.
+
+- pause_closure: USER_CANCELLED_UNSTARTED / V3 NOT_EXECUTED; no security PASS
+- pause_archive: .agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/
 
 ## J4
 - slot: J4

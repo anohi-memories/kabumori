@@ -764,3 +764,75 @@ J2 V2 archive 2026-10-16 F2 F8: .agent_v2/archive/2026-10-16-J2-f2-f8-pause-inte
 ## F6 to F5 AI deletion contract archive — 2026-10-18
 - task_id: `common-ai-f6-f5-account-deletion-ai-cleanup-contract-20261017`; L6 PASS_CONTRACT / PRODUCTION_NO_GO; PR264 Draft head `c558264218badd1ebbdb9063e70f8e7cce9ac23d` at previous verification.
 - original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-18-f6-f5-account-deletion-cleanup-contract.md`; archive commit `c9dc5d5cad885105881597e99cd47a60daaf22d8`, original/archive Git blob `42614c8bbdd1a258e39f938d115795407beaa4f5`, 9410 characters, exact UTF-8 readback comparison PASS. Independent SHA256/MANIFEST NOT_VERIFIED (follow-up required before declaring full archival compliance).
+
+## F10 V3 pilot rules accepted — 2026-10-18
+- task_id `orchestration-v3-gh-pilot-rule-integration-f10-20261018`; L10 PASS_PILOT_RULES / production NO_GO; PR #268 merge `283ab3eaeb4cf04458936834f4ad0da3dcde3a67`.
+- original_path `.agent_v2/tasks/F10.md`; archive_path `.agent_v2/archive/2026-10-18-F10-orchestration-v3-gh-pilot-rule-integration-f10-20261018/files/.agent_v2/tasks/F10.md`.
+- original bytes 14407; SHA256 `e24d2407cdd6c1379296726aea3f44bcc50cf6298c78c4c685aeb906138328c1`; original Git blob `183b1b6a5516677bcbcf99dd0c059f8e1be078da`; read-back restore required before G10 activation.
+
+- 2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017: `.agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md` (verified exact Git blob; SHA256 manifest pending)
+
+## 2026-10-18 かぶモリF2/J3ユーザー指示休止保存
+- archive: `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/` (3 original files + MANIFEST.json + SHA256SUMS); verified original Git blob/SHA256/restore in manifest; original commit not independently identified. F2 L2=USER_DEFERRED_SOURCE_ONLY (PR213 Draft/unmerged, R2(P1)/R3(P2) UNVERIFIED, NO security PASS); J3 V3=USER_CANCELLED_UNSTARTED (NOT_REVIEWED); F2/J3 done/none for slot release; restart requires fresh safety review.
+
+## 2026-10-18 F1 X手入力UI L1受入スナップショット
+- task_id: `postona-f1-x-manual-publish-ui-source-20261018` / L1 PASS_SOURCE_CANDIDATE, PRODUCTION_NO_GO. Original `.agent_v2/tasks/F1.md` → `.agent_v2/archive/2026-10-18-F1-postona-f1-x-manual-publish-ui-source-20261018/F1.md` (19894 bytes, SHA256 `6ff5a42b1abe94e5c35bb7be52da195ad95742817c58cc878016bd5f8c736fa3`, original Git blob `d1422e0faa9bb9af79f385ca10422c989eec69ec`); byte-for-byte restore verified, MANIFEST.json/SHA256SUMS recorded. PR274 Draft, HEAD `007dc3d68bdb6c57e2cfb6831090f6544704a3c3`. Snapshot source ref main; per-file origin commit not separately established.
+
+- 2026-10-18 | F3 | `postona-f3-m1-single-text-post-offline-end-to-end-20261018` | L3 PASS_SOURCE_CANDIDATE / production NO_GO; PR272 HEAD 559b3e54 | `.agent_v2/archive/2026-10-18-F3-postona-f3-m1-single-text-post-offline-end-to-end-20261018` | 22352 bytes; SHA256 `e3c36e29f29374bfe4501f6dada3df4ca138e56275ff1dedc5abf15f62a4ab6b`; original blob `f3d9eaad`; exact restore checked.
+
+## F6 POSTONA OpenAI consult offline seam archive — 2026-10-18
+- task_id: `common-ai-f6-postona-openai-consult-offline-one-request-integration-20261018`, L6 PASS_OFFLINE_INTEGRATION / PRODUCTION_NO_GO; Draft PR273 HEAD `84ee0d6f7cf04b35f790d074435456b4e591a8d1`.
+- original_path: `.agent_v2/tasks/F6.md`; archive_path: `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md`; archive commit `3ac0458f940ecf5748a9a696c059aa5900038c2c`.
+- source/archive Git blob `a92b67257fae6afcc01096ad6c376d7f6cc89150`, exact content read-back PASS; 9508 JS characters. Independent SHA256/MANIFEST NOT_VERIFIED. New handler TASK blocked on F5 AI-specific authorization contract and owner confirmation.
+
+## F4 archive verification — postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
+- archive_path: `.agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md`; original: `.agent_v2/tasks/F4.md` at `ea2c1d6c` (L4 acceptance), replaced in `97df19a4`
+- verified by F4 (`postona-f4-m1-x-identity-verified-credential-port-source-20261018`), 2026-10-18 JST: bytes 11147; SHA256 `e406e90f22850ffe07b980260ef0461eff1d11034431dcfcfa72b7a2c249b305` equals SHA256SUMS; git blob `80f70022404f2e585f49b14681817422ab48344c` = original = parent of the replacing commit. MANIFEST.md and SHA256SUMS were already present (added at L4) and were not changed; this entry completes the earlier "SHA256 manifest pending" line.
+
+## F6 archive 2026-10-18 checksum audit
+- Archive `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.md` original/blob read-back exact PASS; UTF-8 bytes 15014; SHA256 `cd3f98dd01f7ae8b8feb0ead74043a4529e9188dc2d08140160fe351f424ae4a` (known-vector tested JS SHA256).
+- Provenance audit `.agent_v2/archive/2026-10-18-f6-postona-openai-consult-offline-seam.audit/MANIFEST.md`; checksum file sibling `SHA256SUMS`; both GitHub read-back exact PASS. Source last recorded L6 commit `6a63f96f0dd4af76898c4bbb0e2d8feca78a9f58`, original creation commit NOT_VERIFIED. Archive append-only, original content unchanged.
+
+- 2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018: `.agent_v2/archive/2026-10-18-J2-postona-j2-pr263-threads-owner-fence-race-p2-rereview-20261018/` TASK+Report exact blob restore PASS; MANIFEST.md and SHA256SUMS recorded; prior V2 accepted.
+
+- 2026-10-18 | F3 | `postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018` | L3 source accepted / production NO_GO; PR278 `bf76a7c7` | `.agent_v2/archive/2026-10-18-F3-postona-f3-m1-f1-live-pre-send-entitlement-credential-fence-20261018` | bytes=25007 SHA256 `44eda7b2d975d979daaf6f24251d029b7e5e3096b850aa3a6c559e2a9a66e72c`; restore verified; ACTIVE status update blocked.
+
+## F5 M1 manual X Auth/T13 source contract — 2026-10-18
+- task_id: `postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018`; status done / L5 PASS_SOURCE_CONTRACT / PRODUCTION_NO_GO.
+- original_path: `.agent_v2/tasks/F5.md`; archive_path: `.agent_v2/archive/2026-10-18-F5-postona-f5-m1-x-first-manual-publish-auth-entitlement-t13-contract-20261018/files/.agent_v2/tasks/F5.md`.
+- size: 28694 bytes; SHA256 `58fac32220493a5f94c799109a5b065cf99353bc298d633ec3fe2bf754871e54`; source/archive Git blob `0def34270d24a39510b21a78b803e9ba0905f160`. Restore equality PASS. Original commit `c34070ccea65498bc1bfa10109cb6e5adf63c416`; append-only MANIFEST.md and SHA256SUMS.
+- PR275 HEAD `ec0b3a6f4432c1d01ba3671f57d8a508c06d8777` Draft; followups Issue267 G5 ACK `6246624018` and Issue266 AI ACK `6247539818`.
+
+## F1 M1 archive 2026-10-18
+- task_id: postona-f1-m1-manual-ui-single-post-contract-adapter-20261018
+- source: .agent_v2/tasks/F1.md
+- archive: .agent_v2/archive/2026-10-18-F1-postona-m1-single-post-contract-adapter-L1/F1.md
+- bytes: 20263; SHA256: 77eb6093a63bbc6768404da6fa51c19c0e3032838d06170a204438374b42769b
+- Git blob: 6ddf421bddb2b5784b00dbdd40abf62fbd31827d; restore verified; MANIFEST.json and SHA256SUMS present. Origin commit not separately verified.
+
+- 2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018: `.agent_v2/archive/2026-10-18-F4-postona-f4-m1-x-identity-verified-credential-port-source-20261018/` F4 TASK with embedded Report; SHA256 1c605186278a1c9d4e39da22b94f37ef6b3eb0a14f614aee3213db4e46555efb; original blob 34ea870613fad189225171671f2828e53d69da0d; original L4 acceptance commit fd8981fc5e68fe4feeac9fbdfc50f6d7d2af744a; restore PASS.
+
+- 2026-10-18-J2-postona-j2-pr276-x-oauth-credential-security-review-20261018: .agent_v2/archive/2026-10-18-J2-postona-j2-pr276-x-oauth-credential-security-review-20261018/ J2 TASK+Report V2 CHANGES_REQUIRED P2x2; MANIFEST/SHA256SUMS, git blob restore PASS; source commit 98ca0599e8de6557a8e57b071dbf665535e79db9.
+
+## F5 M2 AI consult authorization gap — archived 2026-10-19
+- task_id `postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018`, L5 done PASS_SOURCE_DESIGN / G6_HANDLER_CHANGE_HOLD / PRODUCTION_NO_GO. PR279 HEAD `9dee53c51fbcb30a1c2f4aaea768f4cc76fdfe12` Draft.
+- original_path `.agent_v2/tasks/F5.md`; archive_path `.agent_v2/archive/2026-10-19-F5-postona-f5-m2-ai-consult-auth-acl-owner-gap-source-design-20261018/files/.agent_v2/tasks/F5.md`.
+- original L5 commit `57f4cf9d2bac7a67998d7d768a9a9f1f72e296cd`, original/archive Git blob `3490b3dfe8d1a539cd3f6956e40045738f3a6a7b`, 24155 bytes, SHA256 `89e369c337813310708827abaf2d0da191861596ff81a1b617082e843fded908`. MANIFEST.md/SHA256SUMS saved. Restore original/blob and bytes PASS; append-only.
+
+## F1 M2 archive 2026-10-19
+- task_id: postona-f1-m2-restart-pending-uncertain-guard-20261018
+- original_path: .agent_v2/tasks/F1.md
+- archive_path: .agent_v2/archive/2026-10-19-F1-postona-m2-restart-guard-L1/F1.md
+- size: 15796 bytes; SHA256 `2d22de9b43d6cd01747f02555084e2dba4f299ab446ebacae9a18c22970d9a78`; original/archive Git blob `c8dffbda56cb181e13a748b3fac9885b1f024353`.
+- original commit `bb709d38ec81113706926117834354a05e289945` (blob at that commit equals the archive blob and bytes). MANIFEST.json and SHA256SUMS saved (SHA256SUMS check OK). Restore equality PASS; append-only.
+- L1 PASS_SOURCE_CANDIDATE / PRODUCTION_NO_GO; PR283 HEAD `b4b761c4dd43cc4c8c1ee1533413b46f088ba21f` Draft (base PR277 branch).
+
+## F6 cross-app AI gateway offline contract — archived 2026-10-19
+- task_id `common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019`, L6 done PASS_OFFLINE_CONTRACT / PRODUCTION_NO_GO. PR284 HEAD `9c8421344f7a363b5e4b8a892eb4e9ff4dc8e8f7` Draft.
+- original_path `.agent_v2/tasks/F6.md`; archive_path `.agent_v2/archive/2026-10-19-F6-common-ai-f6-cross-app-gateway-policy-ledger-idempotency-offline-contract-20261019/files/.agent_v2/tasks/F6.md`.
+- original L6 commit `9a51a748054c42ff32a5d71fb646bb9e9ce03c6a` (created `a3134ec2abbd85643543159c2a6ded4e4c151d6a`), original/archive Git blob `22c90227890f0c2468bf58ac5a4110446e87e4c4`, 15229 bytes, SHA256 `7b3ce09670c1e7219d02ccaf5bb700707172820a7b5f45b6c8d664cbd2b938be`. MANIFEST.md/MANIFEST.json/SHA256SUMS saved. Restore bytes/blob PASS; append-only.
+
+## F2 kabumori pause final close record — archived 2026-10-19 (append to 2026-10-18 pause archive)
+- task_id `kabumori-f2-pause-delivery-runtime-candidate-20261015`, final status done/none, USER_DEFERRED_FOR_KABUMORI_PAUSE / SOURCE_ONLY_FREEZE / NOT a security PASS. PR213 Draft/unmerged/un-deployed.
+- original_path `.agent_v2/tasks/F2.md`; archive_path `.agent_v2/archive/2026-10-18-kabumori-pause-f2-j3-user-deferred/.agent_v2__tasks__F2.final-close-20261018.md`.
+- original commit `61c34f63a1e1bafafa60249b136b81530b22f2c1`, original/archive Git blob `c4fa1a28c98863fbf27d78c64518ff2daa7ab213`, 7960 bytes, SHA256 `2a1a59341e25f97b7bdf99020088bb8ff7e91c01adfd05a2f09788c9975e47c1`. MANIFEST.json record appended, SHA256SUMS line appended (shasum -c 4/4 OK). Restore bytes/blob PASS; append-only. F2 reused for `postona-f2-manual-x-ui-iphone-simulator-offline-qa-20261019`.

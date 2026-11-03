@@ -1,0 +1,13 @@
+# F4 archive — 2026-10-18
+- original_path: .agent_v2/tasks/F4.md
+- archive_path: .agent_v2/archive/2026-10-18-F4-postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017/F4.md
+- previous_task_id: postona-f4-pr258-credential-claim-owner-fence-race-p2-fix-20261017
+- original_git_blob_sha1: 80f70022404f2e585f49b14681817422ab48344c
+- archived_git_blob_sha1: 80f70022404f2e585f49b14681817422ab48344c
+- original_and_archive_git_blob_exact_match: PASS (verified by GitHub fetch_file)
+- SHA256: e406e90f22850ffe07b980260ef0461eff1d11034431dcfcfa72b7a2c249b305
+- source_commit: ea2c1d6ca2b20b6a31656503d355f12819b1634c (F4 L4 acceptance metadata)
+- file_size_bytes: 11147
+- restored_content_check: PASS (exact Git blob re-fetch)
+- original_report: embedded in F4.md
+- archive_policy: append-only
