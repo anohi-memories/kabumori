@@ -935,6 +935,9 @@ MUTANTS = [
     ("ps timeout not raised from 10s", "g10runner/procs.py",
      "PS_TIMEOUT = 20.0", "PS_TIMEOUT = 10.0",
      "test_task48_ps_robustness.PsRobustness.test_retries_once_on_timeout_then_succeeds"),
+    ("unhalt ignores explicit agent_halt_ids (split cannot clear exec)", "g10runner/control.py",
+     "            if agent_halt_ids is None:", "            if True:  # agent_halt_ids is None",
+     "test_task24_blockers.AgentHaltFlag.test_unhalt_uses_explicit_agent_halt_ids_over_self"),
 ]
 
 

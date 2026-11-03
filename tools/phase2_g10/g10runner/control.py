@@ -225,8 +225,12 @@ class Control:
                     problems.append("evidence mismatch (supervisor reported absent): " + run_id)
         return problems
 
-    def unhalt(self, ack_reason):
-        """排他ロックを保持したまま、最終の不在確認 → 人の署名つきUNHALT → 解放（v5.4 §4）。"""
+    def unhalt(self, ack_reason, agent_halt_ids=None, agent_head_seq=None):
+        """排他ロックを保持したまま、最終の不在確認 → 人の署名つきUNHALT → 解放（v5.4 §4）。
+
+        分割（専用ユーザー）では exec の agent_halts は exec の agent-out(0700) にあり control(yuya) からは読めない。
+        その場合は呼び出し側が exec から読んだ agent_halt_ids＋agent_head_seq を渡す（None のときだけ自分の
+        agent_events から読む＝単一レイアウトの従来動作）。"""
         with FileLock(self.layout.halt_lock, "ex") as lock:
             problems = self.completion_problems()
             try:
@@ -236,11 +240,12 @@ class Control:
             if problems:
                 return None, problems
             st = self.read_state()
-            agent_events = self.agent_events.read_all()
-            agent_halts = [r["event_id"] for r in agent_events if r["type"] == "HALT_AGENT"]
-            head_seq = agent_events[-1]["seq"] if agent_events else 0
-            payload = {"halt_ids": sorted(st.control_halts.keys()), "agent_halt_ids": sorted(agent_halts),
-                       "agent_head_seq": head_seq,
+            if agent_halt_ids is None:
+                agent_events = self.agent_events.read_all()
+                agent_halt_ids = [r["event_id"] for r in agent_events if r["type"] == "HALT_AGENT"]
+                agent_head_seq = agent_events[-1]["seq"] if agent_events else 0
+            payload = {"halt_ids": sorted(st.control_halts.keys()), "agent_halt_ids": sorted(agent_halt_ids),
+                       "agent_head_seq": int(agent_head_seq or 0),
                        "completion_digest": sha256_hex(canonical({"problems": problems})),
                        "ack_reason": ack_reason}
             rec = self.control.append("UNHALT", payload, self.signer, "human", self.now())

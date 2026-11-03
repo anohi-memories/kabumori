@@ -65,6 +65,20 @@ class BlockersBase(FirstRunBase):
 
 class AgentHaltFlag(BlockersBase):
 
+    def test_unhalt_uses_explicit_agent_halt_ids_over_self(self):
+        # 分割（専用ユーザー）: exec の agent_halts は exec の 0700 agent-out にあり control は読めない。
+        # 呼び出し側が渡した agent_halt_ids / agent_head_seq が、control 自身の agent_events より優先されること。
+        fr, root = self.approved_root()
+        agent = self.agent(root)
+        agent.halt_agent("observation_unavailable", {"run_id": "run-x"})  # control 自身の agent_events にも halt が入る
+        control, _ = autorun.open_control(root)
+        rec, problems = control.unhalt("test", agent_halt_ids=["exec-halt-id-1", "exec-halt-id-2"],
+                                       agent_head_seq=42)
+        self.assertIsNotNone(rec, problems)
+        unhalts = [r for r in autorun.open_control(root)[0].control.read_all() if r["type"] == "UNHALT"]
+        self.assertEqual(unhalts[-1]["payload"]["agent_halt_ids"], ["exec-halt-id-1", "exec-halt-id-2"])
+        self.assertEqual(unhalts[-1]["payload"]["agent_head_seq"], 42)
+
     def test_unhalt_then_s2_cycle_clears_flag_and_detector_launches_once(self):
         fr, root = self.approved_root()
         agent = self.agent(root)

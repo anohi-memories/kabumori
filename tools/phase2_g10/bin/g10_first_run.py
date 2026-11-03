@@ -147,9 +147,12 @@ def cmd_halt(a):
 
 
 def cmd_unhalt(a):
-    """人の署名で HALT を解除する（TASK 21）。実行中のラン・記録の食い違いがあれば解除しない。"""
+    """人の署名で HALT を解除する（TASK 21）。実行中のラン・記録の食い違いがあれば解除しない。
+    分割の exec 自己HALT(agent_halt)を消すときは --agent-halt-ids（exec から読んだ HALT_AGENT の event_id を カンマ区切り）と
+    --agent-head-seq（exec の agent_events の最新 seq）を渡す。"""
     control, _ = open_control(a.root)
-    rec, problems = control.unhalt(a.reason)
+    ids = [x for x in (a.agent_halt_ids or "").split(",") if x] or None
+    rec, problems = control.unhalt(a.reason, agent_halt_ids=ids, agent_head_seq=a.agent_head_seq)
     print(json.dumps({"unhalted": rec is not None, "event_id": rec and rec["event_id"], "problems": problems},
                      ensure_ascii=False))
     return 0 if rec is not None else 1
@@ -416,6 +419,8 @@ def main(argv=None):
     h.add_argument("--root", required=True)
     h.add_argument("--reason", default="human emergency stop")
     u = sub.add_parser("unhalt")
+    u.add_argument("--agent-halt-ids", help="分割: exec の HALT_AGENT event_id をカンマ区切り")
+    u.add_argument("--agent-head-seq", type=int, help="分割: exec の agent_events 最新 seq")
     u.add_argument("--root", required=True)
     u.add_argument("--reason", required=True, help="解除の理由（人の署名とともに記録される）")
     ins = sub.add_parser("install")
