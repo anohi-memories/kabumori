@@ -6,6 +6,8 @@ import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/compon
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { clearAllXReconnectRequired, clearXServiceRestarted, isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
 import { connectionPill, RESTART_HELP_TEXT, RESTART_OBSERVED_ACCOUNTS_TEXT, restartAppliesTo, X_CONNECTION_UNVERIFIED_TEXT } from '@/features/reservations/x-write-view';
+import { ThreadsConnectCard } from '@/features/threads-connect/threads-connect-card';
+import { ThreadsDisconnectCard } from '@/features/threads-disconnect/threads-disconnect-card';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -33,6 +35,7 @@ export default function AccountsScreen() {
   const restarted = isXServiceRestarted(userId);
   const restartObserved = restarted && accounts.some((account) => restartAppliesTo(account, personalId));
   const needsReconnect = xAccount?.connectionStatus === 'needs_attention' || reconnectConfirmed || restartObserved;
+  const threadsAccount = accounts.find((account) => account.platform === 'threads') ?? null;
 
   return (
     <Screen>
@@ -91,6 +94,9 @@ export default function AccountsScreen() {
           </Pressable>
           <Text style={styles.muted}>接続後も投稿機能は自動で有効になりません。</Text>
         </Card>
+
+        <ThreadsConnectCard threadsAccount={threadsAccount} accounts={accounts} reload={reload} preview={status === 'mock_preview'} />
+        <ThreadsDisconnectCard threadsAccount={threadsAccount} accounts={accounts} reload={reload} preview={status === 'mock_preview'} />
 
         <Pressable accessibilityRole="button" onPress={() => router.push('/login-methods')} style={({ pressed }) => [styles.card, pressed && styles.buttonPressed]}>
           <Text style={{ color: colors.ink, fontWeight: '800' }}>ログイン方法</Text>

@@ -118,7 +118,7 @@ test("startConnection: requests only the minimum read, posting, media-upload, an
 test("startConnection: a cross-user or no-membership rejection from the RPC (e.g. ownership DB error) propagates as a real failure, not a fabricated success", async () => {
   await assert.rejects(
     () => startConnection({
-      request: { rawState: "a-sufficiently-long-raw-state-value", codeChallenge: "c", redirectUri: "app://cb" },
+      request: { rawState: "a-sufficiently-long-raw-state-value", codeChallenge: "c", redirectUri: "kabumori-social://oauth-callback" },
       userAccessToken: "user-token", supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, clientId: CLIENT_ID,
       fetchImpl: async () => Response.json({ message: "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED" }, { status: 400 }),
     }),

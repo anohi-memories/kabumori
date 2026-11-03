@@ -25,6 +25,130 @@ function fail(code: string, status: number): never {
   throw new OAuthConnectUserError(code, status);
 }
 
+// G4-02 #6: this entry serves G5's personal MVP only (supabase/candidates/postona_g4_x_oauth_personal_mvp). Unset or anything else
+// answers 503 before any Auth, database or X call. It pins the configuration; that the database runs the same profile is the
+// install's own refusal (each profile's X SQL refuses on the other).
+export const X_AUTH_PROFILE_ENV = "POSTONA_X_AUTH_PROFILE";
+export const X_PRODUCT_AUTH_PROFILE = "personal";
+export function xAuthProfilePinned(value: string | undefined): boolean {
+  return value === X_PRODUCT_AUTH_PROFILE;
+}
+
+// G4-02 #7: the environment value above says what this deployment expects; the DATABASE must agree. Its own answer comes from
+// public.postona_x_connect_profile_v1() (candidates/postona_g4_x_oauth_personal_mvp/006), which exists only in the personal build and
+// reads the catalog. Called with the caller's JWT, first on every start and callback: before GoTrue, the X code exchange and any write.
+// Only exactly "personal" passes. A full or not-installed database (404), "mismatch", any other answer, a timeout or a network failure
+// is X_CONNECT_PROFILE_MISMATCH (503), so nothing proceeds on a guess. An unaccepted JWT stays the usual "sign in again" (401).
+export const X_DB_PROFILE_RPC = "postona_x_connect_profile_v1";
+export async function assertPersonalDatabaseProfile(input: { userAccessToken: string; supabaseUrl: string; anonKey: string }): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${input.supabaseUrl}/rest/v1/rpc/${X_DB_PROFILE_RPC}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: input.anonKey, Authorization: `Bearer ${input.userAccessToken}` },
+      body: "{}",
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    fail("X_CONNECT_PROFILE_MISMATCH", 503);
+  }
+  if (response.status === 401) fail("SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED", 401);
+  const answer = response.ok ? await response.json().catch(() => null) : (await response.body?.cancel(), null);
+  if (answer !== X_PRODUCT_AUTH_PROFILE) fail("X_CONNECT_PROFILE_MISMATCH", 503);
+}
+
+// G4-41: RPC refusals the app must tell apart. A dead or anonymous session means "sign in again" (401, like the
+// missing-token answer of index.ts); the person's workspace failing the one personal-workspace rule (G5's verdict, see
+// supabase/candidates/postona_g4_x_oauth_personal_epoch) means "a retry will not help" (409). Everything else stays 400.
+// G4-46: G5's service-write guard (T13, called first by 005) answers with its own codes -- a dead / anonymous session is the same
+// "sign in again"; no POSTONA service yet, a service or account being ended, a locked account are "a retry will not help" (409);
+// its writer fence being unavailable is transient (503: the app's retry rule).
+const SESSION_REFUSALS = new Set([
+  "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED",
+  "SOCIAL_MOBILE_OAUTH_SESSION_NOT_ACTIVE",
+  "ACCOUNT_LIFECYCLE_AUTH_REQUIRED",
+]);
+const WORKSPACE_REFUSALS = new Set([
+  "OWN_WORKSPACE_CONFLICT",
+  "WORKSPACE_OWNER_UNKNOWN",
+  "WORKSPACE_VERDICT_UNKNOWN",
+  "OWNER_EPOCH_UNAVAILABLE",
+  "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED",
+  "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
+  "SERVICE_NOT_REGISTERED",
+  "SERVICE_NOT_ACTIVE",
+  "SERVICE_DELETION_IN_PROGRESS",
+  "ACCOUNT_DELETION_IN_PROGRESS",
+  "ACCOUNT_LOCKED",
+  // G4-02 #6: G5's MV through the personal profile's generation helper (a moved generation stays 400: start over)
+  "NOT_PERSONAL_WORKSPACE",
+  "WORKSPACE_ABSENT",
+  "SERVICE_GENERATION_UNAVAILABLE",
+  "SERVICE_STATE_UNKNOWN",
+]);
+const TRANSIENT_REFUSALS = new Set(["ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE"]);
+
+// G4-47 (H1 #306 25th, P2 F1): the known codes are classified FIRST. T13 raises its refusals with SQLSTATE 42501, which PostgREST
+// answers with HTTP 403 for an authenticated caller; keeping 401 / 403 first turned every T13 refusal into a bare 403. A 401 / 403
+// whose message is not a known code (PostgREST's own JWT / ACL errors) is still kept as it is.
+export function rpcRefusalStatus(code: string, httpStatus: number): number {
+  if (SESSION_REFUSALS.has(code)) return 401;
+  if (WORKSPACE_REFUSALS.has(code)) return 409;
+  if (TRANSIENT_REFUSALS.has(code)) return 503;
+  if (httpStatus === 401 || httpStatus === 403) return httpStatus;
+  return 400;
+}
+
+// G4-43 (carried over from G4-05's PR #353): only the fixed codes the RPCs raise reach the app. Any other message -- the
+// database's own text for a constraint, a permission or a lock -- becomes the generic code, so nothing internal is echoed.
+export const X_CONNECT_RPC_ERROR_CODES: ReadonlySet<string> = new Set([
+  // main: 20260919120000, 20260922003101, and the account-deletion guard (20260928160000)
+  "OAUTH_STATE_INPUT_INVALID",
+  "OAUTH_STATE_NOT_CONSUMABLE",
+  "OAUTH_TOKEN_OR_IDENTITY_INVALID",
+  "SOCIAL_MOBILE_ACCOUNT_NOT_OWNED",
+  "SOCIAL_MOBILE_MULTIPLE_OWNED_BRANDS_UNSUPPORTED",
+  "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED",
+  "X_ACCOUNT_ALREADY_CONNECTED",
+  "X_IDENTITY_ACCOUNT_MISMATCH",
+  "SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS",
+  // supabase/candidates/postona_g4_x_oauth_personal_epoch 001-004 (G4-39..43)
+  "SOCIAL_MOBILE_OAUTH_SESSION_NOT_ACTIVE",
+  "OWN_WORKSPACE_CONFLICT",
+  "WORKSPACE_OWNER_UNKNOWN",
+  "WORKSPACE_VERDICT_UNKNOWN",
+  "OWNER_EPOCH_UNAVAILABLE",
+  "OWNER_EPOCH_CHANGED",
+  "OAUTH_STATE_SUPERSEDED",
+  "OAUTH_STATE_NOT_BOUND",
+  "X_CONNECTION_CHANGED",
+  // G5's T13 (main 20261010051938), called first by 005 (G4-46)
+  "ACCOUNT_LIFECYCLE_AUTH_REQUIRED",
+  "ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND",
+  "ACCOUNT_LIFECYCLE_SERVICE_INVALID",
+  "ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE",
+  "ACCOUNT_DELETION_IN_PROGRESS",
+  "ACCOUNT_LOCKED",
+  "SERVICE_NOT_REGISTERED",
+  "SERVICE_NOT_ACTIVE",
+  "SERVICE_DELETION_IN_PROGRESS",
+  // G5's MV, raised by supabase/candidates/postona_g4_x_oauth_personal_mvp's require_owner_epoch (G4-02 #5 / #6)
+  "NOT_PERSONAL_WORKSPACE",
+  "WORKSPACE_ABSENT",
+  "SERVICE_GENERATION_CHANGED",
+  "SERVICE_GENERATION_UNAVAILABLE",
+  "SERVICE_STATE_UNKNOWN",
+]);
+
+export function rpcRefusalCode(message: unknown): string {
+  return typeof message === "string" && X_CONNECT_RPC_ERROR_CODES.has(message) ? message : "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED";
+}
+
+// G4-43 (carried over from PR #353): the redirect URI is the one registered for this app in the X developer portal and fixed
+// in the app (use-x-connect.ts), exactly; begin stores it with the state and the callback must present the same value.
+export const X_CONNECT_REGISTERED_REDIRECT_URIS: ReadonlySet<string> = new Set(["kabumori-social://oauth-callback"]);
+
 export async function hashState(state: string): Promise<string> {
   const bytes = new TextEncoder().encode(state);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -98,11 +222,11 @@ export async function rpcAsUser({
     let code = "SOCIAL_MOBILE_OAUTH_DB_CALL_FAILED";
     try {
       const errorBody = await response.json() as { message?: unknown };
-      if (typeof errorBody.message === "string" && errorBody.message.length > 0) code = errorBody.message;
+      code = rpcRefusalCode(errorBody.message);
     } catch {
       // keep the generic code
     }
-    fail(code, response.status === 401 || response.status === 403 ? response.status : 400);
+    fail(code, rpcRefusalStatus(code, response.status));
   }
   const text = await response.text();
   return text.trim() === "" ? null : JSON.parse(text);
@@ -142,6 +266,7 @@ export async function startConnection({
   // as a sanity floor without hardcoding the client's exact encoding.
   if (!request.rawState || request.rawState.length < 16) fail("OAUTH_STATE_INPUT_INVALID", 400);
   if (!request.codeChallenge || !request.redirectUri) fail("OAUTH_STATE_INPUT_INVALID", 400);
+  if (!X_CONNECT_REGISTERED_REDIRECT_URIS.has(request.redirectUri)) fail("OAUTH_STATE_INPUT_INVALID", 400);
 
   const stateHash = await hashState(request.rawState);
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();

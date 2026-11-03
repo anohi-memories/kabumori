@@ -4,10 +4,13 @@
 // x-oauth-connect (which stays exactly as-is: a hardcoded 2-account, service_role-only, admin-initiated
 // flow this file never imports from or writes to).
 import {
+  assertPersonalDatabaseProfile,
   OAuthConnectUserError,
   completeConnection,
   resolveConnectingUser,
   startConnection,
+  X_AUTH_PROFILE_ENV,
+  xAuthProfilePinned,
   type CallbackRequest,
   type StartRequest,
 } from "./oauth_logic.ts";
@@ -18,6 +21,8 @@ function json(body: Record<string, unknown>, status = 200) {
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
+
+  if (!xAuthProfilePinned(Deno.env.get(X_AUTH_PROFILE_ENV))) return json({ error: "X_CONNECT_PROFILE_UNAVAILABLE" }, 503);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
@@ -33,6 +38,8 @@ Deno.serve(async (req) => {
   if (!userAccessToken) return json({ error: "SOCIAL_MOBILE_OAUTH_AUTH_REQUIRED" }, 401);
 
   try {
+    // G4-02 #7: the database must run the personal build too; refused before GoTrue, X and any write
+    await assertPersonalDatabaseProfile({ userAccessToken, supabaseUrl, anonKey });
     // Fails closed with a clear 401 before any RPC call is attempted if the token is missing, malformed,
     // or does not belong to a real signed-in user -- no admin_users check, any real user may proceed.
     await resolveConnectingUser({ authorizationHeader, supabaseUrl, anonKey });

@@ -6,6 +6,8 @@ import { PublishSettingCard } from '@/features/publish-setting/publish-setting-c
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
 import { connectionPill, restartAppliesTo, X_CONNECTION_UNVERIFIED_LABEL, X_CONNECTION_UNVERIFIED_TEXT } from '@/features/reservations/x-write-view';
+import { ThreadsConnectCard } from '@/features/threads-connect/threads-connect-card';
+import { ThreadsPublishCard } from '@/features/threads-publish/threads-publish-card';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
@@ -30,6 +32,8 @@ export default function AccountDetailScreen() {
         {pill.label === X_CONNECTION_UNVERIFIED_LABEL ? <Text style={styles.muted}>{X_CONNECTION_UNVERIFIED_TEXT}</Text> : null}
       </Card>
       <PublishSettingCard key={account.id} account={account} preview={status === 'mock_preview'} reload={reload} />
+      {account.platform === 'threads' ? <ThreadsPublishCard key={`threads-${account.id}`} account={account} preview={status === 'mock_preview'} /> : null}
+      {account.platform === 'threads' && account.connectionStatus !== 'connected' ? <ThreadsConnectCard key={`threads-connect-${account.id}`} threadsAccount={account} accounts={accounts} reload={reload} preview={status === 'mock_preview'} /> : null}
       <Card>
         <Text style={{ color: colors.ink, fontWeight: '800' }}>声の設定（プレビュー）</Text>
         <View style={{ gap: 6 }}>
