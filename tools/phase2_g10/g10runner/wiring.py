@@ -221,6 +221,9 @@ def binding(root):
         portable = {k: v for k, v in cfg.items() if k not in ("public_keys", "private_keys")}
         portable["public_key_sha256"] = fps
         portable["private_key_roles"] = sorted(cfg.get("private_keys", {}))
+        led = portable.get("ledger")
+        if isinstance(led, dict):  # レジャーの path はプレーンごとに異なる（exec は自分の書ける場所）。値（limit 等）は残す
+            portable["ledger"] = {k: v for k, v in led.items() if k != "path"}
         payload = {"wiring": portable}
     return {"mode": cfg["mode"], "sha256": sha256_hex(canonical(payload))}
 
@@ -304,7 +307,7 @@ def agent_side(root):
     return signer(root, cfg, "agent"), verifier(root, cfg)
 
 
-def exec_wiring_doc(template, keys_dir):
+def exec_wiring_doc(template, keys_dir, ledger_path=None):
     """B0-3/B1c: control 側の wiring（template）を雛形に、exec プレーン用の wiring を作る。
 
     public_keys=4役割の .pub（keys_dir）、private_keys は **{agent, witness} だけ**（keys_dir の .key）。
@@ -315,8 +318,11 @@ def exec_wiring_doc(template, keys_dir):
     keys_dir = os.path.abspath(keys_dir)
     pub = {role: os.path.join(keys_dir, role + ".pub") for role in signing.ROLES}
     priv = {role: os.path.join(keys_dir, role + ".key") for role in EXECUTION_SIDE_PRIVATE_ROLES}
+    led = template.get("ledger")
+    if led is not None and ledger_path is not None:
+        led = dict(led, path=ledger_path)  # exec が書ける場所へ path だけ rehome（limit 等の値は据え置き。binding は path を除外して照合）
     return {"version": template["version"], "mode": template["mode"], "public_keys": pub,
-            "private_keys": priv, "issue_source": template["issue_source"], "ledger": template.get("ledger")}
+            "private_keys": priv, "issue_source": template["issue_source"], "ledger": led}
 
 
 # --- 回数台帳 ---

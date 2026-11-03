@@ -282,11 +282,10 @@ class PortableBinding(Keys):
         return wiring.binding(d)
 
     def test_same_keys_at_different_key_paths_bind_equally(self):
-        ledger = {"path": os.path.join(self.tmp, "ledger.json"), "limit_per_hour": 100,
-                  "reserve_fraction": 0.0, "watchdog_interval": 30.0}
         issue = {"kind": "graphql_fixture", "fixture": self.fixture}
-        a = self._binding_at("A", ledger, issue)
-        b = self._binding_at("B", ledger, issue)   # 鍵は同内容・パスだけ別、ledger/issue は同一
+        vals = {"limit_per_hour": 100, "reserve_fraction": 0.0, "watchdog_interval": 30.0}
+        a = self._binding_at("A", dict(vals, path=os.path.join(self.tmp, "A", "ledger.json")), issue)
+        b = self._binding_at("B", dict(vals, path=os.path.join(self.tmp, "B", "ledger.json")), issue)  # 鍵もレジャーも path だけ別・値は同一
         self.assertEqual(a["sha256"], b["sha256"])
 
     def test_ledger_value_change_changes_the_binding(self):

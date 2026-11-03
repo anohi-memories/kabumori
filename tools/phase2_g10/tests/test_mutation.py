@@ -899,6 +899,13 @@ MUTANTS = [
      "        control.approve_wiring()\n        new = control.read_state().wiring",
      "        new = control.read_state().wiring",
      "test_task45_migrate_policy.ApproveWiring.test_write_rebinds_to_current_and_bumps_generation"),
+    ("binding leaks the ledger path (not portable)", "g10runner/wiring.py",
+     'portable["ledger"] = {k: v for k, v in led.items() if k != "path"}',
+     'portable["ledger"] = {k: v for k, v in led.items()}',
+     "test_task16_wiring_p2.PortableBinding.test_same_keys_at_different_key_paths_bind_equally"),
+    ("exec_wiring_doc does not rehome the ledger path", "g10runner/wiring.py",
+     "        led = dict(led, path=ledger_path)", "        led = dict(led)",
+     "test_task43_exec_setup.ExecWiringDoc.test_ledger_path_is_rehomed_when_given"),
 ]
 
 

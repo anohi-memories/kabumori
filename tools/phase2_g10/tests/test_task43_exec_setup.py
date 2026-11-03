@@ -37,6 +37,12 @@ class ExecWiringDoc(unittest.TestCase):
         self.assertEqual(doc["ledger"], self.TEMPLATE["ledger"])
         self.assertEqual((doc["version"], doc["mode"]), (3, "ecdsa"))
 
+    def test_ledger_path_is_rehomed_when_given(self):
+        doc = wiring.exec_wiring_doc(self.TEMPLATE, "/kab/keys", ledger_path="/kab/ledger/github.json")
+        self.assertEqual(doc["ledger"]["path"], "/kab/ledger/github.json")  # path は exec の書ける場所へ
+        self.assertEqual(doc["ledger"]["limit_per_hour"], self.TEMPLATE["ledger"]["limit_per_hour"])  # 値は据え置き
+        self.assertEqual(doc["ledger"]["reserve_fraction"], self.TEMPLATE["ledger"]["reserve_fraction"])
+
     def test_hmac_template_is_refused(self):
         with self.assertRaises(wiring.WiringError):
             wiring.exec_wiring_doc(dict(self.TEMPLATE, mode="hmac"), "/kab/keys")

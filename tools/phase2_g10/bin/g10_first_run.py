@@ -375,7 +375,9 @@ def cmd_exec_init(a):
         raise SystemExit("control-pub does not exist yet (run B1a first): %s" % control_pub)
     with open(a.from_wiring, encoding="utf-8") as f:
         template = json.load(f)
-    doc = wiring.exec_wiring_doc(template, os.path.realpath(a.keys_dir))
+    exec_ledger = os.path.join(exec_root, "ledger", "github.json")
+    os.makedirs(os.path.dirname(exec_ledger), 0o700, exist_ok=True)  # exec 専用レジャー（_kaburun が書ける。control の 0700 home は触れない）
+    doc = wiring.exec_wiring_doc(template, os.path.realpath(a.keys_dir), ledger_path=exec_ledger)
     os.makedirs(exec_root, exist_ok=True)
     wiring.write(exec_root, doc)  # validate + key_fingerprints（鍵が公開鍵と一致すること）+ 0600
     layout = SplitLayout(exec_root, control_pub).ensure()  # agent-out/work/requests + pub symlink
