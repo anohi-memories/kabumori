@@ -25,12 +25,21 @@ class ObservationError(RuntimeError):
     """プロセスを観測できない（不在とは区別する）。"""
 
 
+PS_TIMEOUT = 20.0   # `ps -axww`（全プロセス列挙）の打ち切り。負荷時に 10 秒では一時的に超えることがあったため延長（B6）
+PS_RETRIES = 1      # タイムアウトは負荷の一時スパイクのことがあるので、1 回だけ再試行してから ObservationError
+
+
 def _ps(args):
-    try:
-        out = subprocess.run(["/bin/ps"] + args, capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ObservationError("ps failed: %s" % type(exc).__name__)
-    return out.returncode, out.stdout
+    last = None
+    for _attempt in range(PS_RETRIES + 1):
+        try:
+            out = subprocess.run(["/bin/ps"] + args, capture_output=True, text=True, timeout=PS_TIMEOUT)
+            return out.returncode, out.stdout
+        except subprocess.TimeoutExpired as exc:  # スパイクは一時的なことが多い。再試行（2経路照合の厳しさは保つ）
+            last = exc
+        except OSError as exc:
+            raise ObservationError("ps failed: %s" % type(exc).__name__)
+    raise ObservationError("ps failed: %s" % type(last).__name__)
 
 
 # --- カーネルからの観測（macOS: libproc） ---

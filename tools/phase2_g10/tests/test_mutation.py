@@ -929,6 +929,12 @@ MUTANTS = [
      '"scopes": ["readonly_trial"], "models": dict(policy["models"]),',
      '"scopes": [], "models": dict(policy["models"]),',
      "test_task45_migrate_policy.ApproveEnvelope.test_write_approves_a_readonly_trial_envelope"),
+    ("ps does not retry on timeout", "g10runner/procs.py",
+     "    for _attempt in range(PS_RETRIES + 1):", "    for _attempt in range(1):",
+     "test_task48_ps_robustness.PsRobustness.test_persistent_timeout_retries_then_raises_observation_error"),
+    ("ps timeout not raised from 10s", "g10runner/procs.py",
+     "PS_TIMEOUT = 20.0", "PS_TIMEOUT = 10.0",
+     "test_task48_ps_robustness.PsRobustness.test_retries_once_on_timeout_then_succeeds"),
 ]
 
 
