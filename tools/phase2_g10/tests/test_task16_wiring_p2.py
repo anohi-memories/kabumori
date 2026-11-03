@@ -261,6 +261,55 @@ def read_json_ledger(env):
     return wiring.load(env.tmp)["ledger"]
 
 
+
+class PortableBinding(Keys):
+    """ecdsa の binding は鍵のローカルパスに依存せず、同じ公開鍵・mode・ledger・issue_source なら一致する
+    （専用ユーザー分割: exec は control の wiring を鍵パスだけ変えて複写する——ledger/issue_source/version/mode は
+    verbatim なので binding が一致し、起動直前の照合が通る）。鍵の中身や ledger 値が変われば検知できる（R2）。"""
+    def _binding_at(self, sub, ledger, issue_source, **over):
+        d = os.path.join(self.tmp, sub)
+        os.makedirs(d)
+        pub = {}
+        for role in signing.ROLES:
+            dst = os.path.join(d, role + ".pub"); shutil.copyfile(self.pub[role], dst); pub[role] = dst
+        priv = {}
+        for role in ("agent", "witness"):
+            dst = os.path.join(d, role + ".key"); shutil.copyfile(self.priv[role], dst); os.chmod(dst, 0o600); priv[role] = dst
+        doc = {"version": wiring.VERSION, "mode": "ecdsa", "public_keys": pub, "private_keys": priv,
+               "issue_source": issue_source, "ledger": ledger}
+        doc.update(over)
+        wiring.write(d, doc)
+        return wiring.binding(d)
+
+    def test_same_keys_at_different_key_paths_bind_equally(self):
+        ledger = {"path": os.path.join(self.tmp, "ledger.json"), "limit_per_hour": 100,
+                  "reserve_fraction": 0.0, "watchdog_interval": 30.0}
+        issue = {"kind": "graphql_fixture", "fixture": self.fixture}
+        a = self._binding_at("A", ledger, issue)
+        b = self._binding_at("B", ledger, issue)   # 鍵は同内容・パスだけ別、ledger/issue は同一
+        self.assertEqual(a["sha256"], b["sha256"])
+
+    def test_ledger_value_change_changes_the_binding(self):
+        issue = {"kind": "graphql_fixture", "fixture": self.fixture}
+        base = {"path": os.path.join(self.tmp, "ledger.json"), "limit_per_hour": 100,
+                "reserve_fraction": 0.0, "watchdog_interval": 30.0}
+        a = self._binding_at("C", base, issue)
+        b = self._binding_at("D", dict(base, limit_per_hour=50), issue)
+        self.assertNotEqual(a["sha256"], b["sha256"])
+
+    def test_public_key_content_change_changes_the_binding(self):
+        issue = {"kind": "graphql_fixture", "fixture": self.fixture}
+        ledger = {"path": os.path.join(self.tmp, "ledger.json"), "limit_per_hour": 100,
+                  "reserve_fraction": 0.0, "watchdog_interval": 30.0}
+        a = self._binding_at("E", ledger, issue)
+        # human の公開鍵だけ別の鍵に差し替える（指紋が変わる）
+        other = os.path.join(self.tmp, "other"); os.makedirs(other)
+        _, stray = ec.generate_keypair(other, "human")
+        self.pub = dict(self.pub); self.pub["human"] = stray
+        b = self._binding_at("F", ledger, issue)
+        self.assertNotEqual(a["sha256"], b["sha256"])
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

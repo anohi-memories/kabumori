@@ -647,7 +647,7 @@ MUTANTS = [
      "    key_fingerprints(cfg)  # R3: 役割の間の同じ鍵・秘密鍵との不一致を、組み立ての前に拒否", "    pass",
      "test_task16_wiring_p2.R3KeyIdentity.test_assembly_refuses_duplicates_written_without_the_save_check"),
     ("binding ignores public key contents", "g10runner/wiring.py",
-     'canonical({"wiring": cfg, "public_key_sha256": fps})', 'canonical({"wiring": cfg})',
+     '        portable["public_key_sha256"] = fps', '        portable["public_key_sha256"] = {}',
      "test_task16_wiring_p2.R2RunBinding.test_public_key_contents_replaced_at_the_same_path"),
     ("write allows mode skips and downgrades", "g10runner/wiring.py",
      '    if existing is not None and not mode_transition_allowed(existing["mode"], doc["mode"]):', "    if False:",
@@ -891,6 +891,14 @@ MUTANTS = [
     ("collect never reconciles rejected runs", "bin/g10_first_run.py",
      "        elif os.path.exists(disposition):", "        elif False:",
      "test_task46_collect.Collect.test_reconciles_absent_run_with_disposition_only"),
+    ("wiring binding leaks key paths (not portable)", "g10runner/wiring.py",
+     'portable = {k: v for k, v in cfg.items() if k not in ("public_keys", "private_keys")}',
+     'portable = {k: v for k, v in cfg.items() if k not in ("public_keys",)}',
+     "test_task16_wiring_p2.PortableBinding.test_same_keys_at_different_key_paths_bind_equally"),
+    ("approve-wiring does not re-approve", "bin/g10_first_run.py",
+     "        control.approve_wiring()\n        new = control.read_state().wiring",
+     "        new = control.read_state().wiring",
+     "test_task45_migrate_policy.ApproveWiring.test_write_rebinds_to_current_and_bumps_generation"),
 ]
 
 

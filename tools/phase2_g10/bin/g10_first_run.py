@@ -218,6 +218,23 @@ def cmd_migrate_policy(a):
     return 0
 
 
+def cmd_approve_wiring(a):
+    """（B5）今の wiring.json を人の署名で承認し直す（binding の計算規則を変えた等で、現行 wiring を新たに承認する用途）。
+    --write のときだけ承認し世代を1つ進める。dry-run は現行 binding と承認済みを表示するだけ。鍵・設定自体は変えない。"""
+    control, _policy = open_control(a.root)
+    cur = wiring.binding(os.path.realpath(a.root))
+    approved = control.read_state().wiring
+    out = {"current_binding": cur, "approved": approved, "written": False}
+    if a.write:
+        control.approve_wiring()
+        new = control.read_state().wiring
+        out["written"] = True
+        out["new_generation"] = new["generation"]
+        out["new_wiring_sha256"] = new["wiring_sha256"]
+    print(json.dumps(out, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_collect(a):
     """（B5）handoff/out を回収し、CLAIM 済みで未終了の run を閉じる。結果バンドルがあれば ingest→finalize→REPORT。
     バンドルが無く disposition だけある（exec 拒否/不在）なら END(absence_confirmed) で枠を解放。disposition も無い
@@ -422,6 +439,9 @@ def main(argv=None):
     mp = sub.add_parser("migrate-policy")
     mp.add_argument("--root", required=True)
     mp.add_argument("--write", action="store_true", help="このリリースの policy へ置き換える（要 GO。run 中は拒否）")
+    aw = sub.add_parser("approve-wiring")
+    aw.add_argument("--root", required=True)
+    aw.add_argument("--write", action="store_true", help="今の wiring を承認し直す（要 GO。世代+1）")
     co = sub.add_parser("collect")
     co.add_argument("--root", required=True)
     co.add_argument("--out", required=True, help="handoff/out（_kaburun 所有・yuya 読み）")
@@ -455,7 +475,8 @@ def main(argv=None):
             "jobrunner-plist": cmd_jobrunner_plist, "watchdog-plist": cmd_watchdog_plist, "exec-init": cmd_exec_init,
             "code-edit-policy": cmd_code_edit_policy,
             "migrate-policy": cmd_migrate_policy,
-            "collect": cmd_collect}[a.cmd](a)
+            "collect": cmd_collect,
+            "approve-wiring": cmd_approve_wiring}[a.cmd](a)
 
 
 if __name__ == "__main__":

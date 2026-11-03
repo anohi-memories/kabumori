@@ -65,5 +65,38 @@ class MigratePolicy(unittest.TestCase):
         self.assertEqual(policy_mod.load_current(self.layout)["_digest"], old_digest)
 
 
+
+class ApproveWiring(unittest.TestCase):
+    """今の wiring を承認し直す approve-wiring。--write で承認済み sha が現行 binding に揃い世代が+1、dry-run は不変。
+    binding の計算規則を変えた後にライブ制御を新 binding へ合わせ直す用途（分割の起動直前照合を通すため）。"""
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.fr = load_first_run()
+        self.root = os.path.join(self.tmp, "control")
+        self.assertEqual(_run(self.fr, ["init", "--root", self.root, "--issue-source", "file"])[0], 0)
+        self.layout = Layout(self.root)
+
+    def _approved(self):
+        return self.fr.open_control(self.root)[0].read_state().wiring
+
+    def test_write_rebinds_to_current_and_bumps_generation(self):
+        from g10runner import wiring
+        before = self._approved()
+        code, out = _run(self.fr, ["approve-wiring", "--root", self.root, "--write"])
+        self.assertEqual(code, 0, out)
+        self.assertTrue(json.loads(out)["written"])
+        after = self._approved()
+        self.assertEqual(after["generation"], before["generation"] + 1)
+        self.assertEqual(after["wiring_sha256"], wiring.binding(self.root)["sha256"])
+
+    def test_dry_run_does_not_change_the_approval(self):
+        before = self._approved()
+        code, out = _run(self.fr, ["approve-wiring", "--root", self.root])
+        self.assertEqual(code, 0, out)
+        self.assertFalse(json.loads(out)["written"])
+        self.assertEqual(self._approved()["generation"], before["generation"])
+
+
 if __name__ == "__main__":
     unittest.main()

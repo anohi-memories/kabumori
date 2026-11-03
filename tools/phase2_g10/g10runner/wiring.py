@@ -201,12 +201,28 @@ def key_fingerprints(cfg):
 
 
 def binding(root):
-    """今の設定の識別（R2）。無ければ None。あれば {"mode", "sha256"}（設定の中身＋公開鍵の指紋のハッシュ）。"""
+    """今の設定の識別（R2）。無ければ None。あれば {"mode", "sha256"}。
+
+    ecdsa（本番・専用ユーザー分割）では、設定のうち **鍵のローカルパス（public_keys/private_keys）だけ** を、公開鍵の
+    フィンガープリントと private の役割名に置き換えて sha を取る（ポータブル）。mode・version・issue_source・ledger は
+    そのまま含める。exec_wiring_doc がそれらを verbatim 複写し、制御（~/g10-control）と exec（~/g10-exec）で違うのは
+    鍵パスだけなので binding が一致し、起動直前の照合（claim_binding/check_run）が分割でも通る。公開鍵の中身・mode・
+    ledger 値などの変更は指紋/値で検知できる（R2 は保たれる）。hmac は試験用（分割なし）なので従来どおり設定全体を含める。"""
     cfg = load(root)
     if cfg is None:
         return None
     fps = key_fingerprints(cfg)
-    return {"mode": cfg["mode"], "sha256": sha256_hex(canonical({"wiring": cfg, "public_key_sha256": fps}))}
+    if cfg["mode"] == "hmac":
+        payload = {"wiring": cfg, "public_key_sha256": fps}   # 試験用 hmac（分割なし）は従来どおり設定全体
+    else:
+        # ecdsa: 鍵のローカルパス（public_keys/private_keys）だけを、公開鍵の指紋と private の役割名に置き換える。
+        # exec_wiring_doc が ledger・issue_source・version・mode を verbatim 複写し、制御と exec で違うのは鍵パスだけ
+        # なので、これで binding が一致して分割でも照合が通る。鍵の中身・mode・ledger 等の変更は指紋/値で検知できる（R2）。
+        portable = {k: v for k, v in cfg.items() if k not in ("public_keys", "private_keys")}
+        portable["public_key_sha256"] = fps
+        portable["private_key_roles"] = sorted(cfg.get("private_keys", {}))
+        payload = {"wiring": portable}
+    return {"mode": cfg["mode"], "sha256": sha256_hex(canonical(payload))}
 
 
 def claim_binding(root, st):
