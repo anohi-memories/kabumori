@@ -1,0 +1,5 @@
+lifecycle | 4
+entitlement | active
+connection | unconnected
+verdict | f | DISCONNECTED
+precheck | DISCONNECTED
