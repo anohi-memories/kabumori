@@ -1,0 +1,10 @@
+a lifecycle | 4
+a entitlement | active
+a connection | identity_verified
+a verdict | t | VERIFIED
+a precheck | allow
+c lifecycle | 4
+c entitlement | active
+c connection | unconnected
+c verdict | f | DISCONNECTED
+c precheck | DISCONNECTED
