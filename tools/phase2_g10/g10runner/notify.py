@@ -39,20 +39,22 @@ def _applescript_str(s):
 
 
 class MacNotifier:
-    """macOS 通知。(1) 通知センターに残るバナー（display notification。スリープしても残る）、(2) 任意でテキストダイアログ
-    （display dialog）を**切り離して**出す（collector を止めない）。ダイアログは既定で **押すまで消えない**
-    （dialog_timeout=0。スリープに入っても、起きたとき出たまま待つ）。dialog_timeout>0 を渡したときだけ
-    `giving up after` で自動クローズする。GUI(aqua) セッションのプロセスからのみ画面に出る（LaunchAgent gui/501）。
-    osascript をリスト形式で呼ぶのでシェルは介さない。失敗しても False を返すだけ（notify() が NEEDS_ATTENTION に残す）。"""
+    """macOS 通知。(1) 通知センターに残るバナー（display notification。スリープしても残る）、(2) 任意で
+    ネイティブのテキストボックス窓（swiftc 製バイナリ g10_notify_window）を**切り離して**開く（collector を止めない）。
+    窓は普通のウインドウ（最前面固定でない＝裏に回せる）で、OK/Enter を押すまで残る（スリープ後も出たまま）。
+    窓バイナリは argv で title/message を受け取る（シェルも AppleScript も介さないので注入の余地がない）。
+    窓バイナリが未ビルド/非実行なら窓は出さない（バナーは通知センターに残る）。GUI(aqua) セッションの
+    プロセスからのみ画面に出る（LaunchAgent gui/501）。失敗しても False を返すだけ（notify() が NEEDS_ATTENTION に残す）。"""
 
-    def __init__(self, dialog=True, dialog_timeout=0):
-        self.dialog = dialog
-        self.dialog_timeout = int(dialog_timeout)
+    def __init__(self, window=True, window_bin=None):
+        self.window = window
+        self.window_bin = (window_bin or os.environ.get("G10_NOTIFY_WINDOW")
+                           or os.path.join(os.path.dirname(os.path.abspath(__file__)), "g10_notify_window"))
 
     def __call__(self, title, message):
-        ok = self._run_notification(title, message)
-        if self.dialog:
-            self._open_dialog(title, message)
+        ok = self._run_notification(title, message)   # バナー（通知センターに残る）
+        if self.window:
+            self._open_window(title, message)          # ネイティブ窓（押すまで残る・裏に回せる）
         return ok
 
     def _run_notification(self, title, message):
@@ -63,16 +65,15 @@ class MacNotifier:
         except Exception:
             return False
 
-    def _open_dialog(self, title, message):
-        giveup = (" giving up after %d" % self.dialog_timeout) if self.dialog_timeout > 0 else ""
-        script = ('display dialog %s with title %s buttons {"OK"} default button "OK" with icon note%s'
-                  % (_applescript_str(message), _applescript_str(title), giveup))
-        try:  # fire-and-forget: timeout=0 なら押すまで残る（スリープ後も出たまま）。collector は待たない
-            subprocess.Popen([OSASCRIPT, "-e", script],
+    def _open_window(self, title, message):
+        win = self.window_bin
+        if not (win and os.path.isfile(win) and os.access(win, os.X_OK)):
+            return  # 未ビルド/非実行なら窓は出さない（バナーは通知センターに残る）
+        try:  # 引数渡し（シェルも AppleScript も介さない）。押すまで残るので待たない（fire-and-forget）
+            subprocess.Popen([win, title, message],
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
-
 
 def notify(layout, notifier, kind, title, message):
     symbol = SYMBOLS.get(kind, "")
