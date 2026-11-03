@@ -514,7 +514,7 @@ test('T37 after a restart + reconnect: writes are back, and the words say what i
   await h.update();
   assert.match(onScreen(h), /再開前に保存した予約は/u);
   assert.match(onScreen(h), /判別できません/u);
-  assert.doesNotMatch(onScreen(h), /接続済みと表示されていても/u, 'one note');
+  assert.doesNotMatch(onScreen(h), /Xの接続記録があっても/u, 'one note');
   let label = null; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard') label = n.props.notEditable; });
   assert.equal(label, null, 'no row is singled out');
   const none = await screen({ reply: async () => ok([]) });
@@ -893,7 +893,7 @@ test('T34 RESV-8 + 9: the keyboard insets and the tab scene inset are set in the
 test('T33 not observable: a connected account can save, and the supplement says 接続済み is no promise; no reconnect is claimed', async () => {
   const { h } = await ready({ create: () => no(429, 'POSTONA_RESV_RATE_LIMITED') });
   assert.equal(saveButton(h).disabled, false);
-  assert.match(onScreen(h), /接続済みと表示されていても/u);
+  assert.match(onScreen(h), /Xの接続記録があっても/u);
   assert.doesNotMatch(onScreen(h), /再接続が必要|Xの再接続/u);
   assert.equal(ofAction(h, 'create').length, 0);
 });
@@ -908,7 +908,7 @@ test('T33 observed: after this person\'s restart nothing is sent, the words and 
   await h.update();
   assert.equal(saveButton(h).disabled, true);
   assert.match(onScreen(h), /X自動投稿を再開しました/u);
-  assert.doesNotMatch(onScreen(h), /Xの再接続が必要です|接続済みと表示されていても/u);
+  assert.doesNotMatch(onScreen(h), /Xの再接続が必要です|Xの接続記録があっても/u);
   labelled(h.render(), 'ActionButton', 'アカウント画面を開く').onPress();
   assert.deepEqual(h.world.pushes, ['/accounts']);
   assert.equal(ofAction(h, 'create').length, 0);
@@ -947,10 +947,10 @@ test('T33 A-B-A: a refusal stays with its account; B can save; back on A the wri
 test('T33 gate OFF: with or without a recorded restart, nothing is sent, no token is read, and no supplement is shown (nothing is being saved)', async () => {
   const h = await screen({ gate: false });
   await h.update();
-  assert.doesNotMatch(onScreen(h), /接続済みと表示されていても/u);
+  assert.doesNotMatch(onScreen(h), /Xの接続記録があっても/u);
   signal.markXServiceRestarted('person-1');
   await h.update();
-  assert.doesNotMatch(onScreen(h), /接続済みと表示されていても/u);
+  assert.doesNotMatch(onScreen(h), /Xの接続記録があっても/u);
   assert.equal(h.world.calls.length, 0);
   assert.equal(h.world.sessionReads, 0);
 });
@@ -985,6 +985,36 @@ test('a send-now row is not listed as a reservation here; a saved row is 予約�
 
 // ---------------------------------------------------------------------------------------------------------------
 // The contract with G4 PR 617 / G5, and the connection display.
+test('H5 U1: a reread with a new revision interrupts the old time edit without sending its input', async () => {
+  let rows = [{ reservationId: 'h5-edit', batchId: 'b', draftId: 'd', scheduledAt: '2026-12-01T00:30:00.000Z', status: 'planned', revision: 1, consentState: 'confirmed', body: 'local fixture', mode: 'manual_exact', origin: 'user_authored' }];
+  const h = await screen({ reply: () => ok(rows) });
+  cards2(h)[0].onRetime(); await h.update();
+  cards2(h)[0].onRetimeChange({ date: '2026-12-07', time: '10:20' }); await h.update();
+  rows = [{ ...rows[0], revision: 2, scheduledAt: '2026-12-02T00:30:00.000Z' }];
+  h.world.refocus += 1; await h.update();
+  assert.equal(cards2(h)[0].retiming, null);
+  assert.match(onScreen(h), /編集を中断/u);
+  assert.match(onScreen(h), /2026-12-07.*10:20/u, 'unsubmitted input remains in the warning');
+  assert.equal(ofAction(h, 'reschedule').length, 0);
+});
+
+test('H5 U1: time-only drift, row deletion and A-B-A invalidate the editor; an unchanged reread preserves input', async () => {
+  for (const mode of ['same', 'time', 'deleted', 'scope']) {
+    let rows = [{ reservationId: 'edit-bound', batchId: 'b', draftId: 'd', scheduledAt: '2026-12-01T00:30:00.000Z', status: 'planned', revision: 1, consentState: 'confirmed', body: 'fixture', mode: 'manual_exact', origin: 'user_authored' }];
+    const h = await screen({ reply: () => ok(rows) });
+    cards2(h)[0].onRetime(); await h.update();
+    cards2(h)[0].onRetimeChange({ date: '2026-12-07', time: '10:20' }); await h.update();
+    if (mode === 'time') rows = [{ ...rows[0], scheduledAt: '2026-12-02T00:30:00.000Z' }];
+    if (mode === 'deleted') rows = [];
+    if (mode === 'scope') { h.world.account = OTHER_ACCOUNT; await h.update(); h.world.account = ACCOUNT; }
+    h.world.refocus += 1; await h.update();
+    if (mode === 'same') assert.deepEqual(JSON.parse(JSON.stringify(cards2(h)[0].retiming)), { date: '2026-12-07', time: '10:20' });
+    else if (mode !== 'deleted') assert.equal(cards2(h)[0].retiming, null, mode);
+    else assert.match(onScreen(h), /編集を中断/u);
+    assert.equal(ofAction(h, 'reschedule').length, 0, mode);
+  }
+});
+
 
 test('xAnswerView: every G3 action has one next step; only a server\'s code means reconnect; G4\'s generation code maps to it, an unknown code does not', () => {
   const G4 = 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED';
@@ -1000,11 +1030,12 @@ test('xAnswerView: every G3 action has one next step; only a server\'s code mean
   }
 });
 
-test('connectionPill: 「再接続が必要」 only for a server\'s refusal; a restart alone changes nothing; connection_status keeps each screen\'s wording', () => {
-  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続'), { label: '接続済み', tone: 'success' });
+test('connectionPill: a stored X connection is unverified; 「再接続が必要」 only for a server refusal', () => {
+  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続'), { label: xWriteView.X_CONNECTION_UNVERIFIED_LABEL, tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', false, 'threads'), { label: '接続済み', tone: 'success' });
   assert.deepEqual(xWriteView.connectionPill('connected', true, '要再接続'), { label: '再接続が必要', tone: 'warning' });
   assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要再接続'), { label: '要再接続', tone: 'warning' });
-  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要確認'), { label: '要確認', tone: 'warning' });
+  assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要確認'), { label: '要再接続', tone: 'warning' });
   assert.deepEqual(xWriteView.connectionPill('needs_attention', true, '要確認'), { label: '再接続が必要', tone: 'warning' });
   assert.doesNotMatch(xWriteView.RESTART_HELP_TEXT, /必要です/u, 'the help does not state it for this account');
 });
@@ -1013,7 +1044,7 @@ test('T33 connectionPill: an observed restart hides 接続済み without saying 
   assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', true), { label: '要確認', tone: 'warning' });
   assert.deepEqual(xWriteView.connectionPill('connected', true, '要再接続', true), { label: '再接続が必要', tone: 'warning' });
   assert.deepEqual(xWriteView.connectionPill('needs_attention', false, '要再接続', true), { label: '要再接続', tone: 'warning' });
-  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', false), { label: '接続済み', tone: 'success' });
+  assert.deepEqual(xWriteView.connectionPill('connected', false, '要再接続', false), { label: xWriteView.X_CONNECTION_UNVERIFIED_LABEL, tone: 'warning' });
   const account = { brandId: 'me', connectionStatus: 'connected', platform: 'x' };
   assert.equal(xWriteView.xWriteRefusal({ loginId: 'l', account, personalId: 'me', reconnectRequired: false, restartObserved: true }).text, xWriteView.RESTART_OBSERVED_TEXT);
   assert.equal(xWriteView.xWriteRefusal({ loginId: 'l', account, personalId: 'me', reconnectRequired: true, restartObserved: true }).text, xWriteView.RECONNECT_REQUIRED_TEXT);
@@ -1066,7 +1097,7 @@ const baseStubs = () => ({
   '@/features/reservations/use-home-reservations': { useHomeReservations: () => ({ view: { kind: 'not_applicable' }, reload() {} }) },
 });
 
-test('accounts screen (real): 接続済み until a server\'s refusal; then 再接続が必要 with the words; a new connect clears it; the help is always there and never claims', async () => {
+test('accounts screen (real): stored connection is unverified; a server refusal requires reconnect, which clears that refusal only', async () => {
   const effects = [];
   let connectState = 'idle';
   const render = await loadScreen('../src/app/accounts/index.tsx', {
@@ -1080,7 +1111,7 @@ test('accounts screen (real): 接続済み until a server\'s refusal; then 再�
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: ME } }) },
   });
   let text = textOf(render({}));
-  assert.match(text, /接続済み/u);
+  assert.match(text, /接続記録あり・未確認/u);
   assert.doesNotMatch(text, /再接続が必要/u);
   assert.match(text, /接続の更新が止まることがあります/u);
   signal.markXReconnectRequired(ACCOUNT.id);
@@ -1094,6 +1125,7 @@ test('accounts screen (real): 接続済み until a server\'s refusal; then 再�
   render({});
   effects.forEach((effect) => effect());
   assert.equal(signal.isXReconnectRequired(ACCOUNT.id), false);
+  assert.match(textOf(render({})), /接続記録あり・未確認/u, 'a reconnect response is not a current publish verdict');
   // T33: a restart observed in this app, with no refusal: not 接続済み, not 再接続が必要, the reconnect button; the connect clears it, for this person only
   connectState = 'idle';
   signal.markXServiceRestarted('person-1');
@@ -1145,9 +1177,9 @@ test('T33 another workspace\'s X account: a restart does not touch it, on the ac
   });
   signal.markXServiceRestarted('person-1');
   let text = textOf(accounts({}));
-  assert.match(text, /接続済み/u);
-  assert.doesNotMatch(text, /要確認|X自動投稿を再開しました|Xアカウントの再接続/u);
-  assert.match(textOf(home({})), /^接続済み$/mu);
+  assert.match(text, /接続記録あり・未確認/u);
+  assert.doesNotMatch(text, /X自動投稿を再開しました|Xアカウントの再接続/u);
+  assert.match(textOf(home({})), /接続記録あり・未確認/u);
   view = { kind: 'preparing' };
   text = textOf(accounts({}));
   assert.match(text, /要確認/u);
@@ -1173,9 +1205,9 @@ test('home (real): 再接続が必要 replaces 接続済み for the selected X a
     '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: ME } }) },
   });
-  assert.match(textOf(render({})), /^接続済み$/mu);
+  assert.match(textOf(render({})), /接続記録あり・未確認/u);
   signal.markXServiceRestarted('person-9');
-  assert.match(textOf(render({})), /^接続済み$/mu, 'another person\'s restart');
+  assert.match(textOf(render({})), /接続記録あり・未確認/u, 'another person\'s restart cannot assert anything about this connection');
   signal.clearXServiceRestarted('person-9');
   signal.markXServiceRestarted('person-1');
   const restarted = textOf(render({}));

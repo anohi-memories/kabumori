@@ -8,7 +8,7 @@ import { HOME_NEEDS_CHECK_TEXT, HOME_RESERVATION_NOTE, homeCount, homeHasNoReser
 import { useHomeReservations } from '@/features/reservations/use-home-reservations';
 import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
 import { rowGenerationNote } from '@/features/reservations/x-row-generation';
-import { connectionPill, restartAppliesTo, X_NOT_CONNECTED_HOME_TEXT } from '@/features/reservations/x-write-view';
+import { connectionPill, restartAppliesTo, X_CONNECTION_UNVERIFIED_TEXT, X_NOT_CONNECTED_HOME_TEXT } from '@/features/reservations/x-write-view';
 import { resolvePostsView, statusHeadline, summarizeHome } from '@/domain/data-view';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { useActiveAccount } from '@/providers/active-account-provider';
@@ -26,7 +26,7 @@ export default function HomeScreen() {
   useXReconnectSignal();
   const { session } = useAuth();
   const { view: personal } = usePersonalWorkspace();
-  const connection = connectionPill(activeAccount?.connectionStatus ?? '', activeAccount?.platform === 'x' && isXReconnectRequired(activeAccount.id), '要確認', activeAccount != null && isXServiceRestarted(session?.user?.id) && restartAppliesTo(activeAccount, personal.kind === 'ready' ? personal.workspaceId : null));
+  const connection = connectionPill(activeAccount?.connectionStatus ?? '', activeAccount?.platform === 'x' && isXReconnectRequired(activeAccount.id), '要確認', activeAccount != null && isXServiceRestarted(session?.user?.id) && restartAppliesTo(activeAccount, personal.kind === 'ready' ? personal.workspaceId : null), status === 'mock_preview' ? 'preview' : activeAccount?.platform);
   const headline = homeHeadline(statusHeadline(status), connection.tone);
   const { view: reservations, reload: reloadReservations } = useHomeReservations(activeAccount, status);
 
@@ -64,7 +64,7 @@ export default function HomeScreen() {
 
         {status !== 'mock_preview' && activeAccount?.platform === 'x' && connection.tone === 'warning' ? (
           <Card>
-            <Pill tone="warning">{X_NOT_CONNECTED_HOME_TEXT}</Pill>
+            <Pill tone="warning">{activeAccount.connectionStatus === 'connected' && !isXReconnectRequired(activeAccount.id) && !(isXServiceRestarted(session?.user?.id) && restartAppliesTo(activeAccount, personal.kind === 'ready' ? personal.workspaceId : null)) ? X_CONNECTION_UNVERIFIED_TEXT : X_NOT_CONNECTED_HOME_TEXT}</Pill>
             <Link href="/reservations" asChild><ActionButton label="予約の管理を開く" onPress={() => {}} /></Link>
             <Link href="/accounts" asChild><ActionButton label="アカウント画面を開く" onPress={() => {}} /></Link>
           </Card>
@@ -95,8 +95,8 @@ export default function HomeScreen() {
                 </View>
                 <Pill tone={connection.tone}>{connection.label}</Pill>
               </View>
-              <Pill tone={summary.autoPostEnabled ? 'success' : 'neutral'}>
-                自動投稿: {summary.autoPostEnabled ? 'ON（稼働中）' : 'OFF（停止中）'}
+              <Pill tone={summary.autoPostEnabled ? (activeAccount.platform === 'x' && status !== 'mock_preview' ? 'warning' : 'success') : 'neutral'}>
+                自動投稿: {summary.autoPostEnabled ? (activeAccount.platform === 'x' && status !== 'mock_preview' ? '設定はON（投稿可否は未確認）' : 'ON（稼働中）') : 'OFF（停止中）'}
               </Pill>
             </>
           ) : (
@@ -180,6 +180,7 @@ export default function HomeScreen() {
           <Card style={{ flex: 1 }}>
             <Text style={styles.muted}>今後の予定</Text>
             <Text style={{ color: colors.ink, fontSize: 28, fontWeight: '800' }}>{upcomingCount === null ? '－' : `${upcomingCount}件`}</Text>
+            {status !== 'mock_preview' && activeAccount?.platform === 'x' ? <Text style={styles.muted}>要確認を除く候補・投稿の保証なし</Text> : null}
           </Card>
           <Card style={{ flex: 1 }}>
             <Text style={styles.muted}>要確認</Text>
@@ -188,6 +189,7 @@ export default function HomeScreen() {
             </Text>
           </Card>
         </View>
+        {reservations.kind === 'ready' ? <Text style={styles.muted}>{`Xの保存済み予約: ${reservations.total}件（取消済み・投稿済みを含む）。送信できない以前の接続の予約は「要確認」に表示し、今後の候補には含めません。`}</Text> : null}
 
         <BrandPostPreview brandId={activeAccount?.brandId} workspaceName={workspace?.name ?? ''} handle={activeAccount?.profile.handle} />
 

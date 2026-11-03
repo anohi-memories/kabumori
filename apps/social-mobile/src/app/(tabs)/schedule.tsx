@@ -67,7 +67,7 @@ import {
 import { MODE_LABELS, PREVIEW_LABEL } from '@/features/schedule/schedule-labels';
 import { ScheduleComposer, SmallButton, type AiPlanningInput } from '@/features/schedule/schedule-composer';
 import { sha256Hex } from '@/features/schedule/sha256';
-import { jstFieldsOf, retimeFixedDraft } from '@/features/schedule/time-edit';
+import { interruptedTimeEditText, jstFieldsOf, retimeFixedDraft, serverTimeEditBase, serverTimeEditMatches, type ServerTimeEditBase } from '@/features/schedule/time-edit';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useDataStatus } from '@/providers/data-provider';
 
@@ -115,7 +115,7 @@ export default function ScheduleScreen() {
   const serverLoads = useRef(0);
   const [pendingSaves, setPendingSaves] = useState<Record<string, PendingSave>>({});
   const [rowBusy, setRowBusy] = useState<string | null>(null);
-  const [rowRetiming, setRowRetiming] = useState<{ id: string; date: string; time: string } | null>(null);
+  const [rowRetiming, setRowRetiming] = useState<(ServerTimeEditBase & { date: string; time: string }) | null>(null);
   // One save at a time; an answer for another person / login / account does not reach the screen.
   const xGuard = useXWriteGuard(activeAccount);
   // The saved row whose cancel asked once: the second press is the cancel (as on the reservations screen).
@@ -183,6 +183,9 @@ export default function ScheduleScreen() {
   }, [accountId, reservationStore, xGuard.scope, xGuard.canRead, refocus]);
   const serverList = reservationStore.enabled ? serverListFor(serverSnapshot, accountId) : null;
   const serverRows: ServerReservation[] = serverList?.state === 'ready' ? serverList.rows : [];
+  const rowEditInterrupted = rowRetiming !== null && (rowRetiming.scope !== xGuard.scope || (serverList?.state === 'ready' && !serverTimeEditMatches(rowRetiming, serverRows.find((row) => row.reservationId === rowRetiming.id), xGuard.scope)));
+  // Adjust on a scope change before rendering children, so A→B→A cannot revive A's old editor.
+  if (rowRetiming && rowRetiming.scope !== xGuard.scope) setRowRetiming(null);
   // A "post now" row is not a reservation: its state and its cancel are on the reservations screen.
   const reservationRows = serverRows.filter((row) => !isSendNowRow(row));
   // With the store on, the saved reservations are part of the answer: not read yet or not readable is not "none".
@@ -311,6 +314,7 @@ export default function ScheduleScreen() {
     const sentToken = xGuard.token;
     let iso: string | null = null;
     if (kind === 'reschedule') {
+      if (!rowRetiming || !serverTimeEditMatches(rowRetiming, row, scope)) return;
       iso = rowRetiming && rowRetiming.id === row.reservationId ? isoFromJstFields(rowRetiming) : null;
       if (!iso) {
         setNotice({ tone: 'danger', text: '日時が正しくありません（例: 2026-10-15 / 09:30）。' });
@@ -319,7 +323,7 @@ export default function ScheduleScreen() {
     }
     setRowBusy(row.reservationId);
     const result = kind === 'reschedule'
-      ? await reservationStore.reschedule(row.reservationId, row.revision, iso!)
+      ? await reservationStore.reschedule(row.reservationId, rowRetiming!.revision, iso!)
       : kind === 'reconfirm'
         ? await reservationStore.reconfirm(row.reservationId, row.revision, await sha256Hex(row.body ?? ''))
         : await reservationStore.cancel(row.reservationId, row.revision);
@@ -538,10 +542,11 @@ export default function ScheduleScreen() {
             ) : null}
             {serverList.state === 'ready' && !serverList.rows.length ? <Text style={styles.muted}>まだありません。</Text> : null}
             {serverRows.length > reservationRows.length ? <Text style={styles.muted}>{`即時投稿が${serverRows.length - reservationRows.length}件あります。「予約の管理」で確認できます。`}</Text> : null}
+            {rowEditInterrupted && rowRetiming?.scope === xGuard.scope ? <Text style={styles.muted}>{interruptedTimeEditText(`${rowRetiming.date} ${rowRetiming.time}`)}</Text> : null}
             {reservationRows.map((row) => (
               <ServerReservationCard key={row.reservationId} row={row} account={previewAccount} busy={rowBusy === row.reservationId}
-                retiming={rowRetiming?.id === row.reservationId ? { date: rowRetiming.date, time: rowRetiming.time } : null}
-                onRetime={() => setRowRetiming({ id: row.reservationId, ...jstFieldsOf(row.scheduledAt) })}
+                retiming={!rowEditInterrupted && rowRetiming?.id === row.reservationId ? { date: rowRetiming.date, time: rowRetiming.time } : null}
+                onRetime={() => setRowRetiming({ ...serverTimeEditBase(row, xGuard.scope), ...jstFieldsOf(row.scheduledAt) })}
                 onRetimeChange={(patch) => setRowRetiming((current) => (current && current.id === row.reservationId ? { ...current, ...patch } : current))}
                 onRetimeApply={() => void changeReservation(row, 'reschedule')}
                 onRetimeCancel={() => setRowRetiming(null)}

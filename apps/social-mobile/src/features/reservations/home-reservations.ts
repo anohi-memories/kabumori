@@ -37,9 +37,10 @@ export function homeReservationsOf(list: ServerList, isNotEditable: (reservation
     const notEditable = rowRefusalOf(row, isNotEditable(row.reservationId)) !== null;
     const { tone } = xRowViewOf(row, notEditable, '', '');
     const ahead = new Date(row.scheduledAt).getTime() >= nowMs;
-    if (row.status === 'claimed' || (row.status === 'planned' && ahead)) upcomingCount += 1;
+    const attention = tone === 'warning' || tone === 'danger' || (row.status === 'planned' && !ahead);
+    if (!attention && !notEditable && (row.status === 'claimed' || (row.status === 'planned' && ahead))) upcomingCount += 1;
     // A planned row past its time did not go as planned, and the app does not say why.
-    if (tone === 'warning' || tone === 'danger' || (row.status === 'planned' && !ahead)) attentionCount += 1;
+    if (attention) attentionCount += 1;
     // Only a confirmed row can be next: a row awaiting a reconfirmation, refused an edit or of an earlier generation is not, nor is an AI slot.
     if (row.status === 'planned' && ahead && !notEditable && row.consentState === 'confirmed' && (!next || row.scheduledAt < next.scheduledAt)) next = row;
   }

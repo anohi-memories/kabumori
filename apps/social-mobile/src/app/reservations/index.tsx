@@ -27,6 +27,7 @@ import { isXReconnectedAfterRestart, isXReconnectRequired, isXRowNotEditable, is
 import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, RESTART_RECONNECTED_TEXT, X_NOT_CONNECTED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
 import { anyGenerationUnproven, rowGenerationNote, rowRefusalOf } from '@/features/reservations/x-row-generation';
 import { useRefocusCount } from '@/features/reservations/use-refocus-count';
+import { interruptedTimeEditText, serverTimeEditBase, serverTimeEditMatches, type ServerTimeEditBase } from '@/features/schedule/time-edit';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -84,6 +85,7 @@ export default function ReservationsScreen() {
   const [selected, setSelected] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [timeText, setTimeText] = useState('');
+  const [timeEditBase, setTimeEditBase] = useState<ServerTimeEditBase | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reads, setReads] = useState(0);
   // A return to this screen (from the accounts screen after a reconnect, say) reads the rows again.
@@ -153,6 +155,8 @@ export default function ReservationsScreen() {
       if (result.ok) {
         const row = result.value;
         setXList((value) => (value && value.scope === mine ? { scope: mine, rows: value.rows.map((item) => (item.reservationId === row.reservationId ? row : item)) } : value));
+        // A successful write is explicit; the next edit must start from its read-back, not the old input.
+        setTimeEditBase(null);
         setConfirmCancel(null);
         say(mine, done(row), xRowView(row).needsReconfirm ? 'warning' : 'success');
       } else {
@@ -168,10 +172,10 @@ export default function ReservationsScreen() {
   };
 
   const reschedule = (row: ServerReservation) => {
-    if (scope === null) return;
+    if (scope === null || !timeEditBase || !serverTimeEditMatches(timeEditBase, row, scope)) return;
     const parsed = parseJstInput(timeText, new Date());
     if (!parsed.ok) { say(scope, parsed.message); return; }
-    void editX(row, () => ports.x.reschedule(row.reservationId, row.revision, parsed.iso),
+    void editX(row, () => ports.x.reschedule(row.reservationId, timeEditBase.revision, parsed.iso),
       (next) => (xRowView(next).needsReconfirm ? '時刻を変更しました。この本文で投稿してよいか、再確認してください。確認するまで投稿されません。' : '時刻を変更しました。'));
   };
   const reconfirm = (row: ServerReservation) => {
@@ -266,6 +270,8 @@ export default function ReservationsScreen() {
 
   const shownNotice = notice && notice.scope === scope ? notice : null;
   const rows = xList && xList.scope === scope ? xList.rows : [];
+  const timeEditInterrupted = timeEditBase !== null && (timeEditBase.scope !== scope || (xList?.scope === scope && !xList.failed && !serverTimeEditMatches(timeEditBase, rows.find((row) => row.reservationId === timeEditBase.id), scope)));
+  if (timeEditBase && timeEditBase.scope !== scope) setTimeEditBase(null);
   const mineRequests = threadsRequests.filter((item) => item.scope === scope);
   const reconnectedNote = platform === 'x' && refusal === null && !restartObserved && !reconnectRequired && !notConnected && anyGenerationUnproven(rows) && isXReconnectedAfterRestart(userId);
   const disabled = !usable || busy;
@@ -315,6 +321,7 @@ export default function ReservationsScreen() {
             {shownNotice.button && !loginRefused ? <ActionButton label={shownNotice.button === 'accounts' ? 'アカウント画面を開く' : '設定画面を開く'} onPress={() => go(shownNotice.button)} /> : null}
           </Card>
         ) : null}
+        {timeEditInterrupted && timeEditBase?.scope === scope ? <Card><Text style={styles.muted}>{interruptedTimeEditText(timeText)}</Text></Card> : null}
 
         {platform === 'x' ? (
           <>
@@ -334,7 +341,7 @@ export default function ReservationsScreen() {
               const sendNow = isSendNowRow(row);
               return (
                 <Card key={row.reservationId}>
-                  <Pressable accessibilityRole="button" accessibilityLabel={`${sendNow ? '即時投稿' : '予約'} ${formatJst(row.scheduledAt)}`} onPress={() => { setSelected(open ? null : row.reservationId); setConfirmCancel(null); setTimeText(formatJst(row.scheduledAt)); }}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`${sendNow ? '即時投稿' : '予約'} ${formatJst(row.scheduledAt)}`} onPress={() => { setSelected(open ? null : row.reservationId); setConfirmCancel(null); setTimeText(formatJst(row.scheduledAt)); setTimeEditBase(open ? null : serverTimeEditBase(row, scope)); }}>
                     <View style={{ gap: 4 }}>
                       <Text style={{ color: colors.ink, fontWeight: '700' }}>{formatJst(row.scheduledAt)}</Text>
                       <Pill tone={view.tone}>{view.label}</Pill>
@@ -346,13 +353,14 @@ export default function ReservationsScreen() {
                   {open ? (
                     <View style={{ gap: 8 }}>
                       {view.detail ? <Text style={styles.muted}>{view.detail}</Text> : null}
-                      {view.canReschedule ? (
+                      {view.canReschedule && timeEditBase?.id === row.reservationId && !timeEditInterrupted ? (
                         <>
                           <Text style={styles.muted}>新しい日時（日本時間、例: 2026-11-01 09:30）</Text>
                           <TextInput accessibilityLabel="新しい日時" value={timeText} onChangeText={setTimeText} style={inputStyle} editable={!disabled} />
                           <ActionButton label="時刻を変更" disabled={disabled} onPress={() => reschedule(row)} />
                         </>
                       ) : null}
+                      {view.canReschedule && (timeEditBase?.id !== row.reservationId || timeEditInterrupted) ? <ActionButton label="日時の編集を始める" disabled={disabled} onPress={() => { setTimeEditBase(serverTimeEditBase(row, scope)); setTimeText(formatJst(row.scheduledAt)); }} /> : null}
                       {view.needsReconfirm ? <ActionButton label="この本文で再確認する" disabled={disabled} onPress={() => reconfirm(row)} /> : null}
                       {view.canCancel ? (
                         <ActionButton label={confirmCancel === row.reservationId ? '本当に取り消す' : sendNow ? '即時投稿を取り消す' : '予約を取り消す'} disabled={cancelDisabled} onPress={() => cancelX(row)} />
