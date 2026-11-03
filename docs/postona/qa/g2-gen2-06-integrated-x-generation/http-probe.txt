@@ -1,0 +1,11 @@
+owner list 200 rows 4 top keys ok,reservations
+row keys batchId,body,connectionGeneration,consentState,draftId,fixed,mode,origin,position,reservationId,revision,scheduledAt,status
+connectionGeneration present true
+owner get 200 ok keys ok,reservations
+other get 404 POSTONA_RESV_NOT_FOUND
+other reschedule 404 POSTONA_RESV_NOT_FOUND
+other reconfirm 404 POSTONA_RESV_NOT_FOUND
+other cancel 404 POSTONA_RESV_NOT_FOUND
+other list of owner account 200 ok rows 0
+other create on owner account 404 POSTONA_RESV_ACCOUNT_NOT_FOUND
+bad jwt list 401 UNAUTHORIZED_INVALID_JWT_FORMAT
