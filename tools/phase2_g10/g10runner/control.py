@@ -199,12 +199,18 @@ class Control:
                     claimed_absent[rec.get("run_id")] = bool(rec.get("absent"))
         except FileNotFoundError:
             pass
+        confirmed_ended = {r["payload"]["run_id"] for r in self.ledger.read_all()
+                           if r["type"] == "END" and r["payload"].get("absence_confirmed")}
         for run_id in registry.all_entries(self.layout):
             try:
                 entry = registry.load(self.layout, run_id)
             except (registry.RegistryError, ValueError):
                 continue
             if not entry:
+                continue
+            # 別プレーン(exec)で走り END で不在確認済みの run は、control(別uid)から観測できない。exec が確定した終端を
+            # 信用し観測を要求しない。単一プロセス(同uid)の run は END 済みでも従来どおり再観測する（H3 R2 の不変量を保つ）。
+            if entry.get("uid") != os.getuid() and run_id in confirmed_ended:
                 continue
             present = supervise.run_processes_present(self.layout, entry)
             if present is None:

@@ -195,6 +195,35 @@ class IngestedFinalize(DispatchBase):
             status, _end = self.env.control.finalize(run_id, ingested=True)
         self.assertEqual(status, "ended_checks_passed", status)
 
+    def test_completion_problems_skips_confirmed_ended_ingested_run(self):
+        from unittest import mock
+        from g10runner import supervise
+        bundle = self.make_bundle()
+        go = self.go_doc(source_bundle=bundle)
+        run_id, request_doc = self.approve_and_claim(go)
+        self.place_job(go, request_doc)
+        self.assertEqual(self.loop().step()["decision"], "ran")
+        self.wait_terminal(run_id, 60)
+        signer = signing.HmacTestSigner(AGENT)
+        verifier = signing.HmacTestVerifier(AGENT)
+        rout = os.path.join(self.env.real, "rout-cp")
+        os.makedirs(rout, 0o700)
+        result_handoff.export_result(self.env.layout, run_id, rout, signer)
+        for pth in (self.env.layout.request_file(run_id), self.env.layout.proc_file(run_id)):
+            os.remove(pth)
+        for d in (self.env.layout.run_dir(run_id), self.env.layout.work_dir(run_id)):
+            make_writable(d)
+            shutil.rmtree(d)
+        result_handoff.ingest_result(rout, run_id, self.env.layout, verifier)
+        self.env.control.witness = None
+        from g10runner import control as control_mod
+        with mock.patch.object(supervise, "run_processes_present", return_value=None):
+            self.env.control.finalize(run_id, ingested=True)  # END(absence_confirmed=True)
+            # 別プレーン(exec)相当: entry uid と control の uid が違う＝観測不能。確定 END 済みなので再観測を要求しない
+            with mock.patch.object(control_mod.os, "getuid", return_value=os.getuid() + 1):
+                problems = self.env.control.completion_problems()
+        self.assertFalse(any(run_id in p for p in problems), problems)
+
 
 if __name__ == "__main__":
     unittest.main()

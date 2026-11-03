@@ -914,6 +914,10 @@ MUTANTS = [
      "        if ingested:  # \u5206\u5272: \u5b9f\u884c\u30d7\u30ed\u30bb\u30b9\u306f exec \u5074\u3002exec \u304c\u78ba\u5b9a\u3057\u305f\u7d42\u7aef\u72b6\u614b\u3092\u4fe1\u7528\u3057 control \u5074\u3067\u518d\u89b3\u6e2c\u3057\u306a\u3044",
      "        if False:  # \u5206\u5272: \u5b9f\u884c\u30d7\u30ed\u30bb\u30b9\u306f exec \u5074\u3002exec \u304c\u78ba\u5b9a\u3057\u305f\u7d42\u7aef\u72b6\u614b\u3092\u4fe1\u7528\u3057 control \u5074\u3067\u518d\u89b3\u6e2c\u3057\u306a\u3044",
      "test_task39_result_handoff.IngestedFinalize.test_ingested_finalize_trusts_bundle_without_refetch_or_reobserve"),
+    ("completion_problems re-observes confirmed-ended cross-plane runs", "g10runner/control.py",
+     "            if entry.get(\"uid\") != os.getuid() and run_id in confirmed_ended:",
+     "            if False and run_id in confirmed_ended:",
+     "test_task39_result_handoff.IngestedFinalize.test_completion_problems_skips_confirmed_ended_ingested_run"),
 ]
 
 
