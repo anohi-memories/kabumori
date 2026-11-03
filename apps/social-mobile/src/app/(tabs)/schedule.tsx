@@ -11,7 +11,8 @@ import { isSendNowRow, type ActionButtonKind } from '@/features/reservations/res
 import { useRefocusCount } from '@/features/reservations/use-refocus-count';
 import { useXWriteGuard } from '@/features/reservations/use-x-write-guard';
 import { clearXReconnectRequired, isXRowNotEditable, markXReconnectRequired, markXRowNotEditable } from '@/features/reservations/x-reconnect-signal';
-import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT, RESTART_RECONNECTED_TEXT, xAnswerView } from '@/features/reservations/x-write-view';
+import { anyGenerationUnproven, rowGenerationNote, rowRefusalOf } from '@/features/reservations/x-row-generation';
+import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, RESTART_RECONNECTED_TEXT, xAnswerView } from '@/features/reservations/x-write-view';
 import { resolvePostsView } from '@/domain/data-view';
 import { buildSaveRequest, type SaveRequest, type ServerReservation } from '@/domain/reservation-flow';
 import {
@@ -299,7 +300,7 @@ export default function ScheduleScreen() {
   async function changeReservation(row: ServerReservation, kind: 'reschedule' | 'reconfirm' | 'cancel') {
     if (!reservationStore.enabled || !accountId) return;
     // The card no longer offers these; a press already on its way is not sent either.
-    if (kind !== 'cancel' && isXRowNotEditable(row.reservationId)) return;
+    if (kind !== 'cancel' && rowRefusalOf(row, isXRowNotEditable(row.reservationId))) return;
     const refusal = kind === 'cancel' ? xGuard.cancelRefusal : xGuard.refusal;
     if (refusal) {
       setNotice({ tone: 'danger', text: refusal.text, button: refusal.button });
@@ -415,7 +416,7 @@ export default function ScheduleScreen() {
     setEditing(null);
   }
 
-  const reconnectedNote = reservationStore.enabled && !xGuard.refusal && reservationRows.length > 0 && xGuard.reconnectedAfterRestart;
+  const reconnectedNote = reservationStore.enabled && !xGuard.refusal && anyGenerationUnproven(reservationRows) && xGuard.reconnectedAfterRestart;
   // A failed batch already says it on its own row.
   const batchFailureTexts = myBatches.flatMap((batch) => (pendingSaves[batch.id]?.phase === 'failed' ? [xAnswerView(pendingSaves[batch.id].code ?? '', reservationErrorAction).text] : []));
 
@@ -546,8 +547,9 @@ export default function ScheduleScreen() {
                 onRetimeCancel={() => setRowRetiming(null)}
                 onReconfirm={() => void changeReservation(row, 'reconfirm')}
                 confirmingCancel={askingCancel === row.reservationId}
-                notEditable={isXRowNotEditable(row.reservationId) ? { label: NOT_EDITABLE_LABEL, text: NOT_EDITABLE_TEXT } : null}
+                notEditable={rowRefusalOf(row, isXRowNotEditable(row.reservationId))}
                 canEdit={!xGuard.refusal}
+                generationNote={rowGenerationNote(row, !xGuard.refusal)}
                 onCancel={() => {
                   if (askingCancel !== row.reservationId) { setAskingCancel(row.reservationId); return; }
                   setAskingCancel(null);

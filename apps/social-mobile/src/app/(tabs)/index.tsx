@@ -7,6 +7,7 @@ import { BrandPostPreview } from '@/features/brand-preview/brand-post-preview';
 import { HOME_NEEDS_CHECK_TEXT, HOME_RESERVATION_NOTE, homeCount, homeHasNoReservations, homeHeadline } from '@/features/reservations/home-reservations';
 import { useHomeReservations } from '@/features/reservations/use-home-reservations';
 import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
+import { rowGenerationNote } from '@/features/reservations/x-row-generation';
 import { connectionPill, restartAppliesTo, X_NOT_CONNECTED_HOME_TEXT } from '@/features/reservations/x-write-view';
 import { resolvePostsView, statusHeadline, summarizeHome } from '@/domain/data-view';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
@@ -134,6 +135,7 @@ export default function HomeScreen() {
               <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatTime(nextReservation.scheduledAt)}</Text>
               <Text style={{ color: colors.ink }}>{nextReservation.body ?? ''}</Text>
               <Text style={styles.muted}>{HOME_RESERVATION_NOTE}</Text>
+              {rowGenerationNote(nextReservation, false) ? <Text style={styles.muted}>{rowGenerationNote(nextReservation, false)}</Text> : null}
             </View>
           ) : summary.nextPost ? (
             <View style={{ gap: 4 }}>

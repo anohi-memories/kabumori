@@ -24,7 +24,9 @@ import {
 } from '@/features/reservations/reservation-view';
 import { contentSha256, newClientRequestId, useReservationPorts } from '@/features/reservations/use-reservation-ports';
 import { isXReconnectedAfterRestart, isXReconnectRequired, isXRowNotEditable, isXServiceRestarted, markXReconnectRequired, markXRowNotEditable, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, RESTART_RECONNECTED_TEXT, X_NOT_CONNECTED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
+import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_TEXT, RECONNECT_REQUIRED_TEXT, RESTART_OBSERVED_TEXT, RESTART_RECONNECTED_TEXT, X_NOT_CONNECTED_TEXT, xActionOf } from '@/features/reservations/x-write-view';
+import { anyGenerationUnproven, rowGenerationNote, rowRefusalOf } from '@/features/reservations/x-row-generation';
+import { useRefocusCount } from '@/features/reservations/use-refocus-count';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 
@@ -84,6 +86,8 @@ export default function ReservationsScreen() {
   const [timeText, setTimeText] = useState('');
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reads, setReads] = useState(0);
+  // A return to this screen (from the accounts screen after a reconnect, say) reads the rows again.
+  const refocus = useRefocusCount();
   const [threadsText, setThreadsText] = useState('');
   const [threadsTime, setThreadsTime] = useState('');
   const [threadsRequests, setThreadsRequests] = useState<ThreadsRequest[]>([]);
@@ -131,7 +135,7 @@ export default function ReservationsScreen() {
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [platform, scope, reads, ports, loginRefused]);
+  }, [platform, scope, reads, ports, loginRefused, refocus]);
 
   const rereadX = () => setReads((value) => value + 1);
 
@@ -263,7 +267,7 @@ export default function ReservationsScreen() {
   const shownNotice = notice && notice.scope === scope ? notice : null;
   const rows = xList && xList.scope === scope ? xList.rows : [];
   const mineRequests = threadsRequests.filter((item) => item.scope === scope);
-  const reconnectedNote = platform === 'x' && refusal === null && !restartObserved && !reconnectRequired && !notConnected && rows.length > 0 && isXReconnectedAfterRestart(userId);
+  const reconnectedNote = platform === 'x' && refusal === null && !restartObserved && !reconnectRequired && !notConnected && anyGenerationUnproven(rows) && isXReconnectedAfterRestart(userId);
   const disabled = !usable || busy;
   const cancelDisabled = !canRead || busy;
   const readDisabled = !canRead || busy;
@@ -323,7 +327,9 @@ export default function ReservationsScreen() {
             {canRead && xList?.scope === scope && xList.failed ? <Card><Text style={styles.muted}>予約を読み込めなかったため、予約があるかどうかを確認できていません。「最新の状態を読み込む」でもう一度確かめてください。</Text></Card> : null}
             {canRead && xList?.scope === scope && !xList.failed && rows.length === 0 ? <Card><Text style={styles.muted}>このアカウントの予約はありません。</Text></Card> : null}
             {rows.map((row) => {
-              const view = xRowViewOf(row, isXRowNotEditable(row.reservationId), NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT);
+              const refused = rowRefusalOf(row, isXRowNotEditable(row.reservationId));
+              const view = xRowViewOf(row, refused !== null, refused?.label ?? '', refused?.text ?? '');
+              const note = refused ? null : rowGenerationNote(row, usable);
               const open = selected === row.reservationId;
               const sendNow = isSendNowRow(row);
               return (
@@ -332,6 +338,7 @@ export default function ReservationsScreen() {
                     <View style={{ gap: 4 }}>
                       <Text style={{ color: colors.ink, fontWeight: '700' }}>{formatJst(row.scheduledAt)}</Text>
                       <Pill tone={view.tone}>{view.label}</Pill>
+                      {note ? <Text style={styles.muted}>{note}</Text> : null}
                       {sendNow && row.status !== 'planned' ? <Text style={styles.muted}>即時投稿</Text> : null}
                       {row.body ? <Text style={styles.muted} numberOfLines={open ? undefined : 2}>{row.body}</Text> : null}
                     </View>

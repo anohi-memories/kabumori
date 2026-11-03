@@ -3,15 +3,24 @@
 // harness of tests/reservation-screens.test.mjs, so the screen is mounted exactly as there. React / RN are that harness's stubs: no device.
 const LIVE_FETCH = globalThis.fetch;
 const netlog = { actions: [], before: null, after: null };
+let inflight = 0;
 const countingFetch = async (url, init) => {
   const action = JSON.parse(String(init?.body ?? '{}')).action ?? null;
   netlog.actions.push(action);
-  if (netlog.before) await netlog.before(action);
-  // The product's own URL check stays on: only the origin is swapped, at the fetch boundary, to the local twin.
-  const answer = await LIVE_FETCH(stack.X_FUNCTION, init);
-  if (netlog.after) await netlog.after(action);
-  return answer;
+  inflight += 1;
+  try {
+    if (netlog.before) await netlog.before(action);
+    // The product's own URL check stays on: only the origin is swapped, at the fetch boundary, to the local twin.
+    const answer = await LIVE_FETCH(stack.X_FUNCTION, init);
+    if (netlog.after) await netlog.after(action);
+    return answer;
+  } finally {
+    inflight -= 1;
+  }
 };
+/** G1 TASK 39: with G3 #629 a read takes longer than the fixed settles; wait until no call is out (twice), then render. */
+const quiet = async () => { for (let i = 0; i < 150; i += 1) { await settle(); if (inflight === 0) { await settle(); if (inflight === 0) return; } } };
+const settled = async (h) => { await quiet(); await h.render(); await quiet(); return h.render(); };
 const writesSent = () => netlog.actions.filter((a) => ['create', 'reschedule', 'reconfirm', 'cancel'].includes(a));
 const portsFor = (world, gates = { x: true, threads: false }) => buildReservationPorts(gates, {
   supabaseUrl: 'https://local-stack.invalid',
@@ -47,7 +56,7 @@ const openRowOf = async (h, body) => {
   return h.render();
 };
 const soon = (days) => new Date(Date.now() + days * 86400e3).toISOString();
-const pressButton = async (h, label) => { button(h.renderOnce(), label).onPress(); await settle(); return h.render(); };
+const pressButton = async (h, label) => { button(h.renderOnce(), label).onPress(); await settle(); return settled(h); };
 test.beforeEach(() => { netlog.actions = []; netlog.before = null; netlog.after = null; });
 
 test('stack: X connected -> G4 disconnect (real SQL): the column the app reads changes; list and get answer; the rows stay on the real screen; time change stays off; a cancel asks twice and goes once', async () => {
@@ -278,14 +287,16 @@ test('stack: service end (SYNTHETIC row): list / get / cancel answer, create / r
   tree = await again.render();
   assert.ok(has(tree, 'X自動投稿を再開しました'), shown(tree));
   tree = await openRowOf(again, 'ended other');
-  assert.equal(button(tree, '時刻を変更').disabled, true);
+  // With G3 #629 the list says this row is of an earlier generation: no time change is offered at all.
+  if (process.env.G1T39_G3_629 === '1') assert.equal(buttons(tree, '時刻を変更').length, 0, shown(tree));
+  else assert.equal(button(tree, '時刻を変更').disabled, true);
   await pressButton(again, '予約を取り消す');
   await pressButton(again, '本当に取り消す');
   assert.deepEqual(writesSent(), ['cancel']);
   reconnectSignal.clearXServiceRestarted(a.userId);
 });
 
-test('stack, with G3 #624: after a restart, before and after a reconnect: 403 then 409 for a pre-restart row; the real screen says so, keeps the cancel; a new row works', { skip: process.env.G1T37_G3_624 === '1' ? false : 'needs G3 PR #624 in the tree' }, async () => {
+test('stack, with G3 #624: after a restart, before and after a reconnect: 403 then 409 for a pre-restart row; the real screen says so, keeps the cancel; a new row works', { skip: process.env.G1T37_G3_624 === '1' && process.env.G1T39_G3_629 !== '1' ? false : 'needs G3 PR #624 in the tree, without #629 (its rows then say earlier)' }, async () => {
   const a = await stack.person('m10');
   const row = await stack.saveRow(a, a.account, 'before restart');
   const gone = await stack.saveRow(a, a.account, 'before restart cancel');
@@ -343,4 +354,58 @@ test('stack: gates OFF (the build\'s stores) on a real session: no fetch, no tok
   const tree = await h.render();
   assert.deepEqual(netlog.actions, []);
   assert.ok(button(tree, '最新の状態を読み込む').disabled);
+});
+
+test('stack, with G3 #629: each row\'s connection generation on the real screen: current, then earlier after a restart (a fresh screen, nothing remembered), still earlier after a reconnect, a cancel only; a new row current through a write\'s read-back; unknown when disconnected; never another person\'s', { skip: process.env.G1T39_G3_629 === '1' ? false : 'needs G3 PR #629 in the tree' }, async () => {
+  const a = await stack.person('m39');
+  const keep = await stack.saveRow(a, a.account, 'gen keep');
+  const drop = await stack.saveRow(a, a.account, 'gen drop');
+  const b = await stack.person('m39b');
+  await stack.saveRow(b, b.account, 'gen secret of B');
+  const count = (tree, text) => texts(tree).filter((t) => t === text).length;
+  let h = await onScreenFor(a);
+  let tree = await settled(h);
+  assert.equal(count(tree, xRowGeneration.CURRENT_TEXT), 2, shown(tree));
+
+  await stack.endService(a);
+  const asked = await stack.rpc('start_x_autopost_service', a.token);
+  assert.equal((await stack.rpc('reactivate_x_autopost_service', a.token, { p_expected_lifecycle_version: asked.body.lifecycle_version })).body.status, 'active');
+  assert.deepEqual((await stack.http('list', { socialAccountId: a.account }, a.token)).rows.map((row) => row.connectionGeneration), ['earlier', 'earlier']);
+  h = await onScreenFor(a);
+  netlog.actions = [];
+  tree = await settled(h);
+  assert.equal(count(tree, xRowGeneration.EARLIER_LABEL), 2, shown(tree));
+  assert.equal(count(tree, '予約済み'), 0);
+  tree = await openRowOf(h, 'gen drop');
+  assert.ok(has(tree, xRowGeneration.EARLIER_TEXT), shown(tree));
+  assert.equal(buttons(tree, '時刻を変更').length, 0);
+  assert.equal(buttons(tree, 'この本文で再確認する').length, 0);
+  assert.deepEqual(writesSent(), [], 'shown from the read alone');
+
+  await stack.xConnect(a, 'm39c', a.puid);
+  const fresh = await stack.saveRow(a, a.account, 'gen new');
+  h = await onScreenFor(a);
+  tree = await settled(h);
+  assert.equal(count(tree, xRowGeneration.EARLIER_LABEL), 2, 'a reconnect does not bring them back');
+  assert.equal(count(tree, xRowGeneration.CURRENT_TEXT), 1, shown(tree));
+  await openRowOf(h, 'gen drop');
+  await pressButton(h, '予約を取り消す');
+  tree = await pressButton(h, '本当に取り消す');
+  assert.match(await stack.rowState(drop.reservationId), /^cancelled\/2\//u, 'an earlier row can still be cancelled');
+  tree = await openRowOf(h, 'gen new');
+  field(tree, '新しい日時').onChangeText('2026-11-20 10:00');
+  netlog.actions = [];
+  tree = await pressButton(h, '時刻を変更');
+  assert.deepEqual(writesSent(), ['reschedule']);
+  assert.ok(has(tree, '時刻を変更しました'), shown(tree));
+  assert.equal(count(tree, xRowGeneration.CURRENT_TEXT), 1, 'the store\'s read-back row carries the field');
+  assert.equal(await stack.rowState(keep.reservationId), 'planned/1/confirmed');
+  assert.match(await stack.rowState(fresh.reservationId), /^planned\/2\//u);
+
+  assert.equal(await stack.xDisconnect(a), 'done');
+  h = await onScreenFor(a, { status: 'unconnected' });
+  tree = await settled(h);
+  assert.equal(count(tree, xRowGeneration.UNKNOWN_TEXT), 1, shown(tree));
+  assert.equal(count(tree, xRowGeneration.EARLIER_LABEL), 1);
+  assert.ok(!has(tree, 'gen secret of B'));
 });

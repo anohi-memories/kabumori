@@ -23,6 +23,7 @@ import * as serverState from '../src/features/schedule/server-reservations-state
 import * as reservationView from '../src/features/reservations/reservation-view.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
 import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
+import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const savedGlobals = new Map();
@@ -58,6 +59,22 @@ const ME = 'u_me';
 const held2 = new Promise(() => {});
 const ACCOUNT = { id: '11111111-1111-4111-8111-111111111111', brandId: ME, platform: 'x', profile: { displayName: 'me', handle: '@me', avatarColor: '#000' }, connectionStatus: 'connected', postingState: 'active' };
 const OTHER_ACCOUNT = { ...ACCOUNT, id: '44444444-4444-4444-8444-444444444444' };
+/**
+ * G3 #629's field as its store passes it on: this tree's store may drop it, so `world.generations[id]` is put on the rows of list / get, and
+ * `world.afterWrite[id]` (if given, else the same map) on the read-back row a write returns. An id in neither map has no field.
+ */
+const withGenerations = (store, world) => (!store.enabled ? store : new Proxy(store, {
+  get(target, key) {
+    const fn = target[key];
+    if (typeof fn !== 'function' || !['list', 'get', 'reschedule', 'reconfirm', 'cancel'].includes(key)) return fn;
+    return async (...args) => {
+      const answer = await fn.apply(target, args);
+      const map = (key === 'list' || key === 'get' ? world.generations : world.afterWrite ?? world.generations) ?? {};
+      const put = (row) => (Object.hasOwn(map, row.reservationId) ? { ...row, connectionGeneration: map[row.reservationId] } : row);
+      return answer && answer.ok ? { ...answer, value: Array.isArray(answer.value) ? answer.value.map(put) : put(answer.value) } : answer;
+    };
+  },
+}));
 
 /**
  * The real schedule screen. `gate`: G3's store is built by G3's factory with this argument; the live deps are the ones the screen
@@ -122,13 +139,14 @@ async function screen({ gate = true, reply = null, account = ACCOUNT, workspaceI
     '@/features/reservations/use-refocus-count': { useRefocusCount: () => world.refocus },
     '@/features/reservations/use-x-write-guard': guard,
     '@/features/reservations/x-reconnect-signal': signal,
+    '@/features/reservations/x-row-generation': xRowGeneration,
     '@/features/reservations/x-write-view': xWriteView,
     '@/features/schedule/schedule-composer': { ScheduleComposer: function ScheduleComposer(props) { return { type: 'ScheduleComposer', props }; }, SmallButton: 'SmallButton' },
     '@/features/schedule/reservation-error-actions': { reservationErrorAction },
     '@/features/schedule/reservation-store': {
       ...reservationStore,
       // G3's real factory with the gate of this test, on a real live store whose fetch is scripted.
-      createReservationStore: (_constant, live) => reservationStore.createReservationStore(gate, live ? { ...live, fetch: fetchImpl } : null),
+      createReservationStore: (_constant, live) => withGenerations(reservationStore.createReservationStore(gate, live ? { ...live, fetch: fetchImpl } : null), world),
     },
     '@/features/schedule/server-reservations-state': serverState,
     '@/features/schedule/server-reservation-card': { ServerReservationCard: function ServerReservationCard(props) { return { type: 'ServerReservationCard', props }; } },
@@ -612,6 +630,118 @@ test('T38 S-1 the words: a reconnect alone is not said to bring a stored row bac
   assert.match(xWriteView.RESTART_RECONNECTED_TEXT, /判別できません/u);
 });
 
+// ---- G1 TASK 39: the row's connection generation (G3 #629's list / get field)
+const T39_ROWS = {
+  old: { ...ROW, reservationId: 't39-old', draftId: 'd391', scheduledAt: '2026-12-01T00:30:00.000Z', body: 'old body' },
+  now: { ...ROW, reservationId: 't39-now', draftId: 'd392', scheduledAt: '2026-12-03T00:30:00.000Z', body: 'now body' },
+  bare: { ...ROW, reservationId: 't39-bare', draftId: 'd393', scheduledAt: '2026-12-05T00:30:00.000Z', body: 'bare body' },
+  odd: { ...ROW, reservationId: 't39-odd', draftId: 'd394', scheduledAt: '2026-12-07T00:30:00.000Z', body: 'odd body' },
+};
+/** A server for the four rows: reschedule moves a row (revision + 1, the asked time); `refuse[action]` answers instead. */
+function t39Server(refuse = {}) {
+  const rows = Object.fromEntries(Object.values(T39_ROWS).map((row) => [row.reservationId, { ...row }]));
+  const seen = [];
+  const reply = async (call) => {
+    const { action, payload } = call.body;
+    seen.push(action);
+    if (refuse[action]) return refuse[action];
+    if (action === 'reschedule') { const row = rows[payload.reservationId]; rows[row.reservationId] = { ...row, revision: row.revision + 1, scheduledAt: payload.scheduledAt }; return ok([rows[row.reservationId]]); }
+    if (action === 'cancel') { const row = rows[payload.reservationId]; rows[row.reservationId] = { ...row, revision: row.revision + 1, status: 'cancelled' }; return ok([rows[row.reservationId]]); }
+    if (action === 'get') return ok([rows[payload.reservationId]]);
+    return ok(Object.values(rows));
+  };
+  return { reply, seen, rows };
+}
+const t39Card = (h, id) => { let hit = null; walk(h.render(), (n) => { if (n.type === 'ServerReservationCard' && n.props.row.reservationId === id) hit = n.props; }); return hit; };
+const T39_GENERATIONS = { 't39-old': 'earlier', 't39-now': 'current', 't39-odd': 'weird' };
+
+test('T39 S-4 on the tab: each row says what the server read says; earlier offers a cancel only and sends nothing else, even from a press already on its way; absent and invalid are unknown, never current', async () => {
+  const s = t39Server();
+  const h = await screen({ reply: s.reply });
+  h.world.generations = T39_GENERATIONS;
+  h.world.refocus += 1;
+  await h.update();
+  assert.deepEqual(s.seen.filter((a) => a !== 'list'), [], 'shown from the read alone: no 409 was needed');
+  assert.deepEqual(t39Card(h, 't39-old').notEditable, { label: xRowGeneration.EARLIER_LABEL, text: xRowGeneration.EARLIER_TEXT });
+  assert.equal(t39Card(h, 't39-now').notEditable, null);
+  assert.equal(t39Card(h, 't39-now').generationNote, xRowGeneration.CURRENT_TEXT);
+  assert.equal(t39Card(h, 't39-bare').generationNote, xRowGeneration.UNKNOWN_TEXT);
+  assert.equal(t39Card(h, 't39-odd').generationNote, xRowGeneration.UNKNOWN_TEXT);
+  assert.equal(t39Card(h, 't39-odd').notEditable, null, 'unknown narrows nothing the server allows');
+  const stale = t39Card(h, 't39-old');
+  stale.onRetime(); await h.update();
+  stale.onRetimeApply(); await settle(); await h.update();
+  stale.onReconfirm(); await settle(); await h.update();
+  assert.deepEqual(s.seen.filter((a) => a === 'reschedule' || a === 'reconfirm'), []);
+  t39Card(h, 't39-old').onCancel(); await h.update();
+  t39Card(h, 't39-old').onCancel(); await settle(); await h.update();
+  assert.deepEqual(s.seen.filter((a) => a === 'cancel'), ['cancel']);
+  assert.equal(s.rows['t39-old'].status, 'cancelled');
+});
+
+test('T39 S-4 restart: a new screen (nothing remembered here) shows earlier from the read; a reconnect read again turns an unknown row earlier; A-B-A shows each account its own', async () => {
+  signal.forgetXRowNotEditable?.('t39-old');
+  const s = t39Server();
+  const h = await screen({ reply: async (call) => (call.body.payload?.socialAccountId === OTHER_ACCOUNT.id && call.body.action === 'list' ? ok([{ ...T39_ROWS.bare, reservationId: 't39-b', draftId: 'd39b' }]) : s.reply(call)) });
+  assert.equal(signal.isXRowNotEditable('t39-old'), false, 'nothing remembered');
+  assert.equal(t39Card(h, 't39-old').generationNote, xRowGeneration.UNKNOWN_TEXT, 'before the field is there');
+  h.world.generations = { 't39-old': 'earlier' };
+  h.world.refocus += 1;
+  await h.update();
+  assert.equal(t39Card(h, 't39-old').notEditable.label, xRowGeneration.EARLIER_LABEL);
+  h.world.account = OTHER_ACCOUNT;
+  await h.update();
+  assert.equal(t39Card(h, 't39-old'), null, 'B: not A\'s rows');
+  assert.equal(t39Card(h, 't39-b').generationNote, xRowGeneration.UNKNOWN_TEXT);
+  h.world.account = ACCOUNT;
+  await h.update();
+  assert.equal(t39Card(h, 't39-old').notEditable.label, xRowGeneration.EARLIER_LABEL, 'back on A, from A\'s read');
+  h.world.generations = { 't39-old': 'current' };
+  h.world.refocus += 1;
+  await h.update();
+  assert.equal(t39Card(h, 't39-old').notEditable, null, 'the latest read decides, not an earlier one');
+});
+
+test('T39 a write\'s row without the field is not taken as current; a row of the latest read is', async () => {
+  const s = t39Server();
+  const h = await screen({ reply: s.reply });
+  h.world.generations = { 't39-now': 'current' };
+  h.world.afterWrite = {};
+  h.world.refocus += 1;
+  await h.update();
+  assert.equal(t39Card(h, 't39-now').generationNote, xRowGeneration.CURRENT_TEXT);
+  t39Card(h, 't39-now').onRetime(); await h.update();
+  t39Card(h, 't39-now').onRetimeChange({ date: '2026-12-04', time: '09:30' }); await h.update();
+  t39Card(h, 't39-now').onRetimeApply(); await settle(); await h.update();
+  assert.match(onScreen(h), /日時を変更しました/u);
+  assert.equal(t39Card(h, 't39-now').generationNote, xRowGeneration.UNKNOWN_TEXT, 'no field on that row: unknown');
+  h.world.refocus += 1;
+  await h.update();
+  assert.equal(t39Card(h, 't39-now').generationNote, xRowGeneration.CURRENT_TEXT, 'the next read says current again');
+});
+
+test('T39 while the writes are refused (403) 現在の接続 is not said; the general note on rows the app cannot tell apart is shown only while one has no answer', async () => {
+  const s = t39Server({ reschedule: no(403, 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED') });
+  const h = await screen({ reply: s.reply });
+  h.world.generations = { 't39-now': 'current', 't39-old': 'earlier' };
+  h.world.refocus += 1;
+  await h.update();
+  t39Card(h, 't39-now').onRetime(); await h.update();
+  t39Card(h, 't39-now').onRetimeApply(); await settle(); await h.update();
+  assert.equal(t39Card(h, 't39-now').canEdit, false);
+  assert.equal(t39Card(h, 't39-now').generationNote, null);
+  assert.equal(t39Card(h, 't39-bare').generationNote, xRowGeneration.UNKNOWN_TEXT);
+  signal.clearAllXReconnectRequired();
+  signal.markXServiceRestarted('person-1');
+  signal.clearXServiceRestarted('person-1');
+  await h.update();
+  assert.match(onScreen(h), /再開前に保存した予約は/u, 'two rows have no answer');
+  h.world.generations = { 't39-now': 'current', 't39-old': 'earlier', 't39-bare': 'current', 't39-odd': 'earlier' };
+  h.world.refocus += 1;
+  await h.update();
+  assert.doesNotMatch(onScreen(h), /再開前に保存した予約は/u, 'every row has its own answer');
+});
+
 test('T37 the words: a stored row may not be sent while the connection is off; 接続済み and 予約済み are no promise; a code the app cannot place is not called not-editable', () => {
   for (const text of [xWriteView.RECONNECT_REQUIRED_TEXT, xWriteView.RESTART_OBSERVED_TEXT, xWriteView.X_NOT_CONNECTED_TEXT, xWriteView.X_NOT_CONNECTED_HOME_TEXT]) assert.match(text, /投稿されないことがあります/u);
   assert.match(xWriteView.CONNECTED_NOT_PROOF_TEXT, /投稿を保証するものではありません/u);
@@ -931,6 +1061,7 @@ const baseStubs = () => ({
   '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
   '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
   '@/features/reservations/x-write-view': xWriteView,
+  '@/features/reservations/x-row-generation': xRowGeneration,
   '@/features/reservations/home-reservations': { homeCount: (fromPosts) => fromPosts, homeHasNoReservations: () => true, homeHeadline: (headline) => headline },
   '@/features/reservations/use-home-reservations': { useHomeReservations: () => ({ view: { kind: 'not_applicable' }, reload() {} }) },
 });

@@ -19,7 +19,7 @@ const toneOf = (row: ServerReservation): 'neutral' | 'success' | 'warning' | 'da
  * and each one is applied only after the server's read-back: time change (the consent of a manual post then
  * needs a new confirmation), reconfirmation of the exact text / time / account shown, and cancellation.
  */
-export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false, notEditable = null, canEdit = true }: {
+export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false, notEditable = null, canEdit = true, generationNote = null }: {
   row: ServerReservation;
   account: PreviewAccount | null;
   busy: boolean;
@@ -36,6 +36,8 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
   notEditable?: { label: string; text: string } | null;
   /** False while the screen refuses every write of this account (login, connection, restart): only what can still be done is offered. */
   canEdit?: boolean;
+  /** What the server's list says about this row's connection generation; never a promise that it is sent. */
+  generationNote?: string | null;
 }) {
   const manual = row.origin === 'user_authored';
   const planned = row.status === 'planned';
@@ -51,6 +53,7 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
       <Text style={{ color: colors.ink }}>{manual ? (row.body ?? '') : 'AIが投稿の直前に本文を作成します（現在はAIの枠は投稿されません）'}</Text>
       <Text style={styles.muted}>サーバーで確認した予約・X への投稿はまだ行われません</Text>
       {refused ? <Text style={styles.muted}>{notEditable.text}</Text> : null}
+      {planned && !refused && generationNote ? <Text style={styles.muted}>{generationNote}</Text> : null}
       {planned && !refused && manual && row.consentState === 'needs_reconfirm' ? (
         <Text style={styles.muted}>日時が変わったため、この本文・日時・投稿先でよいか、もう一度確認してください。確認するまで投稿の対象になりません。</Text>
       ) : null}
