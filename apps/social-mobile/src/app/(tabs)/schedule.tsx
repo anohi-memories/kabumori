@@ -8,6 +8,7 @@ import { colors } from '@/constants/theme';
 import { SignOutButton } from '@/components/sign-out-button';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { isSendNowRow, type ActionButtonKind } from '@/features/reservations/reservation-view';
+import { useRefocusCount } from '@/features/reservations/use-refocus-count';
 import { useXWriteGuard } from '@/features/reservations/use-x-write-guard';
 import { clearXReconnectRequired, isXRowNotEditable, markXReconnectRequired, markXRowNotEditable } from '@/features/reservations/x-reconnect-signal';
 import { CONNECTED_NOT_PROOF_TEXT, isNotEditableCode, NOT_EDITABLE_LABEL, NOT_EDITABLE_TEXT, RESTART_RECONNECTED_TEXT, xAnswerView } from '@/features/reservations/x-write-view';
@@ -162,7 +163,8 @@ export default function ScheduleScreen() {
   }
 
   const accountId = activeAccount?.id ?? null;
-  // Every (re)entry of an account -- including an app restart -- reads its reservations fresh from the server.
+  const refocus = useRefocusCount();
+  // Every (re)entry of an account -- including an app restart or a return to this tab -- reads its reservations fresh from the server.
   useEffect(() => {
     if (!reservationStore.enabled || !accountId || !xGuard.canRead) return;
     serverLoads.current += 1;
@@ -177,7 +179,7 @@ export default function ScheduleScreen() {
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, reservationStore, xGuard.scope, xGuard.canRead]);
+  }, [accountId, reservationStore, xGuard.scope, xGuard.canRead, refocus]);
   const serverList = reservationStore.enabled ? serverListFor(serverSnapshot, accountId) : null;
   const serverRows: ServerReservation[] = serverList?.state === 'ready' ? serverList.rows : [];
   // A "post now" row is not a reservation: its state and its cancel are on the reservations screen.
@@ -296,6 +298,8 @@ export default function ScheduleScreen() {
   /** One change of a saved reservation (CAS on its revision), applied only after the server's read-back. */
   async function changeReservation(row: ServerReservation, kind: 'reschedule' | 'reconfirm' | 'cancel') {
     if (!reservationStore.enabled || !accountId) return;
+    // The card no longer offers these; a press already on its way is not sent either.
+    if (kind !== 'cancel' && isXRowNotEditable(row.reservationId)) return;
     const refusal = kind === 'cancel' ? xGuard.cancelRefusal : xGuard.refusal;
     if (refusal) {
       setNotice({ tone: 'danger', text: refusal.text, button: refusal.button });
@@ -321,6 +325,8 @@ export default function ScheduleScreen() {
     setRowBusy(null);
     if (!result.ok) {
       if (kind !== 'cancel' && isNotEditableCode(result.code)) markXRowNotEditable(row.reservationId);
+      // Only a refusal of the new time itself is answered by another time; after any other the editor stays closed.
+      if (kind === 'reschedule' && xAnswerView(result.code, reservationErrorAction).action !== 'fix_input') setRowRetiming((current) => (current?.id === row.reservationId ? null : current));
       applyRefusal(result.code, account, scope, sentToken);
       return;
     }
@@ -541,6 +547,7 @@ export default function ScheduleScreen() {
                 onReconfirm={() => void changeReservation(row, 'reconfirm')}
                 confirmingCancel={askingCancel === row.reservationId}
                 notEditable={isXRowNotEditable(row.reservationId) ? { label: NOT_EDITABLE_LABEL, text: NOT_EDITABLE_TEXT } : null}
+                canEdit={!xGuard.refusal}
                 onCancel={() => {
                   if (askingCancel !== row.reservationId) { setAskingCancel(row.reservationId); return; }
                   setAskingCancel(null);

@@ -71,6 +71,7 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
   }
   const stubs = {
     'expo-router': { useRouter: () => ({ push: () => {} }) },
+    '@/features/reservations/use-refocus-count': { useRefocusCount: () => 0 },
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }) },
     'react-native': { Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', TextInput: 'TextInput', View: 'View' },

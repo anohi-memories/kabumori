@@ -76,7 +76,7 @@ async function screen({ gate = true, reply = null, account = ACCOUNT, workspaceI
       if (changed) { slots[i] = deps ?? []; effects.push(effect); }
     },
   };
-  const world = { account, workspaceId, token: jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'), userId: 'person-1', calls: [], pushes: [], sessionReads: 0 };
+  const world = { account, workspaceId, token: jwt('person-1', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'), userId: 'person-1', calls: [], pushes: [], sessionReads: 0, refocus: 0 };
   const client = { auth: { getSession: async () => { world.sessionReads += 1; return { data: { session: world.token ? { access_token: world.token, user: { id: world.userId } } : null }, error: null }; } } };
   const fetchImpl = async (url, init) => {
     const call = { url: String(url), body: init?.body ? JSON.parse(init.body) : null, token: init?.headers?.authorization ?? null, apikey: init?.headers?.apikey ?? null };
@@ -119,6 +119,7 @@ async function screen({ gate = true, reply = null, account = ACCOUNT, workspaceI
     '@/domain/types': {},
     '@/domain/reservation-flow': reservationFlow,
     '@/features/reservations/reservation-view': reservationView,
+    '@/features/reservations/use-refocus-count': { useRefocusCount: () => world.refocus },
     '@/features/reservations/use-x-write-guard': guard,
     '@/features/reservations/x-reconnect-signal': signal,
     '@/features/reservations/x-write-view': xWriteView,
@@ -506,6 +507,111 @@ test('T37 after a restart + reconnect: writes are back, and the words say what i
   assert.doesNotMatch(onScreen(h), /再開前に保存した予約は/u);
 });
 
+test('T38 S-2 NOT_PLANNED on the tab: the editor closes and stays closed, a press still on its way sends nothing, the cancel goes', async () => {
+  const mine = { ...ROW, reservationId: 't38-a' };
+  let current = mine;
+  const seen = [];
+  const h = await screen({ reply: async (call) => {
+    seen.push(call.body.action);
+    if (call.body.action === 'reschedule') return no(409, 'POSTONA_RESV_NOT_PLANNED');
+    if (call.body.action === 'cancel') { current = { ...mine, status: 'cancelled', revision: 2 }; return ok([current]); }
+    return ok([current]);
+  } });
+  await h.update();
+  const card = () => cards2(h)[0];
+  card().onRetime(); await h.update();
+  assert.notEqual(card().retiming, null, 'open before the refusal');
+  const stale = card();
+  card().onRetimeApply(); await settle(); await h.update();
+  assert.equal(seen.filter((a) => a === 'reschedule').length, 1);
+  assert.equal(card().retiming, null, 'S16: the editor was still open here');
+  assert.notEqual(card().notEditable, null);
+  stale.onRetimeApply(); await settle(); await h.update();
+  stale.onReconfirm(); await settle(); await h.update();
+  assert.deepEqual(seen.filter((a) => a === 'reschedule' || a === 'reconfirm'), ['reschedule'], 'the old buttons send nothing more');
+  card().onCancel(); await h.update();
+  card().onCancel(); await settle(); await h.update();
+  assert.equal(seen.filter((a) => a === 'cancel').length, 1);
+});
+
+test('T38 S-2 403 on the tab: no editor, no time change and no reconfirm are offered while the writes are off; no retry; a new connect offers them again', async () => {
+  const mine = { ...ROW, reservationId: 't38-b' };
+  const seen = [];
+  const h = await screen({ reply: async (call) => { seen.push(call.body.action); return call.body.action === 'reschedule' ? no(403, 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED') : ok([mine]); } });
+  await h.update();
+  const card = () => cards2(h)[0];
+  assert.equal(card().canEdit, true);
+  card().onRetime(); await h.update();
+  card().onRetimeApply(); await settle(); await h.update();
+  assert.equal(card().retiming, null);
+  assert.equal(card().canEdit, false);
+  assert.equal(seen.filter((a) => a === 'reschedule').length, 1);
+  signal.clearXReconnectRequired(h.world.account.id);
+  await h.update();
+  assert.equal(card().canEdit, true);
+  assert.equal(card().retiming, null, 'it is opened again by a press');
+});
+
+test('T38 S-2 the editor stays only for what another time can answer: a slot conflict keeps it; a stale revision and a lost answer close it, and neither is called not editable', async () => {
+  const mine = { ...ROW, reservationId: 't38-c' };
+  let answer = no(409, 'POSTONA_RESV_SLOT_CONFLICT');
+  const h = await screen({ reply: async (call) => (call.body.action === 'reschedule' ? answer : ok([mine])) });
+  await h.update();
+  const card = () => cards2(h)[0];
+  card().onRetime(); await h.update();
+  card().onRetimeApply(); await settle(); await h.update();
+  assert.notEqual(card().retiming, null, 'fix_input');
+  assert.equal(card().canEdit, true);
+  answer = no(409, 'POSTONA_RESV_STALE_REVISION');
+  card().onRetimeApply(); await settle(); await h.update();
+  assert.equal(card().retiming, null, 'reload');
+  assert.equal(card().notEditable, null);
+  assert.equal(card().canEdit, true);
+  answer = 'lost';
+  card().onRetime(); await h.update();
+  card().onRetimeApply(); await settle(); await h.update();
+  assert.equal(card().retiming, null, 'not known: no second press from the same editor');
+  assert.equal(card().notEditable, null);
+});
+
+test('T38 S-6 a return to the tab reads again: a change made elsewhere shows, and a failure replaces the old rows with its error; gate OFF reads nothing', async () => {
+  let reply = ok([{ ...ROW, reservationId: 't38-d' }]);
+  const h = await screen({ reply: async () => reply });
+  await h.update();
+  const reads = () => h.world.calls.filter((call) => call.body.action === 'list').length;
+  const before = reads();
+  assert.equal(cards2(h).length, 1);
+  reply = ok([]);
+  h.world.refocus += 1;
+  await h.update();
+  assert.equal(reads(), before + 1);
+  assert.equal(cards2(h).length, 0);
+  reply = ok([{ ...ROW, reservationId: 't38-d' }]);
+  h.world.refocus += 1;
+  await h.update();
+  reply = 'lost';
+  h.world.refocus += 1;
+  await h.update();
+  assert.equal(cards2(h).length, 0);
+  assert.match(onScreen(h), /サーバーの予約を読み込めませんでした/u);
+  const off = await screen({ gate: false });
+  off.world.refocus += 1;
+  await off.update();
+  assert.deepEqual([off.world.calls.length, off.world.sessionReads], [0, 0]);
+});
+
+test('T38 S-1 the words: a reconnect alone is not said to bring a stored row back; what to do is said; no row is declared lost', () => {
+  for (const text of [xWriteView.RECONNECT_REQUIRED_TEXT, xWriteView.RESTART_OBSERVED_TEXT, xWriteView.RESTART_OBSERVED_ACCOUNTS_TEXT, xWriteView.X_NOT_CONNECTED_TEXT, xWriteView.X_NOT_CONNECTED_HOME_TEXT]) {
+    assert.doesNotMatch(text, /接続し直すまで投稿/u);
+    assert.match(text, /接続し直すだけでは投稿されないことがあります/u);
+    assert.match(text, /取り消して作り直/u);
+  }
+  assert.doesNotMatch(xWriteView.CONNECTED_NOT_PROOF_TEXT, /接続し直してください/u);
+  assert.match(xWriteView.CONNECTED_NOT_PROOF_TEXT, /取り消して作り直/u);
+  assert.match(xWriteView.RESTART_HELP_TEXT, /再接続しても投稿されません/u);
+  assert.match(xWriteView.RESTART_RECONNECTED_TEXT, /判別できません/u);
+});
+
 test('T37 the words: a stored row may not be sent while the connection is off; 接続済み and 予約済み are no promise; a code the app cannot place is not called not-editable', () => {
   for (const text of [xWriteView.RECONNECT_REQUIRED_TEXT, xWriteView.RESTART_OBSERVED_TEXT, xWriteView.X_NOT_CONNECTED_TEXT, xWriteView.X_NOT_CONNECTED_HOME_TEXT]) assert.match(text, /投稿されないことがあります/u);
   assert.match(xWriteView.CONNECTED_NOT_PROOF_TEXT, /投稿を保証するものではありません/u);
@@ -825,6 +931,8 @@ const baseStubs = () => ({
   '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
   '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
   '@/features/reservations/x-write-view': xWriteView,
+  '@/features/reservations/home-reservations': { homeCount: (fromPosts) => fromPosts, homeHasNoReservations: () => true, homeHeadline: (headline) => headline },
+  '@/features/reservations/use-home-reservations': { useHomeReservations: () => ({ view: { kind: 'not_applicable' }, reload() {} }) },
 });
 
 test('accounts screen (real): 接続済み until a server\'s refusal; then 再接続が必要 with the words; a new connect clears it; the help is always there and never claims', async () => {

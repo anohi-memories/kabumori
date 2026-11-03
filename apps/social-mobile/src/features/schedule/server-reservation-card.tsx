@@ -19,7 +19,7 @@ const toneOf = (row: ServerReservation): 'neutral' | 'success' | 'warning' | 'da
  * and each one is applied only after the server's read-back: time change (the consent of a manual post then
  * needs a new confirmation), reconfirmation of the exact text / time / account shown, and cancellation.
  */
-export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false, notEditable = null }: {
+export function ServerReservationCard({ row, account, busy, retiming, onRetime, onRetimeChange, onRetimeApply, onRetimeCancel, onReconfirm, onCancel, confirmingCancel = false, notEditable = null, canEdit = true }: {
   row: ServerReservation;
   account: PreviewAccount | null;
   busy: boolean;
@@ -34,10 +34,13 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
   confirmingCancel?: boolean;
   /** The server refused to edit this planned row: it is not called 予約済み any more, and a cancel is all that is left. */
   notEditable?: { label: string; text: string } | null;
+  /** False while the screen refuses every write of this account (login, connection, restart): only what can still be done is offered. */
+  canEdit?: boolean;
 }) {
   const manual = row.origin === 'user_authored';
   const planned = row.status === 'planned';
   const refused = planned && notEditable !== null;
+  const editable = planned && !refused && canEdit;
   return (
     <Card>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -51,7 +54,7 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
       {planned && !refused && manual && row.consentState === 'needs_reconfirm' ? (
         <Text style={styles.muted}>日時が変わったため、この本文・日時・投稿先でよいか、もう一度確認してください。確認するまで投稿の対象になりません。</Text>
       ) : null}
-      {retiming !== null ? (
+      {editable && retiming !== null ? (
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <View style={{ flex: 1, gap: 2 }}>
@@ -71,8 +74,8 @@ export function ServerReservationCard({ row, account, busy, retiming, onRetime, 
       ) : null}
       {planned ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {retiming === null && !refused ? <SmallButton label="日時を変更" disabled={busy} onPress={onRetime} /> : null}
-          {manual && !refused && row.consentState === 'needs_reconfirm' ? <SmallButton label="この内容で再確認" disabled={busy} onPress={onReconfirm} /> : null}
+          {retiming === null && editable ? <SmallButton label="日時を変更" disabled={busy} onPress={onRetime} /> : null}
+          {manual && editable && row.consentState === 'needs_reconfirm' ? <SmallButton label="この内容で再確認" disabled={busy} onPress={onReconfirm} /> : null}
           <SmallButton label={confirmingCancel ? '本当に取り消す' : '予約を取り消す'} disabled={busy} onPress={onCancel} />
         </View>
       ) : null}
