@@ -13,6 +13,8 @@
 #   G1 (G5-02 #2)    PR #592 eb8f5e98 (read-only archive, blob-checked, the same 3 rewrites): the app's first run as it now ships -- the W0 call
 #                    and its one bounded retry (personal-workspace.ts), the snapshot's personal workspace (brands.code_profile_key) and the
 #                    assist gate that sends only for a W0-ready workspace the snapshot then shows
+#   G5-02 #5        then postona_personal_media_box_local_test.ts: the media box (supabase/candidates/postona_personal_media_box) on the same
+#                    stack, storage-api v1.70.3 with its local file backend (real bytes written, read back by signed URL, removed)
 # Needs: supabase CLI 2.116.0, a running Docker-API engine with the images below already present (never pulls; refuses instead), deno, psql,
 # git. Everything it starts is stopped and removed at exit (`supabase stop --no-backup`).
 set -euo pipefail
@@ -167,8 +169,8 @@ done
 
 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u OPENAI_API_KEY \
     G5LS_API="http://127.0.0.1:$API_PORT" G5LS_PUBLISHABLE="$PUBLISHABLE" G5LS_DB_PORT="$DB_PORT" G5LS_FAKE_PORT="$FAKE_PORT" \
-    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_BRANDS_FIX="$REPO/supabase/candidates/postona_brands_tenant_isolation" G5LS_SECRET="$SECRET" G5LS_PR600="$WORK/pr600" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
+    G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_BRANDS_FIX="$REPO/supabase/candidates/postona_brands_tenant_isolation" G5LS_SECRET="$SECRET" G5LS_PR600="$WORK/pr600" G5LS_MEDIA="$REPO/supabase/candidates/postona_personal_media_box" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
   deno test --no-config --no-check --cached-only \
-    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_PR600,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
+    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_PR600,G5LS_MEDIA,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,PGPASSWORD \
     --allow-net="127.0.0.1:$API_PORT,127.0.0.1:$FAKE_PORT" --allow-read="$WORK,$REPO" --allow-run=psql ${G5LS_FILTER:+--filter "$G5LS_FILTER"} \
-    "$REPO/supabase/tests/postona_personal_workspace_local_test.ts"
+    "$REPO/supabase/tests/postona_personal_workspace_local_test.ts" "$REPO/supabase/tests/postona_personal_media_box_local_test.ts"
