@@ -1,0 +1,7 @@
+G2 task5 a1edit | planned | 1 | confirmed | -
+G2 task5 a2cancel | cancelled | 2 | confirmed | -
+G2 task5 a3reconf | cancelled | 3 | needs_reconfirm | -
+G2 task5 c1edit | cancelled | 2 | confirmed | -
+G2 task5 c2cancel | cancelled | 2 | confirmed | -
+G2 task5 d1row | planned | 1 | confirmed | -
+G2 task5 a4new | planned | 3 | needs_reconfirm | -
