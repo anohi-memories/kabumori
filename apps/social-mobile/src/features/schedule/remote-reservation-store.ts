@@ -55,7 +55,7 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
 
 function parseRow(value: unknown): ServerReservation | null {
   if (!isObject(value)) return null;
-  const { reservationId, batchId, draftId, scheduledAt, status, revision, consentState, body, mode, origin } = value;
+  const { reservationId, batchId, draftId, scheduledAt, status, revision, consentState, body, mode, origin, connectionGeneration } = value;
   if (typeof reservationId !== 'string' || typeof batchId !== 'string' || typeof draftId !== 'string') return null;
   if (typeof scheduledAt !== 'string' || !Number.isFinite(Date.parse(scheduledAt))) return null;
   if (!STATUSES.includes(status as ServerReservation['status']) || !CONSENTS.includes(consentState as ServerReservation['consentState'])) return null;
@@ -67,6 +67,9 @@ function parseRow(value: unknown): ServerReservation | null {
     status: status as ServerReservation['status'],
     revision: revision as number,
     consentState: consentState as ServerReservation['consentState'],
+    ...(connectionGeneration === undefined ? {} : {
+      connectionGeneration: connectionGeneration === 'current' || connectionGeneration === 'earlier' ? connectionGeneration : 'unknown' as const,
+    }),
   };
 }
 

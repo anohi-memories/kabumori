@@ -238,6 +238,22 @@ test("each action calls exactly one owner function as the VERIFIED subject with 
   });
 });
 
+test("G3-02 #15 connectionGeneration: the three words pass, anything else reads unknown, and a row without the column has no field", async () => {
+  const dtoOf = async (over: Record<string, unknown>) => {
+    const { db } = recordingDb({ ok: true, rows: [{ ...row(), ...over }] });
+    const res = await createReservationApi({ enabled: true, auth: verifier, permissions: allow, db })(req({ action: "get", payload: { reservationId: RID } }));
+    assert.equal(res.status, 200);
+    return (res.body as { reservations: Record<string, unknown>[] }).reservations[0];
+  };
+  for (const word of ["current", "earlier", "unknown"]) {
+    assert.equal((await dtoOf({ connection_generation: word })).connectionGeneration, word);
+  }
+  for (const other of [null, "", "CURRENT", "active", "SERVICE_GENERATION_CHANGED"]) {
+    assert.equal((await dtoOf({ connection_generation: other })).connectionGeneration, "unknown", String(other));
+  }
+  assert.ok(!("connectionGeneration" in await dtoOf({})));
+});
+
 test("database codes map to fixed statuses; unknown codes and exceptions never leak detail", async () => {
   const expectations: [string, number, string][] = [
     ["POSTONA_RESV_ACCOUNT_NOT_FOUND", 404, "POSTONA_RESV_ACCOUNT_NOT_FOUND"],

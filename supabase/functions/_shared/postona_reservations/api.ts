@@ -37,7 +37,13 @@ export type ReservationDbFunction =
   | "reconfirm"
   | "cancel";
 
-/** postona_x_resv.reservation_view as returned by the database. */
+/**
+ * G3-02 #15: list / get only, when 017 is installed. `unknown` is never a guess at `current`; write answers and a database without 017
+ * do not carry the field at all.
+ */
+export type ConnectionGeneration = "current" | "earlier" | "unknown";
+
+/** postona_x_resv.reservation_view (list / get: reservation_read_view) as returned by the database. */
 export type ReservationRow = {
   reservation_id: string;
   batch_id: string;
@@ -51,6 +57,7 @@ export type ReservationRow = {
   status: string;
   revision: number;
   consent_state: string;
+  connection_generation?: string | null;
 };
 
 export type DbResult = { ok: true; rows: ReservationRow[] } | { ok: false; code: string };
@@ -114,6 +121,7 @@ export type ReservationDto = {
   status: string;
   revision: number;
   consentState: string;
+  connectionGeneration?: ConnectionGeneration;
 };
 
 export type ApiRequest = { method: string; authorization: string | null; body: string };
@@ -238,6 +246,10 @@ function toCall(input: unknown): Call | null {
   }
 }
 
+function connectionGenerationOf(value: string | null): ConnectionGeneration {
+  return value === "current" || value === "earlier" ? value : "unknown";
+}
+
 function toDto(row: ReservationRow): ReservationDto {
   return {
     reservationId: row.reservation_id,
@@ -252,6 +264,7 @@ function toDto(row: ReservationRow): ReservationDto {
     status: row.status,
     revision: row.revision,
     consentState: row.consent_state,
+    ...(row.connection_generation === undefined ? {} : { connectionGeneration: connectionGenerationOf(row.connection_generation) }),
   };
 }
 
