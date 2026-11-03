@@ -4,6 +4,8 @@ import { mockRepository } from '@/data/mock-repository';
 import { colors, typography } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { BrandPostPreview } from '@/features/brand-preview/brand-post-preview';
+import { HOME_NEEDS_CHECK_TEXT, HOME_RESERVATION_NOTE, homeCount, homeHasNoReservations, homeHeadline } from '@/features/reservations/home-reservations';
+import { useHomeReservations } from '@/features/reservations/use-home-reservations';
 import { isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
 import { connectionPill, restartAppliesTo, X_NOT_CONNECTED_HOME_TEXT } from '@/features/reservations/x-write-view';
 import { resolvePostsView, statusHeadline, summarizeHome } from '@/domain/data-view';
@@ -20,11 +22,12 @@ function formatTime(iso: string) {
 export default function HomeScreen() {
   const { activeAccount } = useActiveAccount();
   const { status, reason, snapshot } = useDataStatus();
-  const headline = statusHeadline(status);
   useXReconnectSignal();
   const { session } = useAuth();
   const { view: personal } = usePersonalWorkspace();
   const connection = connectionPill(activeAccount?.connectionStatus ?? '', activeAccount?.platform === 'x' && isXReconnectRequired(activeAccount.id), '要確認', activeAccount != null && isXServiceRestarted(session?.user?.id) && restartAppliesTo(activeAccount, personal.kind === 'ready' ? personal.workspaceId : null));
+  const headline = homeHeadline(statusHeadline(status), connection.tone);
+  const { view: reservations, reload: reloadReservations } = useHomeReservations(activeAccount, status);
 
   // Mock data is filtered to the selected demo account so switching accounts
   // still demonstrates the per-account view; real scheduled_posts rows have
@@ -43,6 +46,11 @@ export default function HomeScreen() {
     history: historyView.kind === 'posts' ? historyView.posts : [],
     now: new Date(),
   });
+  const upcomingCount = homeCount(postsView.kind === 'posts' ? summary.pendingCount : null, reservations, 'upcomingCount');
+  const attentionCount = homeCount(historyView.kind === 'posts' ? summary.attentionCount : null, reservations, 'attentionCount');
+  const nextReservation = reservations.kind === 'ready' ? reservations.next : null;
+  // The two sources are separate tables: whichever comes first is the next one.
+  const nextIsReservation = nextReservation !== null && (!summary.nextPost || nextReservation.scheduledAt < summary.nextPost.scheduledAt);
 
   return (
     <Screen>
@@ -107,16 +115,33 @@ export default function HomeScreen() {
         </Card>
 
         <Card>
-          <SectionTitle detail="次に投稿される予定">次回の投稿予定</SectionTitle>
+          <SectionTitle detail="次の予定（投稿を保証するものではありません）">次回の投稿予定</SectionTitle>
           {postsView.kind === 'loading' ? (
             <Text style={styles.muted}>読み込み中…</Text>
           ) : postsView.kind === 'unavailable' ? (
             <Text style={styles.muted}>{postsView.reason ?? '投稿予定を確認できません。'}</Text>
+          ) : reservations.kind === 'loading' ? (
+            <Text style={styles.muted}>読み込み中…</Text>
+          ) : reservations.kind === 'no_access' ? (
+            <Text style={styles.muted}>{reservations.text}</Text>
+          ) : reservations.kind === 'error' ? (
+            <>
+              <Text style={styles.muted}>{reservations.text}</Text>
+              <ActionButton label="もう一度読み込む" onPress={reloadReservations} />
+            </>
+          ) : nextIsReservation ? (
+            <View style={{ gap: 4 }}>
+              <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatTime(nextReservation.scheduledAt)}</Text>
+              <Text style={{ color: colors.ink }}>{nextReservation.body ?? ''}</Text>
+              <Text style={styles.muted}>{HOME_RESERVATION_NOTE}</Text>
+            </View>
           ) : summary.nextPost ? (
             <View style={{ gap: 4 }}>
               <Text style={{ color: colors.ink, fontWeight: '800' }}>{formatTime(summary.nextPost.scheduledAt)}</Text>
               <Text style={{ color: colors.ink }}>{summary.nextPost.text || '（本文は投稿予定の確認画面で表示されます）'}</Text>
             </View>
+          ) : reservations.kind === 'ready' && reservations.upcomingCount + reservations.attentionCount > 0 ? (
+            <Text style={styles.muted}>{HOME_NEEDS_CHECK_TEXT}</Text>
           ) : (
             <Text style={styles.muted}>予定されている投稿はありません。</Text>
           )}
@@ -152,12 +177,12 @@ export default function HomeScreen() {
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Card style={{ flex: 1 }}>
             <Text style={styles.muted}>今後の予定</Text>
-            <Text style={{ color: colors.ink, fontSize: 28, fontWeight: '800' }}>{postsView.kind === 'posts' ? `${summary.pendingCount}件` : '－'}</Text>
+            <Text style={{ color: colors.ink, fontSize: 28, fontWeight: '800' }}>{upcomingCount === null ? '－' : `${upcomingCount}件`}</Text>
           </Card>
           <Card style={{ flex: 1 }}>
             <Text style={styles.muted}>要確認</Text>
-            <Text style={{ color: summary.attentionCount ? colors.danger : colors.ink, fontSize: 28, fontWeight: '800' }}>
-              {historyView.kind === 'posts' ? `${summary.attentionCount}件` : '－'}
+            <Text style={{ color: attentionCount ? colors.danger : colors.ink, fontSize: 28, fontWeight: '800' }}>
+              {attentionCount === null ? '－' : `${attentionCount}件`}
             </Text>
           </Card>
         </View>
@@ -180,7 +205,7 @@ export default function HomeScreen() {
           </Link>
         </Card>
 
-        {postsView.kind === 'posts' && postsView.posts.length === 0 && historyView.kind === 'posts' && historyView.posts.length === 0 ? (
+        {postsView.kind === 'posts' && postsView.posts.length === 0 && historyView.kind === 'posts' && historyView.posts.length === 0 && homeHasNoReservations(reservations) ? (
           <EmptyState title="まだ運用データがありません" detail="接続とアカウント選択が完了すると、予定と履歴がここに表示されます。" />
         ) : null}
 
