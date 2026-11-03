@@ -16,6 +16,7 @@ import * as enrollment from '../src/domain/service-enrollment.ts';
 import * as reconnectSignal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
 import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
+import * as timeEdit from '../src/features/schedule/time-edit.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const savedGlobals = new Map();
@@ -207,6 +208,7 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
     '@/features/reservations/x-reconnect-signal': { ...reconnectSignal, useXReconnectSignal: () => 0 },
     '@/features/reservations/x-write-view': xWriteView,
     '@/features/reservations/x-row-generation': xRowGeneration,
+    '@/features/schedule/time-edit': timeEdit,
     '@/features/reservations/use-refocus-count': { useRefocusCount: () => world.refocus },
     '@/features/reservations/use-reservation-ports': { useReservationPorts: () => world.ports, newClientRequestId: () => `cid-${++world.ids}`, contentSha256: async (text) => `sha256:${text}` },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts }) },
@@ -240,6 +242,28 @@ async function threadsScreen(store) {
 }
 const press = async (h, label, index = 0) => { const b = button(h.renderOnce(), label, index); assert.ok(b, `button ${label}`); assert.notEqual(b.disabled, true, `${label} enabled`); b.onPress(); await settle(); return h.render(); };
 const open = async (h, label) => { rowPress(h.renderOnce(), label).onPress(); return h.render(); };
+
+test('H5 U1 manage: newer revision or time interrupts editing; the stale input never writes using the new revision', async () => {
+  for (const patch of [{ revision: 8 }, { scheduledAt: '2026-11-04T00:30:00Z' }]) {
+    const store = scriptedPorts();
+    store.answer('x.list', { ok: true, value: [row('h5', { revision: 7 })] });
+    const h = await mount({ store }); await h.render();
+    let tree = await open(h, '予約 2026-11-02 09:30');
+    field(tree, '新しい日時').onChangeText('2026-11-05 10:00');
+    const staleButton = button(h.renderOnce(), '時刻を変更');
+    store.answer('x.list', { ok: true, value: [row('h5', { revision: 7, ...patch })] });
+    tree = await press(h, '最新の状態を読み込む');
+    assert.equal(field(tree, '新しい日時'), undefined);
+    assert.ok(has(tree, '編集を中断'));
+    assert.ok(has(tree, '2026-11-05 10:00'));
+    assert.equal(button(tree, '時刻を変更'), undefined);
+    assert.equal(store.count('x.reschedule'), 0);
+    assert.ok(staleButton, 'the original action existed; server CAS still guards a truly in-flight old handler');
+    tree = await press(h, '日時の編集を始める');
+    assert.equal(field(tree, '新しい日時').value, view.formatJst(row('h5', patch).scheduledAt));
+    assert.equal(store.count('x.reschedule'), 0);
+  }
+});
 
 test('gates OFF (G3\'s real disabled stores): the reason is shown, nothing is offered, nothing is called, nothing reads 「予約済み」', async () => {
   const h = await mount({ store: { value: buildReservationPorts(OFF, { supabaseUrl: 'https://proj.example.test', session: untouchedClient(), publishableKey: 'sb_publishable_testkey01' }) } });
@@ -293,6 +317,7 @@ test('X reschedule → needs_reconfirm → 「再確認が必要」 → reconfir
   assert.deepEqual(store.calls[2], ['x.reconfirm', 'a', 5, 'sha256:本文a']);
   assert.ok(texts(tree).includes('予約済み'));
   // an invalid time is refused before anything is sent
+  tree = await press(h, '日時の編集を始める');
   field(tree, '新しい日時').onChangeText('来週');
   tree = await press(h, '時刻を変更');
   assert.ok(has(tree, '日時は「2026-11-01 09:30」の形で'));
@@ -398,7 +423,7 @@ test('G1 T33 a restart observed in this app: the rows stay readable, X writes ar
   const h = await mount({ store });
   await h.render();
   let tree = await open(h, '予約 2026-11-02 09:30');
-  assert.ok(has(tree, '接続済みと表示されていても'), 'nothing observed: the supplement, not a refusal');
+  assert.ok(has(tree, 'Xの接続記録があっても'), 'nothing observed: the supplement, not a refusal');
   assert.equal(button(tree, '時刻を変更').disabled, false);
   reconnectSignal.markXServiceRestarted('someone-else');
   assert.equal(button(await h.render(), '時刻を変更').disabled, false, 'another person\'s restart changes nothing here');
@@ -452,7 +477,7 @@ test('T35 disconnected X account of the person: rows are read, 「ありませ�
   assert.ok(has(tree, '既存の予約の確認と取消はできます'));
   assert.ok(!has(tree, 'このアカウントの予約はありません'));
   assert.ok(button(tree, 'アカウント画面を開く'));
-  assert.ok(!has(tree, '接続済みと表示されていても'));
+  assert.ok(!has(tree, 'Xの接続記録があっても'));
   tree = await open(h, '予約 2026-11-02 09:30');
   assert.equal(button(tree, '時刻を変更').disabled, true);
   assert.equal(button(tree, '予約を取り消す').disabled, false);
@@ -598,7 +623,7 @@ test('T37 after a restart + reconnect on the manage screen: writes back on, one 
   reconnectSignal.clearXServiceRestarted(h.world.userId);
   tree = await open(h, '予約 2026-11-02 09:30');
   assert.ok(has(tree, '再開前に保存した予約は'));
-  assert.ok(!has(tree, '接続済みと表示されていても'), 'one note');
+  assert.ok(!has(tree, 'Xの接続記録があっても'), 'one note');
   assert.equal(button(tree, '時刻を変更').disabled, false);
   assert.ok(texts(tree).includes('予約済み'), 'no row is singled out or called failed');
   const other = scriptedPorts();
@@ -842,7 +867,7 @@ test('boundary: the screen reaches the stores only through use-reservation-ports
   assert.deepEqual(importsOf(screen), ['@/components/sign-out-button', '@/components/ui', '@/constants/theme', '@/domain/service-enrollment', '@/features/personal-workspace/personal-workspace-provider',
     '@/features/reservations/reservation-ports', '@/features/reservations/reservation-view', '@/features/reservations/use-refocus-count', '@/features/reservations/use-reservation-ports',
     '@/features/reservations/x-reconnect-signal', '@/features/reservations/x-row-generation', '@/features/reservations/x-write-view',
-    '@/providers/active-account-provider', '@/providers/auth-provider', 'expo-router', 'react', 'react-native']);
+    '@/features/schedule/time-edit', '@/providers/active-account-provider', '@/providers/auth-provider', 'expo-router', 'react', 'react-native']);
   assert.deepEqual(importsOf(hook), ['@/features/reservations/live-reservation-ports', '@/features/reservations/reservation-ports', '@/features/schedule/remote-threads-reservation-store',
     '@/features/schedule/reservation-store', '@/lib/supabase', 'expo-crypto', 'react']);
   assert.deepEqual(importsOf(wiring), ['../schedule/live-reservation-store.ts', '../schedule/remote-threads-reservation-store.ts', '../schedule/reservation-error-actions.ts', '../schedule/reservation-store.ts', './reservation-ports.ts']);
@@ -851,7 +876,7 @@ test('boundary: the screen reaches the stores only through use-reservation-ports
   assert.match(hook, /\{ x: POSTONA_RESERVATION_PERSISTENCE_ENABLED, threads: POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED \}/u);
   assert.doesNotMatch(hook + wiring, /\btrue\b/u, 'no gate is turned on here');
   for (const [name, text] of [['screen', screen], ['contract', contract], ['rules', rules]]) {
-    assert.doesNotMatch(text, /features\/schedule\/|reservation-store|reservation-error-actions/u, `${name}: no G3 file`);
+    assert.doesNotMatch(text.replaceAll('@/features/schedule/time-edit', 'G1_pure_time_edit'), /features\/schedule\/|reservation-store|reservation-error-actions/u, `${name}: no G3 file (the explicitly listed G1 pure time-edit helper is allowed)`);
     assert.doesNotMatch(text, /supabase/u, `${name}: no client`);
   }
   for (const [name, text] of [['screen', screen], ['hook', hook], ['wiring', wiring], ['contract', contract], ['rules', rules]]) {

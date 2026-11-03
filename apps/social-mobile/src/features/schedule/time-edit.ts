@@ -12,6 +12,18 @@ const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 const JST_OFFSET_MS = 9 * 60 * MINUTE_MS;
 
+/** The exact server version the person started editing. An unsubmitted time never rides on a newer revision. */
+export type ServerTimeEditBase = { id: string; revision: number; scheduledAt: string; scope: string | null };
+export function serverTimeEditBase(row: { reservationId: string; revision: number; scheduledAt: string }, scope: string | null): ServerTimeEditBase {
+  return { id: row.reservationId, revision: row.revision, scheduledAt: row.scheduledAt, scope };
+}
+export function serverTimeEditMatches(edit: ServerTimeEditBase, row: { reservationId: string; revision: number; scheduledAt: string; status: string } | undefined, scope: string | null): boolean {
+  return scope !== null && edit.scope === scope && row !== undefined && row.status === 'planned' && edit.id === row.reservationId && edit.revision === row.revision && edit.scheduledAt === row.scheduledAt;
+}
+export function interruptedTimeEditText(input: string): string {
+  return `予約の更新を検知したため、日時の編集を中断しました。未保存の入力「${input}」は送信していません。最新の予約から編集し直してください。`;
+}
+
 /** JST date ('YYYY-MM-DD') and time ('HH:MM') of an ISO instant, as the edit fields show them. */
 export function jstFieldsOf(iso: string): { date: string; time: string } {
   const ms = new Date(iso).getTime();

@@ -7,7 +7,7 @@ import { accountRefusal, actionView, REREAD_TEXT, type ActionButtonKind } from '
 
 /**
  * G4 PR 617's refresh writer after a service stop + restart (G5 lifecycle_version moved). No path carries this code to the app yet:
- * until one does, an account after a restart shows what the server's connection_status says. A restart alone is never taken as proof.
+ * until one does, the UI distinguishes a stored connection_status from a currently verified connection. A restart alone is never taken as proof.
  */
 const GENERATION_CHANGED = 'X_REFRESH_PRECHECK_SERVICE_GENERATION_CHANGED';
 
@@ -17,6 +17,8 @@ const STORED_ROWS_MAY_NOT_SEND = '保存済みの予約は、接続し直すだ�
 export const RECONNECT_REQUIRED_TEXT = `Xの再接続が必要です。再接続するまで、このアカウントの予約は保存・変更できません。${STORED_ROWS_MAY_NOT_SEND}アカウント画面でXを接続し直してください。`;
 /** This person restarted the service from this app and has not connected since. Not a server's refusal, so it does not say 「再接続が必要」. */
 export const RESTART_OBSERVED_LABEL = '要確認';
+export const X_CONNECTION_UNVERIFIED_LABEL = '接続記録あり・未確認';
+export const X_CONNECTION_UNVERIFIED_TEXT = 'Xの接続記録はありますが、現在の接続は未確認です。保存・変更・投稿の可否は、その操作時にサーバーが判断します。以前の接続の予約は、再接続しても投稿されません。「予約の管理」で確認してください。';
 const RESTART_OBSERVED = `X自動投稿を再開しました。再開前のXの接続は更新できないことがあるため、接続し直すまで、このアカウントの予約は保存・変更できません。${STORED_ROWS_MAY_NOT_SEND}`;
 /** After the reconnect: true of rows saved before the restart, and the app cannot tell which those are (G3-02 #14). */
 export const RESTART_RECONNECTED_TEXT = 'X自動投稿の再開前に保存した予約は、「予約済み」と表示されていても投稿されません。どの予約が該当するかは、この画面では判別できません。心当たりがあれば取り消して、作り直してください。';
@@ -26,7 +28,7 @@ export const RESTART_OBSERVED_ACCOUNTS_TEXT = `${RESTART_OBSERVED}下のボタ�
 export const X_NOT_CONNECTED_TEXT = `Xアカウントの接続を確認できないため、新しい予約と時刻の変更はできません。既存の予約の確認と取消はできます。${STORED_ROWS_MAY_NOT_SEND}接続し直すときは、アカウント画面を開いてください。`;
 export const X_NOT_CONNECTED_HOME_TEXT = `Xアカウントの接続を確認できないため、新しい予約と時刻の変更はできません。${STORED_ROWS_MAY_NOT_SEND}既存の予約は「予約の管理」で確認できます。`;
 /** Beside a write when nothing was observed: 接続済み is the stored connection, not a promise that it can still be refreshed. */
-export const CONNECTED_NOT_PROOF_TEXT = '「予約済み」は保存されていることを示すもので、投稿を保証するものではありません。接続済みと表示されていても、X自動投稿を終了して再開したあとは接続を更新できないことがあります。予定どおりに投稿されないときは、アカウント画面で接続を確認し、予約を取り消して作り直してください。';
+export const CONNECTED_NOT_PROOF_TEXT = '「予約済み」は保存されていることを示すもので、投稿を保証するものではありません。Xの接続記録があっても、X自動投稿を終了して再開したあとは接続を更新できないことがあります。予定どおりに投稿されないときは、アカウント画面で接続を確認し、予約を取り消して作り直してください。';
 /** G3 answers this for a row of an earlier generation, and for a row that is no longer plannable. Unlike other final answers, it can still be cancelled. */
 const NOT_EDITABLE = 'POSTONA_RESV_NOT_PLANNED';
 export const NOT_EDITABLE_LABEL = '変更できない予約';
@@ -94,9 +96,10 @@ export function xOwnRefusal(input: {
   return refusal ? { text: refusal, button: 'accounts' } : null;
 }
 
-/** The connection pill: 「再接続が必要」 only for a server's refusal; 接続済み is not shown after an observed restart; otherwise the server's connection_status, in each screen's wording. */
-export function connectionPill(connectionStatus: string, reconnectRequired: boolean, otherLabel: string, restartObserved = false): { label: string; tone: 'success' | 'warning' } {
+/** connection_status is a stored record, not G4/G5's current connection verdict. Neither an earlier row nor a current row proves an account's present authority. */
+export function connectionPill(connectionStatus: string, reconnectRequired: boolean, otherLabel: string, restartObserved = false, platform = 'x'): { label: string; tone: 'success' | 'warning' } {
   if (reconnectRequired) return { label: RECONNECT_REQUIRED_LABEL, tone: 'warning' };
   if (restartObserved && connectionStatus === 'connected') return { label: RESTART_OBSERVED_LABEL, tone: 'warning' };
+  if (platform === 'x' && connectionStatus === 'connected') return { label: X_CONNECTION_UNVERIFIED_LABEL, tone: 'warning' };
   return connectionStatus === 'connected' ? { label: '接続済み', tone: 'success' } : { label: otherLabel, tone: 'warning' };
 }

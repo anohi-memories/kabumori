@@ -149,10 +149,11 @@ async function home({ gate = true, reply = () => ok([]), account = ACCOUNT, work
   return { world, render, update, counts, lists, text: () => textOf(render()), refocus: async () => { world.refocus(); await update(); } };
 }
 
-test('S-3: two planned rows on the server, one awaiting a reconfirmation: the home says 2 and 1, and names the confirmed one; never 「0件」 or 「ありません」', async () => {
+test('S-3 / H5 U2: two saved rows, one awaiting reconfirmation: one upcoming candidate and one needing attention', async () => {
   const later = inDays(9);
   const h = await home({ reply: () => ok([row('a', { scheduledAt: later }), row('b', { scheduledAt: inDays(3), consentState: 'needs_reconfirm' })]) });
-  assert.deepEqual(h.counts(), ['2件', '1件']);
+  assert.deepEqual(h.counts(), ['1件', '1件']);
+  assert.match(h.text(), /Xの保存済み予約: 2件/u);
   const text = h.text();
   assert.doesNotMatch(text, /予定されている投稿はありません/u);
   assert.doesNotMatch(JSON.stringify(h.render()), /まだ運用データがありません/u);
@@ -280,7 +281,7 @@ test('a return to the home reads again: a row cancelled elsewhere leaves the cou
 test('a row refused an edit is 要確認 and never the next post; with nothing else the home says to check, not 「ありません」', async () => {
   signal.markXRowNotEditable('t38-refused');
   const h = await home({ reply: () => ok([row('t38-refused')]) });
-  assert.deepEqual(h.counts(), ['1件', '1件']);
+  assert.deepEqual(h.counts(), ['0件', '1件']);
   assert.doesNotMatch(h.text(), /body t38-refused|予定されている投稿はありません/u);
   assert.match(h.text(), new RegExp(homeReservations.HOME_NEEDS_CHECK_TEXT, 'u'));
 });
@@ -297,7 +298,7 @@ test('the counts: a send-now row is no reservation; an overdue planned row and a
   assert.deepEqual(count(of([row('cl', { status: 'claimed', scheduledAt: inDays(-1) })])), [1, 1, 0, null]);
   assert.deepEqual(count(of([row('x', { status: 'mystery' })])), [1, 0, 1, null], 'an unknown status is to be checked');
   assert.deepEqual(count(of([row('later', { scheduledAt: inDays(8) }), row('sooner', { scheduledAt: inDays(2) })])), [2, 2, 0, 'sooner']);
-  assert.deepEqual(count(of([row('r')], (id) => id === 'r')), [1, 1, 1, null]);
+  assert.deepEqual(count(of([row('r')], (id) => id === 'r')), [1, 0, 1, null]);
 });
 
 test('with the older scheduled posts: the numbers add up, the earlier one is next; posts not readable means no number', async () => {
@@ -327,7 +328,7 @@ test('gate OFF (G3\'s constant) and the sample data: nothing read, no token, no 
   assert.deepEqual(threads.counts(), ['0件', '0件']);
 });
 
-test('S-7: 接続済みデータ is not in green beside an X connection to check; a connected account is as before', async () => {
+test('S-7: 接続済みデータ is not green for an unverified X connection, including after the restart signal is lost', async () => {
   const ready = dataView.statusHeadline('ready');
   assert.deepEqual(homeReservations.homeHeadline(ready, 'success'), ready);
   const shown = homeReservations.homeHeadline(ready, 'warning');
@@ -341,7 +342,8 @@ test('S-7: 接続済みデータ is not in green beside an X connection to check
   assert.match(h.text(), /Xの接続は要確認/u);
   signal.clearXServiceRestarted('person-1');
   const fine = await home({ reply: () => ok([]) });
-  assert.match(fine.text(), /接続済みデータ/u);
+  assert.doesNotMatch(fine.text(), /接続済みデータ/u);
+  assert.match(fine.text(), /現在の接続は未確認/u);
 });
 
 test('T39 the home: a row of an earlier generation is 要確認 and never next; an unknown next row says so; a current one does not add a line', async () => {
@@ -349,7 +351,7 @@ test('T39 the home: a row of an earlier generation is 要確認 and never next; 
   const h = await home({ reply: () => ok(rows) });
   h.world.generations = { old: 'earlier', now: 'current' };
   await h.refocus();
-  assert.deepEqual(h.counts(), ['2件', '1件']);
+  assert.deepEqual(h.counts(), ['1件', '1件']);
   assert.match(h.text(), /body now/u);
   assert.doesNotMatch(h.text(), /body old/u);
   assert.doesNotMatch(h.text(), new RegExp(xRowGeneration.CURRENT_TEXT, 'u'), 'the home says no promise already');
@@ -358,11 +360,29 @@ test('T39 the home: a row of an earlier generation is 要確認 and never next; 
   assert.match(h.text(), new RegExp(xRowGeneration.UNKNOWN_TEXT, 'u'));
   h.world.generations = { old: 'earlier', now: 'earlier' };
   await h.refocus();
-  assert.deepEqual(h.counts(), ['2件', '2件']);
+  assert.deepEqual(h.counts(), ['0件', '2件']);
   assert.match(h.text(), new RegExp(homeReservations.HOME_NEEDS_CHECK_TEXT, 'u'));
 });
 
 // --- The real card (S-2) ---
+test('H5 S7: a cold start without any restart signal never proves the current X connection', async () => {
+  const h = await home({ reply: () => ok([row('old')]) });
+  h.world.generations = { old: 'earlier' };
+  await h.refocus();
+  assert.doesNotMatch(h.text(), /^接続済み$|接続済みデータ/mu);
+  assert.match(h.text(), /現在の接続は未確認/u);
+  // Reconnecting may leave old rows behind: neither earlier nor current authorizes an account.
+  h.world.generations = { old: 'current' };
+  await h.refocus();
+  assert.doesNotMatch(h.text(), /^接続済み$|接続済みデータ/mu);
+});
+
+test('H5 U2: earlier reservations stay saved and visible, but never overlap upcoming candidates', () => {
+  const rows = [row('old', { connectionGeneration: 'earlier' }), row('new', { connectionGeneration: 'current' })];
+  const v = homeReservations.homeReservationsOf({ state: 'ready', rows }, () => false, Date.now(), reservationErrorAction);
+  assert.deepEqual([v.total, v.upcomingCount, v.attentionCount, v.next?.reservationId], [2, 1, 1, 'new']);
+});
+
 async function cardOf(props) {
   const card = await load('../src/features/schedule/server-reservation-card.tsx', {
     'react/jsx-runtime': jsxRuntime, 'react-native': { Text: 'Text', TextInput: 'TextInput', View: 'View' }, '@/constants/theme': { colors: {} },

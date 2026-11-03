@@ -5,7 +5,7 @@ import { colors } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { clearAllXReconnectRequired, clearXServiceRestarted, isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
-import { connectionPill, RESTART_HELP_TEXT, RESTART_OBSERVED_ACCOUNTS_TEXT, restartAppliesTo } from '@/features/reservations/x-write-view';
+import { connectionPill, RESTART_HELP_TEXT, RESTART_OBSERVED_ACCOUNTS_TEXT, restartAppliesTo, X_CONNECTION_UNVERIFIED_TEXT } from '@/features/reservations/x-write-view';
 import { useXConnect } from '@/features/x-connect/use-x-connect';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -45,7 +45,7 @@ export default function AccountsScreen() {
           <Card><Text style={styles.muted}>まだ接続済みのアカウントはありません。下のボタンからXアカウントを接続してください。</Text></Card>
         ) : null}
         {accounts.map((account) => {
-          const pill = connectionPill(account.connectionStatus, account.platform === 'x' && isXReconnectRequired(account.id), '要再接続', restarted && restartAppliesTo(account, personalId));
+          const pill = connectionPill(account.connectionStatus, account.platform === 'x' && isXReconnectRequired(account.id), '要再接続', restarted && restartAppliesTo(account, personalId), status === 'mock_preview' ? 'preview' : account.platform);
           return (
           <Card key={account.id}>
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
@@ -58,7 +58,8 @@ export default function AccountsScreen() {
                 <Pill tone={pill.tone}>{pill.label}</Pill>
               </View>
             </Pressable>
-            <Text style={styles.muted}>投稿状態: {account.postingState === 'active' ? '稼働中' : '停止中'}</Text>
+            {status !== 'mock_preview' && account.platform === 'x' && account.connectionStatus === 'connected' && !isXReconnectRequired(account.id) && !(restarted && restartAppliesTo(account, personalId)) ? <Text style={styles.muted}>{X_CONNECTION_UNVERIFIED_TEXT}</Text> : null}
+            <Text style={styles.muted}>投稿設定: {account.postingState === 'active' ? (account.platform === 'x' && status !== 'mock_preview' ? 'ON（投稿可否は未確認）' : 'ON') : 'OFF'}</Text>
             <ActionButton label={activeAccount?.id === account.id ? '選択中' : 'このアカウントを選択'} onPress={() => selectAccount(account.id)} />
           </Card>
           );
