@@ -164,5 +164,37 @@ class FinalizeViaOut(DispatchBase):
         self.assertEqual(status, "ended_checks_passed", status)
 
 
+
+class IngestedFinalize(DispatchBase):
+    """分割の締め: 取り込んだ run の finalize(ingested=True) は、exec が書いた spawn_evidence と終端状態を信用し、
+    control 側で #323 を取り直さず・exec のプロセスを再観測しない。再取得も観測もできない状況（witness=None・
+    run_processes_present=None）でも ended_checks_passed になることを確かめる（単一プロセス前提の誤検知で止めない）。"""
+    def test_ingested_finalize_trusts_bundle_without_refetch_or_reobserve(self):
+        from unittest import mock
+        from g10runner import supervise
+        bundle = self.make_bundle()
+        go = self.go_doc(source_bundle=bundle)
+        run_id, request_doc = self.approve_and_claim(go)
+        self.place_job(go, request_doc)
+        self.assertEqual(self.loop().step()["decision"], "ran")
+        self.wait_terminal(run_id, 60)
+        signer = signing.HmacTestSigner(AGENT)
+        verifier = signing.HmacTestVerifier(AGENT)
+        rout = os.path.join(self.env.real, "rout-ing")
+        os.makedirs(rout, 0o700)
+        result_handoff.export_result(self.env.layout, run_id, rout, signer)
+        for pth in (self.env.layout.request_file(run_id), self.env.layout.proc_file(run_id)):
+            os.remove(pth)
+        for d in (self.env.layout.run_dir(run_id), self.env.layout.work_dir(run_id)):
+            make_writable(d)
+            shutil.rmtree(d)
+        result_handoff.ingest_result(rout, run_id, self.env.layout, verifier)
+        # 分割相当: control は #323 を取り直せず（witness なし）、exec のプロセスも観測できない
+        self.env.control.witness = None
+        with mock.patch.object(supervise, "run_processes_present", return_value=None):
+            status, _end = self.env.control.finalize(run_id, ingested=True)
+        self.assertEqual(status, "ended_checks_passed", status)
+
+
 if __name__ == "__main__":
     unittest.main()

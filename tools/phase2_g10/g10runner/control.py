@@ -385,7 +385,30 @@ class Control:
         return run_id, None
 
     # --- 終了判定（v5 §10-3）・REPORT・通知 ---
-    def finalize(self, run_id, current_body=None):
+    def _ingested_issue_ok(self, run_dir, req):
+        """取り込んだ分割 run の #323 判定。exec が spawn 直前に 10 秒鮮度で検証して書いた spawn_evidence（witness 署名・
+        結果バンドルは agent 署名で ingest 時に検証済み）を信用し、control 側で #323 を取り直さない（数分前に終わった run を
+        今取り直すのは陳腐で誤検知になる。実行中の #323 変化は exec の監視=reaper が担う）。署名・この run への紐付け・
+        TASK 一致・OPEN を確かめる。問題があれば理由、なければ None。"""
+        se = read_json(os.path.join(run_dir, "spawn_evidence.json"))
+        if not (isinstance(se, dict) and set(se) == {"evidence", "sig"} and isinstance(se.get("evidence"), dict)):
+            return "spawn evidence missing or malformed in the ingested bundle"
+        ev = se["evidence"]
+        try:
+            signed = canonical(ev)
+        except ValueError:
+            return "spawn evidence contains non-finite numbers"
+        if not self.verifier.verify("witness", signed, se["sig"]):
+            return "spawn evidence signature invalid"
+        if ev.get("task_sha256") != req.get("task_sha256"):
+            return "spawn evidence task differs from the request"
+        if ev.get("state") != "OPEN":
+            return "issue was not OPEN at spawn"
+        if not str(ev.get("nonce", "")).startswith("spawn:" + req["run_id"] + ":"):
+            return "spawn evidence is for another run"
+        return None
+
+    def finalize(self, run_id, current_body=None, ingested=False):
         doc = read_json(self.layout.request_file(run_id))
         req = doc["request"]
         try:
@@ -446,7 +469,9 @@ class Control:
             if not same:
                 violations.append("issue body changed during run (observed)")
         # TASK 5: Issue #323 を再取得し、state（OPEN）・本文・世代が CLAIM 時と同じか照合する（CLOSED だけの変更も検出）
-        if self.witness is None:
+        if ingested:  # 分割: exec の spawn_evidence を信用（再取得しない）
+            pf_reason = self._ingested_issue_ok(run_dir, req)
+        elif self.witness is None:
             pf_reason = "no issue witness"
         else:
             try:
@@ -486,10 +511,14 @@ class Control:
 
         from . import supervise
         st_name = entry["state"] if entry else "unknown"
-        present = supervise.run_processes_present(self.layout, entry) if entry else None
-        if present is None:
-            violations.append("process observation unavailable")
-        absent = present is False
+        if ingested:  # 分割: 実行プロセスは exec 側。exec が確定した終端状態を信用し control 側で再観測しない
+            present = None
+            absent = bool(entry) and st_name in registry.TERMINAL
+        else:
+            present = supervise.run_processes_present(self.layout, entry) if entry else None
+            if present is None:
+                violations.append("process observation unavailable")
+            absent = present is False
         if st_name == "stop_unconfirmed" or not absent:
             status = "stop_unconfirmed"
             violations.append("stop unconfirmed")

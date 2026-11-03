@@ -251,7 +251,7 @@ def cmd_collect(a):
         if os.path.exists(bundle_manifest):
             if a.write:
                 result_handoff.ingest_result(out_dir, run_id, control.layout, control.verifier)
-                status, _end = control.finalize(run_id)
+                status, _end = control.finalize(run_id, ingested=True)
                 results.append({"run_id": run_id, "action": "ingest_finalize", "status": status,
                                 "report": os.path.join(control.layout.reports, run_id + ".md")})
             else:

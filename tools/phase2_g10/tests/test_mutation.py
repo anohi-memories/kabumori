@@ -906,6 +906,14 @@ MUTANTS = [
     ("exec_wiring_doc does not rehome the ledger path", "g10runner/wiring.py",
      "        led = dict(led, path=ledger_path)", "        led = dict(led)",
      "test_task43_exec_setup.ExecWiringDoc.test_ledger_path_is_rehomed_when_given"),
+    ("ingested finalize re-fetches the issue instead of trusting spawn evidence", "g10runner/control.py",
+     "        if ingested:  # \u5206\u5272: exec \u306e spawn_evidence \u3092\u4fe1\u7528\uff08\u518d\u53d6\u5f97\u3057\u306a\u3044\uff09",
+     "        if False:  # \u5206\u5272: exec \u306e spawn_evidence \u3092\u4fe1\u7528\uff08\u518d\u53d6\u5f97\u3057\u306a\u3044\uff09",
+     "test_task39_result_handoff.IngestedFinalize.test_ingested_finalize_trusts_bundle_without_refetch_or_reobserve"),
+    ("ingested finalize re-observes the process instead of trusting terminal state", "g10runner/control.py",
+     "        if ingested:  # \u5206\u5272: \u5b9f\u884c\u30d7\u30ed\u30bb\u30b9\u306f exec \u5074\u3002exec \u304c\u78ba\u5b9a\u3057\u305f\u7d42\u7aef\u72b6\u614b\u3092\u4fe1\u7528\u3057 control \u5074\u3067\u518d\u89b3\u6e2c\u3057\u306a\u3044",
+     "        if False:  # \u5206\u5272: \u5b9f\u884c\u30d7\u30ed\u30bb\u30b9\u306f exec \u5074\u3002exec \u304c\u78ba\u5b9a\u3057\u305f\u7d42\u7aef\u72b6\u614b\u3092\u4fe1\u7528\u3057 control \u5074\u3067\u518d\u89b3\u6e2c\u3057\u306a\u3044",
+     "test_task39_result_handoff.IngestedFinalize.test_ingested_finalize_trusts_bundle_without_refetch_or_reobserve"),
 ]
 
 
