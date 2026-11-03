@@ -169,6 +169,12 @@ export async function buildSaveRequest(input: {
 // Server truth
 // ---------------------------------------------------------------------------------------------------
 
+/**
+ * This row's generation against the person's current X connection (G3-02 #15, list / get only). 'earlier': will not be sent, even after a
+ * reconnect. 'unknown' or absent (a write answer, an older server): not proven either way; treat as not proven, never as current.
+ */
+export type ConnectionGeneration = 'current' | 'earlier' | 'unknown';
+
 export type ServerReservation = {
   reservationId: string;
   draftId: string;
@@ -181,6 +187,7 @@ export type ServerReservation = {
   body?: string | null;
   mode?: string;
   origin?: string;
+  connectionGeneration?: ConnectionGeneration;
 };
 
 export type SaveOutcome =

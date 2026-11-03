@@ -263,4 +263,37 @@ expect_err "VW8 015 rollback twice" G3_X_BOUND_ROLLBACK_NOT_APPLIED own -f "$x01
 own -f "$x015" >/dev/null || fail "VW9 015 re-apply"
 [ "$(catalog)" = "$c_015" ] || fail "VW9 the re-applied catalog is not the first apply"
 echo "OK VW: 015 refusals (014 not applied, superuser, also the owner itself), apply = owner + worker EXECUTE only, re-apply refused, unknown row LEASE_LOST/null, API role denied; rollback refusals (superuser, also the owner itself, another body, a widened ACL), rollback = the catalog before 015, twice refused, re-apply = first apply"
+
+# --- VG (G3-02 #15): 017, the read-only connection_generation on list / get ----------------------------------------------------------
+x017="${G3V_017:-$here/017_postona_x_resv_connection_generation.sql}"; x017rb="$here/017_postona_x_resv_connection_generation_rollback.sql"
+fnacl() { sval -c "select string_agg(p.proname || ':' || p.proowner || ':' || coalesce(p.proacl::text, '-') || ':' || p.prosecdef::text || ':' || p.provolatile::text, '|' order by p.proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'postona_x_resv' and p.proname in ('list_reservations', 'get_reservation')"; }
+acl0="$(fnacl)"; c_vg="$(catalog)"
+expect_refused "VG1 017 as a superuser" G3_CONNECTION_GENERATION_OWNER sval -f "$x017"
+sval -c "alter role $owner superuser" >/dev/null
+expect_refused "VG1b 017, the owner is a superuser" G3_CONNECTION_GENERATION_OWNER own -f "$x017"
+sval -c "alter role $owner nosuperuser" >/dev/null
+expect_refused "VG2 017, another list body" G3_CONNECTION_GENERATION_BASE_UNKNOWN own -c "begin" -c "create or replace function postona_x_resv.list_reservations(p_social_account_id text) returns setof postona_x_resv.reservation_view language sql stable security definer set search_path = '' as \$\$ select null::postona_x_resv.reservation_view where false \$\$" -f "$x017"
+expect_refused "VG2b 017, another verified body" G3_CONNECTION_GENERATION_BASE_UNKNOWN own -c "begin" -c "create or replace function postona_x_resv.g4_x_account_verified(p_user_id uuid, p_social_account_id text) returns boolean language sql stable security definer set search_path = '' as \$\$ select true \$\$" -f "$x017"
+own -f "$x017" >/dev/null || fail "VG3 017 apply"
+[ "$(fnacl)" = "$acl0" ] || fail "VG3 the owner / ACL / definer / volatility of list / get changed: $acl0 -> $(fnacl)"
+[ "$(sval -c "select coalesce(array_length(proacl, 1), 0) || ':' || prosecdef from pg_proc where oid = 'postona_x_resv.connection_generation_of(postona_x_resv.reservations)'::regprocedure")" = "1:false" ] || fail "VG3 the helper is reachable or a definer"
+c_017="$(catalog)"
+expect_refused "VG4 017 re-apply" G3_CONNECTION_GENERATION_BASE_UNKNOWN own -f "$x017"
+out="$(own -A -t -f "$here/g4_verdict/connection_generation.sql" 2>&1)" || { printf '%s\n' "$out" | grep -E 'FAIL|ERROR' | head -20 >&2; fail "VG behaviour"; }
+printf '%s\n' "$out" | grep -qx G3_CONNECTION_GENERATION_BEHAVIOR_PASS || fail "VG: no PASS line"
+vg_n="$(printf '%s\n' "$out" | grep -c '|ok$' || true)"
+[ "$(catalog)" = "$c_017" ] || fail "VG behaviour changed the catalog"
+expect_err "VG5 017 rollback as a superuser" G3_CONNECTION_GENERATION_ROLLBACK_OWNER sval -f "$x017rb"
+sed "s|^revoke all on function postona_x_resv.list_reservations(text), postona_x_resv.get_reservation(uuid) from public;\$|&\\ngrant execute on function postona_x_resv.get_reservation(uuid) to authenticated;|" "$x017rb" > "$work/rb_acl_017.sql"
+grep -q 'get_reservation(uuid) to authenticated;$' "$work/rb_acl_017.sql" || fail "VG6 probe not built"
+expect_err "VG6 017 rollback with a widened ACL" "G3_CONNECTION_GENERATION_ROLLBACK_POSTCONDITION: an owner or ACL changed" own -f "$work/rb_acl_017.sql"
+[ "$(catalog)" = "$c_017" ] || fail "VG5-VG6: a refusal changed the catalog"
+own -f "$x017rb" >/dev/null || fail "VG7 017 rollback"
+[ "$(catalog)" = "$c_vg" ] || fail "VG7 rollback is not the catalog before 017"
+[ "$(fnacl)" = "$acl0" ] || fail "VG7 ACL after the rollback"
+[ -z "$(sval -c "select 1 from pg_type where typname = 'reservation_read_view'")" ] || fail "VG7 the type is still there"
+expect_err "VG7 017 rollback twice" G3_CONNECTION_GENERATION_ROLLBACK_NOT_APPLIED own -f "$x017rb"
+own -f "$x017" >/dev/null || fail "VG8 017 re-apply"
+[ "$(catalog)" = "$c_017" ] || fail "VG8 the re-applied catalog is not the first apply"
+echo "OK VG: 017 refusals (superuser, also the owner itself, another list / verified body, re-apply), apply keeps owner + ACL + definer of list / get, helper owner-only and not a definer, behaviour $vg_n checks, rollback refusals (superuser, widened ACL), rollback = the catalog before 017, re-apply = the first apply"
 echo G3_G4_VERDICT_PASS

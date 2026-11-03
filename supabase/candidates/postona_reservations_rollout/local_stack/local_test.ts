@@ -121,6 +121,12 @@ async function createPayload(p: Person, name: string, when: string, batch = cryp
   return { action: "create", payload: { socialAccountId: p.account, clientBatchId: batch, revision: 1, mode: "manual_exact", band: null,
     items: [{ draft_id: `g3ls_${name}`, scheduled_at: when, body, consent: { confirmed: true, content_sha256: await sha256(body) } }] } };
 }
+const genGet = async (s: { get(id: string): Promise<{ ok: boolean; value?: { connectionGeneration?: string } }> }, id: string) => {
+  const read = await s.get(id);
+  assert.ok(read.ok, JSON.stringify(read));
+  return read.value?.connectionGeneration;
+};
+const rowDump = (id: string) => owner("select md5(r::text) from postona_x_resv.reservations r where id = :'i'", { i: id });
 const rowState = (id: string) => owner("select status || '/' || revision || '/' || coalesce(outcome_code, '-') from postona_x_resv.reservations where id = :'i'", { i: id });
 const countOf = (sql: string) => owner(sql).then(Number);
 
@@ -793,6 +799,8 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual([await rowState(rEdit.reservationId), await rowState(rConfirm.reservationId)], ["planned/1/-", "planned/2/-"]);
     const listed = await s.list(d.account!);
     assert.ok(listed.ok && listed.value.length === 4, JSON.stringify(listed));
+    assert.deepStrictEqual(listed.value.map((row) => row.connectionGeneration), ["earlier", "earlier", "earlier", "earlier"], "G3-02 #15: the rows made before the restart");
+    assert.deepStrictEqual(await genGet(s, rEdit.reservationId), "earlier");
     assert.ok((await s.get(rEdit.reservationId)).ok);
     const cancelled = await s.cancel(toCancel.reservationId, toCancel.revision);
     assert.ok(cancelled.ok && cancelled.value.status === "cancelled", JSON.stringify(cancelled));
@@ -825,6 +833,11 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const made = await s.save(await saveRequest(d, "after", at(86)));
     assert.ok(made.kind === "saved", JSON.stringify(made));
     const id = made.reservations[0].reservationId;
+    assert.deepStrictEqual([await genGet(s, id), await genGet(s, rEdit.reservationId)], ["current", "earlier"], "G3-02 #15: after the reconnect, a new row is current and an old one stays earlier");
+    const read = await s.list(d.account!);
+    assert.ok(read.ok);
+    assert.deepStrictEqual(read.value.find((row) => row.reservationId === id)?.connectionGeneration, "current");
+    assert.deepStrictEqual(read.value.find((row) => row.reservationId === rEdit.reservationId)?.connectionGeneration, "earlier");
     await makeDue(id);
     await makeDue(rEdit.reservationId);
     await snapshot(d.account!, await generationOf(d.account!));
@@ -835,5 +848,54 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await outcome(rEdit.reservationId), "failed/SERVICE_GENERATION_CHANGED/-", "the earlier generation's row is closed, never sent");
     const again = await deliver();
     assert.deepStrictEqual([again.report?.claimed, await xCalls()], [0, calls + 1], "not re-sent");
+  });
+
+  await t.step("L34 connectionGeneration: unknown when it cannot be proven (unbound row, disconnected, service not active); read-only; never another person's; old clients and write answers unchanged", async () => {
+    const s = appX(d.token);
+    const raw = async (action: string, payload: unknown) => (await http(X, { action, payload }, d.token)).body as { ok: boolean; reservations: Record<string, unknown>[] };
+    const a = await dSave("g1", 88);
+    const c = await dSave("g2", 89);
+    const w = await dSave("g3", 87);
+    const written = await raw("reschedule", { reservationId: w.reservationId, expectedRevision: w.revision, scheduledAt: at(85) });
+    assert.ok(written.ok, JSON.stringify(written));
+    assert.ok(!("connectionGeneration" in written.reservations[0]), "a write answer has no field");
+    const viaStore = await s.reschedule(w.reservationId, written.reservations[0].revision as number, at(84));
+    assert.ok(viaStore.ok && viaStore.value.connectionGeneration === "current", "the app store's write returns its read-back row, so it has the field");
+    const shape = Object.keys((await raw("get", { reservationId: a.reservationId })).reservations[0]).sort();
+    assert.deepStrictEqual(shape, ["batchId", "body", "connectionGeneration", "consentState", "draftId", "fixed", "mode", "origin", "position", "reservationId", "revision", "scheduledAt", "status"], "one field added, nothing else; no generation number, no token");
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "current");
+    const before = await rowDump(a.reservationId);
+    await s.list(d.account!);
+    await s.get(a.reservationId);
+    assert.deepStrictEqual(await rowDump(a.reservationId), before, "reading writes nothing");
+    // another person: no row, no field
+    assert.deepStrictEqual(await appX(b.token).get(a.reservationId), { ok: false, code: "POSTONA_RESV_NOT_FOUND" });
+    const others = await appX(b.token).list(d.account!);
+    assert.deepStrictEqual(others, { ok: true, value: [] });
+    // a row with no recorded generation (SYNTHETIC)
+    await owner("update postona_x_resv.reservations set bound_lifecycle_version = null where id = :'i'", { i: c.reservationId });
+    assert.deepStrictEqual(await genGet(s, c.reservationId), "unknown", "unbound");
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "current", "the other row is not affected");
+    // disconnected (G4's real SQL): unknown; list / get / cancel go on
+    await xDisconnect(d);
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "unknown", "disconnected");
+    assert.deepStrictEqual(await xConnect(d, "d3", "62301"), d.account);
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "current", "reconnected without a restart: the same generation");
+    // service ended, not restarted (SYNTHETIC end): unknown, not earlier; the row can be read and cancelled
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: d.userId });
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "unknown", "service not active");
+    assert.ok((await s.cancel(c.reservationId, c.revision)).ok);
+    const asked = await rpcAs(d, "start_x_autopost_service", {});
+    const back = await rpcAs(d, "reactivate_x_autopost_service", { p_expected_lifecycle_version: asked.body.lifecycle_version });
+    assert.deepStrictEqual(back.body.status, "active", JSON.stringify(back.body));
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "earlier", "restarted");
+    assert.deepStrictEqual(await xConnect(d, "d4", "62301"), d.account);
+    assert.deepStrictEqual(await genGet(s, a.reservationId), "earlier", "a reconnect does not revive it");
+    // it is not sent, and a store on an older client ignores the field
+    await makeDue(a.reservationId);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const calls = await xCalls();
+    const run = await deliver();
+    assert.deepStrictEqual([run.report?.sends, await xCalls(), await outcome(a.reservationId)], [0, calls, "failed/SERVICE_GENERATION_CHANGED/-"], JSON.stringify(run));
   });
 });

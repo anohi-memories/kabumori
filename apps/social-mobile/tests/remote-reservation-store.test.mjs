@@ -308,3 +308,19 @@ test('server card: needs_reconfirm is not shown as reserved and offers the recon
   const retiming = Card(cardProps({ retiming: { date: '2026-10-20', time: '09:30' } }));
   assert.deepEqual(buttons(retiming).map((b) => b.label), ['予約の日時を変更する', 'やめる', '予約を取り消す']);
 });
+
+test('G3-02 #15 connectionGeneration: list and get pass the three words, anything else reads unknown, a row without it stays without it', async () => {
+  const read = async (value) => {
+    const over = value === undefined ? {} : { connectionGeneration: value };
+    const { transport } = scripted({ list: ok([row(0, over)]), get: ok([row(0, over)]) });
+    const s = store(transport);
+    const listed = await s.list('x_account');
+    const got = await s.get(row(0).reservationId);
+    assert.equal(listed.ok && got.ok, true);
+    assert.deepEqual(listed.value[0].connectionGeneration, got.value.connectionGeneration);
+    return listed.value[0];
+  };
+  for (const word of ['current', 'earlier', 'unknown']) assert.equal((await read(word)).connectionGeneration, word);
+  for (const other of [null, '', 'CURRENT', 'active', 1, {}]) assert.equal((await read(other)).connectionGeneration, 'unknown');
+  assert.ok(!('connectionGeneration' in await read(undefined)));
+});

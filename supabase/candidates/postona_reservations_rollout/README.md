@@ -19,7 +19,7 @@ A real rollout needs, first:
 ## Files
 | file | what it is |
 |---|---|
-| `MANIFEST.tsv` | Install order (15 steps) and the verified rollback order. Every file is pinned by sha256. |
+| `MANIFEST.tsv` | Install order (16 steps) and the verified rollback order. Every file is pinned by sha256. |
 | `preflight.sql` | Read-only checks, ending in `ROLLBACK`. Modes: `install` / `rollback` / `postcheck`. |
 | `rollout.sh` | `preflight`, `install` (all-or-nothing) and `rollback` (pre-checked before any change). |
 | `rollout_test_run.sh`, `smoke.sql` | Tests on G4's own personal world (local PG17, fake data). |
@@ -234,10 +234,19 @@ What it showed, for the operator:
   - `reschedule` / `reconfirm` (001) refuse a row of an earlier generation: `POSTONA_RESV_NOT_PLANNED` → `final`.
   - Unchanged: list, get, cancel; another person's 404; 401; claim closing an earlier generation's row (`SERVICE_GENERATION_CHANGED`).
 - **Rollout dependency**: G4's 006 + 007 must be installed first. 014 and `preflight.sql` refuse otherwise.
-- **Still open**:
-  - a pre-restart row keeps reading 「予約済み」 in the list until its due time closes it (G3's list has no generation field);
-  - the app cannot read "this connection is stale" before a write is refused (G1's request; no read port exists).
+- **Still open**: the app cannot read "this connection is stale" before a write is refused (G1's request; no read port exists). A row's generation is answered by 017, below.
 - **Proof**: `local_stack/` L32–L33, L8, L21, `g1_screen_integration.test.mjs` (service restart); PG17 `g4_verdict_run.sh`, `rollout_test_run.sh`.
+
+**A row's generation on list / get** (G3-02 #15, `017`):
+- `connectionGeneration` on each row of `list` and `get`:
+  - `earlier`: G5's MV answers `SERVICE_GENERATION_CHANGED` for the row's generation. It will not be sent, even after a reconnect; it can still be cancelled.
+  - `current`: G5's MV answers `active` for the row, and `g4_x_account_verified` is true. It does not promise a send (consent, the due time and the send itself still decide).
+  - `unknown`: anything else, such as an unbound row, a service not active, a disconnected account, a missing G4 / G5 function, or any exception. The read still answers.
+- **Absent**: HTTP write answers keep `reservation_view` and have no field, and a database without 017 has none. The API maps any other value to `unknown`. Read an absent field as not proven, never as `current`. The app store's reschedule / reconfirm / cancel return their read-back row, which has the field.
+- **Boundary**: the same two functions, signatures, API role and row filters. A function's result type cannot be replaced, so 017 drops and re-creates both in one transaction with a new result type (`reservation_read_view`) and the same ACL (compared before and after). `connection_generation_of` is not a definer and is granted to nobody.
+- **Rollback**: `017` first. It restores 012's bytes and the ACL; no row is touched.
+- **Proof**: `local_stack/` L32–L34; PG17 `g4_verdict_run.sh` phase VG (`g4_verdict/connection_generation.sql`); `api_test.ts`; `remote-reservation-store.test.mjs`.
+- **Threads** has no such field (U8 keeps it off).
 
 **The reservations screen on this runtime** (G3-02 #13; `local_stack/g1_screen_integration.test.mjs`):
 - **Real here**: G1's screen and view rules (PR #606, pinned, read only), G3's stores and error actions, GoTrue JWTs, Kong, the Edge handlers, Postgres, G5 W0, G4's connect / disconnect SQL and verdict.
