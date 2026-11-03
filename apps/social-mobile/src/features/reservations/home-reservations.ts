@@ -4,6 +4,7 @@ import type { ServerReservation } from '../../domain/reservation-flow.ts';
 import type { ServerList } from '../schedule/server-reservations-state.ts';
 import type { ReservationAction } from './reservation-ports.ts';
 import { isSendNowRow, xRowViewOf } from './reservation-view.ts';
+import { rowRefusalOf } from './x-row-generation.ts';
 
 export const HOME_LOGIN_TEXT = 'ログインを確認できないため、予約の件数を表示できません。ログインし直してください。';
 export const HOME_NO_ACCESS_TEXT = 'このアカウントの予約は確認できないため、件数を表示していません。';
@@ -33,13 +34,13 @@ export function homeReservationsOf(list: ServerList, isNotEditable: (reservation
   let attentionCount = 0;
   let next: ServerReservation | null = null;
   for (const row of rows) {
-    const notEditable = isNotEditable(row.reservationId);
+    const notEditable = rowRefusalOf(row, isNotEditable(row.reservationId)) !== null;
     const { tone } = xRowViewOf(row, notEditable, '', '');
     const ahead = new Date(row.scheduledAt).getTime() >= nowMs;
     if (row.status === 'claimed' || (row.status === 'planned' && ahead)) upcomingCount += 1;
     // A planned row past its time did not go as planned, and the app does not say why.
     if (tone === 'warning' || tone === 'danger' || (row.status === 'planned' && !ahead)) attentionCount += 1;
-    // Only a confirmed row can be next: a row awaiting a reconfirmation or refused an edit is not, nor is an AI slot.
+    // Only a confirmed row can be next: a row awaiting a reconfirmation, refused an edit or of an earlier generation is not, nor is an AI slot.
     if (row.status === 'planned' && ahead && !notEditable && row.consentState === 'confirmed' && (!next || row.scheduledAt < next.scheduledAt)) next = row;
   }
   return { kind: 'ready', total: rows.length, upcomingCount, attentionCount, next };

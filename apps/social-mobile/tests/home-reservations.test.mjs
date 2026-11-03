@@ -12,6 +12,7 @@ import * as enrollment from '../src/domain/service-enrollment.ts';
 import * as homeReservations from '../src/features/reservations/home-reservations.ts';
 import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
+import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
 import { reservationErrorAction } from '../src/features/schedule/reservation-error-actions.ts';
 import * as reservationStore from '../src/features/schedule/reservation-store.ts';
 import * as serverState from '../src/features/schedule/server-reservations-state.ts';
@@ -59,6 +60,22 @@ const inDays = (days) => new Date(Date.now() + days * 864e5).toISOString();
 const row = (id, patch = {}) => ({ reservationId: id, batchId: 'b', draftId: `d-${id}`, scheduledAt: inDays(5), status: 'planned', revision: 1, consentState: 'confirmed', body: `body ${id}`, mode: 'manual_exact', origin: 'user_authored', ...patch });
 const ok = (rows) => ({ status: 200, json: { ok: true, reservations: rows } });
 const no = (status, code) => ({ status, json: { ok: false, code } });
+/**
+ * G3 #629's field as its store passes it on: this tree's store may drop it, so `world.generations[id]` is put on the rows of list / get, and
+ * `world.afterWrite[id]` (if given, else the same map) on the read-back row a write returns. An id in neither map has no field.
+ */
+const withGenerations = (store, world) => (!store.enabled ? store : new Proxy(store, {
+  get(target, key) {
+    const fn = target[key];
+    if (typeof fn !== 'function' || !['list', 'get', 'reschedule', 'reconfirm', 'cancel'].includes(key)) return fn;
+    return async (...args) => {
+      const answer = await fn.apply(target, args);
+      const map = (key === 'list' || key === 'get' ? world.generations : world.afterWrite ?? world.generations) ?? {};
+      const put = (row) => (Object.hasOwn(map, row.reservationId) ? { ...row, connectionGeneration: map[row.reservationId] } : row);
+      return answer && answer.ok ? { ...answer, value: Array.isArray(answer.value) ? answer.value.map(put) : put(answer.value) } : answer;
+    };
+  },
+}));
 
 /** The real home. `reply` answers each fetch, 'lost' is a network failure, a promise holds the answer. */
 async function home({ gate = true, reply = () => ok([]), account = ACCOUNT, workspace = { kind: 'ready', workspaceId: ME }, data = {}, status = 'ready' } = {}) {
@@ -97,7 +114,7 @@ async function home({ gate = true, reply = () => ok([]), account = ACCOUNT, work
     react, '@/features/personal-workspace/personal-workspace-provider': workspaceStub, '@/features/reservations/home-reservations': homeReservations,
     '@/features/reservations/use-refocus-count': refocus, '@/features/reservations/use-x-write-guard': guard, '@/features/reservations/x-reconnect-signal': signals,
     '@/features/schedule/reservation-error-actions': { reservationErrorAction },
-    '@/features/schedule/reservation-store': { ...reservationStore, createReservationStore: (_constant, live) => reservationStore.createReservationStore(gate, live ? { ...live, fetch: fetchImpl } : null) },
+    '@/features/schedule/reservation-store': { ...reservationStore, createReservationStore: (_constant, live) => withGenerations(reservationStore.createReservationStore(gate, live ? { ...live, fetch: fetchImpl } : null), world) },
     '@/features/schedule/server-reservations-state': serverState,
     '@/lib/supabase': { supabase: client, getSupabaseConfig: () => ({ ok: true, config: { url: 'https://example.invalid', publishableKey: 'sb_publishable_testkey01' } }) },
   });
@@ -110,6 +127,7 @@ async function home({ gate = true, reply = () => ok([]), account = ACCOUNT, work
     '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
     '@/features/reservations/home-reservations': homeReservations, '@/features/reservations/use-home-reservations': hook,
     '@/features/reservations/x-reconnect-signal': signals, '@/features/reservations/x-write-view': xWriteView,
+    '@/features/reservations/x-row-generation': xRowGeneration,
     '@/domain/data-view': dataView, '@/features/personal-workspace/personal-workspace-provider': workspaceStub,
     '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: world.account }) }, '@/providers/auth-provider': auth,
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reason: world.reason, snapshot: world.snapshot }) },
@@ -326,6 +344,24 @@ test('S-7: 接続済みデータ is not in green beside an X connection to check
   assert.match(fine.text(), /接続済みデータ/u);
 });
 
+test('T39 the home: a row of an earlier generation is 要確認 and never next; an unknown next row says so; a current one does not add a line', async () => {
+  const rows = [row('old', { scheduledAt: inDays(2) }), row('now', { scheduledAt: inDays(4) })];
+  const h = await home({ reply: () => ok(rows) });
+  h.world.generations = { old: 'earlier', now: 'current' };
+  await h.refocus();
+  assert.deepEqual(h.counts(), ['2件', '1件']);
+  assert.match(h.text(), /body now/u);
+  assert.doesNotMatch(h.text(), /body old/u);
+  assert.doesNotMatch(h.text(), new RegExp(xRowGeneration.CURRENT_TEXT, 'u'), 'the home says no promise already');
+  h.world.generations = { old: 'earlier' };
+  await h.refocus();
+  assert.match(h.text(), new RegExp(xRowGeneration.UNKNOWN_TEXT, 'u'));
+  h.world.generations = { old: 'earlier', now: 'earlier' };
+  await h.refocus();
+  assert.deepEqual(h.counts(), ['2件', '2件']);
+  assert.match(h.text(), new RegExp(homeReservations.HOME_NEEDS_CHECK_TEXT, 'u'));
+});
+
 // --- The real card (S-2) ---
 async function cardOf(props) {
   const card = await load('../src/features/schedule/server-reservation-card.tsx', {
@@ -349,6 +385,14 @@ test('S-2 the card: only what can still be done is offered', async () => {
   assert.deepEqual(offered(await cardOf({ row: reconfirm })), ['日時を変更', 'この内容で再確認', '予約を取り消す']);
   assert.deepEqual(offered(await cardOf({ row: reconfirm, canEdit: false })), ['予約を取り消す']);
   assert.deepEqual(offered(await cardOf({ row: row('c', { status: 'cancelled' }), retiming: OPEN })), [], 'a final row has no editor left open');
+});
+
+test('T39 the card: the generation line beside a planned row that is not refused only', async () => {
+  const lines = async (props) => { const out = []; walk(await cardOf(props), (n) => { if (n.type === 'Text' && n.props.children === 'NOTE') out.push(n); }); return out.length; };
+  assert.equal(await lines({ generationNote: 'NOTE' }), 1);
+  assert.equal(await lines({ generationNote: 'NOTE', notEditable: { label: 'l', text: 't' } }), 0);
+  assert.equal(await lines({ generationNote: 'NOTE', row: row('c', { status: 'published' }) }), 0);
+  assert.equal(await lines({}), 0);
 });
 
 test('use-refocus-count: the first arrival is no return', async () => {

@@ -20,6 +20,7 @@ import * as serverState from '../src/features/schedule/server-reservations-state
 import { reservationErrorAction } from '../src/features/schedule/reservation-error-actions.ts';
 import * as reservationView from '../src/features/reservations/reservation-view.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
+import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
 
 const walk = (node, visit) => {
   if (Array.isArray(node)) return node.forEach((child) => walk(child, visit));
@@ -105,6 +106,7 @@ async function scheduleHarness({ status = 'ready', active = 'X_B', rows = {}, ac
     '@/features/schedule/reservation-error-actions': { reservationErrorAction },
     '@/features/reservations/reservation-view': reservationView,
     '@/features/reservations/x-write-view': xWriteView,
+    '@/features/reservations/x-row-generation': xRowGeneration,
     '@/features/reservations/x-reconnect-signal': { isXRowNotEditable: () => false, markXRowNotEditable() {}, markXReconnectRequired: () => {}, clearXReconnectRequired: () => {} },
     // The guard's own behaviour is tests/x-reservation-composer.test.mjs; here every X write may proceed.
     '@/features/reservations/use-x-write-guard': { useXWriteGuard: (account) => ({ scope: account?.id ?? null, token: 't', canRead: true, refusal: null, refuseToken: () => {}, block: () => {}, unblock: () => {} }) },

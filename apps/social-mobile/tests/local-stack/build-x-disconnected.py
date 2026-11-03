@@ -31,6 +31,8 @@ if os.environ.get('G1T36_MUTANT') == 'reads_need_connection':  # negative contro
     head = sub(head, "const source = await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8');", "const source = (await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8')).replace(\"platform !== 'x')\", 'true)');")
 if os.environ.get('G1T36_MUTANT') == 'refused_row_not_recorded':  # negative control: the row must stop reading 予約済み
     head = sub(head, "const source = await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8');", "const source = (await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8')).replace('if (stillCancellable) markXRowNotEditable(edited.reservationId);', '');")
+if os.environ.get('G1T36_MUTANT') == 'generation_ignored':  # negative control: the rows must say what the server read says
+    head = sub(head, "'@/features/reservations/x-row-generation': xRowGeneration,", "'@/features/reservations/x-row-generation': { ...xRowGeneration, rowRefusalOf: (row, here) => xRowGeneration.rowRefusalOf({}, here), rowGenerationNote: (row, open) => xRowGeneration.rowGenerationNote({ status: row.status }, open) },")
 with open(os.path.join(TESTS, 'zz-x-disconnected-manage.generated.mjs'), 'w', encoding='utf-8') as f:
     f.write(head + read(os.path.join(HERE, 'x-disconnected-manage.tail.mjs')))
 

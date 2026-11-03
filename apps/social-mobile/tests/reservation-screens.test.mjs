@@ -15,6 +15,7 @@ import { POSTONA_THREADS_RESERVATION_PERSISTENCE_ENABLED } from '../src/features
 import * as enrollment from '../src/domain/service-enrollment.ts';
 import * as reconnectSignal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
+import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const savedGlobals = new Map();
@@ -190,7 +191,7 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
       if (!previous || !deps || deps.length !== previous.deps.length || deps.some((d, k) => !Object.is(d, previous.deps[k]))) pendingEffects.push({ i, effect, deps });
     },
   };
-  const world = { token, userId, accounts, workspace, pushes: [], dismissed: [], ports: store.value, ids: 0 };
+  const world = { token, userId, accounts, workspace, pushes: [], dismissed: [], ports: store.value, ids: 0, refocus: 0 };
   const stubs = {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), jsxs: (type, props) => ({ type: typeof type === 'function' ? type.name : type, props }), Fragment: 'Fragment' },
@@ -205,6 +206,8 @@ async function mount({ store = scriptedPorts(), accounts = [xAccount(), thAccoun
     '@/features/reservations/reservation-view': view,
     '@/features/reservations/x-reconnect-signal': { ...reconnectSignal, useXReconnectSignal: () => 0 },
     '@/features/reservations/x-write-view': xWriteView,
+    '@/features/reservations/x-row-generation': xRowGeneration,
+    '@/features/reservations/use-refocus-count': { useRefocusCount: () => world.refocus },
     '@/features/reservations/use-reservation-ports': { useReservationPorts: () => world.ports, newClientRequestId: () => `cid-${++world.ids}`, contentSha256: async (text) => `sha256:${text}` },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts }) },
     '@/providers/auth-provider': { useAuth: () => ({ session: world.token ? { access_token: world.token, user: { id: world.userId } } : null }) },
@@ -837,8 +840,8 @@ test('boundary: the screen reaches the stores only through use-reservation-ports
   const rules = code(await read('features/reservations/reservation-view.ts'));
   const importsOf = (source) => [...source.matchAll(/from ['"]([^'"]+)['"]/gu)].map((m) => m[1]).sort();
   assert.deepEqual(importsOf(screen), ['@/components/sign-out-button', '@/components/ui', '@/constants/theme', '@/domain/service-enrollment', '@/features/personal-workspace/personal-workspace-provider',
-    '@/features/reservations/reservation-ports', '@/features/reservations/reservation-view', '@/features/reservations/use-reservation-ports',
-    '@/features/reservations/x-reconnect-signal', '@/features/reservations/x-write-view',
+    '@/features/reservations/reservation-ports', '@/features/reservations/reservation-view', '@/features/reservations/use-refocus-count', '@/features/reservations/use-reservation-ports',
+    '@/features/reservations/x-reconnect-signal', '@/features/reservations/x-row-generation', '@/features/reservations/x-write-view',
     '@/providers/active-account-provider', '@/providers/auth-provider', 'expo-router', 'react', 'react-native']);
   assert.deepEqual(importsOf(hook), ['@/features/reservations/live-reservation-ports', '@/features/reservations/reservation-ports', '@/features/schedule/remote-threads-reservation-store',
     '@/features/schedule/reservation-store', '@/lib/supabase', 'expo-crypto', 'react']);
@@ -1100,4 +1103,34 @@ test('wired Threads: saved only by a pending receipt; an uncertain create is kep
   assert.ok(!texts(tree).includes('予約済み'));
   assert.equal(button(tree, 'Threadsに予約する').disabled, true);
   assert.equal(w.actions(), 'list,create');
+});
+
+test('T39 S-4 the reservations screen: the label from the server\'s read (after a restart too); earlier offers a cancel only; current and unknown say so beside the row; a return reads again', async () => {
+  const store = scriptedPorts();
+  store.answer('x.list', { ok: true, value: [row('old', { connectionGeneration: 'earlier' }), row('now', { scheduledAt: '2026-11-03T00:30:00Z', connectionGeneration: 'current' }), row('bare', { scheduledAt: '2026-11-04T00:30:00Z' }), row('odd', { scheduledAt: '2026-11-05T00:30:00Z', connectionGeneration: 'later' })] });
+  const h = await mount({ store });
+  let tree = await h.render();
+  assert.ok(texts(tree).includes(xRowGeneration.EARLIER_LABEL));
+  assert.ok(has(tree, xRowGeneration.CURRENT_TEXT));
+  assert.equal(texts(tree).filter((t) => t === xRowGeneration.UNKNOWN_TEXT).length, 2, 'absent and invalid');
+  assert.ok(!texts(tree).includes('予約済み') || texts(tree).filter((t) => t === '予約済み').length === 3, 'the earlier row is not called 予約済み');
+  tree = await open(h, `予約 ${view.formatJst('2026-11-02T00:30:00Z')}`);
+  assert.ok(has(tree, xRowGeneration.EARLIER_TEXT));
+  assert.equal(buttons(tree, '時刻を変更').length, 0);
+  assert.equal(buttons(tree, 'この本文で再確認する').length, 0);
+  assert.ok(buttons(tree, '予約を取り消す').length === 1, 'a cancel is left');
+  assert.equal(store.count('x.list'), 1);
+  store.answer('x.list', { ok: true, value: [row('old', { connectionGeneration: 'earlier' }), row('now', { scheduledAt: '2026-11-03T00:30:00Z' })] });
+  h.world.refocus += 1;
+  tree = await h.render();
+  assert.equal(store.count('x.list'), 2, 'a return reads again');
+  assert.ok(!has(tree, xRowGeneration.CURRENT_TEXT), 'the latest read has no field for it: not current any more');
+  reconnectSignal.markXServiceRestarted('user-A');
+  reconnectSignal.clearXServiceRestarted('user-A');
+  assert.ok(has(await h.render(), '再開前に保存した予約は'), 'one row has no answer');
+  store.answer('x.list', { ok: true, value: [row('old', { connectionGeneration: 'earlier' })] });
+  h.world.refocus += 1;
+  tree = await h.render();
+  assert.ok(!has(tree, '再開前に保存した予約は'), 'every row answered');
+  reconnectSignal.forgetXReconnectedAfterRestart('user-A');
 });
