@@ -141,13 +141,23 @@ export function mediaReadSource(storageUrl: string, accessToken: string, asset: 
   return { uri: `${storageUrl}/object/authenticated/${encodeURIComponent(asset.bucket)}/${path}`, headers: { Authorization: `Bearer ${accessToken}` } };
 }
 
-// delete: the row first (the asset leaves the list at once), then the object through storage-api; both are safe to retry
-export async function deleteMedia(client: MediaBoxClient, assetId: string): Promise<{ ok: true; already: boolean } | MediaFailure> {
+// delete: the row first (the asset leaves the list and every read at once), then the objects through storage-api, then the same call again,
+// which confirms the removal and gives the quota back (G5-02 #7). All three are safe to retry; purged false = not given back yet (the removal
+// failed, or the asset was deleted while an upload of it could still land: ask again after a minute)
+export async function deleteMedia(client: MediaBoxClient, assetId: string): Promise<{ ok: true; already: boolean; purged: boolean } | MediaFailure> {
   const r = await call(client, 'postona_media_delete', { p_asset_id: assetId });
   if (isFailure(r)) return r;
   if (r.status !== 'deleted') return fail(String(r.status));
+  if (r.purged === true) return { ok: true, already: r.already === true, purged: true };
   const target = r.remove as { bucket: string; object_paths: string[] };
-  const removed = await client.storage.from(target.bucket).remove(target.object_paths);
+  let removed;
+  try {
+    removed = await client.storage.from(target.bucket).remove(target.object_paths);
+  } catch {
+    return fail('NETWORK', 'unavailable');
+  }
   if (removed.error) return storageFailure(removed.error);
-  return { ok: true, already: r.already === true };
+  const confirmed = await call(client, 'postona_media_delete', { p_asset_id: assetId });
+  if (isFailure(confirmed)) return confirmed;
+  return { ok: true, already: r.already === true, purged: confirmed.purged === true };
 }

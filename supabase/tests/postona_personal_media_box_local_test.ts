@@ -13,7 +13,8 @@ const DB_PORT = Deno.env.get('G5LS_DB_PORT') ?? '';
 const MVP = Deno.env.get('G5LS_MVP') ?? '';
 const MEDIA = Deno.env.get('G5LS_MEDIA') ?? '';
 const PR636 = Deno.env.get('G5LS_PR636') ?? '';
-const enabled = API !== '' && PUBLISHABLE !== '' && SECRET !== '' && MVP !== '' && MEDIA !== '' && PR636 !== '';
+const PR637 = Deno.env.get('G5LS_PR637') ?? '';
+const enabled = API !== '' && PUBLISHABLE !== '' && SECRET !== '' && MVP !== '' && MEDIA !== '' && PR636 !== '' && PR637 !== '';
 const opts = { ignore: !enabled, sanitizeOps: false, sanitizeResources: false };
 const OWNER = 'postgres';
 const SUPER = 'supabase_admin';
@@ -252,7 +253,7 @@ Deno.test({ name: 'the person: add (begin -> upload to the staging key -> move o
   const del = await A.client.rpc('postona_media_delete', { p_asset_id: j.asset.id });
   SAMPLES.delete = del.data;
   assert.match(await readBack(A.client, j.asset), /^(not_found|invalid):STORAGE_(404|400)$/u, 'no read the moment the row is deleted');
-  assert.deepEqual(await mb.deleteMedia(A.client, j.asset.id), { ok: true, already: true });
+  assert.deepEqual(await mb.deleteMedia(A.client, j.asset.id), { ok: true, already: true, purged: true });
   assert.equal(await objects(j.asset.object_path), '0', 'the bytes are gone');
   assert.equal(await assetRow(j.asset.id), `deleted:${jpg.byteLength}`);
   assert.deepEqual(((await mb.listMedia(A.client, 10)) as { items: Array<{ id: string }> }).items.map((x) => x.id), [v.asset.id, b.asset.id]);
@@ -372,7 +373,8 @@ Deno.test({ name: 'limits and failures: unsupported type, empty / oversize decla
     assert.equal(await stage(A.client, b, body, ct), null, label);
     assert.equal(await status(A.client, 'postona_media_complete_upload', { p_asset_id: b.asset.id }), 'MEDIA_OBJECT_MISMATCH', label);
     assert.equal(await assetRow(b.asset.id), 'pending:-', label);
-    assert.deepEqual(await mb.deleteMedia(A.client, b.asset.id), { ok: true, already: false }, `${label}: cleaned up by the person`);
+    // deleted while its window was open: an upload of it could still land, so the quota comes back a minute later (G5-02 #7)
+    assert.deepEqual(await mb.deleteMedia(A.client, b.asset.id), { ok: true, already: false, purged: false }, `${label}: cleaned up by the person`);
     assert.equal(await objects(b.asset.object_path), '0', `${label}: the object went too`);
   }
   {
@@ -401,7 +403,7 @@ Deno.test({ name: 'limits and failures: unsupported type, empty / oversize decla
   assert.equal(await objects(b1.asset.object_path), '1');
   assert.match(await orphans(), new RegExp(`object_without_asset:${b1.asset.object_path}`, 'u'));
   assert.equal(await st(begin('image/png', PNG.byteLength, rid, 'p.png')), 'MEDIA_NOT_FOUND', 'a deleted request is not reopened');
-  assert.deepEqual(await mb.deleteMedia(A.client, b1.asset.id), { ok: true, already: true });
+  assert.deepEqual(await mb.deleteMedia(A.client, b1.asset.id), { ok: true, already: true, purged: true });
   assert.equal(await objects(b1.asset.object_path), '0');
   {
     const b = (await begin('image/png', PNG.byteLength)).data as Begun;
@@ -415,6 +417,8 @@ Deno.test({ name: 'limits and failures: unsupported type, empty / oversize decla
   assert.ok(open.every((o) => (o.data as { status: string }).status === 'upload'));
   assert.equal(await st(begin('image/png', 10)), 'MEDIA_QUOTA_EXCEEDED', 'the 11th open upload');
   for (const o of open) await mb.deleteMedia(A.client, (o.data as Begun).asset.id);
+  // (G5-02 #7) the pending assets deleted above hold quota for a minute (an upload of them could still land): clear them for the counts below
+  await sql(OWNER, `delete from private.postona_media_assets where owner_user_id = '${A.id}' and status = 'deleted'`);
   await seed(A, 199, 10);
   assert.equal(await st(begin('image/png', 10)), 'upload', '199 + 1');
   assert.equal(await st(begin('image/png', 10)), 'MEDIA_QUOTA_EXCEEDED', 'the 201st asset');
@@ -527,7 +531,7 @@ Deno.test({ name: 'H1 F1 AFTER: the final key takes no client write in any state
   assert.match(await readBack(A.client, b.asset), /^(not_found|invalid):STORAGE_(404|400)$/u, 'PASS: the replaced object is not served');
   assert.ok(!((await mb.listMedia(A.client, 50)) as { items: Array<{ id: string }> }).items.some((x) => x.id === b.asset.id), 'not listed');
   assert.match(await orphans(), new RegExp(`broken_ready:${b.asset.object_path.replace(/\./gu, '\\.')}`, 'u'));
-  assert.deepEqual(await mb.deleteMedia(A.client, b.asset.id), { ok: true, already: false });
+  assert.deepEqual(await mb.deleteMedia(A.client, b.asset.id), { ok: true, already: false, purged: true });
   assert.equal(await sql(SUPER, `select count(*) from storage.objects where bucket_id = '${BUCKET}' and name in ('${b.upload.final_path}', '${b.upload.object_path}')`), '0', 'the person removes both');
 });
 
@@ -644,8 +648,150 @@ Deno.test({ name: 'stop / rollback: the stop closes every path at once and keeps
   await reloadApi();
 });
 
+// ---- G5-02 #7: H1 #306 task 36's P2-1 / P2-2 on PR #637's own files (before), then this tree (after) --------------------------------
+// what a person holds, as the box counts it: <assets>/<open uploads>/<bytes>
+const usage = (p: { id: string }) => sql(OWNER, `select assets || '/' || open_uploads || '/' || bytes from private.postona_media_usage('${p.id}', null)`);
+const FOUND7: Record<string, string> = {};
+// a signed upload token issued under PR #637 (an old environment's bearer, used again after the fix)
+const OLD_BEARER = { token: '', path: '', owner: '' };
+Deno.test({ name: 'H1 task 36 P2-1 / P2-2 BEFORE (PR #637 installed): the person makes a signed upload URL for the staging key and an anonymous client writes real bytes with it after the delete, the stop and the sign-out; three deletes without the remove leave 210 bytes stored and the quota at 0', ...opts }, async () => {
+  await emptyBox();
+  await ok(MEDIA, ROLLBACK);
+  await ok(PR637, INSTALL);
+  await reloadApi();
+  try {
+    // P2-1
+    const A = await person('A7b');
+    const b = (await A.client.rpc('postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 's.png', p_content_type: 'image/png', p_size_bytes: PNG.byteLength })).data as Begun;
+    const su = await A.client.storage.from(BUCKET).createSignedUploadUrl(b.upload.object_path);
+    assert.equal(su.error, null, 'a signed upload URL is made');
+    const claims = JSON.parse(atob(su.data!.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    await A.client.rpc('postona_media_delete', { p_asset_id: b.asset.id });
+    await ok(PR637, STOP);
+    await A.client.auth.signOut({ scope: 'local' });
+    const anon = newClient();
+    assert.equal((await anon.storage.from(BUCKET).uploadToSignedUrl(b.upload.object_path, su.data!.token, PNG, { contentType: 'image/png' })).error, null,
+      'FAIL reproduced: deleted, stopped and signed out, an anonymous client still writes');
+    assert.equal(await objects(b.upload.object_path), '1');
+    FOUND7.P2_1 = `token exp-iat=${claims.exp - claims.iat}s; written after delete + stop + sign-out`;
+    Object.assign(OLD_BEARER, { token: su.data!.token, path: b.upload.object_path, owner: A.id });
+    await ok(PR637, INSTALL);
+    await reloadApi();
+    // P2-2: three adds, then the delete RPC only (no remove)
+    const C = await person('C7b');
+    for (let i = 0; i < 3; i++) {
+      const r = await mb.addMedia(C.client, file(`c${i}.png`, 'image/png', PNG), crypto.randomUUID());
+      assert.ok(r.ok);
+      await C.client.rpc('postona_media_delete', { p_asset_id: r.asset.id });
+    }
+    const stored = await sql(SUPER, `select count(*) || '/' || sum((metadata->>'size')::bigint) from storage.objects where bucket_id = '${BUCKET}' and owner_id = '${C.id}'`);
+    const held = await sql(OWNER, `select assets || '/' || open_uploads || '/' || bytes from private.postona_media_usage('${C.id}', null)`);
+    assert.deepEqual([stored, held], ['3/210', '0/0/0'], 'FAIL reproduced: 210 bytes stored, nothing counted');
+    FOUND7.P2_2 = `stored ${stored}, usage ${held}`;
+  } finally {
+    await emptyBox();
+    await ok(PR637, ROLLBACK);
+    await ok(MEDIA, INSTALL);
+    await reloadApi();
+  }
+  console.log(`G5-02 #7 before (PR #637): ${JSON.stringify(FOUND7)}`);
+});
+
+Deno.test({ name: 'H1 task 36 P2-1 AFTER: no signed upload URL can be made (staging or final, upsert or not, any state); the ordinary add still works; a bearer an old install issued still writes (storage-api checks nothing) but only onto a name no asset reads, counted against its owner and listed for cleanup', ...opts }, async () => {
+  const A = await person('A7s');
+  const b = (await A.client.rpc('postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 's.png', p_content_type: 'image/png', p_size_bytes: PNG.byteLength })).data as Begun;
+  for (const [path, upsert] of [[b.upload.object_path, false], [b.upload.object_path, true], [b.upload.final_path, false]] as Array<[string, boolean]>) {
+    assert.notEqual((await A.client.storage.from(BUCKET).createSignedUploadUrl(path, { upsert })).error, null, `PASS: no signed upload URL for ${path} (upsert ${upsert})`);
+  }
+  assert.equal(await stage(A.client, b, PNG, 'image/png'), null, 'the ordinary upload and move still work');
+  assert.equal(await status(A.client, 'postona_media_complete_upload', { p_asset_id: b.asset.id }), 'ready');
+  assert.equal(await readBack(A.client, b.asset), await sha(PNG));
+  assert.notEqual((await A.client.storage.from(BUCKET).createSignedUploadUrl(b.upload.object_path)).error, null, 'ready: none either');
+  // the old environment's bearer (made under PR #637 in the previous test, 7200 s): storage-api writes with it without any check
+  assert.ok(OLD_BEARER.token !== '', 'the BEFORE test ran first');
+  const anon = newClient();
+  const late = await anon.storage.from(BUCKET).uploadToSignedUrl(OLD_BEARER.path, OLD_BEARER.token, bytes(4000, 6), { contentType: 'image/png' });
+  console.log(`G5-02 #7 an old signed-upload bearer after the fix: ${late.error === null ? 'written' : `refused (${late.error.message})`}`);
+  if (late.error === null) {
+    assert.equal(await sql(SUPER, `select owner_id from storage.objects where bucket_id = '${BUCKET}' and name = '${OLD_BEARER.path}'`), OLD_BEARER.owner);
+    assert.equal(await sql(OWNER, `select count(*) from private.postona_media_assets where '${OLD_BEARER.path}' in (object_path, staging_path)`), '0', 'no asset names it: nothing reads it');
+    assert.match(await usage({ id: OLD_BEARER.owner }), /^1\/0\/4000$/u, 'counted against its owner');
+    assert.match(await orphans(), new RegExp(`object_without_asset:${OLD_BEARER.path.replace(/\./gu, '\\.')}`, 'u'), 'listed for the operator');
+    assert.equal((await service().storage.from(BUCKET).remove([OLD_BEARER.path])).error, null, 'the operator removes it (storage-api, service key)');
+    assert.match(await usage({ id: OLD_BEARER.owner }), /^0\/0\/0$/u);
+  }
+});
+
+Deno.test({ name: 'H1 task 36 P2-2 AFTER: a delete without the remove keeps the stored bytes counted (3 deletes: 3 assets, 210 bytes); the remove plus the confirming delete gives them back for the next add; a failed remove keeps them; final + staging are summed; an upload that could still land is held a minute; a late object after the confirmation counts again; the 200 / 2 GiB boundaries; a delete racing a begin', ...opts }, async () => {
+  const C = await person('C7f');
+  const ids: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const r = await mb.addMedia(C.client, file(`c${i}.png`, 'image/png', PNG), crypto.randomUUID());
+    assert.ok(r.ok);
+    ids.push(r.asset.id);
+    const d = (await C.client.rpc('postona_media_delete', { p_asset_id: r.asset.id })).data as { purged: boolean };
+    assert.equal(d.purged, false, 'objects still stored: not confirmed');
+    assert.match(await readBack(C.client, r.asset), /^(not_found|invalid):STORAGE_(404|400)$/u, 'no read the moment it is deleted');
+  }
+  assert.equal(await usage(C), '3/0/210', 'PASS: the 210 stored bytes are still counted');
+  assert.match(await orphans(), /deleted_awaiting_removal:/u);
+  // at the limit while they are stored
+  await seed(C, 197, 10);
+  assert.equal(await status(C.client, 'postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 'x.png', p_content_type: 'image/png', p_size_bytes: 10 }), 'MEDIA_QUOTA_EXCEEDED', '197 + 3 deleted-unremoved = 200');
+  // a failed remove (the stop is on): nothing given back; the retry after the install gives it back
+  await ok(MEDIA, STOP);
+  assert.equal((await mb.deleteMedia(C.client, ids[0]) as { ok: boolean }).ok, false, 'the stop: the delete is refused');
+  await ok(MEDIA, INSTALL);
+  assert.equal(await usage(C), '200/0/2180');
+  assert.deepEqual(await mb.deleteMedia(C.client, ids[0]), { ok: true, already: true, purged: true }, 'remove + confirm');
+  assert.equal(await usage(C), '199/0/2110', 'given back');
+  assert.equal(await status(C.client, 'postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 'x.png', p_content_type: 'image/png', p_size_bytes: 10 }), 'upload', 'the next add fits');
+  await sql(OWNER, `delete from private.postona_media_assets where owner_user_id = '${C.id}' and (display_name = 'seed' or status = 'pending')`);
+  for (const id of ids.slice(1)) assert.deepEqual(await mb.deleteMedia(C.client, id), { ok: true, already: true, purged: true });
+  assert.equal(await usage(C), '0/0/0');
+  // final + staging both stored: summed, not the larger one
+  const r = await mb.addMedia(C.client, file('r.png', 'image/png', PNG), crypto.randomUUID());
+  assert.ok(r.ok);
+  const staging = r.asset.object_path.replace(/\/([^/]+)$/u, '/staging/$1');
+  assert.equal((await service().storage.from(BUCKET).upload(staging, bytes(5000, 5), { contentType: 'image/png', upsert: true })).error, null);
+  assert.equal(await usage(C), '1/0/5070', 'PASS: 70 + 5000');
+  assert.deepEqual(await mb.deleteMedia(C.client, r.asset.id), { ok: true, already: false, purged: true }, 'both removed, confirmed');
+  assert.equal(await objects(staging), '0');
+  // deleted while its window was open (an upload of it could still land): held one minute, then given back
+  const p = (await C.client.rpc('postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 'p.png', p_content_type: 'image/png', p_size_bytes: 1000 })).data as Begun;
+  assert.deepEqual(await mb.deleteMedia(C.client, p.asset.id), { ok: true, already: false, purged: false });
+  assert.equal(await usage(C), '1/0/1000', 'held');
+  await sql(SUPER, `update private.postona_media_assets set deleted_at = now() - interval '61 seconds' where id = '${p.asset.id}'`);
+  assert.deepEqual(await mb.deleteMedia(C.client, p.asset.id), { ok: true, already: true, purged: true });
+  assert.equal(await usage(C), '0/0/0', 'given back after the minute');
+  // an object that lands after the confirmation (simulated as storage-api's own write) counts again, and the person can remove it
+  assert.equal((await service().storage.from(BUCKET).upload(p.upload.object_path, bytes(3000, 2), { contentType: 'image/png' })).error, null);
+  assert.equal(await usage(C), '1/0/3000', 'PASS: counted again');
+  assert.deepEqual(await mb.deleteMedia(C.client, p.asset.id), { ok: true, already: true, purged: true });
+  assert.equal(await usage(C), '0/0/0');
+  // 2 GiB with an unremoved deleted asset
+  const big = await mb.addMedia(C.client, file('b.png', 'image/png', PNG), crypto.randomUUID());
+  assert.ok(big.ok);
+  await C.client.rpc('postona_media_delete', { p_asset_id: big.asset.id });
+  await seed(C, 100, 21474835);
+  assert.equal(await status(C.client, 'postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 'x.png', p_content_type: 'image/png', p_size_bytes: 79 }), 'MEDIA_QUOTA_EXCEEDED', '2 147 483 500 + 70 stored + 79 > 2 GiB');
+  assert.equal(await status(C.client, 'postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 'x.png', p_content_type: 'image/png', p_size_bytes: 78 }), 'upload', '= 2 GiB');
+  await sql(OWNER, `delete from private.postona_media_assets where owner_user_id = '${C.id}' and (display_name = 'seed' or status = 'pending')`);
+  assert.deepEqual(await mb.deleteMedia(C.client, big.asset.id), { ok: true, already: true, purged: true });
+  // at 200 (199 seeded + one ready), a full delete racing a begin: never more than 200 held
+  const x = await mb.addMedia(C.client, file('x.png', 'image/png', PNG), crypto.randomUUID());
+  assert.ok(x.ok);
+  await seed(C, 199, 10);
+  const [del, beg] = await Promise.all([mb.deleteMedia(C.client, x.asset.id), C.client.rpc('postona_media_begin_upload', { p_request_id: crypto.randomUUID(), p_file_name: 'y.png', p_content_type: 'image/png', p_size_bytes: 10 })]);
+  const held = Number((await usage(C)).split('/')[0]);
+  console.log(`G5-02 #7 a delete racing a begin at 200: delete ${JSON.stringify(del)}, begin ${(beg.data as { status: string }).status}, held ${held}`);
+  assert.ok(held <= 200, `held ${held}`);
+  await sql(OWNER, `delete from private.postona_media_assets where owner_user_id = '${C.id}' and (display_name = 'seed' or status = 'pending')`);
+  console.log('G5-02 #7 2 GiB: the counting is tested with seeded rows and real small objects (a real 2 GiB write NOT_RUN)');
+});
+
 // ---- mutants: every guard is load-bearing (each mutated install changes the answer of its own case; the reviewed file is restored) ------
-Deno.test({ name: 'mutants: owner, pending-only / unexpired / staging-only upload, the version pin, no sign, removal only after delete, moves only onto the own final key, session, lifecycle, T13, quotas (open uploads, expired-with-object, complete re-check), size, list / delete owner, idempotency -- each flips its own case; the original refuses it', ...opts }, async () => {
+Deno.test({ name: 'mutants (G5-02 #5 / #6 / #7): owner, pending-only / unexpired / staging-only / ordinary-only upload, the version pin, no sign, removal only after delete, moves only onto the own final key, session, lifecycle, T13, quotas (open uploads, expired-with-object, complete re-check), size, list / delete owner, idempotency -- each flips its own case; the original refuses it', ...opts }, async () => {
   const text = await Deno.readTextFile(`${MEDIA}/${INSTALL}`);
   const A = await person('mA');
   const B = await person('mB');
@@ -705,8 +851,13 @@ Deno.test({ name: 'mutants: owner, pending-only / unexpired / staging-only uploa
       async () => { const open = await Promise.all(Array.from({ length: 11 }, () => begin(A, 10)));
         const r = open.every((o) => (o.data as { status: string }).status === 'upload');
         await sql(OWNER, `delete from private.postona_media_assets where owner_user_id = '${A.id}' and status = 'pending'`); return r; }],
-    ['MB13 (F3) an expired upload holding an object holds quota', "  select pg_catalog.count(*) filter (where m.status = 'ready' or m.object_bytes is not null or m.window_open),",
-      "  select pg_catalog.count(*) filter (where m.status = 'ready' or m.window_open),",
+    // (G5-02 #7: counted twice -- the pending branch and the any-stored-object branch -- so both go)
+    ['MB13 (F3) an expired upload holding an object holds quota',
+      "                when m.status = 'pending' and (m.window_open or m.object_count > 0) then greatest(m.declared_bytes, m.object_bytes)\n"
+        + "                when m.status = 'deleted' and m.purged_at is null then greatest(m.declared_bytes, m.object_bytes)\n"
+        + '                when m.object_count > 0 then m.object_bytes\n',
+      "                when m.status = 'pending' and m.window_open then greatest(m.declared_bytes, m.object_bytes)\n"
+        + "                when m.status = 'deleted' and m.purged_at is null then greatest(m.declared_bytes, m.object_bytes)\n",
       async () => { const P = await person('mP'); const u = (await begin(P)).data as Begun; await stage(P.client, u, PNG, 'image/png');
         await sql(SUPER, `update private.postona_media_assets set upload_expires_at = now() - interval '1 second' where id = '${u.asset.id}'`); await seed(P, 199, 10);
         return ((await begin(P, 10)).data as { status: string }).status === 'upload'; }],
@@ -727,13 +878,30 @@ Deno.test({ name: 'mutants: owner, pending-only / unexpired / staging-only uploa
       async () => { const rid = crypto.randomUUID(); await A.client.rpc('postona_media_begin_upload', { p_request_id: rid, p_file_name: 'a.png', p_content_type: 'image/png', p_size_bytes: 10 });
         const s = await status(A.client, 'postona_media_begin_upload', { p_request_id: rid, p_file_name: 'a.png', p_content_type: 'image/png', p_size_bytes: 11 });
         await sql(OWNER, `delete from private.postona_media_assets where request_id = '${rid}'`); return s === 'upload'; }],
+    // G5-02 #7 (H1 task 36 P2-1 / P2-2)
+    ['MB19 (P2-1) no signed upload URL', "\n                                and v_op = 'storage.object.upload'", '',
+      async () => { const u = await fresh(); const r = (await A.client.storage.from(BUCKET).createSignedUploadUrl(u.upload.object_path)).error === null; await mb.deleteMedia(A.client, u.asset.id); return r; }],
+    ['MB20 (P2-2) a deleted asset holds its declaration until confirmed', "                when m.status = 'deleted' and m.purged_at is null then greatest(m.declared_bytes, m.object_bytes)\n", '',
+      async () => { const P = await person('mR'); const u = (await begin(P, 1000)).data as Begun; await P.client.rpc('postona_media_delete', { p_asset_id: u.asset.id }); return await usage(P) === '0/0/0'; }],
+    ['MB21 (P2-2) every stored object of an asset counts', '                when m.object_count > 0 then m.object_bytes\n', '',
+      async () => { const P = await person('mS'); const r = await mb.addMedia(P.client, file('s.png', 'image/png', PNG), crypto.randomUUID()); await mb.deleteMedia(P.client, r.asset.id);
+        await service().storage.from(BUCKET).upload(r.asset.object_path.replace(/\/([^/]+)$/u, '/staging/$1'), bytes(300, 1), { contentType: 'image/png' }); return await usage(P) === '0/0/0'; }],
+    ['MB22 (P2-2) final + staging summed', "           (select coalesce(pg_catalog.sum(case when o.metadata ->> 'size' ~ '^[0-9]{1,12}$' then (o.metadata ->> 'size')::bigint else 52428800 end), 0)\n              from storage.objects o where o.bucket_id = a.bucket_id",
+      "           (select coalesce(pg_catalog.max(case when o.metadata ->> 'size' ~ '^[0-9]{1,12}$' then (o.metadata ->> 'size')::bigint else 52428800 end), 0)\n              from storage.objects o where o.bucket_id = a.bucket_id",
+      async () => { const P = await person('mT'); const r = await mb.addMedia(P.client, file('t.png', 'image/png', PNG), crypto.randomUUID());
+        await service().storage.from(BUCKET).upload(r.asset.object_path.replace(/\/([^/]+)$/u, '/staging/$1'), bytes(5000, 1), { contentType: 'image/png' }); return await usage(P) === '1/0/5000'; }],
+    ['MB23 (P2-2) an object no asset names counts', "       and not exists (select 1 from private.postona_media_assets a where a.owner_user_id = p_user and o.name in (a.object_path, a.staging_path)))", '       and false)',
+      async () => { const P = await person('mU'); const r = await mb.addMedia(P.client, file('u.png', 'image/png', PNG), crypto.randomUUID());
+        await sql(OWNER, `delete from private.postona_media_assets where id = '${r.asset.id}'`); return await usage(P) === '0/0/0'; }],
+    ['MB24 (P2-2) an upload that could still land is held a minute', "     and (v_row.ready_at is not null or v_row.upload_expires_at <= v_row.deleted_at\n          or pg_catalog.clock_timestamp() >= v_row.deleted_at + interval '1 minute') then",
+      '     then', async () => { const P = await person('mV'); const u = (await begin(P, 1000)).data as Begun; return ((await mb.deleteMedia(P.client, u.asset.id)) as { purged: boolean }).purged === true; }],
   ];
   const killed: string[] = [];
   try {
     for (const [label, from, to, broken] of cases) {
       assert.equal(await broken(), false, `${label}: the original holds`);
       assert.equal(text.split(from).length, 2, `${label}: site`);
-      const r = await psql(OWNER, ['-f', '-'], text.replace(from, to));
+      const r = await psql(OWNER, ['-f', '-'], text.replace(from, () => to));
       assert.ok(r.ok, `${label}: mutant install\n${r.error}`);
       try {
         assert.equal(await broken(), true, `${label}: survived`);
@@ -746,6 +914,6 @@ Deno.test({ name: 'mutants: owner, pending-only / unexpired / staging-only uploa
     await ok(MEDIA, INSTALL);
   }
   assert.equal(await readBack(A.client, ready.asset), await sha(PNG), 'the reviewed file is back');
-  console.log(`G5-02 #6 media mutants killed ${killed.length} / ${cases.length}: ${killed.join(' ')}`);
+  console.log(`G5-02 #5-#7 media mutants killed ${killed.length} / ${cases.length}: ${killed.join(' ')}`);
   assert.equal(killed.length, cases.length);
 });
