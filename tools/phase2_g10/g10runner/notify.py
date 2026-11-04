@@ -6,6 +6,7 @@ import subprocess
 from .textutil import redact
 
 OSASCRIPT = "/usr/bin/osascript"  # Mac 通知で起動する唯一のシステムツール（固定・絶対パス）
+SHARED_WINDOW_BIN = "/Users/Shared/g10-bin/g10_notify_window"  # リリース運用時の窓バイナリ既定置き場（yuya 所有・0755）
 
 SYMBOLS = {
     "ended_checks_passed": "✅",
@@ -48,8 +49,29 @@ class MacNotifier:
 
     def __init__(self, window=True, window_bin=None):
         self.window = window
-        self.window_bin = (window_bin or os.environ.get("G10_NOTIFY_WINDOW")
-                           or os.path.join(os.path.dirname(os.path.abspath(__file__)), "g10_notify_window"))
+        self.window_bin = window_bin or os.environ.get("G10_NOTIFY_WINDOW")  # 明示指定（None なら既定探索）
+
+    def _candidates(self):
+        """窓バイナリの候補（明示指定があればそれだけ。無ければ パッケージ同梱 → 共有場所）。"""
+        if self.window_bin:
+            return [self.window_bin]
+        return [os.path.join(os.path.dirname(os.path.abspath(__file__)), "g10_notify_window"),
+                SHARED_WINDOW_BIN]
+
+    @staticmethod
+    def _usable(win):
+        """起動してよい窓バイナリか: 実在する通常ファイルで、所有者が自分、group/other 書き込み不可、実行可能。
+        （窓はリリース検証外の装飾 UI なので、差し替え防止の軽い整合性チェックを課す。）"""
+        import stat as _stat
+        try:
+            info = os.stat(win)
+        except OSError:
+            return False
+        if not _stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+            return False
+        if info.st_mode & (_stat.S_IWGRP | _stat.S_IWOTH):
+            return False
+        return os.access(win, os.X_OK)
 
     def __call__(self, title, message):
         ok = self._run_notification(title, message)   # バナー（通知センターに残る）
@@ -66,14 +88,15 @@ class MacNotifier:
             return False
 
     def _open_window(self, title, message):
-        win = self.window_bin
-        if not (win and os.path.isfile(win) and os.access(win, os.X_OK)):
-            return  # 未ビルド/非実行なら窓は出さない（バナーは通知センターに残る）
-        try:  # 引数渡し（シェルも AppleScript も介さない）。押すまで残るので待たない（fire-and-forget）
-            subprocess.Popen([win, title, message],
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
+        for win in self._candidates():
+            if self._usable(win):
+                try:  # 引数渡し（シェルも AppleScript も介さない）。押すまで残るので待たない（fire-and-forget）
+                    subprocess.Popen([win, title, message],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    pass
+                return
+        # どの候補も使えない（未ビルド/非実行/所有者不一致）なら窓は出さない（バナーは通知センターに残る）
 
 def notify(layout, notifier, kind, title, message):
     symbol = SYMBOLS.get(kind, "")

@@ -86,6 +86,14 @@ class MacNotifierTest(unittest.TestCase):
         ok, calls = self._run(notify.MacNotifier(window_bin=path))
         self.assertEqual(calls["popen"], [])                    # 非実行ファイルは起動しない
 
+    def test_window_not_launched_when_group_or_world_writable(self):
+        fd, path = tempfile.mkstemp(prefix="g10ww-")
+        os.close(fd)
+        os.chmod(path, 0o757)                                   # other に書き込み権（差し替え余地）
+        self.addCleanup(os.remove, path)
+        ok, calls = self._run(notify.MacNotifier(window_bin=path))
+        self.assertEqual(calls["popen"], [])                    # 書き込み可なら起動しない
+
     def test_window_can_be_disabled(self):
         win = self._executable()
         ok, calls = self._run(notify.MacNotifier(window=False, window_bin=win))
