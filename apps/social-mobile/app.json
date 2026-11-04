@@ -10,6 +10,15 @@
       "expo-router",
       "expo-web-browser",
       "expo-apple-authentication",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "素材BOXに保存する画像・動画を選ぶために、写真へのアクセスを使います。",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
       "./plugins/with-ios27-scene.plugin.js"
     ],
     "experiments": {
