@@ -1,4 +1,4 @@
--- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 task 5). NOT applied anywhere. Production NO_GO: a focused H1 security review of this
+-- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 task 5; G5-02 task 6 fixes H1 F1 / F2 / F3 of #306 comment 6618373731). NOT applied anywhere. Production NO_GO: a focused H1 security review of this
 -- candidate, the owner's approval and a read-only check of the managed project come first (its state is not known: never connected).
 --
 -- The POSTONA media box ("素材BOX"): a person's private images and short videos in their own personal workspace.
@@ -9,10 +9,22 @@
 --                  postona_media_complete_upload(asset_id)                                       -> ready, after the stored object is checked
 --                  postona_media_list(limit, before_created_at, before_id)                       -> the person's ready assets, newest first
 --                  postona_media_delete(asset_id)                                                -> deleted (idempotent), then the client removes the object
---   Storage      three policies on storage.objects for authenticated (no UPDATE policy: an object is never overwritten); each asks
---                public.postona_media_object_access(bucket, name, op): the object must be the caller's own asset in the caller's own personal
---                workspace, in the right state (insert: pending and not expired; select: ready, or deleted while storage-api removes it;
---                delete: deleted)
+--   Storage      four policies on storage.objects for authenticated; each asks public.postona_media_object_access(bucket, name, version, cmd)
+--                with storage-api's storage.operation: the object must be the caller's own asset in the caller's own personal workspace
+--                  insert  the asset's STAGING key (<ws>/staging/<id>.<ext>) while pending and its 1-hour upload window is open
+--                  update  only storage-api's move (storage.object.move) of that staging object onto the asset's FINAL key (<ws>/<id>.<ext>)
+--                          while pending; nothing else may ever write the final key (no insert, upsert or copy onto it, measured)
+--                  select  the final object of a ready asset AT ITS PINNED VERSION, for storage-api's authenticated download / info only
+--                          (storage.object.get_authenticated / object.get_authenticated_info); the staging object for the move; a deleted
+--                          asset's objects for storage-api's removal. NEVER a signed URL (sign / sign_many), a list or a copy
+--                  delete  a deleted asset's final and staging objects
+--
+-- G5-02 task 6 (H1 F1 / F2 / F3 on PR #636):
+--   F1  a ready asset's bytes cannot change: they live under a key no client write ever reaches (a late upload, measured to commit after
+--       its permission check, lands on the staging key only), and complete pins the final object's version and eTag; reads require it
+--   F2  no signed URL at all: the person reads with their own JWT through storage-api's authenticated download, and every read asks the
+--       session / lifecycle / workspace / ownership again (sign-out, expiry, service end, membership removal, a stop: the next read is refused)
+--   F3  a pending asset that holds an object keeps holding quota after its window closes; complete checks the limits again under T13's lock
 --
 -- Who the caller is: never a client-given workspace id, brand id or path. The RPCs ask G5's reviewed gates, in W0's order: S2-2
 -- private.postona_personal_session() = 'active' (a signed-in, non-anonymous person with a live session), T13 (the lifecycle lock; the x_autopost
@@ -75,8 +87,11 @@ begin
   end if;
   -- ours, or absent
   if pg_catalog.to_regclass('private.postona_media_assets') is not null
-     and (select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_media_assets')) <> v_owner then
-    raise exception 'MEDIA_TAKEN: private.postona_media_assets';
+     and ((select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_media_assets')) <> v_owner
+          or (select pg_catalog.string_agg(a.attname::text, ',' order by a.attname) from pg_catalog.pg_attribute a
+               where a.attrelid = pg_catalog.to_regclass('private.postona_media_assets') and a.attnum > 0 and not a.attisdropped)
+             is distinct from 'bucket_id,content_type,created_at,declared_bytes,deleted_at,display_name,id,kind,object_etag,object_path,object_version,owner_user_id,ready_at,request_id,staging_path,status,stored_bytes,upload_expires_at,workspace_id') then
+    raise exception 'MEDIA_TAKEN: private.postona_media_assets is not this version''s (an earlier candidate is installed: roll it back first)';
   end if;
   select pg_catalog.string_agg(p.oid::pg_catalog.regprocedure::text, ', ') into v_txt from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('public', 'private') and p.proname like 'postona\_media\_%' and p.proowner <> v_owner;
@@ -92,7 +107,7 @@ begin
   -- another permissive policy on storage.objects that reaches an API role would widen what a person may do with these objects
   select pg_catalog.string_agg(p.polname::text, ', ' order by p.polname) into v_txt from pg_catalog.pg_policy p
    where p.polrelid = 'storage.objects'::pg_catalog.regclass and p.polpermissive
-     and p.polname not in ('postona_media_insert', 'postona_media_select', 'postona_media_delete')
+     and p.polname not in ('postona_media_insert', 'postona_media_select', 'postona_media_update', 'postona_media_delete')
      and exists (select 1 from pg_catalog.unnest(p.polroles) u
                   where u = 0 or pg_catalog.pg_has_role(pg_catalog.to_regrole('anon'), u, 'MEMBER') or pg_catalog.pg_has_role(pg_catalog.to_regrole('authenticated'), u, 'MEMBER'));
   if v_txt is not null then
@@ -108,12 +123,15 @@ create table if not exists private.postona_media_assets (
   workspace_id text not null check (workspace_id ~ '^u_[0-9a-f]{24}$'),
   request_id uuid not null,
   bucket_id text not null check (bucket_id = 'postona-media'),
-  object_path text not null unique,
+  object_path text not null unique,    -- the FINAL key (no client write reaches it once storage-api's move created it)
+  staging_path text not null unique,   -- the upload key
   kind text not null check (kind in ('image', 'video')),
   content_type text not null check (content_type in ('image/heic', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime')),
   display_name text not null check (pg_catalog.char_length(display_name) between 1 and 120),
   declared_bytes bigint not null check (declared_bytes > 0),
   stored_bytes bigint check (stored_bytes > 0),
+  object_version text,                 -- storage.objects.version of the final object, pinned by complete; reads require it
+  object_etag text,
   status text not null check (status in ('pending', 'ready', 'deleted')),
   created_at timestamptz not null default pg_catalog.now(),
   upload_expires_at timestamptz not null,
@@ -122,7 +140,9 @@ create table if not exists private.postona_media_assets (
   unique (owner_user_id, request_id),
   check (object_path = workspace_id || '/' || id::text || '.' || case content_type when 'image/heic' then 'heic' when 'image/jpeg' then 'jpg'
          when 'image/png' then 'png' when 'image/webp' then 'webp' when 'video/mp4' then 'mp4' else 'mov' end),
-  check ((status = 'ready') = (ready_at is not null and stored_bytes is not null) or status = 'deleted'),
+  check (staging_path = workspace_id || '/staging/' || id::text || '.' || case content_type when 'image/heic' then 'heic' when 'image/jpeg' then 'jpg'
+         when 'image/png' then 'png' when 'image/webp' then 'webp' when 'video/mp4' then 'mp4' else 'mov' end),
+  check ((status = 'ready') = (ready_at is not null and stored_bytes is not null and object_version is not null) or status = 'deleted'),
   check ((status = 'deleted') = (deleted_at is not null))
 );
 create index if not exists postona_media_assets_list on private.postona_media_assets (owner_user_id, workspace_id, status, created_at desc, id desc);
@@ -245,12 +265,31 @@ begin
   return case v_state when 'own' then null when 'absent' then 'WORKSPACE_REQUIRED' else coalesce(v_state, 'OWN_WORKSPACE_CONFLICT') end;
 end $$;
 
--- an asset as the API answers it
+-- an asset as the API answers it (object_path is the final key; the staging key is told only by begin)
 create or replace function private.postona_media_asset_json(a private.postona_media_assets)
 returns jsonb language sql immutable set search_path = '' as $$
   select pg_catalog.jsonb_build_object('id', a.id, 'kind', a.kind, 'content_type', a.content_type, 'display_name', a.display_name,
            'bytes', coalesce(a.stored_bytes, a.declared_bytes), 'status', a.status, 'created_at', a.created_at, 'ready_at', a.ready_at,
            'bucket', a.bucket_id, 'object_path', a.object_path)
+$$;
+
+-- (G5-02 #6, H1 F3) what a person holds: every ready asset, and every pending asset that holds an object (staging or final) or whose upload
+-- window is still open; the bytes are the larger of the declaration / record and what storage-api stored. An expired pending asset releases
+-- its quota only once no object of it exists (H1: an expired asset with an object left the count, then a late complete made 201).
+create or replace function private.postona_media_usage(p_user uuid, p_except uuid)
+returns table (assets bigint, open_uploads bigint, bytes bigint)
+language sql stable security definer set search_path = '' set row_security = off as $$
+  with mine as (
+    select a.*, pg_catalog.clock_timestamp() < a.upload_expires_at as window_open,
+           (select pg_catalog.max(case when o.metadata ->> 'size' ~ '^[0-9]{1,12}$' then (o.metadata ->> 'size')::bigint else 52428800 end)
+              from storage.objects o where o.bucket_id = a.bucket_id and o.name in (a.object_path, a.staging_path)) as object_bytes
+      from private.postona_media_assets a
+     where a.owner_user_id = p_user and a.status <> 'deleted' and a.id is distinct from p_except)
+  select pg_catalog.count(*) filter (where m.status = 'ready' or m.object_bytes is not null or m.window_open),
+         pg_catalog.count(*) filter (where m.status = 'pending' and m.window_open),
+         coalesce(pg_catalog.sum(case when m.status = 'ready' then greatest(m.stored_bytes, coalesce(m.object_bytes, 0))
+                                      when m.object_bytes is not null or m.window_open then greatest(m.declared_bytes, coalesce(m.object_bytes, 0)) end), 0)::bigint
+    from mine m
 $$;
 
 -- ---- API ----------------------------------------------------------------------------------------------------------------------------
@@ -266,9 +305,7 @@ declare
   v_name text;
   v_row private.postona_media_assets;
   v_id uuid;
-  f_active bigint;
-  f_pending bigint;
-  f_bytes bigint;
+  v_use record;
 begin
   v_state := private.postona_media_writer_state();
   if v_state is not null then
@@ -310,33 +347,33 @@ begin
     if v_row.upload_expires_at <= pg_catalog.clock_timestamp() then
       return pg_catalog.jsonb_build_object('status', 'MEDIA_UPLOAD_EXPIRED');
     end if;
+    -- moved = an earlier try already put the bytes on the final key: the client goes straight to complete
     return pg_catalog.jsonb_build_object('status', 'upload', 'asset', private.postona_media_asset_json(v_row),
-             'upload', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_path', v_row.object_path, 'content_type', v_row.content_type,
-                                                     'max_bytes', v_max, 'expires_at', v_row.upload_expires_at));
+             'upload', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_path', v_row.staging_path, 'final_path', v_row.object_path,
+                                                     'content_type', v_row.content_type, 'max_bytes', v_max, 'expires_at', v_row.upload_expires_at,
+                                                     'moved', exists (select 1 from storage.objects o where o.bucket_id = v_row.bucket_id and o.name = v_row.object_path)));
   end if;
 
   -- quotas (the lifecycle lock T13 took serializes this person's writers): 200 assets, 10 open uploads, 2 GiB
-  select pg_catalog.count(*) filter (where a.status = 'ready' or (a.status = 'pending' and a.upload_expires_at > pg_catalog.clock_timestamp())),
-         pg_catalog.count(*) filter (where a.status = 'pending' and a.upload_expires_at > pg_catalog.clock_timestamp()),
-         coalesce(pg_catalog.sum(case when a.status = 'ready' then a.stored_bytes
-                                      when a.status = 'pending' and a.upload_expires_at > pg_catalog.clock_timestamp() then a.declared_bytes end), 0)
-    into f_active, f_pending, f_bytes
-    from private.postona_media_assets a where a.owner_user_id = v_user;
-  if f_active >= 200 or f_pending >= 10 or f_bytes + p_size_bytes > 2147483648 then
+  select * into v_use from private.postona_media_usage(v_user, null);
+  if v_use.assets >= 200 or v_use.open_uploads >= 10 or v_use.bytes + p_size_bytes > 2147483648 then
     return pg_catalog.jsonb_build_object('status', 'MEDIA_QUOTA_EXCEEDED');
   end if;
 
   v_id := pg_catalog.gen_random_uuid();
-  insert into private.postona_media_assets (id, owner_user_id, workspace_id, request_id, bucket_id, object_path, kind, content_type, display_name,
-                                            declared_bytes, status, upload_expires_at)
-  values (v_id, v_user, v_ws, p_request_id, 'postona-media', v_ws || '/' || v_id::text || '.' || v_ext, v_kind, p_content_type, v_name,
-          p_size_bytes, 'pending', pg_catalog.clock_timestamp() + interval '1 hour')
+  insert into private.postona_media_assets (id, owner_user_id, workspace_id, request_id, bucket_id, object_path, staging_path, kind, content_type,
+                                            display_name, declared_bytes, status, upload_expires_at)
+  values (v_id, v_user, v_ws, p_request_id, 'postona-media', v_ws || '/' || v_id::text || '.' || v_ext, v_ws || '/staging/' || v_id::text || '.' || v_ext,
+          v_kind, p_content_type, v_name, p_size_bytes, 'pending', pg_catalog.clock_timestamp() + interval '1 hour')
   returning * into v_row;
   return pg_catalog.jsonb_build_object('status', 'upload', 'asset', private.postona_media_asset_json(v_row),
-           'upload', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_path', v_row.object_path, 'content_type', v_row.content_type,
-                                                   'max_bytes', v_max, 'expires_at', v_row.upload_expires_at));
+           'upload', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_path', v_row.staging_path, 'final_path', v_row.object_path,
+                                                   'content_type', v_row.content_type, 'max_bytes', v_max, 'expires_at', v_row.upload_expires_at, 'moved', false));
 end $$;
 
+-- complete: the client has uploaded to the staging key and moved it onto the final key (storage-api's move). The final object storage-api
+-- recorded must be the person's, of the declared type and size; its version and eTag are pinned (reads require that version); the limits
+-- are checked again with everything else this person holds (H1 F3: a late complete may not take an asset over 200 / 2 GiB).
 create or replace function public.postona_media_complete_upload(p_asset_id uuid)
 returns jsonb language plpgsql volatile security definer set search_path = '' set row_security = off as $$
 declare
@@ -344,10 +381,14 @@ declare
   v_user uuid;
   v_ws text;
   v_row private.postona_media_assets;
+  v_use record;
   f_found boolean;
   f_owner text;
   f_mime text;
   f_size text;
+  f_version text;
+  f_etag text;
+  f_staged boolean;
 begin
   v_state := private.postona_media_writer_state();
   if v_state is not null then
@@ -363,17 +404,25 @@ begin
   if v_row.status = 'ready' then
     return pg_catalog.jsonb_build_object('status', 'ready', 'asset', private.postona_media_asset_json(v_row));
   end if;
-  -- the object storage-api stored: its owner, type and size, as storage-api recorded them (the client's word is not taken)
-  select true, o.owner_id, o.metadata ->> 'mimetype', o.metadata ->> 'size' into f_found, f_owner, f_mime, f_size
+  select true, o.owner_id, o.metadata ->> 'mimetype', o.metadata ->> 'size', o.version, o.metadata ->> 'eTag'
+    into f_found, f_owner, f_mime, f_size, f_version, f_etag
     from storage.objects o where o.bucket_id = v_row.bucket_id and o.name = v_row.object_path;
   if f_found is null then
-    return pg_catalog.jsonb_build_object('status', case when v_row.upload_expires_at <= pg_catalog.clock_timestamp() then 'MEDIA_UPLOAD_EXPIRED' else 'MEDIA_OBJECT_MISSING' end);
+    f_staged := exists (select 1 from storage.objects o where o.bucket_id = v_row.bucket_id and o.name = v_row.staging_path);
+    return pg_catalog.jsonb_build_object('status', case when f_staged then 'MEDIA_MOVE_REQUIRED'
+                                                        when v_row.upload_expires_at <= pg_catalog.clock_timestamp() then 'MEDIA_UPLOAD_EXPIRED'
+                                                        else 'MEDIA_OBJECT_MISSING' end);
   end if;
   if f_owner is distinct from v_user::text or f_mime is distinct from v_row.content_type or f_size is null or f_size !~ '^[0-9]{1,12}$'
-     or f_size::bigint is distinct from v_row.declared_bytes then
+     or f_size::bigint is distinct from v_row.declared_bytes or f_version is null then
     return pg_catalog.jsonb_build_object('status', 'MEDIA_OBJECT_MISMATCH');
   end if;
-  update private.postona_media_assets a set status = 'ready', stored_bytes = f_size::bigint, ready_at = pg_catalog.clock_timestamp()
+  select * into v_use from private.postona_media_usage(v_user, v_row.id);
+  if v_use.assets + 1 > 200 or v_use.bytes + f_size::bigint > 2147483648 then
+    return pg_catalog.jsonb_build_object('status', 'MEDIA_QUOTA_EXCEEDED');
+  end if;
+  update private.postona_media_assets a set status = 'ready', stored_bytes = f_size::bigint, object_version = f_version, object_etag = f_etag,
+         ready_at = pg_catalog.clock_timestamp()
    where a.id = v_row.id returning * into v_row;
   return pg_catalog.jsonb_build_object('status', 'ready', 'asset', private.postona_media_asset_json(v_row));
 end $$;
@@ -403,9 +452,11 @@ begin
   end if;
   v_ws := 'u_' || pg_catalog.substr(pg_catalog.md5(v_user::text), 1, 24);
   v_limit := p_limit;
+  -- only an asset whose final object is still there at the pinned version (a readable one)
   with page as (
     select private.postona_media_asset_json(a) j, a.created_at c, a.id i from private.postona_media_assets a
      where a.owner_user_id = v_user and a.workspace_id = v_ws and a.status = 'ready'
+       and exists (select 1 from storage.objects o where o.bucket_id = a.bucket_id and o.name = a.object_path and o.version = a.object_version)
        and (p_before_created_at is null or (a.created_at, a.id) < (p_before_created_at, p_before_id))
      order by a.created_at desc, a.id desc
      limit v_limit + 1),
@@ -442,17 +493,20 @@ begin
   if not v_already then
     update private.postona_media_assets a set status = 'deleted', deleted_at = pg_catalog.clock_timestamp() where a.id = v_row.id returning * into v_row;
   end if;
-  -- the object goes through storage-api (the client's remove, allowed for a deleted asset only); a retry is safe
-  return pg_catalog.jsonb_build_object('status', 'deleted', 'already', v_already, 'remove', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_path', v_row.object_path));
+  -- the objects go through storage-api (the client's remove, allowed for a deleted asset only); a retry is safe
+  return pg_catalog.jsonb_build_object('status', 'deleted', 'already', v_already,
+           'remove', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_paths', pg_catalog.jsonb_build_array(v_row.object_path, v_row.staging_path)));
 end $$;
 
--- ---- the Storage policies' question ----------------------------------------------------------------------------------------------
-create or replace function public.postona_media_object_access(p_bucket text, p_name text, p_op text)
+-- ---- the Storage policies' question (storage-api's operation decides what each command may do) ------------------------------------
+create or replace function public.postona_media_object_access(p_bucket text, p_name text, p_version text, p_cmd text)
 returns boolean language plpgsql stable security definer set search_path = '' set row_security = off as $$
 declare
   v_user uuid;
+  v_op text := pg_catalog.current_setting('storage.operation', true);
 begin
-  if p_bucket is distinct from 'postona-media' or p_op is null or p_op not in ('insert', 'select', 'delete') or p_name is null then
+  if p_bucket is distinct from 'postona-media' or p_name is null or p_cmd is null
+     or p_cmd not in ('insert', 'update_using', 'update_check', 'select', 'delete') then
     return false;
   end if;
   if private.postona_media_session() is distinct from 'active' then
@@ -464,14 +518,23 @@ begin
   end if;
   return exists (
     select 1 from private.postona_media_assets a
-     where a.bucket_id = p_bucket and a.object_path = p_name and a.owner_user_id = v_user
+     where a.bucket_id = p_bucket and a.owner_user_id = v_user
        and a.workspace_id = 'u_' || pg_catalog.substr(pg_catalog.md5(v_user::text), 1, 24)
-       and case p_op
-             when 'insert' then a.status = 'pending' and a.upload_expires_at > pg_catalog.clock_timestamp()
-             -- a deleted asset's object is visible only to storage-api's own removal (DELETE needs the row to pass SELECT too)
-             when 'select' then a.status = 'ready'
-                                or (a.status = 'deleted' and pg_catalog.current_setting('storage.operation', true) = 'storage.object.delete_many')
-             else a.status = 'deleted'
+       and case p_cmd
+             -- upload: the staging key only, while pending and the window is open
+             when 'insert' then p_name = a.staging_path and a.status = 'pending' and a.upload_expires_at > pg_catalog.clock_timestamp()
+             -- storage-api's move of the staging object onto the final key (the old row / the new row), while pending
+             when 'update_using' then p_name = a.staging_path and a.status = 'pending' and v_op = 'storage.object.move'
+             when 'update_check' then p_name = a.object_path and a.status = 'pending' and v_op = 'storage.object.move'
+             when 'select' then
+               -- the person's own authenticated download / info of a ready asset, at its pinned version (no sign, list or copy)
+               (p_name = a.object_path and a.status = 'ready' and p_version is not distinct from a.object_version
+                and v_op in ('storage.object.get_authenticated', 'object.get_authenticated_info'))
+               -- the move reads its source and its destination (measured: three SELECT checks, the last on the new row)
+               or (p_name in (a.staging_path, a.object_path) and a.status = 'pending' and v_op = 'storage.object.move')
+               -- storage-api's removal of a deleted asset's objects
+               or (p_name in (a.object_path, a.staging_path) and a.status = 'deleted' and v_op = 'storage.object.delete_many')
+             else p_name in (a.object_path, a.staging_path) and a.status = 'deleted'
            end);
 end $$;
 
@@ -479,39 +542,55 @@ end $$;
 create or replace function private.postona_media_orphans()
 returns table (kind text, bucket_id text, object_path text, owner text)
 language sql stable security definer set search_path = '' set row_security = off as $$
-  -- an object without a pending / ready asset (a deleted asset's object the client never removed, or no asset at all)
+  -- an object no live asset stands for: a deleted asset's object the client never removed, a late upload that landed on the staging key of an
+  -- asset that is no longer pending, or no asset at all
   select 'object_without_asset', o.bucket_id, o.name, o.owner_id from storage.objects o
    where o.bucket_id = 'postona-media'
-     and not exists (select 1 from private.postona_media_assets a where a.object_path = o.name and a.status in ('pending', 'ready'))
+     and not exists (select 1 from private.postona_media_assets a
+                      where (a.status in ('pending', 'ready') and a.object_path = o.name) or (a.status = 'pending' and a.staging_path = o.name))
   union all
-  -- a pending asset whose upload window closed without an object (its row can go)
-  select 'expired_upload', a.bucket_id, a.object_path, a.owner_user_id::text from private.postona_media_assets a
+  -- (G5-02 #6) a pending asset whose window closed while it holds an object: it keeps its quota until completed or deleted
+  select 'expired_upload_with_object', a.bucket_id, o.name, a.owner_user_id::text from private.postona_media_assets a
+    join storage.objects o on o.bucket_id = a.bucket_id and o.name in (a.object_path, a.staging_path)
    where a.status = 'pending' and a.upload_expires_at <= pg_catalog.clock_timestamp()
-     and not exists (select 1 from storage.objects o where o.bucket_id = a.bucket_id and o.name = a.object_path)
+  union all
+  -- a pending asset whose window closed without an object (it holds nothing; its row can go)
+  select 'expired_upload', a.bucket_id, a.staging_path, a.owner_user_id::text from private.postona_media_assets a
+   where a.status = 'pending' and a.upload_expires_at <= pg_catalog.clock_timestamp()
+     and not exists (select 1 from storage.objects o where o.bucket_id = a.bucket_id and o.name in (a.object_path, a.staging_path))
+  union all
+  -- a ready asset whose final object is gone or no longer at its pinned version (not readable; not listed)
+  select 'broken_ready', a.bucket_id, a.object_path, a.owner_user_id::text from private.postona_media_assets a
+   where a.status = 'ready'
+     and not exists (select 1 from storage.objects o where o.bucket_id = a.bucket_id and o.name = a.object_path and o.version = a.object_version)
 $$;
 
 revoke all on function private.postona_media_session(), private.postona_media_reader_state(uuid), private.postona_media_writer_state(),
-  private.postona_media_asset_json(private.postona_media_assets), private.postona_media_orphans(),
+  private.postona_media_asset_json(private.postona_media_assets), private.postona_media_usage(uuid, uuid), private.postona_media_orphans(),
   public.postona_media_begin_upload(uuid, text, text, bigint), public.postona_media_complete_upload(uuid),
-  public.postona_media_list(integer, timestamptz, uuid), public.postona_media_delete(uuid), public.postona_media_object_access(text, text, text)
+  public.postona_media_list(integer, timestamptz, uuid), public.postona_media_delete(uuid), public.postona_media_object_access(text, text, text, text)
   from public, anon, authenticated, service_role;
 grant execute on function public.postona_media_begin_upload(uuid, text, text, bigint), public.postona_media_complete_upload(uuid),
-  public.postona_media_list(integer, timestamptz, uuid), public.postona_media_delete(uuid), public.postona_media_object_access(text, text, text)
+  public.postona_media_list(integer, timestamptz, uuid), public.postona_media_delete(uuid), public.postona_media_object_access(text, text, text, text)
   to authenticated;
 
--- ---- the private bucket and the three policies --------------------------------------------------------------------------------------
+-- ---- the private bucket and the four policies ---------------------------------------------------------------------------------------
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('postona-media', 'postona-media', false, 52428800, array['image/heic', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'])
 on conflict (id) do nothing;
 drop policy if exists postona_media_insert on storage.objects;
 drop policy if exists postona_media_select on storage.objects;
+drop policy if exists postona_media_update on storage.objects;
 drop policy if exists postona_media_delete on storage.objects;
 create policy postona_media_insert on storage.objects for insert to authenticated
-  with check (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, 'insert'));
+  with check (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, version, 'insert'));
 create policy postona_media_select on storage.objects for select to authenticated
-  using (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, 'select'));
+  using (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, version, 'select'));
+create policy postona_media_update on storage.objects for update to authenticated
+  using (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, version, 'update_using'))
+  with check (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, version, 'update_check'));
 create policy postona_media_delete on storage.objects for delete to authenticated
-  using (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, 'delete'));
+  using (bucket_id = 'postona-media' and public.postona_media_object_access(bucket_id, name, version, 'delete'));
 
 -- ---- postconditions ---------------------------------------------------------------------------------------------------------------
 do $post$
@@ -524,7 +603,7 @@ begin
   select pg_catalog.string_agg(p.oid::pg_catalog.regprocedure::text, ', ') into v_txt from pg_catalog.pg_proc p
    where p.oid in ('public.postona_media_begin_upload(uuid,text,text,bigint)'::pg_catalog.regprocedure, 'public.postona_media_complete_upload(uuid)'::pg_catalog.regprocedure,
                    'public.postona_media_list(integer,timestamptz,uuid)'::pg_catalog.regprocedure, 'public.postona_media_delete(uuid)'::pg_catalog.regprocedure,
-                   'public.postona_media_object_access(text,text,text)'::pg_catalog.regprocedure)
+                   'public.postona_media_object_access(text,text,text,text)'::pg_catalog.regprocedure)
      and (p.proowner <> v_owner or not p.prosecdef or p.proconfig is distinct from array['search_path=""', 'row_security=off']
           or exists (select 1 from pg_catalog.pg_roles r
                       where not r.rolsuper and r.oid not in (v_owner, v_auth) and pg_catalog.has_function_privilege(r.oid, p.oid, 'EXECUTE')
@@ -567,12 +646,12 @@ begin
                       = array['image/heic', 'image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime']) then
     raise exception 'MEDIA_POSTCONDITION_BUCKET';
   end if;
-  -- the three policies, exactly; and still no other permissive policy for an API role
+  -- the four policies, exactly; and still no other permissive policy for an API role
   if (select pg_catalog.count(*) from pg_catalog.pg_policy p
        where p.polrelid = 'storage.objects'::pg_catalog.regclass and p.polpermissive and p.polroles = array[v_auth]
-         and ((p.polname, p.polcmd) in (('postona_media_insert', 'a'), ('postona_media_select', 'r'), ('postona_media_delete', 'd')))) <> 3
+         and ((p.polname, p.polcmd) in (('postona_media_insert', 'a'), ('postona_media_select', 'r'), ('postona_media_update', 'w'), ('postona_media_delete', 'd')))) <> 4
      or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'storage.objects'::pg_catalog.regclass and p.polpermissive
-                 and p.polname not in ('postona_media_insert', 'postona_media_select', 'postona_media_delete')
+                 and p.polname not in ('postona_media_insert', 'postona_media_select', 'postona_media_update', 'postona_media_delete')
                  and exists (select 1 from pg_catalog.unnest(p.polroles) u
                               where u = 0 or pg_catalog.pg_has_role(pg_catalog.to_regrole('anon'), u, 'MEMBER') or pg_catalog.pg_has_role(v_auth, u, 'MEMBER'))) then
     raise exception 'MEDIA_POSTCONDITION_POLICIES';
