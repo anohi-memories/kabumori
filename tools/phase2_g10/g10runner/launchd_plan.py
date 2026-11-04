@@ -128,18 +128,25 @@ def stop_commands(label=LABEL_PREFIX + ".watchdog"):
 # 必要がある（専用ユーザー _g10* では Max のログインを使えない）。そのため LaunchAgent（UserName なし）を計画する。
 AGENT_KEYS = ALLOWED_KEYS - {"UserName"}
 AGENT_SCRIPTS = {"watchdog": "g10_watchdog.py", "autorun": "g10_autorun.py",
-                 "producer": "g10_producer.py", "collector": "g10_collector.py"}
+                 "producer": "g10_producer.py", "collector": "g10_collector.py",
+                 "dispatcher": "g10_dispatcher.py"}
 # Phase 2 無人エージェント（yuya の gui ドメイン）。常時 --live。パス引数は絶対パスのみ。
 PHASE2_REQUIRED = {
     "producer": ("--root", "--in", "--bundles-dir", "--source-repo", "--cli", "--home",
                  "--interval", "--release-digest", "--live"),
     "collector": ("--root", "--out", "--interval", "--release-digest", "--live"),
+    "dispatcher": ("--registry", "--cursor-file", "--interval", "--release-digest", "--live"),
 }
-PHASE2_OPTIONAL = {"producer": ("--max-turns",), "collector": ()}
+PHASE2_OPTIONAL = {"producer": ("--max-turns",), "collector": (),
+                   "dispatcher": ("--sweep-every", "--max-turns")}
 PHASE2_PATH_FLAGS = {
     "producer": ("--root", "--in", "--bundles-dir", "--source-repo", "--cli", "--home"),
     "collector": ("--root", "--out"),
+    "dispatcher": ("--registry", "--cursor-file"),
 }
+# 種別ごとの最小間隔（秒）。producer は枠イシューを匿名ポーリング（12/時）。dispatcher は共通
+# お知らせ #639 を 1req/tick（2分=30/時）。collector はローカル処理のみ（レート制限と無関係）。
+PHASE2_MIN_INTERVAL = {"producer": 300.0, "collector": 120.0, "dispatcher": 120.0}
 AGENT_MIN_LIVE_INTERVAL = 300.0
 
 
@@ -198,6 +205,16 @@ def collector_agent_plan(python, root, out_dir, interval, release_digest, packag
     return _phase2_base("collector", python, root, tail, package_root)
 
 
+def dispatcher_agent_plan(python, root, registry, cursor_file, interval, release_digest,
+                          sweep_every=30, max_turns=30, package_root=PACKAGE_ROOT):
+    """notice-dispatch 無人ディスパッチャ（yuya・gui/501・お知らせ #639 を 2 分ごと）の LaunchAgent 計画。常時 --live。
+    ログ等の基点に root を使う（control 本体とは独立でもよいが logs/ をそこに置く）。"""
+    tail = ["--registry", registry, "--cursor-file", cursor_file, "--interval", str(float(interval)),
+            "--sweep-every", str(int(sweep_every)), "--release-digest", release_digest, "--live",
+            "--max-turns", str(int(max_turns))]
+    return _phase2_base("dispatcher", python, root, tail, package_root)
+
+
 def _phase2_flag_map(tail):
     """--root 以降のフラグ列を dict にする。--live は True。重複・不正形は PlanError。"""
     m = {}
@@ -249,8 +266,9 @@ def _validate_phase2_agent(plan, kind, package_root):
         interval = float(flags["--interval"])
     except (ValueError, TypeError):
         raise PlanError("--interval must be a number")
-    if not (math.isfinite(interval) and interval >= AGENT_MIN_LIVE_INTERVAL):
-        raise PlanError("phase2 agents need --interval >= %d" % AGENT_MIN_LIVE_INTERVAL)
+    floor = PHASE2_MIN_INTERVAL[kind]
+    if not (math.isfinite(interval) and interval >= floor):
+        raise PlanError("%s agent needs --interval >= %d" % (kind, floor))
     if "--max-turns" in flags:
         try:
             mt = int(flags["--max-turns"])
@@ -284,7 +302,7 @@ def validate_agent_plan(plan, package_root=PACKAGE_ROOT):
     kind = next((k for k in AGENT_SCRIPTS if plan.get("Label") == "%s.agent.%s" % (LABEL_PREFIX, k)), None)
     if kind is None:
         raise PlanError("unexpected label")
-    if kind in ("producer", "collector"):
+    if kind in ("producer", "collector", "dispatcher"):
         return _validate_phase2_agent(plan, kind, package_root)
     args = plan.get("ProgramArguments")
     live = isinstance(args, list) and len(args) == 10 and args[-1] == "--live"

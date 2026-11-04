@@ -951,8 +951,8 @@ MUTANTS = [
      "test_mac_notifier.MacNotifierTest.test_window_not_launched_when_binary_missing"),
     # --- B6 無人化: Phase2 エージェント（producer/collector）plist の安全ゲート ---
     ("phase2 agent interval floor removed", "g10runner/launchd_plan.py",
-     'interval >= AGENT_MIN_LIVE_INTERVAL):\n        raise PlanError("phase2 agents need',
-     'interval >= 0):\n        raise PlanError("phase2 agents need',
+     'interval >= floor):\n        raise PlanError("%s agent needs',
+     'interval >= 0):\n        raise PlanError("%s agent needs',
      "test_phase2_agents.Phase2AgentRejections.test_interval_below_floor_is_refused"),
     ("phase2 agent path flags not required absolute", "g10runner/launchd_plan.py",
      "if not os.path.isabs(flags[f]):\n            raise PlanError(\"%s must be an absolute path\" % f)",

@@ -28,6 +28,15 @@ class Phase2AgentBase(ReleaseBase):
         kw.update(over)
         return launchd_plan.producer_agent_plan(**kw)
 
+    def dispatcher(self, **over):
+        disp = self._abs("disp")
+        kw = dict(python="/usr/bin/python3", root=self._abs("ctl"),
+                  registry=os.path.join(disp, "registry.json"),
+                  cursor_file=os.path.join(disp, "cursor.json"),
+                  interval=120.0, release_digest=self.digest, package_root=self.rel)
+        kw.update(over)
+        return launchd_plan.dispatcher_agent_plan(**kw)
+
     def collector(self, **over):
         kw = dict(python="/usr/bin/python3", root=self._abs("ctl"), out_dir=self._abs("hout"),
                   interval=300.0, release_digest=self.digest, package_root=self.rel)
@@ -48,6 +57,15 @@ class Phase2AgentValid(Phase2AgentBase):
         plan = self.collector()
         self.assertTrue(launchd_plan.validate_agent_plan(plan, self.rel))
         self.assertEqual(plan["Label"], "com.kabumori.g10.phase2.agent.collector")
+
+    def test_dispatcher_plan_validates_at_two_minutes(self):
+        plan = self.dispatcher()                               # interval=120（2分）
+        self.assertTrue(launchd_plan.validate_agent_plan(plan, self.rel))
+        self.assertEqual(plan["Label"], "com.kabumori.g10.phase2.agent.dispatcher")
+
+    def test_collector_validates_at_two_minutes(self):
+        plan = self.collector(interval=120.0)                  # collector の下限は 120（ローカル）
+        self.assertTrue(launchd_plan.validate_agent_plan(plan, self.rel))
 
     def test_agent_commands_use_gui_domain(self):
         cmds = launchd_plan.agent_commands("com.kabumori.g10.phase2.agent.collector", "/x.plist")
@@ -87,6 +105,18 @@ class Phase2AgentRejections(Phase2AgentBase):
     def test_unexpected_flag_is_refused(self):
         plan = self.collector()
         plan["ProgramArguments"] += ["--comment", "x"]
+        with self.assertRaises(PlanError):
+            launchd_plan.validate_agent_plan(plan, self.rel)
+
+    def test_dispatcher_interval_below_120_is_refused(self):
+        plan = self.dispatcher(interval=60.0)                  # dispatcher 下限 120
+        with self.assertRaises(PlanError):
+            launchd_plan.validate_agent_plan(plan, self.rel)
+
+    def test_dispatcher_relative_registry_is_refused(self):
+        plan = self.dispatcher()
+        i = plan["ProgramArguments"].index("--registry")
+        plan["ProgramArguments"][i + 1] = "relative/registry.json"
         with self.assertRaises(PlanError):
             launchd_plan.validate_agent_plan(plan, self.rel)
 
