@@ -1,4 +1,5 @@
--- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 task 5; G5-02 task 6 fixes H1 F1 / F2 / F3 of #306 comment 6618373731). NOT applied anywhere. Production NO_GO: a focused H1 security review of this
+-- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 task 5; task 6 fixes H1 F1 / F2 / F3 of #306 comment 6618373731; task 7 fixes H1 #306
+-- comment 6619805954's two P2). NOT applied anywhere. Production NO_GO: a focused H1 security review of this
 -- candidate, the owner's approval and a read-only check of the managed project come first (its state is not known: never connected).
 --
 -- The POSTONA media box ("素材BOX"): a person's private images and short videos in their own personal workspace.
@@ -25,6 +26,13 @@
 --   F2  no signed URL at all: the person reads with their own JWT through storage-api's authenticated download, and every read asks the
 --       session / lifecycle / workspace / ownership again (sign-out, expiry, service end, membership removal, a stop: the next read is refused)
 --   F3  a pending asset that holds an object keeps holding quota after its window closes; complete checks the limits again under T13's lock
+-- G5-02 task 7 (H1 #306 task 36, two P2 on PR #637):
+--   P2-1  an upload is ONLY storage-api's ordinary upload (storage.object.upload): creating a signed upload URL (storage.object.sign_upload_url,
+--         measured: its 7200-second bearer token is later used with NO policy check at all) is refused, so no write can outlive a sign-out,
+--         a delete, the window or the stop
+--   P2-2  a deleted asset keeps holding quota until its removal is confirmed: the objects storage-api still holds (final AND staging, summed)
+--         and, for an asset deleted while its upload could still be landing, its declaration; the delete RPC called again confirms the
+--         removal (purged_at) once nothing of it is stored; any object of the person's in the bucket counts, whatever its name
 --
 -- Who the caller is: never a client-given workspace id, brand id or path. The RPCs ask G5's reviewed gates, in W0's order: S2-2
 -- private.postona_personal_session() = 'active' (a signed-in, non-anonymous person with a live session), T13 (the lifecycle lock; the x_autopost
@@ -90,7 +98,7 @@ begin
      and ((select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_media_assets')) <> v_owner
           or (select pg_catalog.string_agg(a.attname::text, ',' order by a.attname) from pg_catalog.pg_attribute a
                where a.attrelid = pg_catalog.to_regclass('private.postona_media_assets') and a.attnum > 0 and not a.attisdropped)
-             is distinct from 'bucket_id,content_type,created_at,declared_bytes,deleted_at,display_name,id,kind,object_etag,object_path,object_version,owner_user_id,ready_at,request_id,staging_path,status,stored_bytes,upload_expires_at,workspace_id') then
+             is distinct from 'bucket_id,content_type,created_at,declared_bytes,deleted_at,display_name,id,kind,object_etag,object_path,object_version,owner_user_id,purged_at,ready_at,request_id,staging_path,status,stored_bytes,upload_expires_at,workspace_id') then
     raise exception 'MEDIA_TAKEN: private.postona_media_assets is not this version''s (an earlier candidate is installed: roll it back first)';
   end if;
   select pg_catalog.string_agg(p.oid::pg_catalog.regprocedure::text, ', ') into v_txt from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
@@ -137,13 +145,15 @@ create table if not exists private.postona_media_assets (
   upload_expires_at timestamptz not null,
   ready_at timestamptz,
   deleted_at timestamptz,
+  purged_at timestamptz,               -- (G5-02 #7) the removal confirmed: nothing of it stored, nothing of it can still land
   unique (owner_user_id, request_id),
   check (object_path = workspace_id || '/' || id::text || '.' || case content_type when 'image/heic' then 'heic' when 'image/jpeg' then 'jpg'
          when 'image/png' then 'png' when 'image/webp' then 'webp' when 'video/mp4' then 'mp4' else 'mov' end),
   check (staging_path = workspace_id || '/staging/' || id::text || '.' || case content_type when 'image/heic' then 'heic' when 'image/jpeg' then 'jpg'
          when 'image/png' then 'png' when 'image/webp' then 'webp' when 'video/mp4' then 'mp4' else 'mov' end),
   check ((status = 'ready') = (ready_at is not null and stored_bytes is not null and object_version is not null) or status = 'deleted'),
-  check ((status = 'deleted') = (deleted_at is not null))
+  check ((status = 'deleted') = (deleted_at is not null)),
+  check (purged_at is null or status = 'deleted')
 );
 create index if not exists postona_media_assets_list on private.postona_media_assets (owner_user_id, workspace_id, status, created_at desc, id desc);
 alter table private.postona_media_assets enable row level security;
@@ -273,23 +283,37 @@ returns jsonb language sql immutable set search_path = '' as $$
            'bucket', a.bucket_id, 'object_path', a.object_path)
 $$;
 
--- (G5-02 #6, H1 F3) what a person holds: every ready asset, and every pending asset that holds an object (staging or final) or whose upload
--- window is still open; the bytes are the larger of the declaration / record and what storage-api stored. An expired pending asset releases
--- its quota only once no object of it exists (H1: an expired asset with an object left the count, then a late complete made 201).
+-- What a person holds (G5-02 #6, H1 F3; G5-02 #7, H1 P2-2). Per asset: a ready asset; a pending asset whose window is open or that holds an
+-- object; a deleted asset whose removal is not confirmed (purged_at); any asset with an object still stored. Its bytes: the larger of its
+-- record / declaration and the SUM of what storage-api stores under its final and staging keys (two objects are two). Plus every object of the
+-- person's in the bucket that no asset of theirs names. An expired pending asset or a confirmed removal releases only what is no longer stored.
 create or replace function private.postona_media_usage(p_user uuid, p_except uuid)
 returns table (assets bigint, open_uploads bigint, bytes bigint)
 language sql stable security definer set search_path = '' set row_security = off as $$
   with mine as (
     select a.*, pg_catalog.clock_timestamp() < a.upload_expires_at as window_open,
-           (select pg_catalog.max(case when o.metadata ->> 'size' ~ '^[0-9]{1,12}$' then (o.metadata ->> 'size')::bigint else 52428800 end)
+           (select pg_catalog.count(*) from storage.objects o where o.bucket_id = a.bucket_id and o.name in (a.object_path, a.staging_path)) as object_count,
+           (select coalesce(pg_catalog.sum(case when o.metadata ->> 'size' ~ '^[0-9]{1,12}$' then (o.metadata ->> 'size')::bigint else 52428800 end), 0)
               from storage.objects o where o.bucket_id = a.bucket_id and o.name in (a.object_path, a.staging_path)) as object_bytes
       from private.postona_media_assets a
-     where a.owner_user_id = p_user and a.status <> 'deleted' and a.id is distinct from p_except)
-  select pg_catalog.count(*) filter (where m.status = 'ready' or m.object_bytes is not null or m.window_open),
-         pg_catalog.count(*) filter (where m.status = 'pending' and m.window_open),
-         coalesce(pg_catalog.sum(case when m.status = 'ready' then greatest(m.stored_bytes, coalesce(m.object_bytes, 0))
-                                      when m.object_bytes is not null or m.window_open then greatest(m.declared_bytes, coalesce(m.object_bytes, 0)) end), 0)::bigint
-    from mine m
+     where a.owner_user_id = p_user and a.id is distinct from p_except),
+  held as (
+    select m.status, m.window_open,
+           case when m.status = 'ready' then greatest(m.stored_bytes, m.object_bytes)
+                when m.status = 'pending' and (m.window_open or m.object_count > 0) then greatest(m.declared_bytes, m.object_bytes)
+                when m.status = 'deleted' and m.purged_at is null then greatest(m.declared_bytes, m.object_bytes)
+                when m.object_count > 0 then m.object_bytes
+           end as bytes
+      from mine m),
+  stray as (
+    select pg_catalog.count(*) as n,
+           coalesce(pg_catalog.sum(case when o.metadata ->> 'size' ~ '^[0-9]{1,12}$' then (o.metadata ->> 'size')::bigint else 52428800 end), 0) as b
+      from storage.objects o
+     where o.bucket_id = 'postona-media' and o.owner_id = p_user::text
+       and not exists (select 1 from private.postona_media_assets a where a.owner_user_id = p_user and o.name in (a.object_path, a.staging_path)))
+  select (select pg_catalog.count(*) from held h where h.bytes is not null) + (select stray.n from stray),
+         (select pg_catalog.count(*) from held h where h.status = 'pending' and h.window_open),
+         ((select coalesce(pg_catalog.sum(h.bytes), 0) from held h) + (select stray.b from stray))::bigint
 $$;
 
 -- ---- API ----------------------------------------------------------------------------------------------------------------------------
@@ -493,8 +517,20 @@ begin
   if not v_already then
     update private.postona_media_assets a set status = 'deleted', deleted_at = pg_catalog.clock_timestamp() where a.id = v_row.id returning * into v_row;
   end if;
-  -- the objects go through storage-api (the client's remove, allowed for a deleted asset only); a retry is safe
+  -- (G5-02 #7) the removal is confirmed -- and the quota released -- only when storage-api holds nothing of it any more, and no upload of it
+  -- can still land: one that passed its check while the asset was pending commits right after (measured), so an asset deleted while its
+  -- window was open waits one minute; an object that still lands later is counted again (usage counts every stored object)
+  if v_row.purged_at is null
+     and not exists (select 1 from storage.objects o where o.bucket_id = v_row.bucket_id and o.name in (v_row.object_path, v_row.staging_path))
+     and (v_row.ready_at is not null or v_row.upload_expires_at <= v_row.deleted_at
+          or pg_catalog.clock_timestamp() >= v_row.deleted_at + interval '1 minute') then
+    update private.postona_media_assets a set purged_at = pg_catalog.clock_timestamp() where a.id = v_row.id returning * into v_row;
+  end if;
+  -- the objects go through storage-api (the client's remove, allowed for a deleted asset only), then this call again; a retry is safe
+  -- purged = given back AND nothing of it stored now (an object that landed after the confirmation needs the remove again)
   return pg_catalog.jsonb_build_object('status', 'deleted', 'already', v_already,
+           'purged', v_row.purged_at is not null
+                     and not exists (select 1 from storage.objects o where o.bucket_id = v_row.bucket_id and o.name in (v_row.object_path, v_row.staging_path)),
            'remove', pg_catalog.jsonb_build_object('bucket', v_row.bucket_id, 'object_paths', pg_catalog.jsonb_build_array(v_row.object_path, v_row.staging_path)));
 end $$;
 
@@ -521,8 +557,10 @@ begin
      where a.bucket_id = p_bucket and a.owner_user_id = v_user
        and a.workspace_id = 'u_' || pg_catalog.substr(pg_catalog.md5(v_user::text), 1, 24)
        and case p_cmd
-             -- upload: the staging key only, while pending and the window is open
+             -- upload: storage-api's ordinary upload only (G5-02 #7: never a signed upload URL), the staging key only, while pending and the
+             -- window is open
              when 'insert' then p_name = a.staging_path and a.status = 'pending' and a.upload_expires_at > pg_catalog.clock_timestamp()
+                                and v_op = 'storage.object.upload'
              -- storage-api's move of the staging object onto the final key (the old row / the new row), while pending
              when 'update_using' then p_name = a.staging_path and a.status = 'pending' and v_op = 'storage.object.move'
              when 'update_check' then p_name = a.object_path and a.status = 'pending' and v_op = 'storage.object.move'
@@ -558,6 +596,10 @@ language sql stable security definer set search_path = '' set row_security = off
   select 'expired_upload', a.bucket_id, a.staging_path, a.owner_user_id::text from private.postona_media_assets a
    where a.status = 'pending' and a.upload_expires_at <= pg_catalog.clock_timestamp()
      and not exists (select 1 from storage.objects o where o.bucket_id = a.bucket_id and o.name in (a.object_path, a.staging_path))
+  union all
+  -- (G5-02 #7) a deleted asset whose removal is not confirmed: it holds quota until the person's remove + delete again (or the operator)
+  select 'deleted_awaiting_removal', a.bucket_id, a.object_path, a.owner_user_id::text from private.postona_media_assets a
+   where a.status = 'deleted' and a.purged_at is null
   union all
   -- a ready asset whose final object is gone or no longer at its pinned version (not readable; not listed)
   select 'broken_ready', a.bucket_id, a.object_path, a.owner_user_id::text from private.postona_media_assets a

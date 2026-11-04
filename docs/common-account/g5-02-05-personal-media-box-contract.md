@@ -1,7 +1,7 @@
-# POSTONA media box (素材BOX): the server contract for G1 (G5-02 tasks 5 and 6)
+# POSTONA media box (素材BOX): the server contract for G1 (G5-02 tasks 5, 6 and 7)
 
 **Source candidate. Nothing is applied anywhere. Production NO_GO.** Before any managed use, these are needed, in order:
-1. the central room's decision on G5-02 task 6 (H1 #306's F1 / F2 / F3 on PR #636, fixed here; see §6);
+1. the central room's decision on G5-02 task 7 (H1 #306 task 35's F1 / F2 / F3 on PR #636 and task 36's P2-1 / P2-2 on PR #637, fixed here; see §6);
 2. the owner's approval;
 3. a read-only check of the managed project (its state is not known: never connected).
 
@@ -17,7 +17,7 @@ The person can add images and short videos to their **own** personal workspace, 
 | | |
 | --- | --- |
 | types | `image/jpeg` `image/png` `image/webp` `image/heic` (up to 20 MiB); `video/mp4` `video/quicktime` (up to 50 MiB). Exact strings only. |
-| limits per person | 200 assets, 10 open uploads, 2 GiB in total. A pending asset that holds an object counts too, even after its window closes. |
+| limits per person | 200 assets, 10 open uploads, 2 GiB in total. Everything storage-api still stores counts, until its removal is confirmed: a pending asset holding an object (even after its window closes), a deleted asset whose objects are not removed yet, any object of the person's. |
 | storage | Supabase Storage bucket `postona-media`, **private**. There is no public URL and **no signed URL**. Reads use the person's own JWT, and every read is checked again. |
 | who | the signed-in person only: a live session, not anonymous, POSTONA (`x_autopost`) active, the account active, and the personal workspace made by W0 |
 
@@ -41,7 +41,12 @@ app                                        server (PostgREST RPC)               
   - or `GET {SUPABASE_URL}/storage/v1/object/authenticated/{bucket}/{path}` with `Authorization: Bearer <access token>`.
 
   The SELECT policy asks for everything again on every request: session, lifecycle, workspace, ownership, ready, and the pinned version.
-- **delete:** `delete(asset_id)` takes the row out of the list (and out of reading) at once. Then `remove([final, staging])` removes the objects; storage-api allows that only for a deleted asset. Both calls can be retried.
+- **delete:** three steps, each safe to retry.
+  1. `delete(asset_id)` takes the row out of the list and out of reading at once.
+  2. `remove([final, staging])` removes the objects; storage-api allows that only for a deleted asset.
+  3. `delete(asset_id)` **again** confirms the removal (`purged: true`), and only then is the quota given back (G5-02 #7).
+
+  An asset deleted while its upload window was open is given back a minute after the delete, because an upload of it could still land.
 
 ## 3. API
 
@@ -52,7 +57,7 @@ Every RPC is `SECURITY DEFINER` with an empty `search_path`, and **only `authent
 | `postona_media_begin_upload` | `p_request_id uuid` (one per chosen file), `p_file_name text` (display only: the last path segment, control characters removed, ≤120 chars), `p_content_type text`, `p_size_bytes bigint` | `upload`: asset + `upload{bucket, object_path` (the staging key)`, final_path, content_type, max_bytes, expires_at, moved}`. `moved: true` means an earlier try already moved the bytes, so go straight to complete. Or `ready` when the same request is already complete. |
 | `postona_media_complete_upload` | `p_asset_id uuid` | `ready` (asset). Idempotent. |
 | `postona_media_list` | `p_limit` 1–50 (default 30), `p_before_created_at` + `p_before_id` (both or neither) | `ok` (`items[]`, `next` or null) |
-| `postona_media_delete` | `p_asset_id uuid` | `deleted` (`already`, `remove{bucket, object_paths: [final, staging]}`). Idempotent. |
+| `postona_media_delete` | `p_asset_id uuid` | `deleted` (`already`, `purged`, `remove{bucket, object_paths: [final, staging]}`). Idempotent. `purged: true` means nothing of it is stored and its quota is back; `false` means remove, then call again (after a minute for an asset deleted while pending). |
 
 The asset in every answer has these fields: `id`, `kind` (`image` / `video`), `content_type`, `display_name`, `bytes`, `status`, `created_at`, `ready_at`, `bucket`, `object_path` (the final key).
 
@@ -107,7 +112,9 @@ storage-api answers with its own codes:
    - or `mediaDownload(client, asset)` gives a Blob.
 
    Take the access token from the current session for each source, and **never store a URL or token**. Every request is checked again: after sign-out, the end of the service, a membership change or the stop, the next read fails with `forbidden` / `not_found`. There is no grace period, because no signed URL exists.
-5. Delete: `deleteMedia(client, assetId)` (row, then both objects). Remove the tile at once; a retry is safe.
+5. Delete: `deleteMedia(client, assetId)` (row → both objects → confirm). Remove the tile at once; a retry is safe.
+   - The answer `purged: false` means the space is not given back yet: the removal failed, or the asset was deleted while its upload could still land. Call it again later (after a minute).
+   - Until then the space counts toward the person's 200 / 2 GiB.
 6. Cache:
    - Key every cached list, thumbnail and blob by the **signed-in user id**.
    - Drop them all on sign-out and on a change of user (measured: on one device, A → B → A each sees only their own).
@@ -156,7 +163,7 @@ T13's lifecycle lock serializes one person's writers; the quota counting relies 
 
 | command | allowed |
 | --- | --- |
-| insert | the **staging** key of an own pending asset whose window is open (an upsert also needs update: refused) |
+| insert | **only `storage.object.upload`** (G5-02 #7: never `sign_upload_url`): the **staging** key of an own pending asset whose window is open (an upsert also needs update: refused) |
 | update | only `storage.object.move` of the own staging object onto **its own final key** while pending. The destination is checked twice: by this WITH CHECK and by the SELECT of the new row (measured). |
 | select | the final key of an own ready asset **at its pinned version**, for `get_authenticated` / `get_authenticated_info` only; the move's source and destination while pending; a deleted asset's objects for `delete_many`. **Never** `sign`, `sign_many`, `list` or `copy`. |
 | delete | a deleted asset's final and staging objects |
@@ -221,6 +228,45 @@ Cleaning is an operator step: delete through storage-api with the service key, n
 - Whole-account deletion already counts them as `MANAGED_STORAGE_OWNED` and lists them in `account_lifecycle_storage_inventory`; they must be removed through storage-api.
 - Ending POSTONA alone keeps them, but unreachable (every path refuses).
 
+### H1 task 36 P2-1: no signed upload (was: a signed upload URL for the staging key let an anonymous client write after the delete, the stop and the sign-out)
+
+- **Measured (storage-api v1.70.3):**
+  - `createSignedUploadUrl` asks the INSERT policy once, as operation `storage.object.sign_upload_url`, and returns a **7200-second** bearer token.
+  - `uploadToSignedUrl` then writes as storage-api with **no policy check at all**, even from an anonymous client.
+  - The ordinary upload is `storage.object.upload`.
+- **Now:** the INSERT branch allows `storage.object.upload` only, so a signed upload URL can't be made in any state (staging or final, upsert or not). Every write then needs the person's live session at the moment it happens: the delete, the stop, the window and a sign-out each close it.
+- **Before → after:**
+  - PR #637: the token was made, and written with after delete + stop + sign-out;
+  - now: refused; the ordinary add still works.
+- **A bearer an old install already issued.** These candidates were never applied anywhere, so outside a local stack none exists. Such a token still writes until it expires (≤ 7200 s; storage-api checks nothing).
+  - It lands only on the staging name it was made for, which no asset reads.
+  - It counts against its owner.
+  - It is listed as `object_without_asset` for the operator to remove through storage-api (measured).
+  - After a stop, wait the 7200 s, then clean the orphans.
+
+### H1 task 36 P2-2: quota until the removal is confirmed (was: three deletes without the remove left 210 bytes stored and the usage at 0)
+
+- **Usage now counts, per asset:**
+  - a ready asset;
+  - a pending asset whose window is open or that holds an object;
+  - a deleted asset whose removal is not confirmed (`purged_at`), at its declaration or what is stored, whichever is larger;
+  - any asset with an object still stored.
+
+  The bytes under the final and staging keys are **summed**. Every object of the person's in the bucket that no asset names counts too.
+- **The confirmation is the delete RPC called again.** It sets `purged_at` only when nothing of the asset is stored. For an asset deleted while its window was open, it also waits a minute, because an upload that passed its check before the delete commits right after (measured). An object landing after that is counted again, and the person removes it with the same call.
+- **Before → after:**
+  - PR #637: stored 3 objects / 210 bytes, usage `0/0/0`;
+  - now: `3/0/210` (with 197 seeded, the 201st begin is refused);
+  - the remove plus the confirm gives it back;
+  - a failed remove (the stop) keeps it;
+  - final + staging: 5070, not 5000;
+  - a deleted pending asset is held a minute, then given back;
+  - a late object after the confirmation counts again;
+  - the 2 GiB boundary is exact;
+  - a delete racing a begin at 200 never holds more than 200.
+
+  A real 2 GiB write: NOT_RUN.
+
 ## 7. Install / stop / rollback (each as the lifecycle owner `postgres`, `ON_ERROR_STOP`)
 
 **Order.**
@@ -275,7 +321,17 @@ A doubled slash collapses onto the own staging key. anon gets nothing, and there
 
 **Stop / rollback.**
 
-**Mutants:** 18 / 18, each flipping its own case and refused by the original. They cover:
+**H1 task 36 P2-1 / P2-2:** BEFORE on PR #637's own install (each reproduced), then AFTER (each PASS).
+
+**Mutants:** 24 / 24, each flipping its own case and refused by the original. The 6 new ones (G5-02 #7) cover:
+- no signed upload;
+- a deleted asset's declaration held until confirmed;
+- every stored object of an asset counted;
+- final + staging summed;
+- an object no asset names counted;
+- the one-minute hold.
+
+The earlier ones cover:
 - the owner;
 - the pending-only, unexpired, staging-only upload;
 - the version pin;
