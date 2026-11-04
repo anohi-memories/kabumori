@@ -926,7 +926,7 @@ MUTANTS = [
      "    if approval_id in autorun.claimed_approvals(control):",
      "    if False and approval_id in autorun.claimed_approvals(control):",
      "test_task47_producer.ProducerEvaluate.test_idle_when_approval_already_claimed"),
-    ("approve-envelope widens the scope beyond readonly_trial", "bin/g10_first_run.py",
+    ("approve-envelope widens the scope beyond readonly_trial", "g10runner/producer.py",
      '"scopes": ["readonly_trial"], "models": dict(policy["models"]),',
      '"scopes": [], "models": dict(policy["models"]),',
      "test_task45_migrate_policy.ApproveEnvelope.test_write_approves_a_readonly_trial_envelope"),
@@ -946,8 +946,8 @@ MUTANTS = [
      "test_mac_notifier.MacNotifierTest.test_banner_strings_are_escaped_for_applescript"),
     # --- Mac 通知: 窓は実在する実行可能ファイルのときだけ起動する（検証を外すと検出） ---
     ("MacNotifier launches window without the usability guard", "g10runner/notify.py",
-     "            if self._usable(win):",
-     "            if True:",
+     "        if window_usable(win):\n            return win",
+     "        if True:\n            return win",
      "test_mac_notifier.MacNotifierTest.test_window_not_launched_when_binary_missing"),
     # --- B6 無人化: Phase2 エージェント（producer/collector）plist の安全ゲート ---
     ("phase2 agent interval floor removed", "g10runner/launchd_plan.py",
