@@ -61,7 +61,8 @@ MUTANTS = [
      "release.verify(package_root, args[20])\n    if False:\n        pass",
      "test_task41_jobrunner_plist.JobRunnerPlist.test_release_jobrunner_plist_and_rules"),
     ("jobrunner plist interval floor removed", "g10runner/launchd_plan.py",
-     "interval >= AGENT_MIN_LIVE_INTERVAL", "interval >= 0",
+     'interval >= AGENT_MIN_LIVE_INTERVAL):\n        raise PlanError("--interval must be a finite number',
+     'interval >= 0):\n        raise PlanError("--interval must be a finite number',
      "test_task41_jobrunner_plist.JobRunnerPlist.test_release_jobrunner_plist_and_rules"),
     ("jobrunner plist path not required absolute", "g10runner/launchd_plan.py",
      '        if not os.path.isabs(args[i]):\n            raise PlanError("%s must be an absolute path" % _JOBRUNNER_FLAGS[i - 1])',
@@ -948,6 +949,19 @@ MUTANTS = [
      "if not (win and os.path.isfile(win) and os.access(win, os.X_OK)):\n            return  # \u672a\u30d3\u30eb\u30c9/\u975e\u5b9f\u884c\u306a\u3089\u7a93\u306f\u51fa\u3055\u306a\u3044\uff08\u30d0\u30ca\u30fc\u306f\u901a\u77e5\u30bb\u30f3\u30bf\u30fc\u306b\u6b8b\u308b\uff09",
      "if False:\n            return",
      "test_mac_notifier.MacNotifierTest.test_window_not_launched_when_binary_missing"),
+    # --- B6 無人化: Phase2 エージェント（producer/collector）plist の安全ゲート ---
+    ("phase2 agent interval floor removed", "g10runner/launchd_plan.py",
+     'interval >= AGENT_MIN_LIVE_INTERVAL):\n        raise PlanError("phase2 agents need',
+     'interval >= 0):\n        raise PlanError("phase2 agents need',
+     "test_phase2_agents.Phase2AgentRejections.test_interval_below_floor_is_refused"),
+    ("phase2 agent path flags not required absolute", "g10runner/launchd_plan.py",
+     "if not os.path.isabs(flags[f]):\n            raise PlanError(\"%s must be an absolute path\" % f)",
+     "if False:\n            raise PlanError(\"%s must be an absolute path\" % f)",
+     "test_phase2_agents.Phase2AgentRejections.test_relative_path_is_refused"),
+    ("phase2 agent does not enforce required flags", "g10runner/launchd_plan.py",
+     'if missing:\n        raise PlanError("%s agent missing flags: %s" % (kind, missing))',
+     'if False:\n        raise PlanError("%s agent missing flags: %s" % (kind, missing))',
+     "test_phase2_agents.Phase2AgentRejections.test_missing_live_is_refused"),
 ]
 
 

@@ -127,7 +127,19 @@ def stop_commands(label=LABEL_PREFIX + ".watchdog"):
 # Claude Max のログインは主ユーザーの Keychain にあるので、実 Claude を起動する検知役（autorun）は主ユーザーで動かす
 # 必要がある（専用ユーザー _g10* では Max のログインを使えない）。そのため LaunchAgent（UserName なし）を計画する。
 AGENT_KEYS = ALLOWED_KEYS - {"UserName"}
-AGENT_SCRIPTS = {"watchdog": "g10_watchdog.py", "autorun": "g10_autorun.py"}
+AGENT_SCRIPTS = {"watchdog": "g10_watchdog.py", "autorun": "g10_autorun.py",
+                 "producer": "g10_producer.py", "collector": "g10_collector.py"}
+# Phase 2 無人エージェント（yuya の gui ドメイン）。常時 --live。パス引数は絶対パスのみ。
+PHASE2_REQUIRED = {
+    "producer": ("--root", "--in", "--bundles-dir", "--source-repo", "--cli", "--home",
+                 "--interval", "--release-digest", "--live"),
+    "collector": ("--root", "--out", "--interval", "--release-digest", "--live"),
+}
+PHASE2_OPTIONAL = {"producer": ("--max-turns",), "collector": ()}
+PHASE2_PATH_FLAGS = {
+    "producer": ("--root", "--in", "--bundles-dir", "--source-repo", "--cli", "--home"),
+    "collector": ("--root", "--out"),
+}
 AGENT_MIN_LIVE_INTERVAL = 300.0
 
 
@@ -153,6 +165,112 @@ def user_agent_plan(kind, python, root, interval, release_digest, live=False, pa
     }
 
 
+def _phase2_base(kind, python, root, args_tail, package_root):
+    """producer/collector の共通 plist（gui ドメイン・リリース固定・常時 --live）。args_tail は --root 以降のフラグ列。"""
+    script = os.path.join(package_root, "bin", AGENT_SCRIPTS[kind])
+    logs = os.path.join(root, "logs")
+    return {
+        "Label": "%s.agent.%s" % (LABEL_PREFIX, kind),
+        "ProgramArguments": [python, "-I", script] + args_tail,
+        "KeepAlive": True,
+        "RunAtLoad": True,
+        "ProcessType": "Background",
+        "Umask": 0o077,
+        "EnvironmentVariables": {"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+        "StandardOutPath": os.path.join(logs, kind + ".out"),
+        "StandardErrorPath": os.path.join(logs, kind + ".err"),
+    }
+
+
+def producer_agent_plan(python, root, in_dir, bundles_dir, source_repo, cli, home,
+                        interval, release_digest, max_turns=30, package_root=PACKAGE_ROOT):
+    """無人 producer（yuya 側・ENVELOPE で自動発行）の LaunchAgent 計画。常時 --live。"""
+    tail = ["--root", root, "--in", in_dir, "--bundles-dir", bundles_dir, "--source-repo", source_repo,
+            "--cli", cli, "--home", home, "--interval", str(float(interval)),
+            "--release-digest", release_digest, "--live", "--max-turns", str(int(max_turns))]
+    return _phase2_base("producer", python, root, tail, package_root)
+
+
+def collector_agent_plan(python, root, out_dir, interval, release_digest, package_root=PACKAGE_ROOT):
+    """無人 collector（yuya の gui セッション・finalize＋Mac 通知）の LaunchAgent 計画。常時 --live。"""
+    tail = ["--root", root, "--out", out_dir, "--interval", str(float(interval)),
+            "--release-digest", release_digest, "--live"]
+    return _phase2_base("collector", python, root, tail, package_root)
+
+
+def _phase2_flag_map(tail):
+    """--root 以降のフラグ列を dict にする。--live は True。重複・不正形は PlanError。"""
+    m = {}
+    i = 0
+    while i < len(tail):
+        a = tail[i]
+        if a == "--live":
+            if a in m:
+                raise PlanError("duplicate --live")
+            m[a] = True
+            i += 1
+        elif isinstance(a, str) and a.startswith("--") and i + 1 < len(tail) and not str(tail[i + 1]).startswith("--"):
+            if a in m:
+                raise PlanError("duplicate flag %s" % a)
+            m[a] = tail[i + 1]
+            i += 2
+        else:
+            raise PlanError("bad arg near %r" % (a,))
+    return m
+
+
+def _validate_phase2_agent(plan, kind, package_root):
+    """producer/collector 用の検証。リリース固定・同梱スクリプト・絶対パス・--live・間隔>=300。"""
+    from . import release
+    args = plan.get("ProgramArguments")
+    if not (isinstance(args, list) and len(args) >= 4 and all(isinstance(a, str) for a in args)):
+        raise PlanError("ProgramArguments must be a list of strings")
+    if args[0] not in ALLOWED_PYTHONS or args[1] != "-I":
+        raise PlanError("python must be %s with -I" % (ALLOWED_PYTHONS,))
+    if os.path.realpath(args[2]) != os.path.realpath(os.path.join(package_root, "bin", AGENT_SCRIPTS[kind])):
+        raise PlanError("only the bundled %s may be run" % AGENT_SCRIPTS[kind])
+    flags = _phase2_flag_map(args[3:])
+    allowed = set(PHASE2_REQUIRED[kind]) | set(PHASE2_OPTIONAL[kind])
+    missing = [f for f in PHASE2_REQUIRED[kind] if f not in flags]
+    if missing:
+        raise PlanError("%s agent missing flags: %s" % (kind, missing))
+    extra = [f for f in flags if f not in allowed]
+    if extra:
+        raise PlanError("%s agent has unexpected flags: %s" % (kind, extra))
+    for f in PHASE2_PATH_FLAGS[kind]:
+        if not os.path.isabs(flags[f]):
+            raise PlanError("%s must be an absolute path" % f)
+    if release.package_manifest(package_root) is None:
+        raise PlanError("plists must point at an installed release, not a development tree")
+    problems = release.verify(package_root, flags["--release-digest"])
+    if problems:
+        raise PlanError("release does not verify: %s" % "; ".join(problems[:3]))
+    try:
+        interval = float(flags["--interval"])
+    except (ValueError, TypeError):
+        raise PlanError("--interval must be a number")
+    if not (math.isfinite(interval) and interval >= AGENT_MIN_LIVE_INTERVAL):
+        raise PlanError("phase2 agents need --interval >= %d" % AGENT_MIN_LIVE_INTERVAL)
+    if "--max-turns" in flags:
+        try:
+            mt = int(flags["--max-turns"])
+        except (ValueError, TypeError):
+            raise PlanError("--max-turns must be an integer")
+        if not (1 <= mt <= 1000):
+            raise PlanError("--max-turns out of range")
+    env = plan.get("EnvironmentVariables", {})
+    if set(env) - {"PATH", "LANG"} or any(FORBIDDEN_ENV.search(k) for k in env):
+        raise PlanError("only PATH and LANG may be set in the environment")
+    if plan.get("KeepAlive") is not True or plan.get("RunAtLoad") is not True:
+        raise PlanError("KeepAlive and RunAtLoad must be true")
+    if plan.get("Umask") != 0o077 or plan.get("ProcessType") != "Background":
+        raise PlanError("Umask must be 077 and ProcessType Background")
+    for key in ("StandardOutPath", "StandardErrorPath"):
+        if not os.path.isabs(str(plan.get(key, ""))):
+            raise PlanError("log paths must be absolute")
+    return True
+
+
 _SHAPE = "[python, -I, script, --root, ROOT, --interval, SECONDS, --release-digest, DIGEST(, --live)]"
 
 
@@ -166,6 +284,8 @@ def validate_agent_plan(plan, package_root=PACKAGE_ROOT):
     kind = next((k for k in AGENT_SCRIPTS if plan.get("Label") == "%s.agent.%s" % (LABEL_PREFIX, k)), None)
     if kind is None:
         raise PlanError("unexpected label")
+    if kind in ("producer", "collector"):
+        return _validate_phase2_agent(plan, kind, package_root)
     args = plan.get("ProgramArguments")
     live = isinstance(args, list) and len(args) == 10 and args[-1] == "--live"
     if not (isinstance(args, list) and all(isinstance(a, str) for a in args) and (len(args) == 9 or live)):
