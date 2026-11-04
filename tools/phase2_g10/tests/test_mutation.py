@@ -975,6 +975,16 @@ MUTANTS = [
      "return sorted((c for c in comments if _cid(c) > base), key=_cid)",
      "return sorted((c for c in comments if _cid(c) >= base), key=_cid)",
      "test_dispatch.CursorAndPlan.test_no_new_comments_keeps_cursor"),
+    # --- notice-dispatch 周期: スイープはお知らせ処理済み枠を重複 emit しない ---
+    ("dispatch sweep re-emits already-dispatched slots", "g10runner/dispatch.py",
+     'for slot in sweep_slots:                 # \u5168\u67a0\u30b9\u30a4\u30fc\u30d7\uff08\u8a18\u5165\u6f0f\u308c\u306e\u4fdd\u967a\uff09\u3002\u304a\u77e5\u3089\u305b\u3067\u51e6\u7406\u6e08\u307f\u306f\u91cd\u8907\u3055\u305b\u306a\u3044\n        if slot not in done:',
+     'for slot in sweep_slots:\n        if True:',
+     "test_dispatch.RunCycle.test_notice_slots_then_sweep_without_duplication"),
+    # --- notice_source: 応答は JSON リストでなければ拒否（GitHub のエラー dict を信じない） ---
+    ("notice_source accepts a non-list response", "g10runner/notice_source.py",
+     'if not isinstance(data, list):\n        raise NoticeSourceError("comments response is not a JSON list")',
+     'if False:\n        raise NoticeSourceError("comments response is not a JSON list")',
+     "test_notice_source.FetchComments.test_non_list_response_is_rejected"),
 ]
 
 

@@ -53,3 +53,32 @@ def plan_dispatch(comments, cursor, allowlist=ALL_SLOTS):
                 slots.append(s)
     new_cursor = max([_cid(c) for c in fresh], default=(cursor or 0))
     return slots, new_cursor
+
+
+def _max_ts(comments, prior):
+    """コメントの created_at の最大（ISO8601 Z は文字列比較で単調）。無ければ prior を保つ。"""
+    seen = [c.get("created_at") for c in comments if c.get("created_at")]
+    if prior:
+        seen.append(prior)
+    return max(seen) if seen else prior
+
+
+def run_cycle(fetch, cursor, allowlist, emit_slot, sweep_slots=()):
+    """1周期。fetch(since)->comments を読み、差分コメントの slot を emit_slot(slot,"notice")、
+    さらに sweep_slots を emit_slot(slot,"sweep") する（お知らせ記入漏れの保険）。
+    emit_slot は各枠の producer.emit_ready を呼ぶ想定で、お知らせは「どの枠を見るか」だけに使う
+    （実行可否は emit_ready が envelope/未消費承認/task_sha/envelope_covers で自己判定）。
+    返り値: {"checked":[{slot,reason,result}...], "cursor":{"id","ts"}}。"""
+    cursor = cursor or {}
+    comments = fetch(cursor.get("ts"))
+    slots, new_id = plan_dispatch(comments, cursor.get("id") or 0, allowlist)
+    new_ts = _max_ts(comments, cursor.get("ts"))
+    checked, done = [], set()
+    for slot in slots:                       # お知らせ差分で見つかった枠（plan_dispatch で許可リスト済み）
+        checked.append({"slot": slot, "reason": "notice", "result": emit_slot(slot, "notice")})
+        done.add(slot)
+    for slot in sweep_slots:                 # 全枠スイープ（記入漏れの保険）。お知らせで処理済みは重複させない
+        if slot not in done:
+            checked.append({"slot": slot, "reason": "sweep", "result": emit_slot(slot, "sweep")})
+            done.add(slot)
+    return {"checked": checked, "cursor": {"id": new_id, "ts": new_ts}}
