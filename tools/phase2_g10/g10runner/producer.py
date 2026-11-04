@@ -21,6 +21,22 @@ def log_path(layout):
     return os.path.join(layout.root, "control", "priv", "producer.log")
 
 
+def trial_envelope_params(policy, max_minutes=120, max_budget=0.50):
+    """readonly_trial 日次窓の envelope params（単一の正本）。変更・書き込み・本番は窓に入れない。
+    手動の approve-envelope とダイアログ発行の両方がこれを使い、scope がドリフトしないようにする。"""
+    return {"scopes": ["readonly_trial"], "models": dict(policy["models"]),
+            "efforts": ["low", "medium", "high"], "max_minutes_cap": int(max_minutes),
+            "max_budget_cap": float(max_budget), "base_ref_prefixes": ["refs/heads/"],
+            "policy_sha256": policy["_digest"]}
+
+
+def approve_trial_envelope(control, policy, max_minutes=120, max_budget=0.50):
+    """readonly_trial の日次窓（翌 04:00 JST 失効）を人の署名で承認する。
+    **呼び出し側は人の明示的な同意（確認ダイアログの「許可」クリック等）を得てから呼ぶこと。**"""
+    control.approve_envelope(trial_envelope_params(policy, max_minutes, max_budget))
+    return control.read_state().envelope
+
+
 def record(layout, entry):
     """判定・emit の記録（本文・秘密・メールアドレスを含めない項目だけ）。"""
     keep = {k: entry[k] for k in ("decision", "reason", "approval_id", "body_sha256", "run_id", "job_path", "error")

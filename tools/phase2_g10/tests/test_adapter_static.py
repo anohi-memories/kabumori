@@ -107,7 +107,7 @@ class TestAdapterFixed(unittest.TestCase):
         nf = texts["notify.py"]  # Mac 通知: バナーは固定の /usr/bin/osascript、窓は検証済みの実行ファイルだけ（Claude・シェルは起動しない）
         self.assertIn('OSASCRIPT = "/usr/bin/osascript"', nf)
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", nf),
-                         ["[OSASCRIPT", "[win"])  # バナー=固定osascript(run)、窓=検証済みバイナリ(Popen)
+                         ["[win", "[OSASCRIPT", "[win"])  # ask(窓run)・バナー(osascript)・通知窓(Popen)
         self.assertIn("os.access(win, os.X_OK)", nf)  # 窓バイナリは実在かつ実行可能と確認してからのみ起動
         launchd = texts["launchd_plan.py"]
         self.assertEqual(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(([^,]+)", launchd),

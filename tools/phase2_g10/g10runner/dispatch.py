@@ -82,3 +82,11 @@ def run_cycle(fetch, cursor, allowlist, emit_slot, sweep_slots=()):
             checked.append({"slot": slot, "reason": "sweep", "result": emit_slot(slot, "sweep")})
             done.add(slot)
     return {"checked": checked, "cursor": {"id": new_id, "ts": new_ts}}
+
+
+def wants_envelope_prompt(result, reason):
+    """notice（新タスクの合図）で起動した枠が「envelope 無し」だけで止まっているか＝人に許可を聞くべきか。
+    sweep では聞かない（新タスクの合図ではないため）。result は emit_slot の戻り（decision/reason）。
+    『envelope が覆わない（scope 違い）』では聞かない（envelope はあるので許可しても無意味）。"""
+    return (reason == "notice" and isinstance(result, dict) and result.get("decision") == "idle"
+            and str(result.get("reason") or "").startswith("no active envelope"))

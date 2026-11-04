@@ -19,7 +19,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import autorun, dispatch, notice_source, producer, release  # noqa: E402
+from g10runner import autorun, dispatch, notice_source, notify, producer, release  # noqa: E402
 from g10runner.fsutil import FileLock, touch  # noqa: E402
 
 MIN_INTERVAL = 120.0          # 2 分。#639 を 1 req/tick ＝ 30 req/時（匿名 60/時の内側）
@@ -61,18 +61,32 @@ def save_cursor(path, cursor):
     os.rename(tmp, path)
 
 
-def make_emit_slot(registry, live, max_turns):
-    """slot -> producer.emit_ready（--live）/ evaluate（dry）。お知らせは合図だけ。実行可否は各枠が自己判定。"""
+def make_emit_slot(registry, live, max_turns, ask_envelope=True):
+    """slot -> producer.emit_ready（--live）/ evaluate（dry）。お知らせは合図だけ。実行可否は各枠が自己判定。
+    ask_envelope のとき、notice で新タスクが来たのに envelope が無ければ、確認ダイアログで本日分の許可を聞く
+    （「許可」クリックで readonly_trial 日次窓を発行→再 emit）。sweep では聞かない。"""
+    def _slim(rec):
+        return {k: rec.get(k) for k in ("decision", "reason", "approval_id", "run_id") if k in rec}
+
+    def _emit(cfg, control, policy):
+        return producer.emit_ready(control, policy, cfg["in"], cfg["bundles"], cfg["source_repo"],
+                                   cfg["cli"], cfg["home"], max_turns=max_turns)
+
     def emit(slot, reason):
         cfg = registry[slot]
         control, policy = autorun.open_control(cfg["root"])
         if not live:
-            rec = producer.evaluate(control, policy)
-        else:
-            rec = producer.emit_ready(control, policy, cfg["in"], cfg["bundles"], cfg["source_repo"],
-                                      cfg["cli"], cfg["home"], max_turns=max_turns)
-            producer.record(control.layout, rec)
-        return {k: rec.get(k) for k in ("decision", "reason", "approval_id", "run_id") if k in rec}
+            return _slim(producer.evaluate(control, policy))
+        rec = _emit(cfg, control, policy)
+        if ask_envelope and dispatch.wants_envelope_prompt(_slim(rec), reason):
+            msg = ("%s に新しいタスクがあります。本日の自動実行を許可しますか？\n"
+                   "読み取り専用・MAX 利用枠を使用・本日 04:00(JST) まで有効。" % slot)
+            choice = notify.ask("%s 自動実行の許可" % slot, msg, ["却下", "許可"], timeout=300.0)
+            if choice == 1:                       # 許可（右端）＝人の明示的な同意
+                producer.approve_trial_envelope(control, policy)
+                rec = _emit(cfg, control, policy)
+        producer.record(control.layout, rec)
+        return _slim(rec)
     return emit
 
 
@@ -86,6 +100,8 @@ def main(argv=None):
     p.add_argument("--live", action="store_true", help="条件がそろえば実際に emit（既定は dry-run）")
     p.add_argument("--release-digest")
     p.add_argument("--max-turns", type=int, default=30)
+    p.add_argument("--no-ask-envelope", dest="ask_envelope", action="store_false",
+                   help="新タスク時に envelope 許可ダイアログを出さない（既定は出す）")
     a = p.parse_args(argv)
 
     package = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -103,7 +119,7 @@ def main(argv=None):
     registry = load_registry(os.path.realpath(a.registry))
     allowlist = frozenset(registry)
     cursor_path = os.path.realpath(a.cursor_file)
-    emit_slot = make_emit_slot(registry, bool(a.live), a.max_turns)
+    emit_slot = make_emit_slot(registry, bool(a.live), a.max_turns, ask_envelope=a.ask_envelope)
 
     touch(cursor_path + ".lock")
     with FileLock(cursor_path + ".lock", "ex", timeout=0) as lock:

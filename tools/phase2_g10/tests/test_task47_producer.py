@@ -46,6 +46,17 @@ class ProducerEvaluate(EnvTestCase):
         self.assertIn("outside the active envelope", d["reason"])
 
 
+class ApproveTrialEnvelope(ProducerEvaluate):
+    def test_grants_readonly_trial_daily_window_then_emits(self):
+        self.assertIsNone(self.env.control.read_state().envelope)      # 最初は envelope 無し
+        env = producer.approve_trial_envelope(self.env.control, self.env.policy)
+        self.assertEqual(env["scopes"], ["readonly_trial"])            # scope は readonly_trial 固定
+        self.assertEqual(env["policy_sha256"], self.env.policy["_digest"])
+        self.assertGreater(env["expires_at"], self.env.control.now())  # 翌 04:00 の未来
+        self._publish()                                               # ready なタスクを置くと
+        self.assertEqual(producer.evaluate(self.env.control, self.env.policy)["decision"], "emit")  # emit になる
+
+
 class BinSmoke(unittest.TestCase):
     """bin/g10_producer.py・g10_collector.py の --once dry-run が、初期化した control で 0 を返し判定を記録する。"""
     def _load(self, name):

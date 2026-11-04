@@ -111,5 +111,32 @@ class MacNotifierTest(unittest.TestCase):
         self.assertFalse(ok)
 
 
+class AskWindow(unittest.TestCase):
+    def _executable(self):
+        fd, path = tempfile.mkstemp(prefix="g10ask-")
+        os.close(fd); os.chmod(path, 0o755); self.addCleanup(os.remove, path)
+        return path
+
+    def test_returns_clicked_button_index(self):
+        win = self._executable()
+        with mock.patch.object(notify.subprocess, "run", return_value=mock.Mock(returncode=1)):
+            self.assertEqual(notify.ask("t", "m", ["却下", "許可"], window_bin=win), 1)  # 許可
+
+    def test_out_of_range_returncode_is_none(self):
+        win = self._executable()
+        with mock.patch.object(notify.subprocess, "run", return_value=mock.Mock(returncode=2)):   # 閉じた=2
+            self.assertIsNone(notify.ask("t", "m", ["却下", "許可"], window_bin=win))
+
+    def test_no_window_binary_returns_none(self):
+        self.assertIsNone(notify.ask("t", "m", ["a", "b"], window_bin="/no/such/window"))
+
+    def test_passes_buttons_as_comma_joined_argv(self):
+        win = self._executable(); seen = {}
+        def fake_run(cmd, **kw): seen["cmd"] = cmd; return mock.Mock(returncode=0)
+        with mock.patch.object(notify.subprocess, "run", side_effect=fake_run):
+            notify.ask("T", "M", ["却下", "許可"], window_bin=win)
+        self.assertEqual(seen["cmd"], [win, "T", "M", "却下,許可"])  # argv 渡し（注入なし）
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -985,6 +985,20 @@ MUTANTS = [
      'if not isinstance(data, list):\n        raise NoticeSourceError("comments response is not a JSON list")',
      'if False:\n        raise NoticeSourceError("comments response is not a JSON list")',
      "test_notice_source.FetchComments.test_non_list_response_is_rejected"),
+    # --- envelope 許可: prompt 判定と ask の範囲チェック ---
+    ("prompt also fires on sweep (not just notice)", "g10runner/dispatch.py",
+     'return (reason == "notice" and isinstance(result, dict)',
+     'return (reason != "zzz" and isinstance(result, dict)',
+     "test_dispatch.WantsEnvelopePrompt.test_sweep_does_not_prompt"),
+    ("ask treats the window-close code as a choice", "g10runner/notify.py",
+     "return rc if 0 <= rc < len(buttons) else None",
+     "return rc if 0 <= rc <= len(buttons) else None",
+     "test_mac_notifier.AskWindow.test_out_of_range_returncode_is_none"),
+    # --- envelope 発行: scope は readonly_trial 固定（広げない） ---
+    ("approve_trial_envelope drops the readonly_trial scope", "g10runner/producer.py",
+     '{"scopes": ["readonly_trial"], "models": dict(policy["models"]),',
+     '{"scopes": [], "models": dict(policy["models"]),',
+     "test_task47_producer.ApproveTrialEnvelope.test_grants_readonly_trial_daily_window_then_emits"),
 ]
 
 

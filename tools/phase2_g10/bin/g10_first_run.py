@@ -31,7 +31,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from g10runner import autorun, code_edit, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, real_claude, registry, release, result_handoff, signing, wiring  # noqa: E402
+from g10runner import autorun, code_edit, ecdsa_signing as ec, launchd_plan, meta, norm, policy as policy_mod, producer, real_claude, registry, release, result_handoff, signing, wiring  # noqa: E402
 from g10runner.control import Control, GoReuseError  # noqa: E402
 from g10runner.fsutil import read_json, sha256_hex  # noqa: E402
 from g10runner.layout import Layout, SplitLayout  # noqa: E402
@@ -243,10 +243,7 @@ def cmd_approve_envelope(a):
     この窓の中でだけ producer は per-run GO 無しで自律 emit する（消費するのは MAX 利用枠）。--write のときだけ承認し、
     dry-run は窓の内容を表示するだけ。scope は readonly_trial 固定（変更・書き込み・本番は窓に入れない）。"""
     control, policy = open_control(a.root)
-    params = {"scopes": ["readonly_trial"], "models": dict(policy["models"]),
-              "efforts": ["low", "medium", "high"], "max_minutes_cap": int(a.max_minutes),
-              "max_budget_cap": float(a.max_budget), "base_ref_prefixes": ["refs/heads/"],
-              "policy_sha256": policy["_digest"]}
+    params = producer.trial_envelope_params(policy, a.max_minutes, a.max_budget)
     out = {"envelope": params, "written": False}
     if a.write:
         control.approve_envelope(params)

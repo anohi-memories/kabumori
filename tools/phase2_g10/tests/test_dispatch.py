@@ -120,3 +120,20 @@ class BinSmoke(unittest.TestCase):
         self.assertEqual(rc, 0, buf.getvalue())
         self.assertTrue(os.path.isfile(cur))                 # カーソルを保存
         self.assertIn('"checked": []', buf.getvalue())       # 空お知らせ・スイープ無し＝emit 呼ばず
+
+
+class WantsEnvelopePrompt(unittest.TestCase):
+    def test_notice_with_no_envelope_prompts(self):
+        r = {"decision": "idle", "reason": "no active envelope (human daily consent window)"}
+        self.assertTrue(dispatch.wants_envelope_prompt(r, "notice"))
+
+    def test_sweep_does_not_prompt(self):
+        r = {"decision": "idle", "reason": "no active envelope (human daily consent window)"}
+        self.assertFalse(dispatch.wants_envelope_prompt(r, "sweep"))   # スイープでは聞かない
+
+    def test_outside_envelope_does_not_prompt(self):
+        r = {"decision": "idle", "reason": "task is outside the active envelope"}
+        self.assertFalse(dispatch.wants_envelope_prompt(r, "notice"))  # envelope はある→聞いても無意味
+
+    def test_emitted_does_not_prompt(self):
+        self.assertFalse(dispatch.wants_envelope_prompt({"decision": "emit", "reason": "ready"}, "notice"))
