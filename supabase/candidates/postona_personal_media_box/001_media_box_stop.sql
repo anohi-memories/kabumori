@@ -1,6 +1,6 @@
--- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 task 5). NOT applied anywhere. The STOP of 001_media_box.sql: every person loses the media
--- box at once and nothing is deleted. It drops the three Storage policies (no upload, signed URL, download or removal of a postona-media
--- object by an API role) and revokes EXECUTE on the five API functions from authenticated. Every asset row and object stays. Re-running
+-- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 tasks 5 / 6). NOT applied anywhere. The STOP of 001_media_box.sql: every person loses the media
+-- box at once and nothing is deleted. It drops the four Storage policies (no upload, move, download or removal of a postona-media
+-- object by an API role; G5-02 #6: no signed URL exists to outlive it) and revokes EXECUTE on the five API functions from authenticated. Every asset row and object stays. Re-running
 -- 001_media_box.sql turns it on again. Idempotent. Run as the lifecycle owner with ON_ERROR_STOP.
 
 begin;
@@ -9,13 +9,14 @@ set local search_path = '';
 
 drop policy if exists postona_media_insert on storage.objects;
 drop policy if exists postona_media_select on storage.objects;
+drop policy if exists postona_media_update on storage.objects;
 drop policy if exists postona_media_delete on storage.objects;
 
 do $stop$
 begin
   if pg_catalog.to_regprocedure('public.postona_media_begin_upload(uuid,text,text,bigint)') is not null then
     revoke execute on function public.postona_media_begin_upload(uuid, text, text, bigint), public.postona_media_complete_upload(uuid),
-      public.postona_media_list(integer, timestamptz, uuid), public.postona_media_delete(uuid), public.postona_media_object_access(text, text, text)
+      public.postona_media_list(integer, timestamptz, uuid), public.postona_media_delete(uuid), public.postona_media_object_access(text, text, text, text)
       from authenticated;
   end if;
   -- postcondition: no API role reaches any of them, and no policy of ours is left

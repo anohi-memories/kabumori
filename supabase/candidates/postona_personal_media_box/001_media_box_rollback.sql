@@ -1,4 +1,4 @@
--- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 task 5). NOT applied anywhere. The ROLLBACK of 001_media_box.sql: removes the three Storage
+-- G5 SOURCE CANDIDATE (2026-11-04, Issue #587 G5-02 tasks 5 / 6). NOT applied anywhere. The ROLLBACK of 001_media_box.sql: removes the four Storage
 -- policies, the functions, the metadata table and the (empty) bucket. It refuses while anything is still stored:
 --   MEDIA_ROLLBACK_NOT_EMPTY  a pending / ready asset, or any object in postona-media (objects are removable only through storage-api: delete
 --                             them there first; deleting storage.objects rows in SQL would orphan the stored bytes)
@@ -27,13 +27,15 @@ $rollback$;
 
 drop policy if exists postona_media_insert on storage.objects;
 drop policy if exists postona_media_select on storage.objects;
+drop policy if exists postona_media_update on storage.objects;
 drop policy if exists postona_media_delete on storage.objects;
 drop function if exists public.postona_media_begin_upload(uuid, text, text, bigint);
 drop function if exists public.postona_media_complete_upload(uuid);
 drop function if exists public.postona_media_list(integer, timestamptz, uuid);
 drop function if exists public.postona_media_delete(uuid);
-drop function if exists public.postona_media_object_access(text, text, text);
+drop function if exists public.postona_media_object_access(text, text, text, text);
 drop function if exists private.postona_media_orphans();
+drop function if exists private.postona_media_usage(uuid, uuid);
 drop function if exists private.postona_media_writer_state();
 drop function if exists private.postona_media_reader_state(uuid);
 drop function if exists private.postona_media_session();
