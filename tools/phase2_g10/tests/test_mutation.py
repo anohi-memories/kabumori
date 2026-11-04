@@ -962,6 +962,19 @@ MUTANTS = [
      'if missing:\n        raise PlanError("%s agent missing flags: %s" % (kind, missing))',
      'if False:\n        raise PlanError("%s agent missing flags: %s" % (kind, missing))',
      "test_phase2_agents.Phase2AgentRejections.test_missing_live_is_refused"),
+    # --- notice-dispatch 中核: シグナル解析・許可リスト・カーソル差分 ---
+    ("dispatch accepts out-of-range slot", "g10runner/dispatch.py",
+     "if slot and SLOT_RE.match(slot):",
+     "if slot:",
+     "test_dispatch.ParseSignals.test_out_of_range_slot_is_ignored"),
+    ("dispatch ignores the slot allowlist", "g10runner/dispatch.py",
+     "if s in allowlist and s not in seen:",
+     "if s not in seen:",
+     "test_dispatch.CursorAndPlan.test_plan_dispatch_respects_allowlist"),
+    ("dispatch reprocesses the cursor comment", "g10runner/dispatch.py",
+     "return sorted((c for c in comments if _cid(c) > base), key=_cid)",
+     "return sorted((c for c in comments if _cid(c) >= base), key=_cid)",
+     "test_dispatch.CursorAndPlan.test_no_new_comments_keeps_cursor"),
 ]
 
 
