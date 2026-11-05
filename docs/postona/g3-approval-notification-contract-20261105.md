@@ -85,7 +85,7 @@ There is no post text, token or account handle in a notification.
 - **No duplicates**: there is one row per event, so retries and races do not create a second one.
 - **Nothing lost**: a reservation change that no one has listed yet is written by the next list. Only the latest state is guaranteed, so two reschedules between lists can show as one.
 - **Mark read**: `markRead` is idempotent; the first read time stays.
-- **Whose rows**: only the caller's notifications are returned, and only for a workspace the caller still owns. Nothing is written for a former owner: no notification, no outbox row (G3-02 #17).
+- **Whose rows**: only the caller's notifications are returned, and only for a workspace the caller still owns. Nothing is written for a former owner: no notification, no outbox row (G3-02 #17). An ownership loss that is committing at the same time either commits first (then nothing is written) or waits for the write to commit (G3-02 #18 row locks).
   - A deleted workspace or X account takes its candidates and notifications with it. This is a foreign-key cascade, checked in the catalog only.
   - A person who no longer owns the workspace sees nothing and can change nothing.
 

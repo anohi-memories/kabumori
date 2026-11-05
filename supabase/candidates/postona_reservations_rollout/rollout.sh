@@ -58,6 +58,10 @@ while IFS="$(printf '\t')" read -r kind step rel sha; do
   [ "$(shasum -a 256 "$f" | cut -d ' ' -f 1)" = "$sha" ] || die "G3_ROLLOUT_MANIFEST_SHA: $kind $step"
 done < "$manifest"
 [ "$n_install" -gt 0 ] && [ "$n_install" = "$n_rollback" ] || die "G3_ROLLOUT_MANIFEST_SHAPE: $n_install install / $n_rollback rollback"
+# G3-02 #18 (H1 #38 P3): every step has both its install and its rollback line, each once
+[ "$(awk -F '\t' '$1 == "install" { print $2 }' "$manifest" | sort)" = "$(awk -F '\t' '$1 == "rollback" { print $2 }' "$manifest" | sort)" ] \
+  && [ -z "$(awk -F '\t' '$1 == "install" || $1 == "rollback" { print $1 " " $2 }' "$manifest" | sort | uniq -d)" ] \
+  || die "G3_ROLLOUT_MANIFEST_PAIRS: the install and rollback steps differ (nothing touched)"
 steps_of() { awk -F '\t' -v k="$1" '$1 == k { print $2 "\t" $3 }' "$manifest"; }
 
 # --- the target: the attested throw-away database, before anything else is read or changed -----------------------------------------
@@ -132,6 +136,24 @@ install)
   ;;
 rollback)
   preflight rollback
+  # G3-02 #18 (H1 #38 P3): the optional steps 017 / 018 are installed exactly when this manifest has them; anything else (installed but
+  # not in the manifest, in the manifest but not installed, or only part of a step's objects present) refuses before ANY rollback step.
+  coherence="$("${P[@]}" -c "select (select count(*) from (values (to_regtype('postona_x_resv.reservation_read_view')::oid),
+        (to_regprocedure('postona_x_resv.connection_generation_of(postona_x_resv.reservations)')::oid)) v(o) where o is not null)::text
+    || ':' || ((select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'postona_x_resv'
+                 and c.relname in ('approval_candidates', 'notifications', 'push_outbox') and c.relkind = 'r')
+             + (select count(*) from pg_type t join pg_namespace n on n.oid = t.typnamespace where n.nspname = 'postona_x_resv'
+                 and t.typname in ('approval_view', 'notification_view') and t.typtype = 'c')
+             + (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'postona_x_resv'
+                 and p.proname in ('submit_approval', 'revise_approval', 'approve_candidate', 'reject_candidate', 'list_approvals', 'get_approval',
+                                   'list_notifications', 'mark_notification_read') and p.prosrc ~ 'G3_APPROVALS'))::text")"
+  for pair in "x017:${coherence%%:*}:2" "x018:${coherence#*:}:13"; do
+    IFS=: read -r opt have full <<<"$pair"
+    listed=no; awk -F '\t' -v s="$opt" '$2 == s { found = 1 } END { exit !found }' "$manifest" && listed=yes
+    if [ "$have" != 0 ] && [ "$have" != "$full" ]; then die "G3_ROLLOUT_ROLLBACK_PARTIAL: $opt has $have of $full objects (nothing changed)"; fi
+    if [ "$have" = "$full" ] && [ "$listed" = no ]; then die "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: $opt is installed but not in the manifest (nothing changed)"; fi
+    if [ "$have" = 0 ] && [ "$listed" = yes ]; then die "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: $opt is in the manifest but not installed (nothing changed)"; fi
+  done
   live="$("${P[@]}" -c "select (select count(*) from postona_x_resv.reservations where status in ('planned', 'claimed', 'uncertain'))::text || '/'
     || (select count(*) from postona_threads_resv.reservations where status in ('planned', 'claimed', 'uncertain'))::text")"
   [ "$live" = "0/0" ] || die "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads $live (finish or resolve them first; nothing changed)"

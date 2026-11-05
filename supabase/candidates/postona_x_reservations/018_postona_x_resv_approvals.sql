@@ -1,5 +1,5 @@
--- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16; G3-02 #17: H1 #37 P2-1 / P2-2 fixed): post approval + the person's notification
--- events. NOT applied anywhere.
+-- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16; G3-02 #17: H1 #37 P2-1 / P2-2 fixed; G3-02 #18: H1 #38 P2 race fixed): post
+-- approval + the person's notification events. NOT applied anywhere.
 -- Applied last, after 001-006, 008, 010, 012, 014, 015 and 017; rolled back FIRST with 018_..._rollback.sql.
 --
 -- A post candidate is NOT a reservation. The person submits it (pending_approval), may revise it, then approves or rejects it. Only an
@@ -33,7 +33,14 @@
 -- result, cancel or expiry of an approved candidate's reservation) is derived from the reservation's confirmed state when the person
 -- lists notifications, so a missed event is never lost: the next list writes it. G3-02 #17 (H1 #37 P2-2): every notification write
 -- (and its outbox row) is made only while the workspace is still the caller's own personal one (G5's eligibility 'own' + the owner
--- membership), checked in the INSERT statement itself; a former owner's list writes nothing. Each new notification also gets a push_outbox row
+-- membership), checked in the INSERT statement itself; a former owner's list writes nothing. G3-02 #18 (H1 #38 P2): before that
+-- INSERT, notify() takes FOR SHARE row locks, in this order, held until COMMIT: the person's public.common_accounts row -> the
+-- workspace's public.brands row -> the person's owner row in public.brand_memberships. A missing row writes nothing. A DELETE or UPDATE of
+-- any of them (an ownership loss, a workspace deletion, a lifecycle change that updates the account row) that is still uncommitted makes
+-- notify() wait and then re-read the committed row; one that starts later waits for this transaction. The INSERT that follows is a new
+-- statement, so its snapshot is taken after the locks and its eligibility check sees every change committed before them. NOT covered
+-- by these locks: a change made only by INSERTING another row (a second owner / member, another owned workspace) concurrently -- that
+-- needs a G5-side lock contract (e.g. G5 taking the account row FOR UPDATE in every ownership change), which G3 does not define here. Each new notification also gets a push_outbox row
 -- (state pending). Nothing reads the outbox in this candidate: a later, separately reviewed push worker does; no push is sent here.
 -- Payloads carry ids, states, revisions and times only: no post text, no token, no account handle.
 -- Refuses (nothing changed) when: already applied; 001 / 008 (personal MVP) / 014 / 017 are not there; the caller is a superuser or does
@@ -56,6 +63,10 @@ begin
      or pg_catalog.to_regprocedure('private.postona_personal_worker_verdict(uuid,text,text,bigint)') is null
      or pg_catalog.to_regprocedure('private.postona_personal_workspace_eligibility(uuid)') is null
      or pg_catalog.to_regprocedure('postona_x_resv.x_credential_generation(text)') is null
+     or pg_catalog.to_regclass('public.common_accounts') is null
+     or not pg_catalog.has_table_privilege(current_user, 'public.common_accounts', 'UPDATE')
+     or not pg_catalog.has_table_privilege(current_user, 'public.brands', 'UPDATE')
+     or not pg_catalog.has_table_privilege(current_user, 'public.brand_memberships', 'UPDATE')
      or (select p.prosrc from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('postona_x_resv.g5_bound_state(postona_x_resv.reservations)')) !~ 'G3_G5_PROFILE_MVP'
      or (select p.prosrc from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('postona_x_resv.g4_x_account_verified(uuid,text)')) !~ 'postona_x_refresh_precheck_v1'
      or pg_catalog.to_regrole('postona_resv_api') is null then
@@ -159,12 +170,21 @@ exception when others then
   return null;
 end $$;
 
-/** One notification + its outbox row, once per (person, event key), and only while the workspace is still theirs. Internal. */
+/**
+ * One notification + its outbox row, once per (person, event key), and only while the workspace is still theirs: the three row locks
+ * first (account -> workspace -> owner row, FOR SHARE, until COMMIT), then the INSERT re-checks the whole rule. Internal.
+ */
 create function postona_x_resv.notify(p_user_id uuid, p_brand_id text, p_event_key text, p_kind text, p_candidate_id uuid,
                                       p_reservation_id uuid, p_revision integer, p_state text, p_scheduled_at timestamptz) returns void
 language plpgsql volatile set search_path = '' as $$
 declare v_id uuid;
 begin
+  perform 1 from public.common_accounts a where a.user_id = p_user_id for share;
+  if not found then return; end if;
+  perform 1 from public.brands b where b.id = p_brand_id for share;
+  if not found then return; end if;
+  perform 1 from public.brand_memberships bm where bm.brand_id = p_brand_id and bm.user_id = p_user_id and bm.role = 'owner' for share;
+  if not found then return; end if;
   insert into postona_x_resv.notifications (user_id, brand_id, event_key, kind, candidate_id, reservation_id, subject_revision, state, scheduled_at)
   select p_user_id, p_brand_id, p_event_key, p_kind, p_candidate_id, p_reservation_id, p_revision, p_state, p_scheduled_at
   where postona_x_resv.approval_workspace_live(p_user_id, p_brand_id)

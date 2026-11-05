@@ -318,6 +318,65 @@ out="$(own -A -t -f "$here/g4_verdict/approvals.sql" 2>&1)" || { printf '%s\n' "
 printf '%s\n' "$out" | grep -qx G3_APPROVALS_BEHAVIOR_PASS || fail "VA: no PASS line"
 va_n="$(printf '%s\n' "$out" | grep -c '|ok$' || true)"
 [ "$(catalog)" = "$c_018" ] || fail "VA behaviour changed the catalog"
+# --- VR18 (G3-02 #18, H1 #38 P2): an ownership loss vs a notification write, in two real sessions (person 4843 of approvals.sql) -------
+now_s() { python3 -I -c 'import time; print(f"{time.time():.3f}")'; }
+rows43() { val -c "select (select count(*) from postona_x_resv.notifications where user_id = g48.u(4843))::text || '/' || (select count(*) from postona_x_resv.push_outbox where user_id = g48.u(4843))::text"; }
+moved43() { own -c "update postona_x_resv.reservations set revision = revision + 1, updated_at = now() where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'))" >/dev/null; }   # SYNTHETIC: a new reservation state to report
+lose43() { echo "delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843) and role = 'owner';"; }
+own -c "create table g48.bm43 as select * from public.brand_memberships where user_id = g48.u(4843) and role = 'owner'" >/dev/null
+restore43() { own -c "insert into public.brand_memberships select * from g48.bm43 b where not exists (select 1 from public.brand_memberships m where m.brand_id = b.brand_id and m.user_id = b.user_id)" >/dev/null; }
+barrier() { own -c "create function g48.barrier() returns trigger language plpgsql as \$\$ begin perform pg_sleep($1); return new; end \$\$" -c "create trigger g3_barrier before insert on postona_x_resv.notifications for each row execute function g48.barrier()" >/dev/null; }
+unbarrier() { own -c "drop trigger g3_barrier on postona_x_resv.notifications" -c "drop function g48.barrier()" >/dev/null; }
+listing43() { val -c "select g48.ap_notes(4843)"; }
+# W: the write passes its guard first and waits (a test-only BEFORE INSERT barrier, H1's fixture); the loss arrives during the wait
+moved43; barrier 3; r0="$(rows43)"
+listing43 > "$work/w_list.txt" 2>&1 & lp=$!
+sleep 1
+t0="$(now_s)"; own -c "set lock_timeout = '20s'" -c "$(lose43)" >/dev/null || fail "VR18-W the loss failed"; t1="$(now_s)"
+wait "$lp" || fail "VR18-W the list failed: $(cat "$work/w_list.txt")"
+unbarrier
+waited="$(python3 -I -c "print('waited' if $t1 - $t0 >= 1.5 else 'not waited')")"
+r1="$(rows43)"
+[ "$waited" = waited ] || fail "VR18-W the loss committed during the notification write (rows $r0 -> $r1, the H1 #38 race)"
+[ "$r1" = "$(python3 -I -c "a, b = '$r0'.split('/'); print(f'{int(a) + 1}/{int(b) + 1}')")" ] || fail "VR18-W expected the event written while still the owner: $r0 -> $r1"
+restore43
+# L: the loss is in flight first (uncommitted, held 3 s); the list waits for it and then writes nothing
+moved43; r0="$(rows43)"
+own -c "begin" -c "$(lose43)" -c "select pg_sleep(3)" -c "commit" >/dev/null & dp=$!
+sleep 1
+t0="$(now_s)"; answer="$(listing43)"; t1="$(now_s)"
+wait "$dp" || fail "VR18-L the loss failed"
+[ "$answer" = "-" ] || fail "VR18-L a former owner's list answered $answer"
+[ "$(rows43)" = "$r0" ] || fail "VR18-L wrote $r0 -> $(rows43) after the loss committed"
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18-L the list did not wait for the loss"
+restore43
+# B: the owner again, two lists at once: the event once
+moved43; r0="$(rows43)"
+listing43 >/dev/null & p1=$!; listing43 >/dev/null & p2=$!
+wait "$p1" && wait "$p2" || fail "VR18-B a list failed"
+[ "$(rows43)" = "$(python3 -I -c "a, b = '$r0'.split('/'); print(f'{int(a) + 1}/{int(b) + 1}')")" ] || fail "VR18-B two lists: $r0 -> $(rows43)"
+# P: a change of the workspace's profile (the brands row G5's eligibility reads, SYNTHETIC) during a write waits for it (the brand lock)
+moved43; barrier 3
+listing43 > "$work/p_list.txt" 2>&1 & lp=$!
+sleep 1
+prof="$(val -c "select code_profile_key from public.brands where id = g48.ws(4843)")"
+t0="$(now_s)"; own -c "set lock_timeout = '20s'" -c "update public.brands set code_profile_key = 'g3_other_profile' where id = g48.ws(4843)" >/dev/null || fail "VR18-P update"; t1="$(now_s)"
+wait "$lp" || fail "VR18-P the list failed"
+unbarrier
+own -c "update public.brands set code_profile_key = '$prof' where id = g48.ws(4843)" >/dev/null
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18-P the profile change did not wait for the write"
+# S: G5's restart (it updates the account row) during a notification write waits for it (the account row lock)
+moved43; own -c "update public.service_entitlements set status = 'ended', ended_at = now() where user_id = g48.u(4843) and service_key = 'x_autopost'" >/dev/null   # SYNTHETIC end
+barrier 3
+listing43 > "$work/s_list.txt" 2>&1 & lp=$!
+sleep 1
+t0="$(now_s)"; [ "$(val -c "set lock_timeout = '20s'" -c "select g48.cg_restart(4843)")" = active ] || fail "VR18-S restart"; t1="$(now_s)"
+wait "$lp" || fail "VR18-S the list failed"
+unbarrier
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18-S the restart did not wait for the write"
+own -c "drop table g48.bm43" >/dev/null
+[ "$(catalog)" = "$c_018" ] || fail "VR18 left something in the catalog"
+echo "OK VR18: the loss during a write waits for it (W, +1 while the owner); a loss in flight first makes the list wait and write 0 (L); two owner lists write once (B); a workspace profile change waits for a write (P); G5's restart waits for a write (S)"
 counts="$(sval -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text")"
 expect_err "VA5 018 rollback as a superuser" G3_APPROVALS_ROLLBACK_OWNER sval -c "set postona_resv_approval_rollback.discard = '$counts'" -f "$x018rb"
 expect_err "VA6 018 rollback, counts not stated" G3_APPROVALS_ROLLBACK_ROWS own -f "$x018rb"
