@@ -1,0 +1,7 @@
+A | 04a68aaa-1d1e-4d33-ada8-d506ccc089b5.png | image/png | 2747
+A | ab1f7886-b8f7-41e5-99ab-b41e003043cb.jpg | image/jpeg | 13847
+A | 6a1c6a43-fa52-4c51-8873-e3ed8d2162ff.heic | image/heic | 793
+A | 78150f70-c6f9-4f5f-a311-1e9e4ea65c4f.mp4 | video/mp4 | 1339
+A | 4a0d24a9-c8b5-4b31-81a0-62bb1e3634e7.mov | video/quicktime | 1515
+A | 0b78330a-30a1-4e96-8251-3a0cb14364d3.mp4 | video/mp4 | 4417
+B | 0c0b5d1c-35e0-4c11-be48-3d9284365fb1.jpg | image/jpeg | 13847

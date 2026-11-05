@@ -1,0 +1,8 @@
+A | image | image/png | ready | 2747 | 2747 | purged=f | req=f1d38ecb | g2-blue-card.png
+A | image | image/jpeg | ready | 13847 | 13847 | purged=f | req=93ab9573 | g2-green-tri.jpeg
+A | image | image/heic | ready | 793 | 793 | purged=f | req=f3e65da0 | g2-purple.heic
+A | video | video/mp4 | ready | 1339 | 1339 | purged=f | req=abed32df | g2-clip.mp4
+A | video | video/quicktime | ready | 1515 | 1515 | purged=f | req=49f7a956 | g2-clip.mov
+A | video | video/mp4 | deleted | 4417 | 4417 | purged=t | req=9356acea | g2-long-6s.mp4
+A | video | video/mp4 | ready | 4417 | 4417 | purged=f | req=27ff65f1 | g2-long-6s.mp4
+B | image | image/jpeg | ready | 13847 | 13847 | purged=f | req=4dafa8df | g2-green-tri.jpeg

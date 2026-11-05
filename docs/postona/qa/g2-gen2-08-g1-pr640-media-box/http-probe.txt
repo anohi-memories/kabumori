@@ -1,0 +1,10 @@
+G2-02 TASK 8: reads of person A's stored objects on the local stack (statuses only; no token, no URL with secrets)
+after the 5 real-tap adds (PNG, JPEG, HEIC, MP4, MOV), 2026-11-04 13:45 JST
+
+postona_media_list  owner A: 200, 5 items      other person B: 200, 0 items
+
+storage /object/authenticated/postona-media/<A's object>   (x5, one per kind)
+  with A's headers      200   (bytes SHA-256 = the original test file: 5/5 match)
+  with no auth header   400
+  with B's token        400
+  /object/public/...    400   (bucket is private)
