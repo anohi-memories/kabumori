@@ -997,4 +997,65 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId }),
       await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId }), "one outbox row per notification; nothing sends them");
   });
+
+  await t.step("L36 G3-02 #17 (H1 #37): a G4-only reconnect refuses an earlier candidate (P2-1); a former owner's list writes nothing (P2-2); expired / anonymous tokens 401", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const resvCount = () => countOf(`select count(*) from postona_x_resv.reservations where user_id = '${d.userId}'`);
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const submit = async (name: string, days: number) => {
+      const a = await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: `G3-02 #17 ${name}`, scheduledAt: at(days) });
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body));
+      return cands(a)[0];
+    };
+    // P2-1: the same account disconnected and connected again (G4's real SQL); G5's generation unchanged
+    const life = () => owner("select lifecycle_version from public.common_accounts where user_id = :'u'", { u: d.userId });
+    const k1 = await submit("k1", 66);
+    const k2 = await submit("k2", 67);
+    const life0 = await life();
+    const gen0 = await generationOf(d.account!);
+    await xDisconnect(d);
+    assert.deepStrictEqual(await xConnect(d, "d6", "62301"), d.account, "the same social_account_id");
+    assert.deepStrictEqual(await life(), life0, "G5's generation did not move");
+    assert.notDeepStrictEqual(await generationOf(d.account!), gen0, "G4's connection generation moved");
+    const n0 = await resvCount();
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: k1.candidateId, expectedRevision: 1, contentSha256: k1.contentSha256 })), "409 POSTONA_RESV_APPROVAL_GENERATION_CHANGED");
+    assert.deepStrictEqual([await resvCount(), cands(await ap("get", { candidateId: k1.candidateId }))[0].state], [n0, "pending_approval"], "nothing written");
+    const calls0 = await xCalls();
+    const idle = await deliver();
+    assert.deepStrictEqual([idle.report?.sends ?? 0, await xCalls()], [0, calls0], "the worker sends nothing for it");
+    const revised = await ap("revise", { candidateId: k2.candidateId, expectedRevision: 1, body: "G3-02 #17 k2 v2", scheduledAt: at(68) });
+    assert.strictEqual(revised.status, 200, JSON.stringify(revised.body));
+    const k2v2 = cands(revised)[0];
+    const approved = await ap("approve", { candidateId: k2.candidateId, expectedRevision: 2, contentSha256: k2v2.contentSha256 });
+    assert.deepStrictEqual([approved.status, cands(approved)[0]?.state], [200, "approved"], "the person's explicit revise under the new connection");
+    const rid = cands(approved)[0].reservationId as string;
+    // P2-2: the reservation changes, then the person is no longer the owner; two lists at once answer nothing and write nothing
+    await owner("update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC (operator)
+    await owner("create table public.g3ls17_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });
+    await owner("delete from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });   // SYNTHETIC ownership loss
+    const before = await noteRows();
+    const lost = await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
+    assert.deepStrictEqual(lost.map((l) => `${l.status}/${((l.body.notifications ?? []) as unknown[]).length}`), ["200/0", "200/0"]);
+    assert.deepStrictEqual(await noteRows(), before, "no notification and no outbox row for a former owner");
+    await owner("insert into public.brand_memberships select * from public.g3ls17_bm", {});
+    await owner("drop table public.g3ls17_bm", {});
+    // the owner again: two lists at once write the event once
+    const both = await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
+    assert.deepStrictEqual(both.map((l) => l.status), [200, 200]);
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.notifications where reservation_id = :'i' and kind = 'reservation_changed' and state = 'cancelled'", { i: rid }), "1");
+    const [nb, ob] = before.split("/").map(Number);
+    assert.deepStrictEqual(await noteRows(), `${nb + 1}/${ob + 1}`);
+    // expired (signed with the stack's secret) and anonymous tokens
+    const enc = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+    const now = Math.floor(Date.now() / 1000);
+    const unsigned = `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ ...claimsOf(d.token), iat: now - 7200, exp: now - 3600 })}`;
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(JWT_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const expired = `${unsigned}.${b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned))))}`;
+    assert.deepStrictEqual((await ap("notifications", {}, expired)).status, 401, "expired token");
+    const anon = await (await auth("signup", {})).json();
+    assert.deepStrictEqual(code(await ap("notifications", {}, anon.access_token)), "401 AUTH_REQUIRED", "anonymous sign-in");
+    assert.deepStrictEqual(await noteRows(), `${nb + 1}/${ob + 1}`, "401s wrote nothing");
+  });
 });

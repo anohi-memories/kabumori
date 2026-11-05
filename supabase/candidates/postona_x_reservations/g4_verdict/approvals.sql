@@ -151,9 +151,75 @@ select g48.check_('AP16 cascades', 'approval_candidates>brands:c,approval_candid
      from pg_constraint c
     where c.contype = 'f' and c.conrelid in ('postona_x_resv.approval_candidates'::regclass, 'postona_x_resv.notifications'::regclass, 'postona_x_resv.push_outbox'::regclass)) t));
 
+-- AP17 (G3-02 #17, H1 #37 P2-1) a disconnect + reconnect of the SAME account (G4's real SQL), G5's generation unchanged: a candidate
+-- submitted under the earlier connection is refused and no reservation is made; a revise under the new connection rebinds it
+select g48.person(4843);
+select g48.xconnect(4843, 'ap7', '48430');
+select g48.nobody();
+select g48.xacct(4843) as acct17, (select lifecycle_version::text from public.common_accounts where user_id = g48.u(4843)) as life17,
+       postona_x_resv.x_credential_generation(g48.xacct(4843)) as gen17 \gset
+select g48.ap_submit(4843, 'g1', 680);
+select g48.ap_submit(4843, 'g2', 690);
+select g48.xdisconnect(4843);
+select g48.xconnect(4843, 'ap8', '48430');
+select g48.nobody();
+select g48.check_('AP17 the same account', :'acct17', g48.xacct(4843));
+select g48.check_('AP17 G5 generation unchanged', :'life17', (select lifecycle_version::text from public.common_accounts where user_id = g48.u(4843)));
+select g48.check_('AP17 G4 generation moved', 'moved', case when postona_x_resv.x_credential_generation(g48.xacct(4843)) is distinct from :'gen17' then 'moved' else 'same' end);
+select g48.check_('AP17 old candidate', 'ERR:POSTONA_RESV_APPROVAL_GENERATION_CHANGED', g48.ap_approve(4843, 'g1'));
+select g48.check_('AP17 nothing written', 'pending_approval/1/none|0', g48.ap_state('g1') || '|' || g48.resv_count(4843));
+select g48.check_('AP17 revise under the new connection', 'pending_approval/2', g48.ap(4843, format('select state || ''/'' || revision from postona_x_resv.revise_approval(%L::uuid, 1, ''G3-02 #17 g2 v2'', now() + interval ''700 hours'')', g48.id('g2'))));
+select g48.check_('AP17 then approved', 'approved/3', g48.ap_approve(4843, 'g2'));
+select g48.check_('AP17 one reservation', '1', g48.resv_count(4843));
+-- AP18 (G3-02 #17, H1 #37 P2-2) a former owner's list writes no notification and no outbox row; the current owner's list writes the event once
+create function g48.note_rows(p int) returns text language sql stable as $$
+  select (select count(*) from postona_x_resv.notifications where user_id = g48.u(p))::text || '/' || (select count(*) from postona_x_resv.push_outbox where user_id = g48.u(p))::text $$;
+begin;
+update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.note_rows(4843) as before18 \gset
+delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843);
+select g48.ap_notes(4843) as l1, g48.ap_notes(4843) as l2 \gset
+select g48.note_rows(4843) as after18 \gset
+rollback;
+select g48.check_('AP18 former owner: list answers nothing', '-|-', :'l1' || '|' || :'l2');
+select g48.check_('AP18 former owner: 0 writes', :'before18', :'after18');
+begin;
+update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.note_rows(4843) as before18b \gset
+select g48.ap_notes(4843) as m1 \gset
+select g48.ap_notes(4843) as m2 \gset
+select g48.note_rows(4843) as after18b, (select count(*)::text from postona_x_resv.notifications where candidate_id = g48.id('g2') and kind = 'reservation_changed') as ev18 \gset
+rollback;
+select g48.check_('AP18 current owner: one event', '1', :'ev18');
+select g48.check_('AP18 current owner: +1 notification, +1 outbox', (split_part(:'before18b', '/', 1)::int + 1)::text || '/' || (split_part(:'before18b', '/', 2)::int + 1)::text, :'after18b');
+select g48.check_('AP18 listed twice, the same answer', :'m1', :'m2');
+-- AP19 a candidate cannot be stored without its connection (NOT NULL, 64 hex)
+select g48.check_('AP19 column', 'NO|true', (select is_nullable from information_schema.columns where table_schema = 'postona_x_resv' and table_name = 'approval_candidates' and column_name = 'bound_credential_generation')
+  || '|' || exists (select 1 from pg_constraint where conrelid = 'postona_x_resv.approval_candidates'::regclass and pg_get_constraintdef(oid) ~ 'bound_credential_generation.*\{64\}')::text);
+
+-- AP20 (G3-02 #17) the write guard itself, not only the list's filter: notify() as the owner for a person who no longer owns the
+-- workspace writes nothing; and a person whose G5 eligibility is no longer 'own' (they also own another workspace, SYNTHETIC) gets no
+-- derived event (both rolled back)
+begin;
+delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843);
+select g48.note_rows(4843) as b20 \gset
+select postona_x_resv.notify(g48.u(4843), g48.ws(4843), 'approval_requested:' || gen_random_uuid() || ':r1', 'approval_requested', null, null, 1, 'pending_approval', null);
+select g48.note_rows(4843) as a20 \gset
+rollback;
+select g48.check_('AP20 notify for a former owner', :'b20', :'a20');
+begin;
+update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+insert into public.brand_memberships (brand_id, user_id, role) values (g48.ws(4842), g48.u(4843), 'owner');
+select private.postona_personal_workspace_eligibility(g48.u(4843)) as elig20, g48.note_rows(4843) as b20b \gset
+select g48.ap_notes(4843) as n20 \gset
+select g48.note_rows(4843) as a20b \gset
+rollback;
+select g48.check_('AP20 G5 eligibility not own', 'not own', case when :'elig20' = 'own' then 'own' else 'not own' end);
+select g48.check_('AP20 no derived event', :'b20b', :'a20b');
+
 select n, case_id, case when expected = actual then 'ok' else 'FAIL expected ' || coalesce(expected, '<null>') || ' got ' || coalesce(actual, '<null>') end from g48.results order by n;
 do $$ begin
   if exists (select 1 from g48.results where expected is distinct from actual) then raise exception 'G3_APPROVALS_BEHAVIOR_FAIL'; end if;
-  if (select count(*) from g48.results) < 60 then raise exception 'G3_APPROVALS_BEHAVIOR_INCOMPLETE %', (select count(*) from g48.results); end if;
+  if (select count(*) from g48.results) < 75 then raise exception 'G3_APPROVALS_BEHAVIOR_INCOMPLETE %', (select count(*) from g48.results); end if;
 end $$;
 select 'G3_APPROVALS_BEHAVIOR_PASS';

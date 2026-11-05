@@ -1,4 +1,4 @@
--- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16): removes 018. NOT applied anywhere. Run FIRST, before 017's and every other rollback.
+-- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16 / #17): removes 018. NOT applied anywhere. Run FIRST, before 017's and every other rollback.
 -- Drops 018's functions, types and tables. Reservations that approvals created stay as ordinary reservations (unchanged). Candidates and
 -- notifications are discarded only when the operator states their counts: set postona_resv_approval_rollback.discard = '<candidates>:<notifications>'
 -- (both 0 when the tables are empty). Any other value refuses, nothing changed.
@@ -45,6 +45,8 @@ drop function postona_x_resv.approval_owned(uuid, text);
 drop function postona_x_resv.sync_reservation_notifications(uuid);
 drop function postona_x_resv.notify(uuid, text, text, text, uuid, uuid, integer, text, timestamptz);
 drop function postona_x_resv.approval_generation_active(uuid, text, bigint);
+drop function postona_x_resv.approval_workspace_live(uuid, text);
+drop function postona_x_resv.approval_credential_generation(text);
 drop type postona_x_resv.approval_view;
 drop type postona_x_resv.notification_view;
 drop table postona_x_resv.push_outbox;

@@ -354,7 +354,10 @@ rb_refused "the uncertain rows alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads 
 own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END_RESOLVED' where status = 'uncertain'" >/dev/null   # operator, after checking X
 xrows="$(own -A -t -c "select (select count(*) from postona_x_resv.reservations) || ':' || (select count(*) from postona_x_resv.batches) || ':' || (select count(*) from postona_x_resv.audit)")"
 trows="$(own -A -t -c "select (select count(*) from postona_threads_resv.reservations) || ':' || (select count(*) from postona_threads_resv.audit)")"
-arows="$(own -A -t -c "select case when to_regclass('postona_x_resv.approval_candidates') is null then '0:0' else (select count(*) from postona_x_resv.approval_candidates) || ':' || (select count(*) from postona_x_resv.notifications) end")"
+arows=0:0   # G3-02 #17 (H1 #37 P3): the existence check is its own statement (a CASE still parses the missing tables)
+if [ "$(own -A -t -c "select to_regclass('postona_x_resv.approval_candidates') is not null")" = t ]; then
+  arows="$(own -A -t -c "select (select count(*) from postona_x_resv.approval_candidates) || ':' || (select count(*) from postona_x_resv.notifications)")"
+fi
 rb_refused "finished rows not stated" G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATED
 [ "$arows" = "0:0" ] || rb_refused "approval rows not stated" G3_ROLLOUT_ROLLBACK_APPROVAL_ROWS_NOT_STATED G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows"
 rb_refused "the test's login members" G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows" G3RO_APPROVAL_DISCARD_ROWS="$arows"
