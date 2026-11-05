@@ -324,6 +324,29 @@ printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=16$' || fail "RN rol
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RN G3's catalog is not the fresh one"
 echo "OK RN: an install without 018 (16 steps) rolls back with the approval-row guard at 0:0 (no parse error); G3's fresh catalog"
 
+# --- RC (G3-02 #18, H1 #38 P3): the database and the manifest must agree on 017 / 018 before ANY rollback step; nothing changes otherwise
+AC=(G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers")
+o="$(ro install "${AC[@]}" 2>&1)" || fail "RC install (17): $o"
+expect_ro "RC1 018 installed, a 16-step manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x018 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}"
+own -c "alter table postona_x_resv.push_outbox rename to push_outbox_g3rc" >/dev/null
+expect_ro "RC2 018 partly present" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 12 of 13 objects" rollback "${AC[@]}"
+own -c "alter table postona_x_resv.push_outbox_g3rc rename to push_outbox" >/dev/null
+own -c "alter function postona_x_resv.list_notifications(integer) rename to list_notifications_g3rc" >/dev/null
+expect_ro "RC2b an 018 function missing" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 12 of 13 objects" rollback "${AC[@]}"
+own -c "alter function postona_x_resv.list_notifications_g3rc(integer) rename to list_notifications" >/dev/null
+grep -v -E '^(install|rollback)\tx017\t' "$here/MANIFEST.tsv" > "$work/m_no017.tsv"
+expect_ro "RC3 017 installed, not in the manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x017 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no017.tsv" "${AC[@]}"
+awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "rollback" && $2 == "x018" { $2 = "x019" } { print }' "$here/MANIFEST.tsv" > "$work/m_half018.tsv"   # the same count, another step id
+expect_ro "RC4 x018's rollback line under another step id" "G3_ROLLOUT_MANIFEST_PAIRS" rollback G3RO_MANIFEST="$work/m_half018.tsv" "${AC[@]}"
+awk -F '\t' '$1 == "rollback" && $2 == "x017" { next } { print } $1 == "rollback" && $2 == "x018" { print }' "$here/MANIFEST.tsv" > "$work/m_dup018.tsv"   # x018 twice, x017 never
+expect_ro "RC4b a rollback line twice" "G3_ROLLOUT_MANIFEST_PAIRS" rollback G3RO_MANIFEST="$work/m_dup018.tsv" "${AC[@]}"
+o="$(ro rollback "${AC[@]}" 2>&1)" || fail "RC rollback (17): $o"
+o="$(ro install G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}" 2>&1)" || fail "RC install (16): $o"
+expect_ro "RC5 018 not installed, a 17-step manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x018 is in the manifest but not installed" rollback "${AC[@]}"
+o="$(ro rollback G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}" 2>&1)" || fail "RC rollback (16): $o"
+[ "$(g3fp)" = "$fresh_g3" ] || fail "RC G3's catalog is not the fresh one"
+echo "OK RC: before any rollback step, refused with nothing changed: 018 installed + a 16-step manifest, 018 partly present (a table / a function renamed), 017 installed + a manifest without it, a manifest whose install / rollback lines differ or repeat, 018 absent + a 17-step manifest; the matching 17 / 16-step rollbacks still work"
+
 # --- RA -------------------------------------------------------------------------------------------------------------------------------
 o="$(ro install 2>&1)" || fail "RA re-install: $o"
 [ "$(g3fp)" = "$installed_g3" ] || fail "RA the re-installed catalog is not the first install"

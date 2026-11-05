@@ -1058,4 +1058,54 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(code(await ap("notifications", {}, anon.access_token)), "401 AUTH_REQUIRED", "anonymous sign-in");
     assert.deepStrictEqual(await noteRows(), `${nb + 1}/${ob + 1}`, "401s wrote nothing");
   });
+
+  await t.step("L37 G3-02 #18 (H1 #38): an ownership loss vs a notification write over real JWT -> Edge -> PG: a loss during the write waits for it; a loss in flight first leaves 0 writes", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const plus1 = (r: string) => r.split("/").map((x) => String(Number(x) + 1)).join("/");
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const sub = await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #18 race", scheduledAt: at(64) });
+    const c = cands(sub)[0];
+    const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+    assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+    const rid = cands(ok)[0].reservationId as string;
+    const moved = () => owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: a new state to report
+    await owner("create table public.g3ls18_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });
+    const restore = () => owner("insert into public.brand_memberships select * from public.g3ls18_bm", {});
+    const lose = "delete from public.brand_memberships where user_id = :'u' and role = 'owner';";
+    // W: the write passes its guard and waits in a test-only BEFORE INSERT barrier (H1's fixture); the loss arrives during the wait
+    await moved();
+    await owner("create function public.g3ls18_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return new; end $$; create trigger g3ls18_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls18_barrier();", {});
+    const r0 = await noteRows();
+    const listing = ap("notifications", { limit: 100 });
+    await sleep(1000);
+    const t0 = Date.now();
+    await owner(`set lock_timeout = '20s'; ${lose}`, { u: d.userId });
+    const waited = Date.now() - t0;
+    const answered = await listing;
+    await owner("drop trigger g3ls18_barrier on postona_x_resv.notifications; drop function public.g3ls18_barrier();", {});
+    assert.strictEqual(answered.status, 200, JSON.stringify(answered.body));
+    assert.ok(waited >= 1500, `the loss committed during the write (waited ${waited} ms; rows ${r0} -> ${await noteRows()}): the H1 #38 race`);
+    assert.deepStrictEqual(await noteRows(), plus1(r0), "written while still the owner, then the loss");
+    await restore();
+    // L: the loss is in flight first (uncommitted for 3 s); the list waits for it and writes nothing
+    await moved();
+    const r1 = await noteRows();
+    const losing = owner(`begin; ${lose} select pg_sleep(3); commit;`, { u: d.userId });
+    await sleep(1000);
+    const t1 = Date.now();
+    const lost = await ap("notifications", { limit: 100 });
+    const listWaited = Date.now() - t1;
+    await losing;
+    assert.deepStrictEqual([lost.status, ((lost.body.notifications ?? []) as unknown[]).length], [200, 0]);
+    assert.deepStrictEqual(await noteRows(), r1, "0 notification / outbox writes after the loss committed");
+    assert.ok(listWaited >= 1500, `the list did not wait for the loss (${listWaited} ms)`);
+    await restore();
+    await owner("drop table public.g3ls18_bm", {});
+    // the owner again: the pending event is written once
+    await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
+    assert.deepStrictEqual(await noteRows(), plus1(r1));
+  });
 });

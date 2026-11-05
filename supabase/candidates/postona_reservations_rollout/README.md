@@ -255,6 +255,12 @@ What it showed, for the operator:
   - P2-1: a candidate records G4's credential generation at submit / revise; approve refuses `APPROVAL_GENERATION_CHANGED` when it moved (checked before and after `create_batch`).
   - P2-2: every notification / outbox write needs the workspace to be the caller's own personal one, checked in the INSERT itself.
   - P3: `rollout.sh` checks that 018's tables exist in a separate statement before counting.
+- **G3-02 #18 (H1 #38)**:
+  - P2 race: `notify()` takes FOR SHARE locks on the account row, then the workspace's brands row, then the owner membership row, held until COMMIT, before its INSERT.
+    - A loss already in flight makes the write wait, then write nothing.
+    - A loss that starts later waits for the write.
+    - A concurrent INSERT of another membership row is not covered: that needs a G5-side lock contract.
+  - P3: `rollout.sh rollback` refuses before any step when the database and the manifest disagree on 017 / 018 (installed but not listed, listed but not installed, or partly present), or when the manifest's install and rollback steps differ.
 - **Notifications** are one row per event key. `reservation_changed` is derived on the next list. Each new notification gets a `push_outbox` row, which nothing reads or sends.
 - **Rollback**: `018` first, with `G3RO_APPROVAL_DISCARD_ROWS` stated.
 - **Contract for G1**: `docs/postona/g3-approval-notification-contract-20261105.md`.
