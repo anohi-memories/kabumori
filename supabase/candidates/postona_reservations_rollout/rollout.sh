@@ -139,7 +139,13 @@ rollback)
   [ "$xrows" = "${G3RO_X_DISCARD_ROWS:-0:0:0}" ] || die "G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATED: G3RO_X_DISCARD_ROWS must be $xrows (export first; nothing changed)"
   trows="$("${P[@]}" -c "select (select count(*) from postona_threads_resv.reservations)::text || ':' || (select count(*) from postona_threads_resv.audit)::text")"
   [ "$trows" = "${G3RO_THREADS_DISCARD_ROWS:-0:0}" ] || die "G3_ROLLOUT_ROLLBACK_THREADS_ROWS_NOT_STATED: G3RO_THREADS_DISCARD_ROWS must be $trows (export first; nothing changed)"
-  arows="$("${P[@]}" -c "select case when to_regclass('postona_x_resv.approval_candidates') is null then '0:0' else (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text end")"
+  # G3-02 #17 (H1 #37 P3): the existence check is its own statement. A CASE does not help: the parser resolves every branch's tables, so
+  # the count query of a database without 018 (a manifest without x018) would fail instead of answering 0:0.
+  if [ "$("${P[@]}" -c "select to_regclass('postona_x_resv.approval_candidates') is not null and to_regclass('postona_x_resv.notifications') is not null")" = t ]; then
+    arows="$("${P[@]}" -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text")"
+  else
+    arows="0:0"
+  fi
   [ "$arows" = "${G3RO_APPROVAL_DISCARD_ROWS:-0:0}" ] || die "G3_ROLLOUT_ROLLBACK_APPROVAL_ROWS_NOT_STATED: G3RO_APPROVAL_DISCARD_ROWS must be $arows (export first; nothing changed)"
   consumers="$("${P[@]}" -c "select coalesce(string_agg(p.oid::regprocedure::text, ',' order by p.oid::regprocedure::text), '') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname not in ('postona_x_resv', 'postona_threads_resv') and n.nspname !~ '^(pg_catalog|information_schema|pg_toast|pg_temp_|pg_toast_temp_)' and p.prosrc ~* 'postona_x_resv'")"

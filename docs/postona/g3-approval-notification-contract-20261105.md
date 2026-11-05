@@ -67,7 +67,7 @@ There is no post text, token or account handle in a notification.
 | 404 | `POSTONA_RESV_NOT_FOUND` / `POSTONA_RESV_ACCOUNT_NOT_FOUND` | not found (also another person's id; no other detail) |
 | 409 | `POSTONA_RESV_STALE_REVISION` | re-read; someone changed it |
 | 409 | `POSTONA_RESV_APPROVAL_NOT_PENDING` | already decided; re-read |
-| 409 | `POSTONA_RESV_APPROVAL_GENERATION_CHANGED` | submitted before a service restart; submit it again |
+| 409 | `POSTONA_RESV_APPROVAL_GENERATION_CHANGED` | submitted before a service restart or an X reconnect; revise it (or submit again) under the current connection, then approve |
 | 409 | `POSTONA_RESV_SLOT_CONFLICT` / `_DAILY_CAPACITY` / `_MONTHLY_CAPACITY` / `_APPROVAL_CAPACITY` | change the time / later |
 | 422 | `POSTONA_RESV_CONSENT_REQUIRED` | the text changed since it was shown; show it again |
 | 422 | `POSTONA_RESV_TEXT_INVALID` / `_TIME_OUT_OF_RANGE` / `_REQUEST_INVALID` | fix the input |
@@ -85,7 +85,7 @@ There is no post text, token or account handle in a notification.
 - **No duplicates**: there is one row per event, so retries and races do not create a second one.
 - **Nothing lost**: a reservation change that no one has listed yet is written by the next list. Only the latest state is guaranteed, so two reschedules between lists can show as one.
 - **Mark read**: `markRead` is idempotent; the first read time stays.
-- **Whose rows**: only the caller's notifications are returned, and only for a workspace the caller still owns.
+- **Whose rows**: only the caller's notifications are returned, and only for a workspace the caller still owns. Nothing is written for a former owner: no notification, no outbox row (G3-02 #17).
   - A deleted workspace or X account takes its candidates and notifications with it. This is a foreign-key cascade, checked in the catalog only.
   - A person who no longer owns the workspace sees nothing and can change nothing.
 

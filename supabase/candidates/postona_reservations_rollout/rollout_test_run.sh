@@ -313,6 +313,17 @@ printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALL_ROLLED_BACK' || fail "RF2: $o"
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RF2 G3's catalog is not the fresh one"
 echo "OK RF: 015 failing mid-install -> the 14 applied steps rolled back (G3's fresh catalog); a failing first step leaves nothing"
 
+# --- RN (G3-02 #17, H1 #37 P3): rollout.sh rollback of an install without 018 (a manifest without x018): the approval-row guard answers 0:0
+grep -v -E '^(install|rollback)\tx018\t' "$here/MANIFEST.tsv" > "$work/m_no018.tsv"
+[ "$(grep -c x018 "$work/m_no018.tsv")" = 0 ] || fail "RN probe not built"
+o="$(ro install G3RO_MANIFEST="$work/m_no018.tsv" G3RO_ACK_CONSUMERS="$consumers" 2>&1)" || fail "RN install without 018: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALLED steps=16 ' || fail "RN install: $o"
+[ "$(sval -c "select to_regclass('postona_x_resv.approval_candidates') is null")" = t ] || fail "RN 018 is installed"
+o="$(ro rollback G3RO_MANIFEST="$work/m_no018.tsv" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers" 2>&1)" || fail "RN rollback without 018: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=16$' || fail "RN rollback: $o"
+[ "$(g3fp)" = "$fresh_g3" ] || fail "RN G3's catalog is not the fresh one"
+echo "OK RN: an install without 018 (16 steps) rolls back with the approval-row guard at 0:0 (no parse error); G3's fresh catalog"
+
 # --- RA -------------------------------------------------------------------------------------------------------------------------------
 o="$(ro install 2>&1)" || fail "RA re-install: $o"
 [ "$(g3fp)" = "$installed_g3" ] || fail "RA the re-installed catalog is not the first install"
