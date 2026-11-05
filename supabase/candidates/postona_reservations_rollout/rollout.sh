@@ -20,7 +20,8 @@
 # Environment: G3RO_PGHOST (a /tmp socket dir, or 127.0.0.1; a password comes from the caller's PGPASSWORD / .pgpass), G3RO_PGPORT, G3RO_DB, G3RO_OWNER (the non-superuser lifecycle owner G3's objects
 # belong to; G5 / G4 objects must belong to it too). rollback only: G3RO_X_DISCARD_ROWS ('<reservations>:<batches>:<audit>', 001),
 # G3RO_THREADS_DISCARD_ROWS ('<reservations>:<audit>'), G3RO_ACK_CONSUMERS (001's consumer list, empty when none),
-# G3RO_ACK_THREADS_CONSUMERS (functions outside G3's schemas naming postona_threads_resv, empty when none). Always: G3RO_DB_ATTESTATION. Optional:
+# G3RO_ACK_THREADS_CONSUMERS (functions outside G3's schemas naming postona_threads_resv, empty when none),
+# G3RO_APPROVAL_DISCARD_ROWS ('<candidates>:<notifications>', 018, G3-02 #16; 0:0 when none). Always: G3RO_DB_ATTESTATION. Optional:
 # G3RO_MANIFEST (another manifest; paths may be absolute).
 # After an install the Edge entries stay closed: release gates OFF in source, G4's X token read / Threads credential statement
 # NOT_CONNECTED (deny), Threads publish-disabled by U8. This runner never opens them. Nothing is logged but codes and counts.
@@ -97,7 +98,8 @@ run_rollback_steps() {  # <applied steps, space separated, or ALL> -> 0 when eve
   while IFS="$(printf '\t')" read -r step rel; do
     case " $applied " in *" $step "*) ;; *) [ "$applied" = ALL ] || continue ;; esac
     if ! "${P[@]}" -c "set postona_resv_rollback.discard_rows = '${G3RO_X_DISCARD_ROWS:-0:0:0}'" \
-         -c "set postona_resv_rollback.ack_consumers = '${G3RO_ACK_CONSUMERS:-}'" -f "$(path_of "$rel")" >/dev/null 2>"$errf"; then
+         -c "set postona_resv_rollback.ack_consumers = '${G3RO_ACK_CONSUMERS:-}'" \
+         -c "set postona_resv_approval_rollback.discard = '${G3RO_APPROVAL_DISCARD_ROWS:-0:0}'" -f "$(path_of "$rel")" >/dev/null 2>"$errf"; then
       echo "G3_ROLLOUT_ROLLBACK_STOPPED_AT: $step $(grep -oE '(G3|POSTONA)_[A-Z0-9_]+(: .*)?' "$errf" | head -1)" >&2
       return 1
     fi
@@ -137,6 +139,8 @@ rollback)
   [ "$xrows" = "${G3RO_X_DISCARD_ROWS:-0:0:0}" ] || die "G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATED: G3RO_X_DISCARD_ROWS must be $xrows (export first; nothing changed)"
   trows="$("${P[@]}" -c "select (select count(*) from postona_threads_resv.reservations)::text || ':' || (select count(*) from postona_threads_resv.audit)::text")"
   [ "$trows" = "${G3RO_THREADS_DISCARD_ROWS:-0:0}" ] || die "G3_ROLLOUT_ROLLBACK_THREADS_ROWS_NOT_STATED: G3RO_THREADS_DISCARD_ROWS must be $trows (export first; nothing changed)"
+  arows="$("${P[@]}" -c "select case when to_regclass('postona_x_resv.approval_candidates') is null then '0:0' else (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text end")"
+  [ "$arows" = "${G3RO_APPROVAL_DISCARD_ROWS:-0:0}" ] || die "G3_ROLLOUT_ROLLBACK_APPROVAL_ROWS_NOT_STATED: G3RO_APPROVAL_DISCARD_ROWS must be $arows (export first; nothing changed)"
   consumers="$("${P[@]}" -c "select coalesce(string_agg(p.oid::regprocedure::text, ',' order by p.oid::regprocedure::text), '') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname not in ('postona_x_resv', 'postona_threads_resv') and n.nspname !~ '^(pg_catalog|information_schema|pg_toast|pg_temp_|pg_toast_temp_)' and p.prosrc ~* 'postona_x_resv'")"
   [ "$consumers" = "${G3RO_ACK_CONSUMERS:-}" ] || die "G3_ROLLOUT_ROLLBACK_CONSUMERS_NOT_STATED: G3RO_ACK_CONSUMERS must be '$consumers' (nothing changed)"
