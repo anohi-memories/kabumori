@@ -7,7 +7,7 @@
 #           G4T_VERDICT personal path: G5 lifecycle + T13, G5 MVP_INSTALL, PR #124, Threads custody, G4's g5pv binding + stack, personal
 #           X 001-005, both verdicts), applied as `postgres` (the image's own non-superuser owner). The fixtures' stand-ins for auth /
 #           vault / storage fail on the real schema (measured lines); anything else must not.
-#   G3      this tree's rollout bundle: rollout.sh preflight / install over 127.0.0.1 (16 steps + postcheck) and, after the test,
+#   G3      this tree's rollout bundle: rollout.sh preflight / install over 127.0.0.1 (17 steps + postcheck) and, after the test,
 #           rollout.sh rollback (the test's login members revoked first, rows stated exactly); G3's schemas and roles must be gone.
 #   Edge    the real entries (release gates OFF: 503) and their localtest twins (gate passed as enabled; permission ports and the X
 #           credential source NOT overridden: deny), behind the real Kong / GoTrue.
@@ -86,7 +86,7 @@ for sec in ["realtime", "studio", "local_smtp", "analytics"]:
 s, n = re.subn(r"(\[db\.seed\]\n(?:#.*\n)*)enabled = true", r"\1enabled = false", s, count=1); assert n == 1
 s, n = re.subn(r"enable_anonymous_sign_ins = false", "enable_anonymous_sign_ins = true", s, count=1); assert n == 1
 assert 'project_id = "g3ls"' in s
-for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest"]:
+for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest", "postona-x-approvals-localtest"]:
     s += f'\n[functions.{fn}]\nverify_jwt = true\n'
 # G3-02 #10: the worker entries are called by the scheduler (pg_net, no user JWT; the worker checks its own secret), as a deploy needs them
 for fn in ["postona-x-reservation-worker", "postona-x-reservation-worker-e2etest"]:
@@ -95,8 +95,8 @@ open(p, "w").write(s)
 PY
 fns="$WORK/p/supabase/functions"
 mkdir -p "$fns/_shared" "$fns/_shared_g3ls"
-for d in postona-x-reservations postona-threads-reservations postona-x-reservation-worker postona-x-single-post; do cp -R "$REPO/supabase/functions/$d" "$fns/"; done
-cp -R "$REPO/supabase/functions/_shared/postona_reservations" "$fns/_shared/"
+for d in postona-x-reservations postona-threads-reservations postona-x-reservation-worker postona-x-single-post postona-x-approvals; do cp -R "$REPO/supabase/functions/$d" "$fns/"; done
+cp -R "$REPO/supabase/functions/_shared/postona_reservations" "$REPO/supabase/functions/_shared/postona_approvals" "$fns/_shared/"
 cp "$here/local_transport.ts" "$fns/_shared_g3ls/"
 # Mutation runs only (G3LS_MUTANT): one exact replacement in a COPY that runs (the bundle copy's manifest paths still resolve to
 # this checkout); the checkout is never changed. Without a mutant the bundle's own rollout.sh runs.
@@ -118,13 +118,14 @@ case "${G3LS_MUTANT:-}" in
   tick_no_lock) mutate16 "  if not pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended('postona_x_resv:worker_tick', 0)) then" "  if false then" ;;
   tick_short_secret) mutate16 " or pg_catalog.length(v_key) < 32 then" " then" ;;
   tick_key_in_header) mutate16 "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json'," "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json', 'x-postona-worker-secret', v_key," ;;
-  no_017) grep -v -E '^(install|rollback)\tx017\t' "$bundle/MANIFEST.tsv" > "$WORK/bundle/MANIFEST.tsv" ;;   # the state before G3-02 #15
+  no_017) grep -v -E '^(install|rollback)\tx01[78]\t' "$bundle/MANIFEST.tsv" > "$WORK/bundle/MANIFEST.tsv" ;;   # the state before G3-02 #15 (018 needs 017)
+  no_018) grep -v -E '^(install|rollback)\tx018\t' "$bundle/MANIFEST.tsv" > "$WORK/bundle/MANIFEST.tsv" ;;   # the state before G3-02 #16
   g1_writes_stay_on|g1_write_resent) ;;   # applied below, to the extracted G1 copy
   *) fail "unknown G3LS_MUTANT" ;;
 esac
-STEPS=16; [ "${G3LS_MUTANT:-}" = no_017 ] && STEPS=15
-RO_SH="$bundle/rollout.sh"; case "${G3LS_MUTANT:-}" in host_any|no_017) RO_SH="$WORK/bundle/rollout.sh" ;; esac
-for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest; do
+STEPS=17; case "${G3LS_MUTANT:-}" in no_017) STEPS=15 ;; no_018) STEPS=16 ;; esac
+RO_SH="$bundle/rollout.sh"; case "${G3LS_MUTANT:-}" in host_any|no_017|no_018) RO_SH="$WORK/bundle/rollout.sh" ;; esac
+for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest postona-x-approvals-localtest; do
   mkdir -p "$fns/$d"; cp "$here/$d/index.ts" "$fns/$d/"
   (cd "$WORK/p" && deno check --no-config --cached-only "supabase/functions/$d/index.ts" >/dev/null 2>&1) || fail "deno check $d"
 done
@@ -353,10 +354,15 @@ rb_refused "the uncertain rows alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads 
 own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END_RESOLVED' where status = 'uncertain'" >/dev/null   # operator, after checking X
 xrows="$(own -A -t -c "select (select count(*) from postona_x_resv.reservations) || ':' || (select count(*) from postona_x_resv.batches) || ':' || (select count(*) from postona_x_resv.audit)")"
 trows="$(own -A -t -c "select (select count(*) from postona_threads_resv.reservations) || ':' || (select count(*) from postona_threads_resv.audit)")"
+arows=0:0   # G3-02 #17 (H1 #37 P3): the existence check is its own statement (a CASE still parses the missing tables)
+if [ "$(own -A -t -c "select to_regclass('postona_x_resv.approval_candidates') is not null")" = t ]; then
+  arows="$(own -A -t -c "select (select count(*) from postona_x_resv.approval_candidates) || ':' || (select count(*) from postona_x_resv.notifications)")"
+fi
 rb_refused "finished rows not stated" G3_ROLLOUT_ROLLBACK_X_ROWS_NOT_STATED
-rb_refused "the test's login members" G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows"
+[ "$arows" = "0:0" ] || rb_refused "approval rows not stated" G3_ROLLOUT_ROLLBACK_APPROVAL_ROWS_NOT_STATED G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows"
+rb_refused "the test's login members" G3_ROLLOUT_ROLLBACK_ROLE_MEMBERS G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows" G3RO_APPROVAL_DISCARD_ROWS="$arows"
 own -c "drop role g3ls_api_login" -c "drop role g3ls_worker_login" >/dev/null
-mode=rollback; o="$(ro G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows" 2>&1)" || fail "rollback: $o"
+mode=rollback; o="$(ro G3RO_X_DISCARD_ROWS="$xrows" G3RO_THREADS_DISCARD_ROWS="$trows" G3RO_APPROVAL_DISCARD_ROWS="$arows" 2>&1)" || fail "rollback: $o"
 grep -q "^G3_ROLLOUT_ROLLED_BACK steps=$STEPS\$" <<<"$o" || fail "rollback: $o"
 left="$(own -A -t -c "select (select count(*) from pg_namespace where nspname in ('postona_x_resv', 'postona_threads_resv')) || '/' || (select count(*) from pg_roles where rolname in ('postona_resv_api', 'postona_resv_worker'))")"
 [ "$left" = "0/0" ] || fail "G3 left after the rollback: $left"

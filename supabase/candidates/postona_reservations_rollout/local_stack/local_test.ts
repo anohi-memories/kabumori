@@ -898,4 +898,214 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const run = await deliver();
     assert.deepStrictEqual([run.report?.sends, await xCalls(), await outcome(a.reservationId)], [0, calls, "failed/SERVICE_GENERATION_CHANGED/-"], JSON.stringify(run));
   });
+
+  await t.step("L35 approvals + notifications (G3-02 #16): submit / revise / approve / reject over real JWT -> Kong -> Edge -> PG; not approved = not a reservation, never sent; approved = one reservation, sent once; another person sees nothing; events once each", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const notes = async (token = d.token) => {
+      const a = await ap("notifications", { limit: 100 }, token);
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body));
+      return (a.body.notifications ?? []) as Array<Record<string, unknown>>;
+    };
+    const resvCount = () => countOf(`select count(*) from postona_x_resv.reservations where user_id = '${d.userId}'`);
+    const submit = (name: string, days: number, client = crypto.randomUUID()) =>
+      ap("submit", { socialAccountId: d.account, clientRequestId: client, body: `G3-02 #16 ${name}`, scheduledAt: at(days) });
+    // submit: pending, one event; a retry of the same request is the same row; another person sees nothing
+    const client = crypto.randomUUID();
+    const when = at(70);
+    const s1 = await ap("submit", { socialAccountId: d.account, clientRequestId: client, body: "G3-02 #16 c1", scheduledAt: when });
+    assert.deepStrictEqual([s1.status, cands(s1)[0]?.state, cands(s1)[0]?.revision, cands(s1)[0]?.reservationId], [200, "pending_approval", 1, null], JSON.stringify(s1.body));
+    const c1 = cands(s1)[0];
+    const again = await ap("submit", { socialAccountId: d.account, clientRequestId: client, body: "G3-02 #16 c1", scheduledAt: when });
+    assert.deepStrictEqual(cands(again)[0]?.candidateId, c1.candidateId, "the same request, the same row");
+    assert.deepStrictEqual(code(await ap("submit", { socialAccountId: d.account, clientRequestId: client, body: "another", scheduledAt: when })), "409 POSTONA_RESV_IDEMPOTENCY_CONFLICT");
+    assert.deepStrictEqual((await notes()).filter((n) => n.candidateId === c1.candidateId).map((n) => `${n.kind}/${n.subjectRevision}`), ["approval_requested/1"]);
+    assert.deepStrictEqual(code(await ap("get", { candidateId: c1.candidateId }, b.token)), "404 POSTONA_RESV_NOT_FOUND");
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c1.candidateId, expectedRevision: 1, contentSha256: c1.contentSha256 }, b.token)), "404 POSTONA_RESV_NOT_FOUND");
+    assert.deepStrictEqual(cands(await ap("list", { socialAccountId: d.account }, b.token)), []);
+    assert.ok((await notes(b.token)).every((n) => n.candidateId !== c1.candidateId), "B never sees A's events");
+    const mine = (await notes())[0];
+    assert.deepStrictEqual(code(await ap("markRead", { notificationId: mine.notificationId }, b.token)), "404 POSTONA_RESV_NOT_FOUND");
+    assert.deepStrictEqual((await ap("notifications", {}, "not.a.jwt.at-all-0000")).status, 401, "a bad token: the gateway");
+    assert.deepStrictEqual((await ap("notifications", {})).status, 200);
+    // not approved: no reservation, nothing for the worker
+    const n0 = await resvCount();
+    const idle = await deliver();
+    assert.deepStrictEqual([idle.report?.claimed ?? 0, await resvCount()], [0, n0], JSON.stringify(idle));
+    // revision: stale refused; revise; the old hash no longer approves
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c1.candidateId, expectedRevision: 9, contentSha256: c1.contentSha256 })), "409 POSTONA_RESV_STALE_REVISION");
+    const r2 = await ap("revise", { candidateId: c1.candidateId, expectedRevision: 1, body: "G3-02 #16 c1 v2", scheduledAt: at(71) });
+    assert.deepStrictEqual([r2.status, cands(r2)[0]?.revision], [200, 2], JSON.stringify(r2.body));
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c1.candidateId, expectedRevision: 2, contentSha256: c1.contentSha256 })), "422 POSTONA_RESV_CONSENT_REQUIRED");
+    assert.deepStrictEqual(await resvCount(), n0);
+    // approve: one reservation (create_batch, planned, confirmed); five concurrent retries of the same approval make nothing more
+    const sha2 = cands(r2)[0].contentSha256 as string;
+    const many = await Promise.all(Array.from({ length: 5 }, () => ap("approve", { candidateId: c1.candidateId, expectedRevision: 2, contentSha256: sha2 })));
+    assert.deepStrictEqual(many.map((m) => `${m.status}/${cands(m)[0]?.state}`), Array(5).fill("200/approved"), JSON.stringify(many.map((m) => m.body)));
+    const rid = cands(many[0])[0].reservationId as string;
+    assert.ok(many.every((m) => cands(m)[0].reservationId === rid), "the same reservation each time");
+    assert.deepStrictEqual(await resvCount(), n0 + 1, "exactly one reservation");
+    const made = await appX(d.token).get(rid);
+    assert.ok(made.ok && made.value.status === "planned" && made.value.consentState === "confirmed" && made.value.body === "G3-02 #16 c1 v2", JSON.stringify(made));
+    assert.deepStrictEqual(code(await ap("reject", { candidateId: c1.candidateId, expectedRevision: 3 })), "409 POSTONA_RESV_APPROVAL_NOT_PENDING");
+    // approve vs reject at once: exactly one wins
+    const c2 = cands(await submit("c2", 72))[0];
+    const race = await Promise.all([
+      ap("approve", { candidateId: c2.candidateId, expectedRevision: 1, contentSha256: c2.contentSha256 }),
+      ap("reject", { candidateId: c2.candidateId, expectedRevision: 1 }),
+    ]);
+    assert.deepStrictEqual(race.map((r) => r.status).sort(), [200, 409], JSON.stringify(race.map((r) => r.body)));
+    const c2state = cands(await ap("get", { candidateId: c2.candidateId }))[0].state;
+    assert.deepStrictEqual(await resvCount(), n0 + 1 + (c2state === "approved" ? 1 : 0), `race winner ${c2state}`);
+    // reservation_changed: a reschedule of the approved reservation shows once, on the next list
+    const moved = await appX(d.token).reschedule(rid, made.ok ? made.value.revision : 1, at(73));
+    assert.ok(moved.ok, JSON.stringify(moved));
+    const changed = (await notes()).filter((n) => n.reservationId === rid && n.kind === "reservation_changed");
+    assert.deepStrictEqual(changed.map((n) => `${n.state}/${n.subjectRevision}`), ["planned/2"]);
+    assert.deepStrictEqual((await notes()).filter((n) => n.reservationId === rid && n.kind === "reservation_changed").length, 1, "listed twice: once");
+    // mark read: idempotent
+    const read1 = await ap("markRead", { notificationId: changed[0].notificationId });
+    const readAt = ((read1.body.notifications ?? []) as Array<Record<string, unknown>>)[0]?.readAt;
+    assert.ok(typeof readAt === "string");
+    const read2 = await ap("markRead", { notificationId: changed[0].notificationId });
+    assert.deepStrictEqual(((read2.body.notifications ?? []) as Array<Record<string, unknown>>)[0]?.readAt, readAt);
+    // the approved reservation is sent once by the worker (fake X); the result shows as an event
+    assert.ok((await appX(d.token).reconfirm(rid, 2, await sha256("G3-02 #16 c1 v2"))).ok);
+    if (c2state === "approved") assert.ok((await appX(d.token).cancel(cands(await ap("get", { candidateId: c2.candidateId }))[0].reservationId as string, 1)).ok);
+    await makeDue(rid);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const calls = await xCalls();
+    const run = await deliver();
+    assert.deepStrictEqual([run.report?.sends, await xCalls()], [1, calls + 1], JSON.stringify(run));
+    assert.match(await outcome(rid), /^published\/PUBLISHED\//u);
+    assert.ok((await notes()).some((n) => n.reservationId === rid && n.kind === "reservation_changed" && n.state === "published"));
+    // service ended (SYNTHETIC): approve refused, reject works; restarted: the old connection refused; reconnected: the earlier generation refused
+    const c3 = cands(await submit("c3", 74))[0];
+    const c4 = cands(await submit("c4", 75))[0];
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: d.userId });
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c3.candidateId, expectedRevision: 1, contentSha256: c3.contentSha256 })), "403 POSTONA_RESV_SERVICE_NOT_ACTIVE");
+    assert.deepStrictEqual(code(await ap("reject", { candidateId: c4.candidateId, expectedRevision: 1 })), "200 ok");
+    const asked = await rpcAs(d, "start_x_autopost_service", {});
+    const back = await rpcAs(d, "reactivate_x_autopost_service", { p_expected_lifecycle_version: asked.body.lifecycle_version });
+    assert.deepStrictEqual(back.body.status, "active", JSON.stringify(back.body));
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c3.candidateId, expectedRevision: 1, contentSha256: c3.contentSha256 })), "403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED");
+    assert.deepStrictEqual(await xConnect(d, "d5", "62301"), d.account);
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c3.candidateId, expectedRevision: 1, contentSha256: c3.contentSha256 })), "409 POSTONA_RESV_APPROVAL_GENERATION_CHANGED");
+    const c5 = cands(await submit("c5", 76))[0];
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: c5.candidateId, expectedRevision: 1, contentSha256: c5.contentSha256 })), "200 ok", "a new candidate after the reconnect");
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId }),
+      await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId }), "one outbox row per notification; nothing sends them");
+  });
+
+  await t.step("L36 G3-02 #17 (H1 #37): a G4-only reconnect refuses an earlier candidate (P2-1); a former owner's list writes nothing (P2-2); expired / anonymous tokens 401", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const resvCount = () => countOf(`select count(*) from postona_x_resv.reservations where user_id = '${d.userId}'`);
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const submit = async (name: string, days: number) => {
+      const a = await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: `G3-02 #17 ${name}`, scheduledAt: at(days) });
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body));
+      return cands(a)[0];
+    };
+    // P2-1: the same account disconnected and connected again (G4's real SQL); G5's generation unchanged
+    const life = () => owner("select lifecycle_version from public.common_accounts where user_id = :'u'", { u: d.userId });
+    const k1 = await submit("k1", 66);
+    const k2 = await submit("k2", 67);
+    const life0 = await life();
+    const gen0 = await generationOf(d.account!);
+    await xDisconnect(d);
+    assert.deepStrictEqual(await xConnect(d, "d6", "62301"), d.account, "the same social_account_id");
+    assert.deepStrictEqual(await life(), life0, "G5's generation did not move");
+    assert.notDeepStrictEqual(await generationOf(d.account!), gen0, "G4's connection generation moved");
+    const n0 = await resvCount();
+    assert.deepStrictEqual(code(await ap("approve", { candidateId: k1.candidateId, expectedRevision: 1, contentSha256: k1.contentSha256 })), "409 POSTONA_RESV_APPROVAL_GENERATION_CHANGED");
+    assert.deepStrictEqual([await resvCount(), cands(await ap("get", { candidateId: k1.candidateId }))[0].state], [n0, "pending_approval"], "nothing written");
+    const calls0 = await xCalls();
+    const idle = await deliver();
+    assert.deepStrictEqual([idle.report?.sends ?? 0, await xCalls()], [0, calls0], "the worker sends nothing for it");
+    const revised = await ap("revise", { candidateId: k2.candidateId, expectedRevision: 1, body: "G3-02 #17 k2 v2", scheduledAt: at(68) });
+    assert.strictEqual(revised.status, 200, JSON.stringify(revised.body));
+    const k2v2 = cands(revised)[0];
+    const approved = await ap("approve", { candidateId: k2.candidateId, expectedRevision: 2, contentSha256: k2v2.contentSha256 });
+    assert.deepStrictEqual([approved.status, cands(approved)[0]?.state], [200, "approved"], "the person's explicit revise under the new connection");
+    const rid = cands(approved)[0].reservationId as string;
+    // P2-2: the reservation changes, then the person is no longer the owner; two lists at once answer nothing and write nothing
+    await owner("update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC (operator)
+    await owner("create table public.g3ls17_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });
+    await owner("delete from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });   // SYNTHETIC ownership loss
+    const before = await noteRows();
+    const lost = await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
+    assert.deepStrictEqual(lost.map((l) => `${l.status}/${((l.body.notifications ?? []) as unknown[]).length}`), ["200/0", "200/0"]);
+    assert.deepStrictEqual(await noteRows(), before, "no notification and no outbox row for a former owner");
+    await owner("insert into public.brand_memberships select * from public.g3ls17_bm", {});
+    await owner("drop table public.g3ls17_bm", {});
+    // the owner again: two lists at once write the event once
+    const both = await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
+    assert.deepStrictEqual(both.map((l) => l.status), [200, 200]);
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.notifications where reservation_id = :'i' and kind = 'reservation_changed' and state = 'cancelled'", { i: rid }), "1");
+    const [nb, ob] = before.split("/").map(Number);
+    assert.deepStrictEqual(await noteRows(), `${nb + 1}/${ob + 1}`);
+    // expired (signed with the stack's secret) and anonymous tokens
+    const enc = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+    const now = Math.floor(Date.now() / 1000);
+    const unsigned = `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ ...claimsOf(d.token), iat: now - 7200, exp: now - 3600 })}`;
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(JWT_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const expired = `${unsigned}.${b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned))))}`;
+    assert.deepStrictEqual((await ap("notifications", {}, expired)).status, 401, "expired token");
+    const anon = await (await auth("signup", {})).json();
+    assert.deepStrictEqual(code(await ap("notifications", {}, anon.access_token)), "401 AUTH_REQUIRED", "anonymous sign-in");
+    assert.deepStrictEqual(await noteRows(), `${nb + 1}/${ob + 1}`, "401s wrote nothing");
+  });
+
+  await t.step("L37 G3-02 #18 (H1 #38): an ownership loss vs a notification write over real JWT -> Edge -> PG: a loss during the write waits for it; a loss in flight first leaves 0 writes", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const plus1 = (r: string) => r.split("/").map((x) => String(Number(x) + 1)).join("/");
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const sub = await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #18 race", scheduledAt: at(64) });
+    const c = cands(sub)[0];
+    const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+    assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+    const rid = cands(ok)[0].reservationId as string;
+    const moved = () => owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: a new state to report
+    await owner("create table public.g3ls18_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });
+    const restore = () => owner("insert into public.brand_memberships select * from public.g3ls18_bm", {});
+    const lose = "delete from public.brand_memberships where user_id = :'u' and role = 'owner';";
+    // W: the write passes its guard and waits in a test-only BEFORE INSERT barrier (H1's fixture); the loss arrives during the wait
+    await moved();
+    await owner("create function public.g3ls18_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return new; end $$; create trigger g3ls18_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls18_barrier();", {});
+    const r0 = await noteRows();
+    const listing = ap("notifications", { limit: 100 });
+    await sleep(1000);
+    const t0 = Date.now();
+    await owner(`set lock_timeout = '20s'; ${lose}`, { u: d.userId });
+    const waited = Date.now() - t0;
+    const answered = await listing;
+    await owner("drop trigger g3ls18_barrier on postona_x_resv.notifications; drop function public.g3ls18_barrier();", {});
+    assert.strictEqual(answered.status, 200, JSON.stringify(answered.body));
+    assert.ok(waited >= 1500, `the loss committed during the write (waited ${waited} ms; rows ${r0} -> ${await noteRows()}): the H1 #38 race`);
+    assert.deepStrictEqual(await noteRows(), plus1(r0), "written while still the owner, then the loss");
+    await restore();
+    // L: the loss is in flight first (uncommitted for 3 s); the list waits for it and writes nothing
+    await moved();
+    const r1 = await noteRows();
+    const losing = owner(`begin; ${lose} select pg_sleep(3); commit;`, { u: d.userId });
+    await sleep(1000);
+    const t1 = Date.now();
+    const lost = await ap("notifications", { limit: 100 });
+    const listWaited = Date.now() - t1;
+    await losing;
+    assert.deepStrictEqual([lost.status, ((lost.body.notifications ?? []) as unknown[]).length], [200, 0]);
+    assert.deepStrictEqual(await noteRows(), r1, "0 notification / outbox writes after the loss committed");
+    assert.ok(listWaited >= 1500, `the list did not wait for the loss (${listWaited} ms)`);
+    await restore();
+    await owner("drop table public.g3ls18_bm", {});
+    // the owner again: the pending event is written once
+    await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
+    assert.deepStrictEqual(await noteRows(), plus1(r1));
+  });
 });

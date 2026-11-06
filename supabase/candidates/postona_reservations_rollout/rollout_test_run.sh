@@ -6,7 +6,7 @@
 #   RP  preflight refusals, each with the WHOLE database fingerprint unchanged: superuser (also the owner itself); G4's X verdict ACL widened;
 #       G4's Threads verdict body altered; a G5 function widened / of another owner; U8 CHECK dropped; a default privilege for authenticated;
 #       a partial G3 schema; no CREATEROLE; rollback mode on a fresh database;
-#   RI  install (16 steps) + postcheck; a second install / preflight refused, nothing changed; postcheck refuses an exposed function / a
+#   RI  install (17 steps) + postcheck; a second install / preflight refused, nothing changed; postcheck refuses an exposed function / a
 #       LOGIN worker role;
 #   RS  smoke.sql (person reserve / read / cancel, another person sees nothing, claim pins G4's generation, bound check, outcome; Threads
 #       create refused by U8; authenticated / anon reach nothing);
@@ -215,13 +215,13 @@ sval -c "alter role $owner createrole" >/dev/null
 expect_ro "RP9 rollback on a fresh database" "G3_ROLLOUT_PREFLIGHT_NOT_INSTALLED: fresh" rollback
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RP: G3's catalog moved"
 o="$(ro preflight)" || fail "RP10 preflight on the restored world: $o"
-printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=16$' || fail "RP10: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_PREFLIGHT_PASS fresh install_steps=17$' || fail "RP10: $o"
 echo "OK RP: preflight refusals (superuser, also the owner itself; G4 X verdict widened; G4 Threads verdict altered; G5 function widened / of another owner; U8 dropped; a default privilege; a partial schema; no CREATEROLE; rollback on fresh), each with the whole database unchanged; restored world passes"
 
 # --- RI -------------------------------------------------------------------------------------------------------------------------------
 pre_install="$(dbfp)"
 o="$(ro install 2>&1)" || fail "RI1 install: $o"
-printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALLED steps=16 ' || fail "RI1: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALLED steps=17 ' || fail "RI1: $o"
 installed_g3="$(g3fp)"
 [ "$installed_g3" != "$fresh_g3" ] || fail "RI1 nothing installed"
 [ "$(sval -c "select count(*) from pg_constraint where conname = 'social_accounts_meta_publish_disabled'")" = 1 ] || fail "RI1 U8 touched"
@@ -240,7 +240,7 @@ printf '%s\n' "$o" | grep -q G3_ROLLOUT_PREFLIGHT_POSTCHECK_ROLES || fail "RI5: 
 own -c "alter role postona_resv_worker nologin" >/dev/null
 postcheck | grep -q '^G3_ROLLOUT_PREFLIGHT_OK postcheck installed$' || fail "RI6 postcheck after restore"
 [ "$(g3fp)" = "$installed_g3" ] || fail "RI4-RI6 G3's catalog moved"
-echo "OK RI: 16 steps installed, postcheck (nothing exposed to PUBLIC / anon / authenticated / service_role, roles NOLOGIN, G4 verdicts owner-only, U8 kept); install / preflight again refused, nothing changed; postcheck refuses an exposed function / a LOGIN role"
+echo "OK RI: 17 steps installed, postcheck (nothing exposed to PUBLIC / anon / authenticated / service_role, roles NOLOGIN, G4 verdicts owner-only, U8 kept); install / preflight again refused, nothing changed; postcheck refuses an exposed function / a LOGIN role"
 
 # --- RS -------------------------------------------------------------------------------------------------------------------------------
 # TEST WORLD only: the owner may act as the API / worker / client roles to drive the smoke (the real logins are members of one role each)
@@ -293,7 +293,7 @@ expect_ro "RX6 a body-only Threads consumer not stated" "G3_ROLLOUT_ROLLBACK_THR
 own -c "drop function public.g3rx_tc()" >/dev/null
 echo "OK RX: rollback refused before any step, nothing changed, the external object kept: an external view on Threads (H4's case) / on X, a foreign key to Threads, a function taking an X row type, a view calling a Threads function; a body-only Threads consumer not stated"
 o="$(ro rollback G3RO_X_DISCARD_ROWS="$xrows" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers" 2>&1)" || fail "RB5 rollback: $o"
-printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=16$' || fail "RB5: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=17$' || fail "RB5: $o"
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RB5 G3's catalog is not the fresh one"
 expect_ro "RB6 rollback twice" "G3_ROLLOUT_PREFLIGHT_NOT_INSTALLED: fresh" rollback
 echo "OK RB: rollback refused with a live row, unstated / wrong finished-row counts, unstated X / Threads consumers, a member that can SET the roles (nothing changed); full rollback = G3's fresh catalog; twice refused"
@@ -313,15 +313,49 @@ printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALL_ROLLED_BACK' || fail "RF2: $o"
 [ "$(g3fp)" = "$fresh_g3" ] || fail "RF2 G3's catalog is not the fresh one"
 echo "OK RF: 015 failing mid-install -> the 14 applied steps rolled back (G3's fresh catalog); a failing first step leaves nothing"
 
+# --- RN (G3-02 #17, H1 #37 P3): rollout.sh rollback of an install without 018 (a manifest without x018): the approval-row guard answers 0:0
+grep -v -E '^(install|rollback)\tx018\t' "$here/MANIFEST.tsv" > "$work/m_no018.tsv"
+[ "$(grep -c x018 "$work/m_no018.tsv")" = 0 ] || fail "RN probe not built"
+o="$(ro install G3RO_MANIFEST="$work/m_no018.tsv" G3RO_ACK_CONSUMERS="$consumers" 2>&1)" || fail "RN install without 018: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_INSTALLED steps=16 ' || fail "RN install: $o"
+[ "$(sval -c "select to_regclass('postona_x_resv.approval_candidates') is null")" = t ] || fail "RN 018 is installed"
+o="$(ro rollback G3RO_MANIFEST="$work/m_no018.tsv" G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers" 2>&1)" || fail "RN rollback without 018: $o"
+printf '%s\n' "$o" | grep -q '^G3_ROLLOUT_ROLLED_BACK steps=16$' || fail "RN rollback: $o"
+[ "$(g3fp)" = "$fresh_g3" ] || fail "RN G3's catalog is not the fresh one"
+echo "OK RN: an install without 018 (16 steps) rolls back with the approval-row guard at 0:0 (no parse error); G3's fresh catalog"
+
+# --- RC (G3-02 #18, H1 #38 P3): the database and the manifest must agree on 017 / 018 before ANY rollback step; nothing changes otherwise
+AC=(G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers")
+o="$(ro install "${AC[@]}" 2>&1)" || fail "RC install (17): $o"
+expect_ro "RC1 018 installed, a 16-step manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x018 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}"
+own -c "alter table postona_x_resv.push_outbox rename to push_outbox_g3rc" >/dev/null
+expect_ro "RC2 018 partly present" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 12 of 13 objects" rollback "${AC[@]}"
+own -c "alter table postona_x_resv.push_outbox_g3rc rename to push_outbox" >/dev/null
+own -c "alter function postona_x_resv.list_notifications(integer) rename to list_notifications_g3rc" >/dev/null
+expect_ro "RC2b an 018 function missing" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 12 of 13 objects" rollback "${AC[@]}"
+own -c "alter function postona_x_resv.list_notifications_g3rc(integer) rename to list_notifications" >/dev/null
+grep -v -E '^(install|rollback)\tx017\t' "$here/MANIFEST.tsv" > "$work/m_no017.tsv"
+expect_ro "RC3 017 installed, not in the manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x017 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no017.tsv" "${AC[@]}"
+awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "rollback" && $2 == "x018" { $2 = "x019" } { print }' "$here/MANIFEST.tsv" > "$work/m_half018.tsv"   # the same count, another step id
+expect_ro "RC4 x018's rollback line under another step id" "G3_ROLLOUT_MANIFEST_PAIRS" rollback G3RO_MANIFEST="$work/m_half018.tsv" "${AC[@]}"
+awk -F '\t' '$1 == "rollback" && $2 == "x017" { next } { print } $1 == "rollback" && $2 == "x018" { print }' "$here/MANIFEST.tsv" > "$work/m_dup018.tsv"   # x018 twice, x017 never
+expect_ro "RC4b a rollback line twice" "G3_ROLLOUT_MANIFEST_PAIRS" rollback G3RO_MANIFEST="$work/m_dup018.tsv" "${AC[@]}"
+o="$(ro rollback "${AC[@]}" 2>&1)" || fail "RC rollback (17): $o"
+o="$(ro install G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}" 2>&1)" || fail "RC install (16): $o"
+expect_ro "RC5 018 not installed, a 17-step manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x018 is in the manifest but not installed" rollback "${AC[@]}"
+o="$(ro rollback G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}" 2>&1)" || fail "RC rollback (16): $o"
+[ "$(g3fp)" = "$fresh_g3" ] || fail "RC G3's catalog is not the fresh one"
+echo "OK RC: before any rollback step, refused with nothing changed: 018 installed + a 16-step manifest, 018 partly present (a table / a function renamed), 017 installed + a manifest without it, a manifest whose install / rollback lines differ or repeat, 018 absent + a 17-step manifest; the matching 17 / 16-step rollbacks still work"
+
 # --- RA -------------------------------------------------------------------------------------------------------------------------------
 o="$(ro install 2>&1)" || fail "RA re-install: $o"
 [ "$(g3fp)" = "$installed_g3" ] || fail "RA the re-installed catalog is not the first install"
 echo "OK RA: re-install = the first install"
 
 # --- RT (G3-02 #4): Threads 007's rollback file itself (no rollout.sh) refuses an external dependent instead of CASCADE-dropping it ------
-for step in x017 x015 x014 t013 t009 t011; do
+for step in x018 x017 x015 x014 t013 t009 t011; do
   rel="$(awk -F '\t' -v s="$step" '$1 == "rollback" && $2 == s { print $3 }' "$here/MANIFEST.tsv")"
-  own -c "set postona_resv_rollback.discard_rows = '0:0:0'" -f "$here/../$rel" >/dev/null || fail "RT rollback $step"
+  own -c "set postona_resv_rollback.discard_rows = '0:0:0'" -c "set postona_resv_approval_rollback.discard = '0:0'" -f "$here/../$rel" >/dev/null || fail "RT rollback $step"
 done
 t007="$here/../$(awk -F '\t' '$1 == "rollback" && $2 == "t007" { print $3 }' "$here/MANIFEST.tsv")"
 own -c "create view public.g3rt_threads_v as select id from postona_threads_resv.reservations" >/dev/null
