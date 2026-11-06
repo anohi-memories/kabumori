@@ -1,0 +1,16 @@
+G2-02 TASK 9: HTTP to postona-x-approvals-localtest with real local JWTs (status + code only; no token, no body text)
+
+after the real-tap flow (A has 3 candidates), 2026-11-06 16:55 JST
+  A list own account          200  candidates=3
+  B list of A's account       200  candidates=0
+  B get A's candidate         404  POSTONA_RESV_NOT_FOUND
+  B approve A's candidate     404  POSTONA_RESV_NOT_FOUND
+  B reject A's candidate      404  POSTONA_RESV_NOT_FOUND
+  B notifications             200  (B's own: 0 rows on screen, A13a/b)
+  no token notifications      401  AUTH_REQUIRED
+  malformed JWT list          401  UNAUTHORIZED_INVALID_JWT_FORMAT
+
+after A's service end (entitlement ended), 2026-11-06 17:03 JST
+  A list                      200  candidates=3
+  A notifications             200  rows=7
+  (reads stay open after a service end on the server; the screen shows what the server returns, A18)
