@@ -7,6 +7,9 @@
 // SQL in PostgreSQL 17 (PR #124, G4 001/002 + G4-42/43, H5 claim SQL, G5 S2-3/S2-2, publish stack + disconnect candidate).
 // FAKE: GoTrue (RS256 JWTs signed here; JWKS + /auth/v1/user), Threads, PostgREST for the disconnect RPC (a psql bridge),
 // the browser round trip (the person approves at Threads) and the app config (callback + associated domain).
+// G4-02 #11 (scenarios 20-30): after a REAL connect, the app's manual publish hook -> the publish Edge over 127.0.0.1 HTTP ->
+// the attested publish / release SQL (+ postona_g4_threads_manual_publish_verdict/001) -> a FAKE Threads publish API that
+// counts every write; nothing else is reachable from the Edge (refused and recorded).
 // Not part of `npm test` (*.test.mjs): it needs the runner's database.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,6 +23,7 @@ import { createClient } from '@supabase/supabase-js';
 import * as threadsDomain from '../src/domain/threads-connect.ts';
 import * as disconnectDomain from '../src/domain/threads-disconnect.ts';
 import * as recoveryBinding from '../src/domain/recovery-binding.ts';
+import * as publishDomain from '../src/domain/threads-manual-publish.ts';
 
 const env = (k) => { const v = process.env[k]; if (!v) throw new Error(`${k} missing (run postona_g4_threads_person_session_run.sh with G4T_APP_FLOW=1)`); return v; };
 const PG = { host: env('FLOW_PGHOST'), port: env('FLOW_PGPORT'), user: env('FLOW_PGUSER'), db: env('FLOW_DB') };
@@ -98,9 +102,14 @@ const openDisconnect = (request) => disconnectCore.handleThreadsDisconnect(reque
   getUser: publishHttp.createGetUser({ supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY }, (...a) => globalThis.fetch(...a)),
   disconnect: disconnectCore.createThreadsDisconnectRpc({ supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY }, (...a) => globalThis.fetch(...a)),
 });
+// G4-02 #11: the manual publish Edge's six RPCs (social-mobile-threads-publish/http.ts THREADS_PUBLISH_RPC) join the disconnect one
+const POSTGREST_RPCS = new Set(['disconnect_threads_account', ...Object.values(publishHttp.THREADS_PUBLISH_RPC)]);
+// a token past its exp is refused as PostgREST / GoTrue refuse it (the SDK verification lives in the connect Edge only)
+const expired = (claims) => typeof claims?.exp === 'number' && claims.exp <= Math.floor(Date.now() / 1000);
 function postgrest(name, args, bearer) {
-  if (name !== 'disconnect_threads_account') return Response.json({ code: 'PGRST202', message: 'not in this fixture' }, { status: 404 });
+  if (!POSTGREST_RPCS.has(name)) return Response.json({ code: 'PGRST202', message: 'not in this fixture' }, { status: 404 });
   const claims = claimsOf(bearer);
+  if (expired(claims)) return Response.json({ code: 'PGRST301', message: 'JWT expired' }, { status: 401 });
   const role = claims?.role === 'authenticated' ? 'authenticated' : 'anon';
   const call = `public.${name}(${Object.entries(args ?? {}).map(([k, v]) => `${k} => ${lit(v)}`).join(', ')})`;
   const r = psql(`begin; select set_config('request.jwt.claims', ${lit(claims ? JSON.stringify(claims) : '')}, true) is null; `
@@ -110,12 +119,15 @@ function postgrest(name, args, bearer) {
 }
 function gotrueUser(bearer) {
   const claims = claimsOf(bearer);
-  if (!claims?.sub || owner(`select count(*) from auth.users where id = ${lit(claims.sub)}::uuid`) !== '1') return Response.json({ msg: 'invalid JWT' }, { status: 401 });
+  if (!claims?.sub || expired(claims) || owner(`select count(*) from auth.users where id = ${lit(claims.sub)}::uuid`) !== '1') return Response.json({ msg: 'invalid JWT' }, { status: 401 });
   return Response.json({ id: claims.sub, aud: 'authenticated', role: 'authenticated', is_anonymous: claims.is_anonymous === true });
 }
 
 // ---- the app's network: functions/v1 -> the Edges, rest/v1/rpc -> PostgREST, auth/v1/user -> GoTrue ------------------------
 const flow = { connectEntry: 'open', disconnectOpen: true };
+// G4-02 #11: the manual publish Edge (a 127.0.0.1 HTTP server further down): its base URL, which entry ('open' | 'closed'),
+// and how many app requests to it are still in flight (a screen settles when none is)
+const pub = { base: null, entry: 'open', inFlight: 0 };
 const sent = [];
 globalThis.fetch = async (input, init = {}) => {
   const url = typeof input === 'string' ? input : input.url;
@@ -129,6 +141,14 @@ globalThis.fetch = async (input, init = {}) => {
     sent.push({ fn: 'disconnect' });
     const request = new Request(url, { method: init.method ?? 'POST', headers, body: bodyText });
     response = await (flow.disconnectOpen ? openDisconnect(request) : closedDisconnect(request));
+  } else if (url === `${SUPABASE_URL}/functions/v1/social-mobile-threads-publish`) {
+    sent.push({ fn: 'publish', action: JSON.parse(bodyText ?? '{}').action });
+    pub.inFlight += 1;
+    try {
+      response = await realFetch(`${pub.base}/${pub.entry}/functions/v1/social-mobile-threads-publish`, { method: init.method ?? 'POST', headers, body: bodyText });
+    } finally {
+      pub.inFlight -= 1;
+    }
   } else if (url.startsWith(`${SUPABASE_URL}/rest/v1/rpc/`)) {
     response = postgrest(url.slice(`${SUPABASE_URL}/rest/v1/rpc/`.length).split('?')[0], bodyText ? JSON.parse(bodyText) : {}, headers.get('Authorization'));
   } else if (url === `${SUPABASE_URL}/auth/v1/user`) {
@@ -564,4 +584,473 @@ test('19. the Threads verdict across connect / reconnect / re-bind / expiry / er
   // the service ends (SYNTHETIC end, as G5 leaves it)
   owner(`update public.service_entitlements set status = 'ended', ended_at = now() where user_id = ${lit(uid(A))}::uuid and service_key = 'x_autopost'`);
   assert.equal(verdict(A, account()), `false|${g4}|SERVICE_NOT_ACTIVE`);
+});
+
+// ==== G4-02 #11 (Issue #561): connect -> manual publish -> result (confirmed / failed / unknown), end to end ===============
+// REAL: the connect flow above; the app hook use-threads-manual-publish.ts (real supabase-js functions.invoke); the publish Edge
+// (social-mobile-threads-publish: logic.ts handleThreadsPublish + http.ts createStore / createGetUser, the same construction as
+// createHandler's inner handler) served over HTTP on 127.0.0.1; its attested RPCs into the publish + release SQL candidates in
+// this PostgreSQL 17 world, which hand out the token the CONNECT stored in (fake) Vault.
+// FAKE: the Threads publish API (below: containers, publish, read-back, listing; every write counted), PostgREST (psql bridge),
+// GoTrue. Any other host the Edge asks for is refused and recorded (`denied`): no request leaves this process.
+const publishLogic = await import('../../../supabase/functions/social-mobile-threads-publish/logic.ts');
+const { createServer } = await import('node:http');
+const PUBLISH_KEY = 'fake_publish_attestation_key_0123456789abcdef0123456789';
+// the release candidate's server attestation key, as the test world's (fake) Vault holds it -- TEST-ONLY value
+owner(`insert into vault.secrets (name, secret) values ('postona_threads_publish_attestation_v1', ${lit(PUBLISH_KEY)}) on conflict (name) do nothing`);
+
+const threadsApi = { plan: {}, containers: new Map(), posts: [], writes: [], reads: 0, seq: 18000000000000100n };
+const denied = [];
+const graphError = (code, status = 400) => Response.json({ error: { message: 'fake refusal', type: 'OAuthException', code } }, { status });
+const tokenUser = (token) => /^long([1-9][0-9]{0,31})abcdefghijklmnop$/u.exec(token ?? '')?.[1] ?? null;
+const nextId = () => String(threadsApi.seq += 1n);
+const permalinkOf = (post) => `https://www.threads.net/@flow_${post.puid.slice(-4)}/post/C${post.id}`;
+/** The fake Threads Graph API for publishing: a token is valid only as the connect flow minted it (long<puid>...). */
+function fakeThreadsPublish(url, init) {
+  const u = new URL(url);
+  const isPost = (init.method ?? 'GET') === 'POST';
+  const params = isPost ? new URLSearchParams(String(init.body ?? '')) : u.searchParams;
+  const who = tokenUser(params.get('access_token'));
+  if (!who) return graphError(190);
+  const m = /^\/v1\.0\/([1-9][0-9]*)(?:\/(threads|threads_publish))?$/u.exec(u.pathname);
+  if (!m) return graphError(100);
+  const [, id, edgeName] = m;
+  const plan = threadsApi.plan[who] ?? {};
+  if (isPost && edgeName === 'threads') {
+    threadsApi.writes.push({ kind: 'container', puid: who, path: id });
+    if (id !== who) return graphError(10);
+    if (plan.container === 'refuse') return graphError(10);
+    const containerId = nextId();
+    threadsApi.containers.set(containerId, { puid: who, text: params.get('text'), status: plan.status ?? 'FINISHED' });
+    return Response.json({ id: containerId });
+  }
+  if (isPost && edgeName === 'threads_publish') {
+    threadsApi.writes.push({ kind: 'publish', puid: who, path: id });
+    const container = threadsApi.containers.get(params.get('creation_id') ?? '');
+    if (id !== who || !container || container.puid !== who) return graphError(100);
+    if (container.status === 'PUBLISHED') return graphError(100);
+    const post = { id: nextId(), puid: who, text: container.text, timestamp: new Date().toISOString() };
+    container.status = 'PUBLISHED';
+    threadsApi.posts.push(post);
+    // 'lost': Threads published, but its answer never arrived (a 5xx): the write outcome is unknown to POSTONA
+    if (plan.publish === 'lost') return new Response('upstream timeout', { status: 503 });
+    return Response.json({ id: post.id });
+  }
+  threadsApi.reads += 1;
+  if (!isPost && edgeName === 'threads') {
+    if (id !== who) return graphError(10);
+    const mine = threadsApi.posts.filter((p) => p.puid === who).reverse();
+    return Response.json({ data: mine.map((p) => ({ id: p.id, text: p.text, permalink: permalinkOf(p), timestamp: p.timestamp })) });
+  }
+  if (!isPost && !edgeName) {
+    const container = threadsApi.containers.get(id);
+    if (container && container.puid === who) return Response.json({ id, status: container.status, error_message: null });
+    const post = threadsApi.posts.find((p) => p.id === id);
+    if (post && post.puid === who) {
+      return Response.json({ id, permalink: permalinkOf(post), owner: { id: who }, username: `flow_${who.slice(-4)}`, timestamp: post.timestamp });
+    }
+  }
+  return graphError(100);
+}
+/** The publish Edge's whole network: PostgREST, GoTrue, the fake Threads API; anything else is refused and recorded. */
+const edgeFetch = async (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input.url;
+  const headers = new Headers(init.headers);
+  if (url.startsWith(`${SUPABASE_URL}/rest/v1/rpc/`)) {
+    return postgrest(url.slice(`${SUPABASE_URL}/rest/v1/rpc/`.length).split('?')[0], init.body ? JSON.parse(String(init.body)) : {}, headers.get('Authorization'));
+  }
+  if (url === `${SUPABASE_URL}/auth/v1/user`) return gotrueUser(headers.get('Authorization'));
+  if (url.startsWith('https://graph.threads.net/')) return fakeThreadsPublish(url, init);
+  denied.push(url);
+  throw new TypeError('network refused in this test');
+};
+const PUBLISH_ENV = { get: (k) => ({ SUPABASE_URL, SUPABASE_ANON_KEY: ANON_KEY, THREADS_PUBLISH_ATTESTATION_KEY: PUBLISH_KEY })[k] };
+const publishEntries = {
+  // the deployable entry exactly as in source (its static gate THREADS_MANUAL_PUBLISH_PREREQUISITES_MET is false)
+  closed: publishHttp.createHandler(PUBLISH_ENV, edgeFetch),
+  // createHandler's inner handler, opened in this TEST only (the gate is a source constant)
+  open: (request) => publishLogic.handleThreadsPublish(request, {
+    getUser: publishHttp.createGetUser({ supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY }, edgeFetch),
+    store: publishHttp.createStore({ supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, attestationKey: PUBLISH_KEY }, edgeFetch),
+    fetch: edgeFetch,
+    sleep: () => Promise.resolve(),
+    now: () => new Date(),
+  }),
+};
+const PASSED_HEADERS = ['authorization', 'apikey', 'content-type', 'content-length', 'x-client-info'];
+const publishServer = createServer(async (req, res) => {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const entry = /^\/(open|closed)(\/functions\/v1\/social-mobile-threads-publish)$/u.exec(req.url ?? '');
+  if (!entry) { res.writeHead(404).end(); return; }
+  const headers = new Headers();
+  for (const name of PASSED_HEADERS) if (typeof req.headers[name] === 'string') headers.set(name, req.headers[name]);
+  const request = new Request(`${SUPABASE_URL}${entry[2]}`, { method: req.method, headers, body: req.method === 'POST' ? Buffer.concat(chunks) : undefined });
+  const response = await publishEntries[entry[1]](request);
+  res.writeHead(response.status, Object.fromEntries(response.headers));
+  res.end(Buffer.from(await response.arrayBuffer()));
+});
+await new Promise((resolve) => publishServer.listen(0, '127.0.0.1', resolve));
+pub.base = `http://127.0.0.1:${publishServer.address().port}`;
+test.after(() => publishServer.close());
+
+/** A direct HTTP call to the publish Edge (another client, a replay, a forged or missing token). */
+async function publishCall(body, bearer, entry = 'open') {
+  const response = await realFetch(`${pub.base}/${entry}/functions/v1/social-mobile-threads-publish`, {
+    method: 'POST', headers: { 'content-type': 'application/json', ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) }, body: JSON.stringify(body),
+  });
+  return { status: response.status, json: await response.json() };
+}
+
+/** One mounted Threads publish card: the REAL hook with the app's supabase client and auth provider. */
+async function publishScreen({ session, account, releaseEnabled = true }) {
+  const auth = { session };
+  const slots = [];
+  const effects = [];
+  let cursor = 0;
+  const client = createClient(SUPABASE_URL, ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: { fetch: (...a) => globalThis.fetch(...a) },
+  });
+  const react = {
+    useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = initial; return [slots[i], (v) => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; },
+    useRef(initial) { const i = cursor++; return slots[i] ??= { current: initial }; },
+    useCallback: (cb) => cb,
+    useLayoutEffect: (effect) => effect(),
+    // an effect runs after a render whose dependencies changed (React's rule), never on every render
+    useEffect(effect, deps) {
+      const i = cursor++;
+      const prev = slots[i];
+      if (!prev || prev.length !== deps.length || deps.some((d, k) => !Object.is(d, prev[k]))) { slots[i] = deps; effects.push(effect); }
+    },
+  };
+  const hook = await loadTs('features/threads-publish/use-threads-manual-publish.ts', {
+    react, 'expo-crypto': { randomUUID: () => randomUUID() }, '@/domain/threads-manual-publish': publishDomain,
+    '@/lib/supabase': { supabase: client }, '@/providers/auth-provider': { useAuth: () => ({ session: auth.session }) },
+  });
+  let shown = account;
+  const render = () => {
+    cursor = 0;
+    const card = hook.useThreadsManualPublish(shown, false, { releaseEnabled });
+    while (effects.length) effects.shift()();
+    return card;
+  };
+  /** Waits until no request of this app to the publish Edge is in flight (the hook reloads the state after every answer). */
+  const settle = async () => {
+    render();
+    for (let quiet = 0; quiet < 5;) {
+      await new Promise((resolve) => setImmediate(resolve));
+      quiet = pub.inFlight === 0 ? quiet + 1 : 0;
+    }
+    return render();
+  };
+  return { render, settle, show(next) { shown = next; }, signIn(next) { auth.session = next; } };
+}
+/** The account as the app's repository maps it (supabase-repository.ts: identity_verified -> connected). */
+const appAccount = (n) => {
+  const row = threadsAccount(n);
+  return row && { id: row.id, platform: 'threads', connectionStatus: row.status === 'identity_verified' ? 'connected' : 'needs_attention' };
+};
+const attemptRow = (id) => owner(`select status || '|' || coalesce(container_id, '-') || '|' || coalesce(provider_post_id, '-') || '|' || coalesce(error_code, '-')
+  from public.threads_manual_publish_attempts where id = ${lit(id)}::uuid`);
+const writes = (puid, kind) => threadsApi.writes.filter((w) => w.puid === puid && (!kind || w.kind === kind)).length;
+const publishSent = (action) => sent.filter((s) => s.fn === 'publish' && (!action || s.action === action)).length;
+
+const F = 4706, G = 4707;
+const PUID_F = '17841400000004706';
+const SESSION_F = person(F, true);
+const SESSION_G = person(G, true);
+
+/** F's card, loaded, with the permission granted through the card (consent -> ready). */
+async function readyCard(session = SESSION_F) {
+  const card = await publishScreen({ session, account: appAccount(F) });
+  let view = await card.settle();
+  if (view.context.mode === 'consent_required') {
+    await view.setPermission(true);
+    view = await card.settle();
+  }
+  return { card, view };
+}
+
+test('20. F connects, allows posting, posts once: hook -> HTTP Edge -> attested SQL -> fake Threads -> published, read back', { timeout: 60000 }, async () => {
+  const app = await screen({ session: SESSION_F });
+  assert.equal((await connectAs(app, PUID_F)).kind, 'verifying');
+  assert.equal(threadsAccount(F).status, 'identity_verified');
+  const card = await publishScreen({ session: SESSION_F, account: appAccount(F) });
+  let view = await card.settle();
+  assert.equal(view.context.mode, 'consent_required', 'nothing is allowed by connecting alone');
+  await view.setPermission(true);
+  view = await card.settle();
+  assert.equal(view.context.mode, 'ready', JSON.stringify(view.message));
+  const pinned = view.pin('POSTONAからの最初の投稿です。');
+  assert.ok(pinned, 'the text is pinned for the confirmed account and user');
+  assert.equal(await view.publish(pinned), true);
+  view = await card.settle();
+  assert.equal(view.answer.status, 'published', JSON.stringify(view.answer));
+  assert.match(view.answer.permalink, /^https:\/\/www\.threads\.net\/@flow_4706\/post\/C[0-9]+$/u);
+  const [status, container, post] = attemptRow(view.answer.id).split('|');
+  assert.deepEqual([status, container !== '-', post], ['published', true, threadsApi.posts.at(-1).id], 'the database recorded the read-back');
+  // exactly one container and one publish, made with the token the CONNECT stored, as F's Threads user, with the pinned text
+  assert.deepEqual([writes(PUID_F, 'container'), writes(PUID_F, 'publish')], [1, 1]);
+  assert.equal(threadsApi.posts.at(-1).text, 'POSTONAからの最初の投稿です。');
+  assert.equal(view.context.mode, 'ready', 'no attempt left open');
+  assert.deepEqual(denied, [], 'no request left this process');
+});
+
+test('21. two taps and a replay: one attempt, one post; the replayed request is only reported', { timeout: 60000 }, async () => {
+  const { card, view } = await readyCard();
+  const before = [writes(PUID_F, 'container'), writes(PUID_F, 'publish'), publishSent('publish')];
+  const pinned = view.pin('二重送信しないことの確認です。');
+  const [first, second] = await Promise.all([view.publish(pinned), view.publish(pinned)]);
+  assert.deepEqual([first, second], [true, false], 'the second tap sends nothing while the first is in flight');
+  const done = await card.settle();
+  assert.equal(done.answer.status, 'published');
+  assert.equal(publishSent('publish') - before[2], 1, 'one publish request left the app');
+  // the same request again (a client retry, or a captured request replayed by the same person)
+  const replay = await publishCall({ action: 'publish', social_account_id: pinned.accountId, idempotency_key: pinned.idempotencyKey, text: pinned.text }, SESSION_F.access_token);
+  assert.equal(replay.status, 200);
+  assert.deepEqual([replay.json.attempt.id, replay.json.attempt.status, replay.json.attempt.replayed], [done.answer.id, 'published', true]);
+  assert.deepEqual([writes(PUID_F, 'container') - before[0], writes(PUID_F, 'publish') - before[1]], [1, 1], 'still one post');
+});
+
+test('22. the container is not ready: the attempt stays open (busy), a second post is refused, resume publishes once', { timeout: 60000 }, async () => {
+  threadsApi.plan[PUID_F] = { status: 'IN_PROGRESS' };
+  const { card, view } = await readyCard();
+  const before = writes(PUID_F, 'publish');
+  assert.equal(await view.publish(view.pin('準備中のコンテナの確認です。')), true);
+  let shown = await card.settle();
+  assert.equal(shown.answer.status, 'container_created');
+  assert.equal(shown.context.mode, 'busy', 'the card shows the open attempt');
+  // a different post while that attempt is open: refused by the database (one open attempt per account), nothing sent
+  const other = await publishCall({ action: 'publish', social_account_id: shown.answer.accountId, idempotency_key: randomUUID(), text: '別の投稿' }, SESSION_F.access_token);
+  console.log(`measured 22 second post while open: ${other.status} ${JSON.stringify(other.json)}`);
+  assert.equal(other.json.success, false);
+  assert.equal(writes(PUID_F, 'publish'), before, 'nothing was published');
+  for (const c of threadsApi.containers.values()) if (c.status === 'IN_PROGRESS') c.status = 'FINISHED';
+  threadsApi.plan[PUID_F] = {};
+  await shown.followUp('resume', shown.answer);
+  shown = await card.settle();
+  assert.equal(shown.answer.status, 'published');
+  assert.equal(writes(PUID_F, 'publish') - before, 1);
+});
+
+test('23. Threads refuses the container (a definite refusal): failed, nothing published, the card is ready again', { timeout: 60000 }, async () => {
+  threadsApi.plan[PUID_F] = { container: 'refuse' };
+  const { card, view } = await readyCard();
+  const before = writes(PUID_F, 'publish');
+  assert.equal(await view.publish(view.pin('拒否される投稿の確認です。')), true);
+  const shown = await card.settle();
+  threadsApi.plan[PUID_F] = {};
+  assert.equal(shown.answer.status, 'failed', JSON.stringify(shown.answer));
+  assert.ok(shown.answer.errorCode, 'a fixed reason');
+  assert.equal(writes(PUID_F, 'publish'), before);
+  assert.equal(shown.context.mode, 'ready');
+});
+
+test('24. the publish answer is lost: unknown is kept, never resent; reconcile finds the post read-only', { timeout: 60000 }, async () => {
+  threadsApi.plan[PUID_F] = { publish: 'lost' };
+  const { card, view } = await readyCard();
+  const before = writes(PUID_F, 'publish');
+  assert.equal(await view.publish(view.pin('応答が失われた投稿の確認です。')), true);
+  let shown = await card.settle();
+  threadsApi.plan[PUID_F] = {};
+  assert.equal(shown.answer.status, 'uncertain', JSON.stringify(shown.answer));
+  assert.equal(shown.context.mode, 'busy', 'an unknown outcome blocks the next post');
+  // "resume" never re-runs a step that may have happened
+  await shown.followUp('resume', shown.answer);
+  shown = await card.settle();
+  assert.equal(shown.answer.status, 'uncertain');
+  assert.equal(writes(PUID_F, 'publish') - before, 1, 'not resent');
+  await shown.followUp('reconcile', shown.answer);
+  shown = await card.settle();
+  assert.equal(shown.answer.status, 'published', JSON.stringify(shown.answer));
+  assert.equal(shown.answer.permalink, permalinkOf(threadsApi.posts.at(-1)));
+  assert.equal(writes(PUID_F, 'publish') - before, 1, 'reconcile is read-only');
+});
+
+test('25. another person, no token, an expired token, the anon key: refused before any provider call', { timeout: 60000 }, async () => {
+  const account = threadsAccount(F).id;
+  const before = threadsApi.writes.length;
+  const body = { action: 'publish', social_account_id: account, idempotency_key: randomUUID(), text: '他人からの投稿' };
+  const asG = await publishCall(body, SESSION_G.access_token);
+  const stateAsG = await publishCall({ action: 'account_state', social_account_id: account }, SESSION_G.access_token);
+  const none = await publishCall(body, null);
+  const stale = await publishCall(body, jwt({ sub: uid(F), session_id: sid(F), is_anonymous: false, exp: Math.floor(Date.now() / 1000) - 60 }));
+  const anon = await publishCall(body, ANON_KEY);
+  console.log(`measured 25: G ${asG.status} ${asG.json.error}; G state ${stateAsG.status} ${stateAsG.json.error}; none ${none.status} ${none.json.error}; expired ${stale.status} ${stale.json.error}; anon ${anon.status} ${anon.json.error}`);
+  assert.deepEqual([asG.json.error, stateAsG.json.error], ['ACCOUNT_NOT_FOUND', 'ACCOUNT_NOT_FOUND'], 'another person cannot tell the account exists');
+  assert.deepEqual([none.status, stale.status, anon.status], [401, 401, 401]);
+  assert.equal(threadsApi.writes.length, before);
+  // G's own card for an account id G does not own: loads nothing usable, sends no post
+  const card = await publishScreen({ session: SESSION_G, account: { id: account, platform: 'threads', connectionStatus: 'connected' } });
+  const shown = await card.settle();
+  assert.equal(shown.context.mode, 'unavailable');
+});
+
+test('26. the account is stopped (N1 SYNTHETIC: what a Meta deauthorize would set): refused; the card asks to reconnect', { timeout: 60000 }, async () => {
+  const account = threadsAccount(F).id;
+  const { view } = await readyCard();
+  const pinned = view.pin('停止後の投稿');
+  // the table's CHECK allows unconnected / authorization_pending / connected / identity_verified / failed only: PR #648's N1
+  // example 'reauth_required' is refused by it (measured below), so the stop N1 can write without a schema change is 'failed'
+  const reauth = psql(`update public.social_accounts set connection_status = 'reauth_required' where id = ${lit(account)}`);
+  assert.equal(reauth.ok, false);
+  assert.match(reauth.message, /social_accounts_connection_status_check/u);
+  owner(`update public.social_accounts set connection_status = 'failed', last_connection_error_code = 'THREADS_DEAUTHORIZED' where id = ${lit(account)}`);
+  console.log(`measured 26 credential verdict while stopped: ${verdict(F, account)}`);
+  assert.ok(verdict(F, account).startsWith('false|'), 'the G4 credential verdict (G3 dispatch) refuses too');
+  const before = threadsApi.writes.length;
+  // the screen still showed "ready" (stale data): the server refuses
+  const refused = await publishCall({ action: 'publish', social_account_id: account, idempotency_key: pinned.idempotencyKey, text: pinned.text }, SESSION_F.access_token);
+  console.log(`measured 26 stopped: ${refused.status} ${JSON.stringify(refused.json)}`);
+  assert.equal(refused.json.error, 'CONNECTION_NOT_VERIFIED');
+  assert.equal(threadsApi.writes.length, before, 'no provider call');
+  // the reloaded data maps the stop to "needs attention": the card asks to reconnect and loads nothing
+  const card = await publishScreen({ session: SESSION_F, account: appAccount(F) });
+  const shown = await card.settle();
+  assert.equal(shown.context.mode, 'reconnect');
+  // N8: connecting again (the real connect flow) clears the stop, and posting works again
+  const app = await screen({ session: SESSION_F });
+  assert.equal((await connectAs(app, PUID_F)).kind, 'verifying');
+  const row = owner(`select connection_status || '|' || coalesce(last_connection_error_code, '-') from public.social_accounts where id = ${lit(account)}`);
+  console.log(`measured 26 after reconnect: ${row}`);
+  assert.equal(row, 'identity_verified|-', 'the reconnect overwrote the stop');
+  const again = await readyCard();
+  assert.equal(await again.view.publish(again.view.pin('再接続後の投稿です。')), true);
+  assert.equal((await again.card.settle()).answer.status, 'published');
+});
+
+test('27. the stored credential expires (SYNTHETIC) or the service ends: refused, nothing sent', { timeout: 60000 }, async () => {
+  const account = threadsAccount(F).id;
+  const post = () => publishCall({ action: 'publish', social_account_id: account, idempotency_key: randomUUID(), text: '期限の確認' }, SESSION_F.access_token);
+  const before = threadsApi.writes.length;
+  owner(`update public.threads_account_credential_custody set expires_at = now() + interval '1 minute' where social_account_id = ${lit(account)}`);
+  const expiredCredential = await post();
+  owner(`update public.threads_account_credential_custody set expires_at = now() + interval '50 days' where social_account_id = ${lit(account)}`);
+  owner(`update public.service_entitlements set status = 'ended', ended_at = now() where user_id = ${lit(uid(F))}::uuid and service_key = 'x_autopost'`);
+  const ended = await post();
+  owner(`update public.service_entitlements set status = 'active', ended_at = null where user_id = ${lit(uid(F))}::uuid and service_key = 'x_autopost'`);
+  console.log(`measured 27: expiring credential ${expiredCredential.status} ${expiredCredential.json.error}; service ended ${ended.status} ${ended.json.error}`);
+  assert.equal(expiredCredential.json.error, 'CREDENTIALS_EXPIRED');
+  assert.equal(ended.json.error, 'SERVICE_NOT_ACTIVE');
+  assert.equal(threadsApi.writes.length, before);
+});
+
+test('28. disconnect while the outcome is unknown keeps the account; after reconcile it disconnects; nothing old carries over', { timeout: 60000 }, async () => {
+  threadsApi.plan[PUID_F] = { publish: 'lost' };
+  const { card, view } = await readyCard();
+  assert.equal(await view.publish(view.pin('切断前の不確定な投稿です。')), true);
+  let shown = await card.settle();
+  threadsApi.plan[PUID_F] = {};
+  assert.equal(shown.answer.status, 'uncertain');
+  const old = threadsAccount(F);
+  const app = await screen({ session: SESSION_F });
+  app.setAccounts([{ id: old.id, platform: 'threads', connectionStatus: 'connected' }]);
+  app.render().disconnect.ask({ id: old.id, handle: old.handle });
+  await app.render().disconnect.confirm();
+  const stopped = app.render().disconnect.state;
+  console.log(`measured 28 disconnect while uncertain: ${JSON.stringify(stopped.result ?? stopped.kind)}`);
+  assert.equal(threadsAccount(F)?.id, old.id, 'the account (and the evidence of the unknown post) is kept');
+  assert.equal(attemptRow(shown.answer.id).split('|')[0], 'uncertain');
+  // the permission was withdrawn by the disconnect: a new post is refused, the unknown one can still be reconciled
+  const refused = await publishCall({ action: 'publish', social_account_id: old.id, idempotency_key: randomUUID(), text: '切断中の投稿' }, SESSION_F.access_token);
+  assert.equal(refused.json.success, false);
+  await shown.followUp('reconcile', shown.answer);
+  shown = await card.settle();
+  assert.equal(shown.answer.status, 'published');
+  const app2 = await screen({ session: SESSION_F });
+  app2.setAccounts([{ id: old.id, platform: 'threads', connectionStatus: 'connected' }]);
+  app2.render().disconnect.ask({ id: old.id, handle: old.handle });
+  await app2.render().disconnect.confirm();
+  assert.equal(app2.render().disconnect.state.result?.kind, 'disconnected');
+  assert.equal(threadsAccount(F), null);
+  const gone = await publishCall({ action: 'publish', social_account_id: old.id, idempotency_key: randomUUID(), text: '切断後の投稿' }, SESSION_F.access_token);
+  assert.equal(gone.json.error, 'ACCOUNT_NOT_FOUND');
+  // connect again: the account id is deterministic per workspace (PR #124: 'sa_' || md5(workspace || ':threads')), so the same
+  // id comes back as a NEW row: no old attempt, no old permission, a new binding generation
+  const app3 = await screen({ session: SESSION_F });
+  assert.equal((await connectAs(app3, PUID_F)).kind, 'verifying');
+  assert.equal(threadsAccount(F).id, old.id, 'the same deterministic id');
+  assert.equal(owner(`select count(*) from public.threads_manual_publish_attempts where social_account_id = ${lit(old.id)}`), '0', 'old attempts went with the old row');
+  const fresh = await publishScreen({ session: SESSION_F, account: appAccount(F) });
+  let card2 = await fresh.settle();
+  assert.equal(card2.context.mode, 'consent_required', 'the old permission did not carry over');
+  await card2.setPermission(true);
+  card2 = await fresh.settle();
+  assert.equal(await card2.publish(card2.pin('再接続した新しい行からの投稿です。')), true);
+  assert.equal((await fresh.settle()).answer.status, 'published');
+});
+
+test('29. the publish entry as in source (static gate closed): 503 for every action over HTTP; the app card sends nothing', { timeout: 60000 }, async () => {
+  const account = threadsAccount(F).id;
+  const before = [threadsApi.writes.length, threadsApi.reads];
+  for (const body of [
+    { action: 'publish', social_account_id: account, idempotency_key: randomUUID(), text: 'ゲートの確認' },
+    { action: 'account_state', social_account_id: account },
+    { action: 'set_permission', social_account_id: account, desired_enabled: true, expected_current_enabled: false },
+  ]) {
+    const r = await publishCall(body, SESSION_F.access_token, 'closed');
+    assert.deepEqual([r.status, r.json], [503, { success: false, error: 'THREADS_PUBLISH_DISABLED' }], body.action);
+  }
+  assert.deepEqual([threadsApi.writes.length, threadsApi.reads], before);
+  // the app as built (THREADS_MANUAL_PUBLISH_UI_ENABLED = false): "in preparation", no request at all
+  const sentBefore = publishSent();
+  const card = await publishScreen({ session: SESSION_F, account: appAccount(F), releaseEnabled: publishDomain.THREADS_MANUAL_PUBLISH_UI_ENABLED });
+  const shown = await card.settle();
+  assert.equal(shown.context.mode, 'release_disabled');
+  assert.equal(publishSent(), sentBefore);
+  assert.equal(await shown.publish({ accountId: account, userId: uid(F), text: 'x', idempotencyKey: randomUUID() }), false);
+  assert.equal(publishSent(), sentBefore);
+  assert.deepEqual(denied, [], 'no request left this process in any publish scenario');
+  console.log(`measured publish totals: containers ${threadsApi.writes.filter((w) => w.kind === 'container').length}, publishes ${threadsApi.writes.filter((w) => w.kind === 'publish').length}, reads ${threadsApi.reads}, posts ${threadsApi.posts.length}, denied ${denied.length}`);
+});
+
+// G4-02 #11: a manual post may go out only when G4's credential verdict (the one G3's dispatch binds to) says VERIFIED: the
+// same account must not be refused for a scheduled post and accepted for a manual one. Read-backs of a post that may exist
+// (confirm / reconcile) stay possible. Fixed by supabase/candidates/postona_g4_threads_manual_publish_verdict/001 (the
+// runner installs it after the verdict); without it (G4MP_WITHOUT_VERDICT_GATE=1) cases a-c post and this test fails.
+test('30. manual publish agrees with the G4 credential verdict: connection error / no G4 binding / foreign custody refuse', { timeout: 60000 }, async () => {
+  const account = threadsAccount(F).id;
+  const { card, view } = await readyCard();
+  const post = () => publishCall({ action: 'publish', social_account_id: account, idempotency_key: randomUUID(), text: `判定の確認 ${randomUUID().slice(0, 8)}` }, SESSION_F.access_token);
+  const outcome = (r) => (r.json.success ? `posted:${r.json.attempt.status}` : r.json.error);
+  const results = {};
+  // (d) first: an unknown outcome, then a connection error -- the read-only reconcile still settles it
+  threadsApi.plan[PUID_F] = { publish: 'lost' };
+  assert.equal(await view.publish(view.pin('判定前の不確定な投稿です。')), true);
+  let shown = await card.settle();
+  threadsApi.plan[PUID_F] = {};
+  assert.equal(shown.answer.status, 'uncertain');
+  // (a) a connection error on a still identity_verified row (SYNTHETIC: what a refresh failure or N1 could record)
+  owner(`update public.social_accounts set last_connection_error_code = 'THREADS_TOKEN_REJECTED' where id = ${lit(account)}`);
+  results.verdictA = verdict(F, account).split('|')[2];
+  await shown.followUp('reconcile', shown.answer);
+  shown = await card.settle();
+  results.reconcileA = shown.answer.status;
+  results.a = outcome(await post());
+  owner(`update public.social_accounts set last_connection_error_code = null where id = ${lit(account)}`);
+  // (b) no G4 binding (SYNTHETIC: a row made identity_verified by a path that skipped G4's reviewed connect bridge)
+  owner(`create table public.g4mp_binding as select * from postona_threads_binding.bindings where social_account_id = ${lit(account)}; `
+    + `delete from postona_threads_binding.bindings where social_account_id = ${lit(account)}`);
+  results.verdictB = verdict(F, account).split('|')[2];
+  results.b = outcome(await post());
+  // (c) custody names another credential than the one the account holds (SYNTHETIC)
+  owner(`insert into postona_threads_binding.bindings select * from public.g4mp_binding; drop table public.g4mp_binding`);
+  const held = owner(`select vault_access_token_secret_id from public.social_accounts where id = ${lit(account)}`);
+  const other = owner(`insert into vault.secrets (secret) values ('another-credential') returning id`);
+  owner(`update public.threads_account_credential_custody set vault_secret_id = ${lit(other)}::uuid where social_account_id = ${lit(account)}`);
+  results.verdictC = verdict(F, account).split('|')[2];
+  results.c = outcome(await post());
+  owner(`update public.threads_account_credential_custody set vault_secret_id = ${lit(held)}::uuid where social_account_id = ${lit(account)}`);
+  results.verdictAfter = verdict(F, account).split('|')[2];
+  console.log(`measured 30: ${JSON.stringify(results)}`);
+  // every case a post went out in is settled before asserting, so the next run of the world is not left open
+  for (const id of owner(`select coalesce(string_agg(id::text, ' '), '') from public.threads_manual_publish_attempts
+      where social_account_id = ${lit(account)} and status not in ('published', 'published_unidentified', 'failed')`).split(' ').filter(Boolean)) {
+    await publishCall({ action: 'reconcile', attempt_id: id }, SESSION_F.access_token);
+  }
+  assert.deepEqual([results.verdictA, results.verdictB, results.verdictC, results.verdictAfter], ['CONNECTION_ERROR', 'NOT_BOUND', 'CREDENTIAL_MISSING', 'VERIFIED']);
+  assert.equal(results.reconcileA, 'published', 'a read-back of a post that may exist is not blocked by the error');
+  assert.deepEqual([results.a, results.b, results.c], ['CONNECTION_NOT_VERIFIED', 'CONNECTION_NOT_VERIFIED', 'CREDENTIALS_MISSING']);
+  assert.equal(outcome(await post()), 'posted:published', 'verified again: posting works');
 });
