@@ -23,20 +23,61 @@
 //  - no outbound call (Threads has no app-side revoke), nothing logged, no request data or secret in any answer.
 // Replays: both effects are idempotent, so a replayed signed request changes nothing new; issued_at far in the future
 // is refused as a forgery signal. Nothing else about freshness is documented, so nothing else is assumed.
+//
+// G4-02 #10 (Issue #561, 2026-11-06). Re-read on 2026-11-06 (no API called): the generic page's payload example also
+// carries `expires`; the page does not say to check it and its own example does not. In Meta's signed requests `expires`
+// is the access token's expiry (0 can mean "does not expire"), not the request's, so it stays IGNORED: refusing on it
+// could drop a person's deletion request. Threads' webhooks page lists no deauthorize / deletion topic, and still nothing
+// documents the Threads format, the user id sent, the deauthorize answer or retries: all of that stays ASSUMED / NOT
+// VERIFIED. Added here:
+//  - each callback is one typed event (deauthorization / data_deletion_request) with eventKey = SHA-256 of the signed
+//    payload as sent, handed to the store so it can recognise Meta's retry or a replay of the same request;
+//  - a data deletion request for a bound account stops that account first (the same idempotent stop as deauthorize):
+//    publishing must not go on for someone who asked for their data to be deleted. Both must be recorded before the
+//    answer; either failing is 503.
 
 export const THREADS_META_CALLBACKS_ENABLED = false;
 
 export type ThreadsMetaCallbackKind = "deauthorize" | "data_deletion";
 export type ThreadsDeletionStatus = "received" | "in_progress" | "completed";
 
-/** The durable store (a port; no implementation exists yet). Every method may throw: the handler answers 503. */
+/** One verified Meta callback. Built only after the signature, the algorithm and every field checked out. */
+type ThreadsMetaCallbackEventFields = {
+  /** The Threads user id the signed request names (ASSUMED = social_accounts.platform_user_id). */
+  providerUserId: string;
+  /** Seconds, as Meta signed it. */
+  issuedAt: number;
+  /** Lowercase hex SHA-256 of the encoded payload as sent: the same signed request again has the same key. */
+  eventKey: string;
+};
+export type ThreadsDeauthorizationEvent = Readonly<ThreadsMetaCallbackEventFields & { kind: "deauthorization" }>;
+export type ThreadsDataDeletionRequestEvent = Readonly<
+  ThreadsMetaCallbackEventFields & { kind: "data_deletion_request" }
+>;
+export type ThreadsMetaCallbackEvent = ThreadsDeauthorizationEvent | ThreadsDataDeletionRequestEvent;
+
+/**
+ * The durable store (a port; no implementation exists yet). Every method may throw: the handler answers 503, and Meta's
+ * retry (or the next request) runs the same idempotent work again. A store must not report success it has not recorded.
+ */
 export type ThreadsMetaCallbackStore = {
   /** The Threads account bound to this Threads user id, or null (UNIQUE (platform, platform_user_id)). */
   accountByProviderUser(providerUserId: string): Promise<string | null>;
-  /** Publishing stops for this account and it needs the person to reconnect; idempotent. */
-  markDeauthorized(socialAccountId: string): Promise<void>;
-  /** Records the deletion request durably (idempotent per account / unknown person) and returns its code. */
-  requestDeletion(socialAccountId: string | null, providerUserId: string): Promise<string>;
+  /**
+   * Publishing stops for this account and it needs the person to reconnect; idempotent (the same eventKey again changes
+   * nothing new). Called for a deauthorization AND, first, for a data deletion request of a bound account. It never
+   * revokes anything at Meta (there is no app-side revoke) and never deletes: deletion is requestDeletion's record.
+   */
+  markDeauthorized(socialAccountId: string, event: ThreadsMetaCallbackEvent): Promise<void>;
+  /**
+   * Records the deletion request durably (idempotent per account / unknown person) and returns its code. Recording is
+   * not deleting: the status stays "received" until the deletion owner (G5 T10) reports progress.
+   */
+  requestDeletion(
+    socialAccountId: string | null,
+    providerUserId: string,
+    event: ThreadsDataDeletionRequestEvent,
+  ): Promise<string>;
 };
 export type ThreadsDeletionStatusStore = {
   /** The recorded state for this code, or null when there is none. */
@@ -131,7 +172,12 @@ async function readBody(request: Request): Promise<string | null> {
   return new TextDecoder("utf-8", { fatal: false }).decode(all);
 }
 
-export type VerifiedSignedRequest = { userId: string; issuedAt: number };
+export type VerifiedSignedRequest = { userId: string; issuedAt: number; eventKey: string };
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(text)));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 /** The signed request's Threads user id, or null when anything about it is off. Pure; no store, no network. */
 export async function verifySignedRequest(
@@ -161,7 +207,7 @@ export async function verifySignedRequest(
   if (typeof userId !== "string" || !USER_ID.test(userId)) return null;
   if (typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < 0) return null;
   if (issuedAt > nowSeconds + MAX_FUTURE_SKEW_SECONDS) return null;
-  return { userId, issuedAt };
+  return { userId, issuedAt, eventKey: await sha256Hex(encodedPayload) };
 }
 
 class StoreTimeout extends Error {}
@@ -194,12 +240,17 @@ export function createThreadsMetaCallbackHandler(deps: ThreadsMetaCallbackDeps) 
     if (!verified) return failure("INVALID_SIGNED_REQUEST");
     try {
       return await withTimeout(async () => {
+        const fields = { providerUserId: verified.userId, issuedAt: verified.issuedAt, eventKey: verified.eventKey };
         const account = await deps.store.accountByProviderUser(verified.userId);
         if (kind === "deauthorize") {
-          if (account !== null) await deps.store.markDeauthorized(account);
+          const event: ThreadsDeauthorizationEvent = Object.freeze({ kind: "deauthorization", ...fields });
+          if (account !== null) await deps.store.markDeauthorized(account, event);
           return new Response(null, { status: 204, headers: HEADERS });
         }
-        const code = await deps.store.requestDeletion(account, verified.userId);
+        const event: ThreadsDataDeletionRequestEvent = Object.freeze({ kind: "data_deletion_request", ...fields });
+        // Stop first: no more publishing for someone who asked for deletion, even if recording the request then fails.
+        if (account !== null) await deps.store.markDeauthorized(account, event);
+        const code = await deps.store.requestDeletion(account, verified.userId, event);
         if (typeof code !== "string" || !CONFIRMATION_CODE.test(code)) return failure("STORE_UNAVAILABLE");
         const url = new URL(statusBase!);
         url.searchParams.set("code", code);

@@ -36,8 +36,8 @@ function recordingStore(overrides: Partial<ThreadsMetaCallbackStore> = {}) {
       calls.push(`lookup ${id}`);
       return Promise.resolve(id === "1784140000000001" ? "sa_threads_alice" : null);
     },
-    markDeauthorized: (account) => {
-      calls.push(`deauthorize ${account}`);
+    markDeauthorized: (account, event) => {
+      calls.push(`deauthorize ${account} ${event.kind}`);
       return Promise.resolve();
     },
     requestDeletion: (account, user) => {
@@ -61,8 +61,10 @@ test("the handler meets the Meta callback contract M1-M7", async () => {
 
 test("signed request: well-formed fields only", async () => {
   const verify = async (payload: unknown, secret = SECRET) => verifySignedRequest(await signedRequest(secret, payload), SECRET, NOW);
-  assert.deepEqual(await verify(ok()), { userId: "1784140000000001", issuedAt: NOW });
-  assert.deepEqual(await verify(ok("1784140000000001", { expires: 0, extra: "ignored" })), { userId: "1784140000000001", issuedAt: NOW });
+  const fields = (v: Awaited<ReturnType<typeof verifySignedRequest>>) => v && { userId: v.userId, issuedAt: v.issuedAt };
+  assert.deepEqual(fields(await verify(ok())), { userId: "1784140000000001", issuedAt: NOW });
+  // `expires` is the token's expiry in Meta's signed requests (0 = does not expire): ignored, never a refusal.
+  assert.deepEqual(fields(await verify(ok("1784140000000001", { expires: 0, extra: "ignored" }))), { userId: "1784140000000001", issuedAt: NOW });
   for (const bad of [
     ok(1784140000000001 as unknown as string), // a number loses precision: refused
     ok("01784140000000001"),
@@ -79,7 +81,7 @@ test("signed request: well-formed fields only", async () => {
   ]) {
     assert.equal(await verify(bad), null, JSON.stringify(bad));
   }
-  assert.deepEqual(await verify(ok("1784140000000001", { issued_at: NOW + 600 })), { userId: "1784140000000001", issuedAt: NOW + 600 });
+  assert.deepEqual(fields(await verify(ok("1784140000000001", { issued_at: NOW + 600 }))), { userId: "1784140000000001", issuedAt: NOW + 600 });
   const good = await signedRequest(SECRET, ok());
   const [sig, body] = good.split(".");
   for (const bad of [`${sig}.${body}.x`, `${sig.slice(0, -2)}.${body}`, `${sig}==.${body}`, `.${body}`, `${sig}.`, `${sig} .${body}`]) {
@@ -134,7 +136,7 @@ test("deauthorize: 204 with no body for a known or an unknown person; only the b
     assert.equal(res.status, 204);
     assert.equal(await res.text(), "");
   }
-  assert.deepEqual(calls, ["lookup 1784140000000001", "deauthorize sa_threads_alice", "lookup 1784149999999999"]);
+  assert.deepEqual(calls, ["lookup 1784140000000001", "deauthorize sa_threads_alice deauthorization", "lookup 1784149999999999"]);
 });
 
 test("data deletion: the answer carries the store's code and the status URL, never the user id", async () => {
@@ -142,7 +144,11 @@ test("data deletion: the answer carries the store's code and the status URL, nev
   const res = await handlerWith(store)("data_deletion", await signedForm(ok()));
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), { url: `${STATUS_URL}?code=Code0123456789ab`, confirmation_code: "Code0123456789ab" });
-  assert.deepEqual(calls, ["lookup 1784140000000001", "delete sa_threads_alice 1784140000000001"]);
+  assert.deepEqual(calls, [
+    "lookup 1784140000000001",
+    "deauthorize sa_threads_alice data_deletion_request", // G4-02 #10: stopped first
+    "delete sa_threads_alice 1784140000000001",
+  ]);
 });
 
 test("a store that does not answer in time is 503, never acknowledged", async () => {
@@ -151,9 +157,8 @@ test("a store that does not answer in time is 503, never acknowledged", async ()
     const { store } = recordingStore(overrides);
     for (const kind of ["deauthorize", "data_deletion"] as const) {
       const res = await handlerWith(store, { storeTimeoutMs: 20 })(kind, await signedForm(ok()));
-      // A method the kind never calls cannot block it.
-      const unused = kind === "deauthorize" ? "requestDeletion" : "markDeauthorized";
-      const expectAck = unused in overrides;
+      // A method the kind never calls cannot block it (data deletion now calls all three).
+      const expectAck = kind === "deauthorize" && "requestDeletion" in overrides;
       assert.equal(res.status, expectAck ? (kind === "deauthorize" ? 204 : 200) : 503, `${kind} ${Object.keys(overrides)}`);
       if (!expectAck) assert.deepEqual(await res.json(), { ok: false, error: "STORE_UNAVAILABLE" });
     }
@@ -221,4 +226,155 @@ test("isolation: the module imports nothing; only its Edge entry and tests impor
     "supabase/functions/_shared/social/threads_meta_callback_test.ts",
     "supabase/functions/threads-meta-callbacks/http.ts",
   ]);
+});
+
+// --- G4-02 #10 (Issue #561): typed events, replay, cross-account, stop-before-delete, no logs, no network ---------------
+
+type Recorded = { method: string; account: string | null; event: Record<string, unknown> };
+function eventStore(accounts: Record<string, string> = { "1784140000000001": "sa_threads_alice" }) {
+  const seen: Recorded[] = [];
+  const stopped = new Set<string>();
+  const stopKeys = new Set<string>();
+  const codes = new Map<string, string>();
+  const store: ThreadsMetaCallbackStore = {
+    accountByProviderUser: (id) => Promise.resolve(accounts[id] ?? null),
+    markDeauthorized: (account, event) => {
+      seen.push({ method: "stop", account, event: { ...event } });
+      stopKeys.add(`${account}:${event.eventKey}`);
+      stopped.add(account);
+      return Promise.resolve();
+    },
+    requestDeletion: (account, user, event) => {
+      seen.push({ method: "delete", account, event: { ...event } });
+      const key = account ?? `unknown:${user}`;
+      if (!codes.has(key)) codes.set(key, `Code${String(codes.size).padStart(12, "0")}`);
+      return Promise.resolve(codes.get(key)!);
+    },
+  };
+  return { store, seen, stopped, stopKeys, codes };
+}
+
+test("events: deauthorization and data deletion request are separate typed events keyed by the signed payload", async () => {
+  const { store, seen } = eventStore();
+  const handler = handlerWith(store);
+  const signed = await signedRequest(SECRET, ok());
+  const body = new URLSearchParams({ signed_request: signed }).toString();
+  await handler("deauthorize", form(body));
+  await handler("data_deletion", form(body));
+  const expectedKey = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(signed.split(".")[1]))),
+    (b) => b.toString(16).padStart(2, "0"),
+  ).join("");
+  assert.deepEqual(seen.map((s) => [s.method, s.account, s.event.kind]), [
+    ["stop", "sa_threads_alice", "deauthorization"],
+    ["stop", "sa_threads_alice", "data_deletion_request"],
+    ["delete", "sa_threads_alice", "data_deletion_request"],
+  ]);
+  for (const s of seen) {
+    assert.deepEqual(Object.keys(s.event).sort(), ["eventKey", "issuedAt", "kind", "providerUserId"]);
+    assert.equal(s.event.eventKey, expectedKey);
+    assert.equal(s.event.providerUserId, "1784140000000001");
+    assert.equal(s.event.issuedAt, NOW);
+  }
+  // Another request (another issued_at) is another event.
+  await handler("deauthorize", await signedForm(ok("1784140000000001", { issued_at: NOW - 1 })));
+  assert.notEqual(seen.at(-1)!.event.eventKey, expectedKey);
+  assert.match(String(seen.at(-1)!.event.eventKey), /^[0-9a-f]{64}$/u);
+});
+
+test("replay or Meta's retry of the same signed request: the same answer, nothing new recorded", async () => {
+  const { store, stopKeys, codes } = eventStore();
+  const handler = handlerWith(store);
+  const body = new URLSearchParams({ signed_request: await signedRequest(SECRET, ok()) }).toString();
+  const first = await handler("data_deletion", form(body));
+  const second = await handler("data_deletion", form(body));
+  assert.equal(first.status, 200);
+  assert.deepEqual(await second.json(), await first.json());
+  assert.equal(stopKeys.size, 1);
+  assert.equal(codes.size, 1);
+  for (let i = 0; i < 2; i += 1) assert.equal((await handler("deauthorize", form(body))).status, 204);
+  assert.equal(stopKeys.size, 1, "the same signed payload is the same event for the stop too");
+});
+
+test("cross-account: a request signed for one person never touches another person's or another brand's account", async () => {
+  const accounts = { "1784140000000001": "sa_threads_brand_a_alice", "1784140000000002": "sa_threads_u_bob" };
+  const { store, seen, stopped } = eventStore(accounts);
+  const handler = handlerWith(store);
+  assert.equal((await handler("deauthorize", await signedForm(ok("1784140000000001")))).status, 204);
+  assert.equal((await handler("data_deletion", await signedForm(ok("1784140000000001")))).status, 200);
+  assert.deepEqual([...stopped], ["sa_threads_brand_a_alice"]);
+  assert.equal(seen.some((s) => s.account === "sa_threads_u_bob" || s.event.providerUserId === "1784140000000002"), false);
+  // Bob's id under alice's valid signature (payload swapped), or signed with any other secret: refused, nothing recorded.
+  const good = await signedRequest(SECRET, ok("1784140000000001"));
+  const swapped = `${good.split(".")[0]}.${b64url(new TextEncoder().encode(JSON.stringify(ok("1784140000000002"))))}`;
+  const before = seen.length;
+  for (const signed of [swapped, await signedRequest("another-app-secret-0123456789abcdef", ok("1784140000000002"))]) {
+    for (const kind of ["deauthorize", "data_deletion"] as const) {
+      const res = await handler(kind, form(new URLSearchParams({ signed_request: signed }).toString()));
+      assert.equal(res.status, 400);
+      assert.deepEqual(await res.json(), { ok: false, error: "INVALID_SIGNED_REQUEST" });
+    }
+  }
+  assert.equal(seen.length, before);
+  assert.deepEqual([...stopped], ["sa_threads_brand_a_alice"]);
+});
+
+test("data deletion stops the account before recording; a failure at either step is 503 and no code is invented", async () => {
+  const detail = "relation social_accounts: permission denied sa_threads_alice 1784140000000001";
+  const order: string[] = [];
+  const stopFails = recordingStore({
+    markDeauthorized: () => {
+      order.push("stop");
+      return Promise.reject(new Error(detail));
+    },
+    requestDeletion: () => {
+      order.push("delete");
+      return Promise.resolve("Code0123456789ab");
+    },
+  });
+  const res1 = await handlerWith(stopFails.store)("data_deletion", await signedForm(ok()));
+  assert.equal(res1.status, 503);
+  assert.deepEqual(order, ["stop"], "nothing is recorded as requested when the stop failed");
+  const recordFails = recordingStore({ requestDeletion: () => Promise.reject(new Error(detail)) });
+  const res2 = await handlerWith(recordFails.store)("data_deletion", await signedForm(ok()));
+  assert.equal(res2.status, 503);
+  const text = await res2.text();
+  assert.equal(text.includes("permission denied") || text.includes("1784140000000001") || text.includes("Code"), false);
+  assert.deepEqual(recordFails.calls, ["lookup 1784140000000001", "deauthorize sa_threads_alice data_deletion_request"]);
+  // An unknown person: nothing to stop; the request is still recorded (no enumeration).
+  const unknown = recordingStore();
+  assert.equal((await handlerWith(unknown.store)("data_deletion", await signedForm(ok("1784149999999999")))).status, 200);
+  assert.deepEqual(unknown.calls, ["lookup 1784149999999999", "delete null 1784149999999999"]);
+});
+
+test("nothing is logged and nothing goes out, on every path (success, refusal, failure, timeout)", async () => {
+  const methods = ["log", "info", "warn", "error", "debug", "trace"] as const;
+  const original = Object.fromEntries(methods.map((m) => [m, console[m]]));
+  const originalFetch = globalThis.fetch;
+  let logged = 0;
+  let fetched = 0;
+  for (const m of methods) console[m] = () => { logged += 1; };
+  globalThis.fetch = (() => { fetched += 1; return Promise.reject(new Error("no network")); }) as typeof fetch;
+  try {
+    const failing = recordingStore({ requestDeletion: () => Promise.reject(new Error("secret token sa_threads_alice")) });
+    const hanging = recordingStore({ accountByProviderUser: () => new Promise<never>(() => {}) });
+    for (const handler of [handlerWith(recordingStore().store), handlerWith(failing.store), handlerWith(hanging.store, { storeTimeoutMs: 10 })]) {
+      for (const kind of ["deauthorize", "data_deletion"] as const) {
+        for (const req of [
+          await signedForm(ok()),
+          await signedForm(ok(), "not-the-app-secret-0123456789abcdef"),
+          form("signed_request=a.b"),
+          form("x".repeat(9000)),
+          form("", "application/json"),
+        ]) await (await handler(kind, req)).body?.cancel();
+      }
+    }
+    const status = createThreadsDeletionStatusHandler({ store: { deletionStatus: () => Promise.reject(new Error("db down")) } });
+    await (await status(new Request("https://edge.example/x/deletion-status?code=Code0123456789ab"))).body?.cancel();
+  } finally {
+    for (const m of methods) console[m] = original[m];
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(logged, 0);
+  assert.equal(fetched, 0);
 });
