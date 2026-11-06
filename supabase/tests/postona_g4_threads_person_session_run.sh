@@ -203,6 +203,11 @@ stack=("$cand2" "$c/postona_threads_auth_runtime/claim_candidate.sql" "$pub/thre
   "$pub/threads_publish_release_candidate.sql" "$c/postona_threads_cleanup/threads_provider_cleanup_candidate.sql"
   "$c/postona_threads_disconnect/threads_disconnect_candidate.sql"
   "$c/postona_g4_credential_verdict/001_threads_publish_credential_verdict.sql")
+# G4-02 #11: a manual post also needs G4's credential verdict (after the verdict 001). G4MP_WITHOUT_VERDICT_GATE=1 leaves it out.
+g4mp="$c/postona_g4_threads_manual_publish_verdict/001_manual_publish_requires_credential_verdict.sql"
+g4mp_rb="$c/postona_g4_threads_manual_publish_verdict/001_manual_publish_requires_credential_verdict_rollback.sql"
+stack_before_g4mp=("${stack[@]}")
+[ "${G4MP_WITHOUT_VERDICT_GATE:-0}" = 1 ] || stack+=("$g4mp")
 # The personal MVP world up to (not including) G4's binding: G5's chain + MVP_INSTALL, PR #124, custody.
 mvp_world() {
   local db; db="$(copy "$1" "$mvp_pre")"
@@ -487,6 +492,52 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
   if flow_run personal "$mut_db"; then fail "the e2e passed without the completion's MV check"; fi
   grep -E '^not ok 8 ' <<<"$out" > /dev/null || { echo "$out"; fail "the mutant did not fail scenario 8"; }
   echo "MUTANT_CAUGHT completion_mv_removed by: $(grep -E '^not ok' <<<"$out" | cut -c1-90 | paste -sd ';' -)"
+
+  if [ "${G4MP_WITHOUT_VERDICT_GATE:-0}" != 1 ]; then
+    echo "== G4-02 #11 manual publish x credential verdict (postona_g4_threads_manual_publish_verdict/001)"
+    # (a) fail-before: the same e2e on the stack WITHOUT 001 fails scenario 30, and nothing else
+    nc_db="$(mvp_world appmut1)"
+    for f in "$g5pv" "${stack_before_g4mp[@]}"; do need "$nc_db" "$f"; done
+    if flow_run personal "$nc_db"; then fail "the e2e passed without the verdict gate"; fi
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = 30 ] || { echo "$out"; fail "without 001: expected only scenario 30 to fail"; }
+    echo "FAIL_BEFORE without 001: $(grep -E '^# measured 30' <<<"$out" | cut -c1-260)"
+    # (b) install / refusals / rollback on copies of a world that has the stack up to the verdict
+    base_db="$(mvp_world g4mpbase)"
+    for f in "$g5pv" "${stack_before_g4mp[@]}"; do need "$base_db" "$f"; done
+    body_md5() { q "$1" -c "select md5(prosrc) from pg_proc where oid = 'public.threads_manual_publish_authorize(uuid,text,boolean)'::regprocedure"; }
+    fn_acl() { q "$1" -c "select coalesce(proacl::text, 'null') from pg_proc where oid = 'public.threads_manual_publish_authorize(uuid,text,boolean)'::regprocedure"; }
+    [ "$(body_md5 "$base_db")" = 8e97121f49f5b934dda0408f9b4044e9 ] || fail "the release candidate's authorize body moved: $(body_md5 "$base_db")"
+    r="$(apply "$base_db" "$g4mp_rb")"; [ "$r" = G4MP_ROLLBACK_NOT_APPLIED ] || fail "rollback before install: $r"
+    echo "ok rollback refused before install ($r)"
+    db="$(copy "g4mp$RANDOM" "$base_db")"
+    need "$db" "$g4mp"
+    r="$(apply "$db" "$g4mp")"; [ "$r" = G4MP_PRECONDITION_ALREADY_APPLIED ] || fail "001 twice: $r"
+    [ "$(fn_acl "$base_db")" = "$(fn_acl "$db")" ] || fail "001 changed the ACL: $(fn_acl "$base_db") -> $(fn_acl "$db")"
+    need "$db" "$g4mp_rb"
+    [ "$(body_md5 "$db")" = 8e97121f49f5b934dda0408f9b4044e9 ] || fail "rollback did not restore the release body"
+    need "$db" "$g4mp"
+    echo "ok install, ALREADY_APPLIED, ACL unchanged ($(fn_acl "$db")), rollback restores md5 8e97121f, install again"
+    db="$(copy "g4mp$RANDOM" "$base_db")"
+    q "$db" -c "drop function postona_g4_credential.threads_publish_credential_verdict(uuid, text)" > /dev/null
+    r="$(apply "$db" "$g4mp")"; [ "$r" = G4MP_PRECONDITION_VERDICT ] || fail "001 without the verdict: $r"
+    echo "ok refused without the verdict ($r)"
+    db="$(copy "g4mp$RANDOM" "$base_db")"
+    q "$db" -c "do \$x\$ begin execute replace(pg_get_functiondef('public.threads_manual_publish_authorize(uuid,text,boolean)'::regprocedure), 'return null;', 'return null; -- moved'); end \$x\$" > /dev/null
+    r="$(apply "$db" "$g4mp")"; [ "$r" = G4MP_PRECONDITION_AUTHORIZE_UNPINNED ] || fail "001 on another authorize body: $r"
+    echo "ok refused on an unpinned authorize body ($r)"
+    db="$(copy "g4mp$RANDOM" "$base_db")"
+    r="$({ "$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$db" -f "$g4mp" 2>&1 || true; } | sed -n 's/^.*ERROR: *//p' | head -1)"
+    [ "$r" = G4MP_PRECONDITION_OWNER ] || fail "001 as a superuser: $r"
+    echo "ok refused as a superuser ($r)"
+    # (c) mutant: the verdict also gates the read-backs (confirm / reconcile) -> the unknown post of scenario 30 is stranded
+    sed 's/^  if p_require_permission then$/  if true then -- MUTANT/' "$g4mp" > "$tree/g4mp_mutant_readback.sql"
+    [ "$(grep -c MUTANT "$tree/g4mp_mutant_readback.sql")" = 1 ] || fail "read-back mutant not made"
+    mut_db="$(mvp_world appmut2)"
+    for f in "$g5pv" "${stack_before_g4mp[@]}" "$tree/g4mp_mutant_readback.sql"; do need "$mut_db" "$f"; done
+    if flow_run personal "$mut_db"; then fail "the e2e passed with the verdict gating read-backs"; fi
+    grep -E '^not ok 30 ' <<<"$out" > /dev/null || { echo "$out"; fail "the read-back mutant did not fail scenario 30"; }
+    echo "MUTANT_CAUGHT verdict_gates_readbacks by: $(grep -E '^not ok' <<<"$out" | cut -c1-90 | paste -sd ';' -)"
+  fi
   echo "G4T_APP_FLOW_ALL_PASS"
   exit 0
 fi
