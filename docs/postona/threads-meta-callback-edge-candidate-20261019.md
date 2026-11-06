@@ -3,6 +3,7 @@
 - task_id: `postona-g4-threads-meta-callback-edge-g4issue-20261019`（G4 の固定 Issue #319）
 - 返却先: POSTONA G4 担当ちゃ／完了コード K4／`next_task_allowed: false`
 - 判定: **SOURCE_ONLY_CANDIDATE（固定 OFF・未配備・永続の store なし）**。本番で使えるとは判断していない。
+- **追記（G4-02 #10, 2026-11-06）:** 型付きイベント・削除要求時の先行停止・ローカル HTTP 実行・次工程契約は `threads-meta-callbacks-delta-and-next-actions-20261106.md`。本文と違う点はそちらが正。
 - 土台: PR #327（head `743deee0a9c57bc756220523f3b8e24150478df2`）の上。#324 の棚卸しと M1〜M5 の契約は作り直さず、そのまま使った。
 
 ## 1. 公式の資料で確かめたこと・確かめられなかったこと（2026-10-19 に閲覧、API は呼んでいない）

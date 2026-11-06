@@ -114,6 +114,7 @@ test("gate lifted with a fake store: routes reach the handlers; unknown routes a
     "lookup 1784140000000001",
     "deauthorize sa_threads_alice",
     "lookup 1784140000000001",
+    "deauthorize sa_threads_alice", // G4-02 #10: a deletion request stops the account first
     "delete sa_threads_alice 1784140000000001",
     "status Code0123456789ab",
   ]);
