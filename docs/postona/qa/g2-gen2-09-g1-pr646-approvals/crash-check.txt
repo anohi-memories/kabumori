@@ -1,0 +1,3 @@
+2026-11-06 17:04 JST
+ls -t ~/Library/Logs/DiagnosticReports | grep SocialOperations  -> (no lines)
+SocialOperations crash reports during this run: 0

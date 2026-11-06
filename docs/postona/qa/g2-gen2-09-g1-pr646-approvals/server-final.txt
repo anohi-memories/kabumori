@@ -1,0 +1,17 @@
+# candidates (A)
+G2task9firstpost | approved | 2 | t
+G2task9reject | rejected | 2 | f
+G2task9regen | approved | 3 | t
+# reservations on A's account
+G2task9firstpost | planned | 1
+G2task9regen | planned | 1
+# notifications (A)
+approval_requested | t | 16:48
+approval_approved | f | 16:49
+approval_requested | f | 16:51
+approval_rejected | f | 16:52
+approval_requested | f | 16:53
+approval_requested | f | 16:54
+approval_approved | f | 16:54
+# push_outbox rows for A's notifications (none delivered: no worker ran)
+7
