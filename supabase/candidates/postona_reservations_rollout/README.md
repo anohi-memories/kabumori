@@ -19,7 +19,7 @@ A real rollout needs, first:
 ## Files
 | file | what it is |
 |---|---|
-| `MANIFEST.tsv` | Install order (16 steps) and the verified rollback order. Every file is pinned by sha256. |
+| `MANIFEST.tsv` | Install order (17 steps) and the verified rollback order. Every file is pinned by sha256. |
 | `preflight.sql` | Read-only checks, ending in `ROLLBACK`. Modes: `install` / `rollback` / `postcheck`. |
 | `rollout.sh` | `preflight`, `install` (all-or-nothing) and `rollback` (pre-checked before any change). |
 | `rollout_test_run.sh`, `smoke.sql` | Tests on G4's own personal world (local PG17, fake data). |
@@ -247,6 +247,24 @@ What it showed, for the operator:
 - **Rollback**: `017` first. It restores 012's bytes and the ACL; no row is touched.
 - **Proof**: `local_stack/` L32–L34; PG17 `g4_verdict_run.sh` phase VG (`g4_verdict/connection_generation.sql`); `api_test.ts`; `remote-reservation-store.test.mjs`.
 - **Threads** has no such field (U8 keeps it off).
+
+**Post approval + notifications** (G3-02 #16, `018`, Edge `postona-x-approvals`):
+- A candidate is not a reservation. Only `approve_candidate` makes one, through `create_batch` in the same transaction, so a candidate that is not approved never reaches the worker. Reservations made the existing way are unchanged.
+- **New**: 3 tables (owner only), 2 result types, 8 SECURITY DEFINER functions with EXECUTE to `postona_resv_api` only, and 9 internal helpers granted to nobody. No existing object is replaced.
+- **G3-02 #17 (H1 #37)**:
+  - P2-1: a candidate records G4's credential generation at submit / revise; approve refuses `APPROVAL_GENERATION_CHANGED` when it moved (checked before and after `create_batch`).
+  - P2-2: every notification / outbox write needs the workspace to be the caller's own personal one, checked in the INSERT itself.
+  - P3: `rollout.sh` checks that 018's tables exist in a separate statement before counting.
+- **G3-02 #18 (H1 #38)**:
+  - P2 race: `notify()` takes FOR SHARE locks on the account row, then the workspace's brands row, then the owner membership row, held until COMMIT, before its INSERT.
+    - A loss already in flight makes the write wait, then write nothing.
+    - A loss that starts later waits for the write.
+    - A concurrent INSERT of another membership row is not covered: that needs a G5-side lock contract.
+  - P3: `rollout.sh rollback` refuses before any step when the database and the manifest disagree on 017 / 018 (installed but not listed, listed but not installed, or partly present), or when the manifest's install and rollback steps differ.
+- **Notifications** are one row per event key. `reservation_changed` is derived on the next list. Each new notification gets a `push_outbox` row, which nothing reads or sends.
+- **Rollback**: `018` first, with `G3RO_APPROVAL_DISCARD_ROWS` stated.
+- **Contract for G1**: `docs/postona/g3-approval-notification-contract-20261105.md`.
+- **Proof**: `local_stack/` L35 (`G3LS_MUTANT=no_018` = the state before); PG17 `g4_verdict_run.sh` phase VA (`g4_verdict/approvals.sql`, `G3V_018` takes a mutated copy); `_shared/postona_approvals/api_test.ts`; `postona-x-approvals/http_test.ts`.
 
 **The reservations screen on this runtime** (G3-02 #13; `local_stack/g1_screen_integration.test.mjs`):
 - **Real here**: G1's screen and view rules (PR #606, pinned, read only), G3's stores and error actions, GoTrue JWTs, Kong, the Edge handlers, Postgres, G5 W0, G4's connect / disconnect SQL and verdict.

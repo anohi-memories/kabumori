@@ -12,6 +12,7 @@ python3 "$here/build-x-disconnected.py" "$tmp" || exit 1
 cat > "$tmp/inner.sh" <<EOF
 #!/bin/bash
 node --test --test-concurrency=1 $generated || exit 1
+node --test --test-concurrency=1 "$here/approvals.e2e.mjs" || exit 1
 if [ -n "\${G1T36_AFTER:-}" ]; then "\$G1T36_AFTER" || exit 1; fi
 echo G1T36_LOCAL_STACK_PASS
 EOF
