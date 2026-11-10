@@ -26,6 +26,14 @@
 // the 10 s request bound) a lifecycle change cannot stop a request already released. Every LATER write
 // needs a new release.
 //
+// The send onset (G4-02 #13, H1 #41 P2) is the publish release's COMMIT. From then until this server records
+// the answer, or THREADS_STALE_IN_FLIGHT_SECONDS pass, the database refuses a reconnect / re-bind of the account
+// (candidate postona_g4_threads_manual_publish_verdict/002's send fence), so the one publish request is ordered
+// before any new connection. This server keeps its side: it starts that request within
+// THREADS_PUBLISH_SEND_START_WINDOW_MS of asking for the release (or records that nothing was sent), and the
+// request is bounded at 10 s. A disconnect / stop / G5 end is not fenced: it never resumes a send, and a send
+// already leased is ordered before it.
+//
 // Statuses (THREADS_ATTEMPT_STATUSES): reserved -> creating_container -> container_created -> publishing
 // -> publish_returned -> published, plus failed / uncertain / published_unidentified. Only `published`
 // (read back with a permalink, same id, same owner) and `published_unidentified` (the provider's own
@@ -97,6 +105,16 @@ export const THREADS_PERMISSION_STEPS: ReadonlySet<ThreadsClaimStep> = new Set([
  * normal read-only reconciliation.
  */
 export const THREADS_STALE_IN_FLIGHT_SECONDS = 120;
+
+/**
+ * G4-02 #13: the publish request must start within this long of asking for its release, measured on both the
+ * monotonic clock and `deps.now()` (a clock that moved backwards also refuses). Otherwise nothing is sent and
+ * the attempt is recorded `failed` STEP_INTERRUPTED (no post can exist: the container was never published).
+ * With the 10 s request bound this keeps the request inside the database's send lease
+ * (THREADS_STALE_IN_FLIGHT_SECONDS, counted from the release transaction, which starts after this server asks).
+ */
+export const THREADS_PUBLISH_SEND_START_WINDOW_MS = 30_000;
+export const THREADS_PUBLISH_REQUEST_BOUND_MS = 10_000;
 export const THREADS_ATTEMPT_MAX_AGE_SECONDS = 15 * 60;
 
 /**
@@ -186,7 +204,7 @@ export const THREADS_ATTEMPT_ERROR_CODES = [
   "PUBLISHED_POST_AMBIGUOUS",
   "PUBLISHED_POST_NOT_FOUND",
   "ATTEMPT_EXPIRED", // set by the database: too old to continue, nothing was published
-  "STEP_INTERRUPTED", // set by the database: an in-flight step was abandoned (see the SQL candidate)
+  "STEP_INTERRUPTED", // set by the database: an in-flight step was abandoned (see the SQL candidate); or by the server: the publish request was not started inside its window, nothing was sent (G4-02 #13)
   "AUTHORIZATION_CHANGED", // set by the database: the connection changed after begin (G4-02 #12 candidate 002); nothing more was sent
 ] as const;
 export type ThreadsAttemptErrorCode = (typeof THREADS_ATTEMPT_ERROR_CODES)[number];
@@ -389,10 +407,17 @@ async function publishWhenReady(deps: ThreadsManualPublishDeps, caller: Verified
 }
 
 async function publishStep(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, attempt: ThreadsAttempt): Promise<ThreadsAttempt> {
+  const askedAt = { wall: deps.now().getTime(), mono: performance.now() };
   const redeemed = await deps.store.release(caller, { attemptId: attempt.attemptId, step: "publish" });
   const record = (result: ThreadsStepResult) =>
     deps.store.record(caller, { attemptId: attempt.attemptId, step: "publish", grant: redeemed.grant, result });
   if (redeemed.containerId === null) return await record({ to: "uncertain", errorCode: "STORED_CONTAINER_MISSING" });
+  // G4-02 #13: only inside the send lease (see THREADS_PUBLISH_SEND_START_WINDOW_MS); checked last, right before the request
+  const wall = deps.now().getTime() - askedAt.wall;
+  const mono = performance.now() - askedAt.mono;
+  if (!(wall >= 0 && wall <= THREADS_PUBLISH_SEND_START_WINDOW_MS && mono <= THREADS_PUBLISH_SEND_START_WINDOW_MS)) {
+    return await record({ to: "failed", errorCode: "STEP_INTERRUPTED" });
+  }
   try {
     const { mediaId } = await publishThreadsContainer(deps.fetch, redeemed.credential, redeemed.containerId);
     return await record({ to: "publish_returned", providerPostId: mediaId });

@@ -1,7 +1,9 @@
 -- NOT A MIGRATION. G4 SOURCE CANDIDATE ONLY (G4-02 #12, Issue #561). Rollback of 002_manual_publish_attempt_credential_generation.sql.
 -- Restores the bodies of public.begin_threads_manual_publish (md5 6ae40adbcd203592fbc3847c57f1bccf, threads_manual_publish_candidate.sql)
 -- and public.release_threads_manual_publish_step (md5 bd5bed5adcbef4d87614613f51c83dbf, threads_publish_release_candidate.sql)
--- exactly, then drops public.threads_manual_publish_attempt_generations. Owners and ACLs stay (CREATE OR REPLACE; checked).
+-- exactly, then drops G4-02 #13's send fence (trigger threads_manual_publish_send_fence on postona_threads_binding.bindings and
+-- postona_threads_binding.manual_publish_send_fence()) and public.threads_manual_publish_attempt_generations. Owners and ACLs
+-- stay (CREATE OR REPLACE; checked).
 -- Refuses (nothing changed) unless 002 is applied byte for byte. After it, write steps are again gated by 001 only (the P2
 -- gap returns): roll back only together with a decision to stop manual publishing, or before 001's rollback.
 -- Run as the lifecycle owner.
@@ -17,7 +19,13 @@ declare
 begin
   if pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is null
      or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_begin) is distinct from '7d26e42edaf3f7f85083880814983c2e'
-     or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_release) is distinct from 'e92ec523bb1a7a3ba7ca53dce744fb82' then
+     or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_release) is distinct from 'e92ec523bb1a7a3ba7ca53dce744fb82'
+     -- G4-02 #13: the send fence and its trigger, as installed
+     or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
+          where p.oid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) is distinct from '1e9c3cbf99dc053c72eb134cef913cb1'
+     or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
+          where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
+            and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1 then
     raise exception 'G4MG_ROLLBACK_NOT_APPLIED';
   end if;
   if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user)
@@ -203,6 +211,8 @@ exception
 end;
 $$;
 
+drop trigger threads_manual_publish_send_fence on postona_threads_binding.bindings;
+drop function postona_threads_binding.manual_publish_send_fence();
 drop table public.threads_manual_publish_attempt_generations;
 
 do $$
@@ -213,6 +223,11 @@ begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_begin) is distinct from '6ae40adbcd203592fbc3847c57f1bccf'
      or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_release) is distinct from 'bd5bed5adcbef4d87614613f51c83dbf' then
     raise exception 'G4MG_ROLLBACK_POSTCONDITION_BODY';
+  end if;
+  if pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is not null
+     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence')
+     or pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null then
+    raise exception 'G4MG_ROLLBACK_POSTCONDITION_LEFTOVER';
   end if;
   if (select pg_catalog.string_agg(p.oid::regprocedure::text || ':' || p.proowner::text || ':' || coalesce(p.proacl::text, '-')
                                    || ':' || p.prosecdef::text || ':' || coalesce(p.proconfig::text, '-'), '|' order by p.oid)
