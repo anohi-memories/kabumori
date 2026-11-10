@@ -208,6 +208,12 @@ g4mp="$c/postona_g4_threads_manual_publish_verdict/001_manual_publish_requires_c
 g4mp_rb="$c/postona_g4_threads_manual_publish_verdict/001_manual_publish_requires_credential_verdict_rollback.sql"
 stack_before_g4mp=("${stack[@]}")
 [ "${G4MP_WITHOUT_VERDICT_GATE:-0}" = 1 ] || stack+=("$g4mp")
+# G4-02 #12: each attempt is bound to the credential generation it was begun under (002, after 001).
+# G4MG_WITHOUT_GENERATION_GATE=1 leaves it out (002 needs 001: also left out with G4MP_WITHOUT_VERDICT_GATE=1).
+g4mg="$c/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql"
+g4mg_rb="$c/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation_rollback.sql"
+stack_before_g4mg=("${stack[@]}")
+[ "${G4MP_WITHOUT_VERDICT_GATE:-0}" = 1 ] || [ "${G4MG_WITHOUT_GENERATION_GATE:-0}" = 1 ] || stack+=("$g4mg")
 # The personal MVP world up to (not including) G4's binding: G5's chain + MVP_INSTALL, PR #124, custody.
 mvp_world() {
   local db; db="$(copy "$1" "$mvp_pre")"
@@ -495,11 +501,12 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
 
   if [ "${G4MP_WITHOUT_VERDICT_GATE:-0}" != 1 ]; then
     echo "== G4-02 #11 manual publish x credential verdict (postona_g4_threads_manual_publish_verdict/001)"
-    # (a) fail-before: the same e2e on the stack WITHOUT 001 fails scenario 30, and nothing else
+    # (a) fail-before: the same e2e on the stack WITHOUT 001 (so also without 002, which needs it) fails scenario 30 and
+    #     #12's 31-32, and nothing else
     nc_db="$(mvp_world appmut1)"
     for f in "$g5pv" "${stack_before_g4mp[@]}"; do need "$nc_db" "$f"; done
     if flow_run personal "$nc_db"; then fail "the e2e passed without the verdict gate"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = 30 ] || { echo "$out"; fail "without 001: expected only scenario 30 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "30 31 32" ] || { echo "$out"; fail "without 001: expected only scenarios 30 31 32 to fail"; }
     echo "FAIL_BEFORE without 001: $(grep -E '^# measured 30' <<<"$out" | cut -c1-260)"
     # (b) install / refusals / rollback on copies of a world that has the stack up to the verdict
     base_db="$(mvp_world g4mpbase)"
@@ -529,6 +536,29 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     r="$({ "$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$db" -f "$g4mp" 2>&1 || true; } | sed -n 's/^.*ERROR: *//p' | head -1)"
     [ "$r" = G4MP_PRECONDITION_OWNER ] || fail "001 as a superuser: $r"
     echo "ok refused as a superuser ($r)"
+    # G4-02 #12 (H1 #40 P3): a verdict that is not the reviewed one refuses the install (nothing changed)
+    verdict_fn="postona_g4_credential.threads_publish_credential_verdict(uuid,text)"
+    [ "$(q "$base_db" -c "select md5(prosrc) from pg_proc where oid = '$verdict_fn'::regprocedure")" = fb93a0ad84c44c6781521eec4618fff4 ] \
+      || fail "the installed verdict is not the reviewed body"
+    synth_true="create or replace function postona_g4_credential.threads_publish_credential_verdict(p_user_id uuid, p_social_account_id text)
+      returns table (verified boolean, credential_generation text, code text) language plpgsql stable security definer set search_path = ''
+      as \$v\$ begin return query select true, 'g4t1:00000000-0000-4000-8000-000000000000'::text, 'VERIFIED'::text; end \$v\$"
+    for drift in synthetic_true grant_authenticated search_path; do
+      db="$(copy "g4mp$RANDOM" "$base_db")"
+      case "$drift" in
+        synthetic_true) q "$db" -c "$synth_true" > /dev/null
+          [ "$(q "$db" -c "select verified::text || '|' || code from postona_g4_credential.threads_publish_credential_verdict(null, null)")" = "true|VERIFIED" ] \
+            || fail "the synthetic verdict is not constant-true" ;;
+        grant_authenticated) q "$db" -c "grant execute on function $verdict_fn to authenticated" > /dev/null ;;
+        search_path) q "$db" -c "alter function $verdict_fn set search_path = public" > /dev/null ;;
+      esac
+      [ "$(q "$db" -c "select proowner = (select oid from pg_roles where rolname = current_user) and prosecdef from pg_proc where oid = '$verdict_fn'::regprocedure")" = t ] \
+        || fail "drift $drift changed the owner / definer"
+      before_md5="$(body_md5 "$db")"
+      r="$(apply "$db" "$g4mp")"; [ "$r" = G4MP_PRECONDITION_VERDICT_UNPINNED ] || fail "001 on a drifted verdict ($drift): $r"
+      [ "$(body_md5 "$db")" = "$before_md5" ] || fail "001 changed authorize on a drifted verdict ($drift)"
+      echo "ok refused on a drifted verdict: $drift ($r, authorize unchanged)"
+    done
     # (c) mutant: the verdict also gates the read-backs (confirm / reconcile) -> the unknown post of scenario 30 is stranded
     sed 's/^  if p_require_permission then$/  if true then -- MUTANT/' "$g4mp" > "$tree/g4mp_mutant_readback.sql"
     [ "$(grep -c MUTANT "$tree/g4mp_mutant_readback.sql")" = 1 ] || fail "read-back mutant not made"
@@ -537,6 +567,101 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     if flow_run personal "$mut_db"; then fail "the e2e passed with the verdict gating read-backs"; fi
     grep -E '^not ok 30 ' <<<"$out" > /dev/null || { echo "$out"; fail "the read-back mutant did not fail scenario 30"; }
     echo "MUTANT_CAUGHT verdict_gates_readbacks by: $(grep -E '^not ok' <<<"$out" | cut -c1-90 | paste -sd ';' -)"
+  fi
+
+  if [ "${G4MP_WITHOUT_VERDICT_GATE:-0}" != 1 ] && [ "${G4MG_WITHOUT_GENERATION_GATE:-0}" != 1 ]; then
+    echo "== G4-02 #12 manual publish attempt x credential generation (postona_g4_threads_manual_publish_verdict/002)"
+    begin_fn="public.begin_threads_manual_publish(text,uuid,text)"
+    release_fn="public.release_threads_manual_publish_step(uuid,text,bigint,text,text)"
+    fn_md5() { q "$1" -c "select md5(prosrc) from pg_proc where oid = '$2'::regprocedure"; }
+    fn_acls() { q "$1" -c "select string_agg(oid::regprocedure::text || '=' || proowner::text || ':' || coalesce(proacl::text, 'null') || ':' || prosecdef::text || ':' || coalesce(proconfig::text, '-'), ' ' order by oid) from pg_proc where oid in ('$begin_fn'::regprocedure, '$release_fn'::regprocedure)"; }
+    has_table() { q "$1" -c "select to_regclass('public.threads_manual_publish_attempt_generations') is not null"; }
+    # (a) fail-before: the stack WITH 001 but WITHOUT 002 fails scenarios 31 and 32, and nothing else
+    ng_db="$(mvp_world appmut3)"
+    for f in "$g5pv" "${stack_before_g4mg[@]}"; do need "$ng_db" "$f"; done
+    if flow_run personal "$ng_db"; then fail "the e2e passed without the generation gate"; fi
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 32" ] || { echo "$out"; fail "without 002: expected only scenarios 31 32 to fail"; }
+    echo "FAIL_BEFORE without 002: $(grep -E '^# measured 31' <<<"$out" | cut -c1-900)"
+    echo "FAIL_BEFORE without 002: $(grep -E '^# measured 32' <<<"$out" | cut -c1-400)"
+    # (b) install / refusals / partial application / rollback on copies of a world with the stack up to 001
+    gbase="$(mvp_world g4mgbase)"
+    for f in "$g5pv" "${stack_before_g4mg[@]}"; do need "$gbase" "$f"; done
+    [ "$(fn_md5 "$gbase" "$begin_fn") $(fn_md5 "$gbase" "$release_fn")" = "6ae40adbcd203592fbc3847c57f1bccf bd5bed5adcbef4d87614613f51c83dbf" ] \
+      || fail "the candidates' begin / release bodies moved"
+    r="$(apply "$gbase" "$g4mg_rb")"; [ "$r" = G4MG_ROLLBACK_NOT_APPLIED ] || fail "002 rollback before install: $r"
+    echo "ok 002 rollback refused before install ($r)"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    need "$db" "$g4mg"
+    [ "$(fn_md5 "$db" "$begin_fn") $(fn_md5 "$db" "$release_fn")" = "7d26e42edaf3f7f85083880814983c2e e92ec523bb1a7a3ba7ca53dce744fb82" ] || fail "002 bodies"
+    [ "$(fn_acls "$gbase")" = "$(fn_acls "$db")" ] || fail "002 changed owner / ACL / settings: $(fn_acls "$gbase") -> $(fn_acls "$db")"
+    tbl="$(q "$db" -c "select relrowsecurity::text || ' ' || coalesce(relacl::text, 'null') || ' policies=' || (select count(*) from pg_policy where polrelid = c.oid) from pg_class c where oid = 'public.threads_manual_publish_attempt_generations'::regclass")"
+    r="$(apply "$db" "$g4mg")"; [ "$r" = G4MG_PRECONDITION_ALREADY_APPLIED ] || fail "002 twice: $r"
+    r="$(apply "$db" "$g4mp_rb")"; [ "$r" = G4MP_ROLLBACK_002_PRESENT ] || fail "001 rollback under 002: $r"
+    need "$db" "$g4mg_rb"
+    [ "$(fn_md5 "$db" "$begin_fn") $(fn_md5 "$db" "$release_fn") $(has_table "$db")" = "6ae40adbcd203592fbc3847c57f1bccf bd5bed5adcbef4d87614613f51c83dbf f" ] \
+      || fail "002 rollback did not restore the bodies / drop the table"
+    [ "$(fn_acls "$gbase")" = "$(fn_acls "$db")" ] || fail "002 rollback changed owner / ACL / settings"
+    need "$db" "$g4mg"
+    need "$db" "$g4mg_rb"
+    need "$db" "$g4mp_rb"
+    echo "ok 002 install (bodies 7d26e42e / e92ec523, owner / ACL / definer / settings unchanged: $(fn_acls "$db" | md5 -q)), table: $tbl"
+    echo "ok 002 twice refused, 001 rollback refused under 002, 002 rollback restores 6ae40adb / bd5bed5a and drops the table, install again, then 002 -> 001 rollback"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    need "$db" "$g4mp_rb"
+    r="$(apply "$db" "$g4mg")"; [ "$r" = G4MG_PRECONDITION_001 ] || fail "002 without 001: $r"
+    echo "ok 002 refused without 001 ($r)"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    q "$db" -c "do \$x\$ begin execute replace(pg_get_functiondef('$begin_fn'::regprocedure), 'end loop;', 'end loop; -- moved'); end \$x\$" > /dev/null
+    r="$(apply "$db" "$g4mg")"; [ "$r" = G4MG_PRECONDITION_BEGIN_UNPINNED ] || fail "002 on another begin body: $r"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    q "$db" -c "do \$x\$ begin execute replace(pg_get_functiondef('$release_fn'::regprocedure), 'v_token := null;', 'v_token := null; -- moved'); end \$x\$" > /dev/null
+    r2="$(apply "$db" "$g4mg")"; [ "$r2" = G4MG_PRECONDITION_RELEASE_UNPINNED ] || fail "002 on another release body: $r2"
+    echo "ok 002 refused on unpinned bodies ($r / $r2)"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    q "$db" -c "$synth_true" > /dev/null
+    r="$(apply "$db" "$g4mg")"; [ "$r" = G4MG_PRECONDITION_VERDICT_UNPINNED ] || fail "002 on a constant-true verdict: $r"
+    [ "$(has_table "$db") $(fn_md5 "$db" "$release_fn")" = "f bd5bed5adcbef4d87614613f51c83dbf" ] || fail "002 changed something on a drifted verdict"
+    echo "ok 002 refused on a constant-true verdict ($r, nothing changed)"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    r="$({ "$psql_bin" -X -q -v ON_ERROR_STOP=1 -h "$host" -p "$port" -U "$super" -d "$db" -f "$g4mg" 2>&1 || true; } | sed -n 's/^.*ERROR: *//p' | head -1)"
+    [ "$r" = G4MG_PRECONDITION_OWNER ] || fail "002 as a superuser: $r"
+    echo "ok 002 refused as a superuser ($r)"
+    # partial states: the table alone (a half-made install) / the bodies without the table -> refused, never completed
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    q "$db" -c "create table public.threads_manual_publish_attempt_generations (attempt_id uuid primary key)" > /dev/null
+    r="$(apply "$db" "$g4mg")"; [ "$r" = G4MG_PRECONDITION_ALREADY_APPLIED ] || fail "002 on a lone table: $r"
+    r2="$(apply "$db" "$g4mg_rb")"; [ "$r2" = G4MG_ROLLBACK_NOT_APPLIED ] || fail "002 rollback on a lone table: $r2"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    need "$db" "$g4mg"
+    q "$db" -c "drop table public.threads_manual_publish_attempt_generations" > /dev/null
+    r3="$(apply "$db" "$g4mg")"; [ "$r3" = G4MG_PRECONDITION_BEGIN_UNPINNED ] || fail "002 on bodies without the table: $r3"
+    r4="$(apply "$db" "$g4mg_rb")"; [ "$r4" = G4MG_ROLLBACK_NOT_APPLIED ] || fail "002 rollback on bodies without the table: $r4"
+    echo "ok partial states refused: lone table ($r / $r2), bodies without the table ($r3 / $r4)"
+    # one transaction: a failing postcondition leaves nothing behind
+    sed "s/is distinct from 'e92ec523bb1a7a3ba7ca53dce744fb82' then/is distinct from 'ffffffffffffffffffffffffffffffff' then/" "$g4mg" > "$tree/g4mg_broken_post.sql"
+    [ "$(grep -c ffffffffffffffffffffffffffffffff "$tree/g4mg_broken_post.sql")" = 1 ] || fail "broken-postcondition copy not made"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    r="$(apply "$db" "$tree/g4mg_broken_post.sql")"; [ "$r" = G4MG_POSTCONDITION_BODY ] || fail "broken postcondition: $r"
+    [ "$(has_table "$db") $(fn_md5 "$db" "$begin_fn") $(fn_md5 "$db" "$release_fn")" = "f 6ae40adbcd203592fbc3847c57f1bccf bd5bed5adcbef4d87614613f51c83dbf" ] \
+      || fail "a failed 002 left something behind"
+    echo "ok a failed postcondition rolls the whole 002 back ($r: no table, both bodies original)"
+    # (c) mutants (the postcondition's expected md5 follows the mutant body so that it installs)
+    make_mutant() { # name old new
+      sed -e "s/is distinct from 'e92ec523bb1a7a3ba7ca53dce744fb82' then/is distinct from (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_release) then/" \
+          -e "$2" "$g4mg" > "$tree/g4mg_mutant_$1.sql"
+      [ "$(grep -c MUTANT "$tree/g4mg_mutant_$1.sql")" = 1 ] || fail "mutant $1 not made"
+    }
+    make_mutant no_binding_lock 's/^    perform 1 from postona_threads_binding.bindings b where b.social_account_id = v_row.social_account_id for share;$/    null; -- MUTANT/'
+    make_mutant no_generation_compare 's/^    if v_bound is null or v_verified is distinct from true or v_generation is distinct from v_bound then$/    if v_bound is null or v_verified is distinct from true then -- MUTANT/'
+    make_mutant gates_readbacks "s/^  if p_step in ('create_container', 'check_container', 'publish') then\$/  if true then -- MUTANT/"
+    for m in no_binding_lock:32 no_generation_compare:31 gates_readbacks:31; do
+      name="${m%%:*}"; expect="${m##*:}"
+      mut_db="$(mvp_world "appmg$RANDOM")"
+      for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_mutant_$name.sql"; do need "$mut_db" "$f"; done
+      if flow_run personal "$mut_db"; then fail "the e2e passed with mutant $name"; fi
+      grep -E "^not ok $expect " <<<"$out" > /dev/null || { echo "$out"; fail "mutant $name did not fail scenario $expect"; }
+      echo "MUTANT_CAUGHT $name by: $(grep -E '^not ok' <<<"$out" | cut -c1-90 | paste -sd ';' -) | $(grep -E "^# measured $expect" <<<"$out" | cut -c1-300)"
+    done
   fi
   echo "G4T_APP_FLOW_ALL_PASS"
   exit 0

@@ -187,7 +187,7 @@ export const THREADS_ATTEMPT_ERROR_CODES = [
   "PUBLISHED_POST_NOT_FOUND",
   "ATTEMPT_EXPIRED", // set by the database: too old to continue, nothing was published
   "STEP_INTERRUPTED", // set by the database: an in-flight step was abandoned (see the SQL candidate)
-  "AUTHORIZATION_CHANGED", // PR #140's superseded redeem path only; the release candidate never sets it
+  "AUTHORIZATION_CHANGED", // set by the database: the connection changed after begin (G4-02 #12 candidate 002); nothing more was sent
 ] as const;
 export type ThreadsAttemptErrorCode = (typeof THREADS_ATTEMPT_ERROR_CODES)[number];
 

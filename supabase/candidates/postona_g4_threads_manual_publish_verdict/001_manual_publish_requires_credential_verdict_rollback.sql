@@ -3,6 +3,7 @@
 -- public.threads_manual_publish_authorize(uuid, text, boolean) EXACTLY (copied verbatim from
 -- ../postona_threads_publish/threads_publish_release_candidate.sql section 2; md5 of the body 8e97121f49f5b934dda0408f9b4044e9).
 -- Refuses unless the current body is 001's. Owner, definer, search_path and ACL are unchanged by both files.
+-- G4-02 #12: refuses while 002 is installed (G4MP_ROLLBACK_002_PRESENT): roll back 002 first.
 
 begin;
 set local lock_timeout = '2s';
@@ -17,6 +18,10 @@ begin
   end if;
   if (select p.proowner from pg_catalog.pg_proc p where p.oid = v_fn) is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
     raise exception 'G4MP_ROLLBACK_OWNER';
+  end if;
+  -- G4-02 #12: 002 builds on 001 (it checks 001's body at install): roll 002 back first
+  if pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null then
+    raise exception 'G4MP_ROLLBACK_002_PRESENT';
   end if;
 end $$;
 
