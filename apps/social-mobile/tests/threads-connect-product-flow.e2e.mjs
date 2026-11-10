@@ -10,12 +10,14 @@
 // G4-02 #11 (scenarios 20-30): after a REAL connect, the app's manual publish hook -> the publish Edge over 127.0.0.1 HTTP ->
 // the attested publish / release SQL (+ postona_g4_threads_manual_publish_verdict/001) -> a FAKE Threads publish API that
 // counts every write; nothing else is reachable from the Edge (refused and recorded).
+// G4-02 #12 (scenarios 31-32): an attempt is bound to the connection it was begun under (+ .../002): a reconnect in the
+// middle of a post (at the provider boundary, or racing the release in PostgreSQL) never lets the old attempt write.
 // Not part of `npm test` (*.test.mjs): it needs the runner's database.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Buffer } from 'node:buffer';
-import { generateKeyPairSync, sign, randomUUID } from 'node:crypto';
+import { generateKeyPairSync, sign, randomUUID, createHmac, randomBytes } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -660,7 +662,12 @@ const edgeFetch = async (input, init = {}) => {
     return postgrest(url.slice(`${SUPABASE_URL}/rest/v1/rpc/`.length).split('?')[0], init.body ? JSON.parse(String(init.body)) : {}, headers.get('Authorization'));
   }
   if (url === `${SUPABASE_URL}/auth/v1/user`) return gotrueUser(headers.get('Authorization'));
-  if (url.startsWith('https://graph.threads.net/')) return fakeThreadsPublish(url, init);
+  if (url.startsWith('https://graph.threads.net/')) {
+    // G4-02 #12: a one-shot hook at the provider boundary (e.g. the person reconnects before Threads answers)
+    const fired = threadsApi.before?.(url, init);
+    if (fired) { threadsApi.before = null; await fired; }
+    return fakeThreadsPublish(url, init);
+  }
   denied.push(url);
   throw new TypeError('network refused in this test');
 };
@@ -1053,4 +1060,255 @@ test('30. manual publish agrees with the G4 credential verdict: connection error
   assert.equal(results.reconcileA, 'published', 'a read-back of a post that may exist is not blocked by the error');
   assert.deepEqual([results.a, results.b, results.c], ['CONNECTION_NOT_VERIFIED', 'CONNECTION_NOT_VERIFIED', 'CREDENTIALS_MISSING']);
   assert.equal(outcome(await post()), 'posted:published', 'verified again: posting works');
+});
+
+// ---- G4-02 #12 (H1 #40 P2): an attempt writes only under the connection it was begun with ------------------------------------
+// supabase/candidates/postona_g4_threads_manual_publish_verdict/002 stores the verdict's credential_generation at begin and
+// compares it in every write release (create / check / publish). Without 002 (G4MG_WITHOUT_GENERATION_GATE=1) the old
+// attempts below post and scenarios 31-32 fail. The reconnects are REAL (app hook -> connect Edge -> G4 bridge -> SQL), the same
+// Threads user: social_account_id and G5's lifecycle_version stay, only G4's generation moves (H1's reproduction).
+const has002 = () => owner(`select to_regclass('public.threads_manual_publish_attempt_generations') is not null`) === 't';
+const generationOf = (accountId) => verdict(F, accountId).split('|')[1];
+const boundGeneration = (id) => (has002()
+  ? owner(`select coalesce((select credential_generation from public.threads_manual_publish_attempt_generations where attempt_id = ${lit(id)}::uuid), '-')`)
+  : 'no-002');
+const bindingOf = (accountId) => owner(`select social_account_id || '|' || lifecycle_version from postona_threads_binding.bindings where social_account_id = ${lit(accountId)}`);
+const statusError = (id) => attemptRow(id).split('|').filter((_, i) => i === 0 || i === 3).join('|');
+const latestAttempt = (accountId) => owner(`select id from public.threads_manual_publish_attempts where social_account_id = ${lit(accountId)} order by created_at desc limit 1`);
+const finishContainers = () => { for (const c of threadsApi.containers.values()) if (c.status === 'IN_PROGRESS') c.status = 'FINISHED'; };
+const pathOf = (url) => new URL(url).pathname;
+const isContainerRead = (url, init) => (init.method ?? 'GET') === 'GET' && threadsApi.containers.has(pathOf(url).split('/').pop());
+const isContainerCreate = (url, init) => init.method === 'POST' && pathOf(url).endsWith('/threads');
+/** The release SQL called as the publish SERVER would (its attestation, F's verified claims); optionally held open. */
+function releaseAsServerSql(attemptId, step, hold) {
+  const issued = Math.floor(Date.now() / 1000);
+  const nonce = randomBytes(32).toString('hex');
+  const attestation = createHmac('sha256', PUBLISH_KEY)
+    .update(['postona-threads-publish-release-v1', uid(F), attemptId, step, String(issued), nonce].join('\n')).digest('hex');
+  const claims = JSON.stringify({ sub: uid(F), role: 'authenticated', session_id: sid(F), is_anonymous: false });
+  return `begin;\nselect set_config('request.jwt.claims', ${lit(claims)}, true) is null;\n`
+    + `select r->>'status' || ':' || coalesce(r->>'code', '-') from public.release_threads_manual_publish_step(${lit(attemptId)}::uuid, ${lit(step)}, ${issued}, ${lit(nonce)}, ${lit(attestation)}) r;\n`
+    + (hold ? `select pg_sleep(${hold}), 'g4mg_y';\n` : '') + 'commit;\n';
+}
+/** F reconnects the SAME Threads user through the real connect path. */
+async function reconnectF() {
+  const app = await screen({ session: SESSION_F });
+  return (await connectAs(app, PUID_F)).kind;
+}
+/** Every attempt of the account still open is settled read-only, so the next case (and scenario) starts clean. */
+async function settleOpen(accountId) {
+  for (const id of owner(`select coalesce(string_agg(id::text, ' '), '') from public.threads_manual_publish_attempts
+      where social_account_id = ${lit(accountId)} and status not in ('published', 'published_unidentified', 'failed')`).split(' ').filter(Boolean)) {
+    await publishCall({ action: 'reconcile', attempt_id: id }, SESSION_F.access_token);
+  }
+}
+
+test('31. a reconnect in the middle of a post: the old attempt never writes again (container_created / at the provider / reserved); reconcile stays read-only; a new post works', { timeout: 120000 }, async () => {
+  const account = threadsAccount(F).id;
+  const results = {};
+  const lifecycle = bindingOf(account);
+  // (a) container_created, then the person reconnects, then resumes
+  threadsApi.plan[PUID_F] = { status: 'IN_PROGRESS' };
+  let { card, view } = await readyCard();
+  assert.equal(await view.publish(view.pin('再接続の前に始めた投稿 a')), true);
+  let shown = await card.settle();
+  const a = shown.answer;
+  results.aOpen = a.status;
+  results.aBoundAtBegin = boundGeneration(a.id) === generationOf(account);
+  const genBefore = generationOf(account);
+  finishContainers();
+  threadsApi.plan[PUID_F] = {};
+  results.aReconnect = await reconnectF();
+  results.aGenerationMoved = generationOf(account) !== genBefore;
+  results.aSameAccountAndLifecycle = bindingOf(account) === lifecycle;
+  let p0 = writes(PUID_F, 'publish');
+  await shown.followUp('resume', a);
+  shown = await card.settle();
+  results.a = statusError(a.id);
+  results.aPublishes = writes(PUID_F, 'publish') - p0;
+  await settleOpen(account);
+  // (b) H1's race: the reconnect happens while Threads is asked for the container's status (between check and publish)
+  ({ card, view } = await readyCard());
+  p0 = writes(PUID_F, 'publish');
+  threadsApi.before = (url, init) => (isContainerRead(url, init) ? (async () => { results.bReconnect = await reconnectF(); })() : null);
+  // the whole post runs in this one request, so the refusal of its publish step IS the answer (no attempt is shown)
+  results.bAnswered = await view.publish(view.pin('状態確認の最中に再接続された投稿 b'));
+  await card.settle();
+  threadsApi.before = null;
+  const b = latestAttempt(account);
+  results.b = statusError(b);
+  results.bPublishes = writes(PUID_F, 'publish') - p0;
+  await settleOpen(account);
+  // (c) the reconnect happens while the container is being created (creating_container in flight at the provider)
+  ({ card, view } = await readyCard());
+  const c0 = [writes(PUID_F, 'container'), writes(PUID_F, 'publish')];
+  threadsApi.before = (url, init) => (isContainerCreate(url, init) ? (async () => { results.cReconnect = await reconnectF(); })() : null);
+  results.cAnswered = await view.publish(view.pin('コンテナ作成の最中に再接続された投稿 c'));
+  await card.settle();
+  threadsApi.before = null;
+  const c = latestAttempt(account);
+  results.c = statusError(c);
+  results.cWrites = [writes(PUID_F, 'container') - c0[0], writes(PUID_F, 'publish') - c0[1]];
+  await settleOpen(account);
+  // (d) the outcome is unknown, then the person reconnects: reconcile settles it read-only, never resends
+  threadsApi.plan[PUID_F] = { publish: 'lost' };
+  ({ card, view } = await readyCard());
+  assert.equal(await view.publish(view.pin('結果不明のあとに再接続した投稿 d')), true);
+  shown = await card.settle();
+  threadsApi.plan[PUID_F] = {};
+  results.dOpen = shown.answer.status;
+  const d = shown.answer;
+  results.dReconnect = await reconnectF();
+  p0 = writes(PUID_F, 'publish');
+  await shown.followUp('reconcile', d);
+  shown = await card.settle();
+  results.d = statusError(d.id);
+  results.dPublishes = writes(PUID_F, 'publish') - p0;
+  await settleOpen(account);
+  // (e) an attempt with no stored generation (SYNTHETIC: begun before 002 was installed): unknown -> no write
+  threadsApi.plan[PUID_F] = { status: 'IN_PROGRESS' };
+  ({ card, view } = await readyCard());
+  assert.equal(await view.publish(view.pin('世代の記録がない投稿 e')), true);
+  shown = await card.settle();
+  const e = shown.answer;
+  if (has002()) owner(`delete from public.threads_manual_publish_attempt_generations where attempt_id = ${lit(e.id)}::uuid`);
+  finishContainers();
+  threadsApi.plan[PUID_F] = {};
+  p0 = writes(PUID_F, 'publish');
+  await shown.followUp('resume', e);
+  await card.settle();
+  results.e = statusError(e.id);
+  results.ePublishes = writes(PUID_F, 'publish') - p0;
+  await settleOpen(account);
+  // (g) reserved through a DIRECT RPC (no Edge): the generation is the server's; a forged attestation writes nothing; the
+  //     table is out of every API role's reach; after a reconnect the reserved attempt cannot be driven
+  const key = randomUUID();
+  const text = `直接RPCで予約した投稿 ${key.slice(0, 8)}`;
+  const bearer = `Bearer ${SESSION_F.access_token}`;
+  const begun = await postgrest('begin_threads_manual_publish', { p_social_account_id: account, p_idempotency_key: key, p_text: text }, bearer).json();
+  const g = begun.attempt?.attempt_id;
+  results.gBegun = begun.status;
+  results.gBoundAtBegin = boundGeneration(g) === generationOf(account);
+  const forged = await postgrest('release_threads_manual_publish_step', {
+    p_attempt_id: g, p_step: 'create_container', p_issued_at: Math.floor(Date.now() / 1000), p_nonce: '0'.repeat(64), p_attestation: '0'.repeat(64),
+  }, bearer).json();
+  results.gForged = `${forged.status}:${forged.code}|${statusError(g)}`;
+  const reach = ['anon', 'authenticated', 'service_role'].map((role) => psql(`begin; set local role ${role}; `
+    + 'select count(*) from public.threads_manual_publish_attempt_generations; commit;'));
+  results.gTableReach = reach.map((r) => (r.ok ? 'READABLE' : r.message.replace(/ for table.*/u, ''))).join(',');
+  const w0 = [writes(PUID_F, 'container'), writes(PUID_F, 'publish')];
+  results.gReconnect = await reconnectF();
+  // the app's retry of the same post replays the reserved attempt; the publish server's own create release then decides
+  const replayed = await publishCall({ action: 'publish', social_account_id: account, idempotency_key: key, text }, SESSION_F.access_token);
+  results.gReplayed = `${replayed.status}:${replayed.json.error ?? replayed.json.attempt?.status}`;
+  results.gServerRelease = statusError(g) === 'reserved|-'
+    ? owner(releaseAsServerSql(g, 'create_container', 0)).split('\n').filter((line) => line.includes(':')).join(',')
+    : 'not-reserved';
+  results.g = statusError(g);
+  results.gWrites = [writes(PUID_F, 'container') - w0[0], writes(PUID_F, 'publish') - w0[1]];
+  await settleOpen(account);
+  // (f) a NEW attempt after the reconnects posts once, bound to the current generation
+  ({ card, view } = await readyCard());
+  results.fMode = view.context.mode;
+  p0 = writes(PUID_F, 'publish');
+  if (results.fMode === 'ready') {
+    await view.publish(view.pin('再接続のあとの新しい投稿 f'));
+    shown = await card.settle();
+  }
+  const f = latestAttempt(account);
+  results.f = statusError(f);
+  results.fBound = boundGeneration(f) === generationOf(account);
+  results.fPublishes = writes(PUID_F, 'publish') - p0;
+  console.log(`measured 31: ${JSON.stringify(results)}`);
+  await settleOpen(account);
+  assert.deepEqual(denied, [], 'no request left this process');
+  assert.deepEqual([results.aOpen, results.aBoundAtBegin, results.aReconnect, results.aGenerationMoved, results.aSameAccountAndLifecycle],
+    ['container_created', true, 'verifying', true, true], 'H1 setup: same account and lifecycle, only the generation moved');
+  assert.deepEqual([results.a, results.aPublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(a) container_created + reconnect');
+  assert.deepEqual([results.bReconnect, results.bAnswered, results.b, results.bPublishes], ['verifying', false, 'failed|AUTHORIZATION_CHANGED', 0], '(b) reconnect at the status read');
+  assert.deepEqual([results.cReconnect, results.cAnswered, results.c, results.cWrites], ['verifying', false, 'failed|AUTHORIZATION_CHANGED', [1, 0]], '(c) reconnect while creating');
+  assert.deepEqual([results.dOpen, results.dReconnect, results.d, results.dPublishes], ['uncertain', 'verifying', 'published|-', 0], '(d) read-only');
+  assert.deepEqual([results.e, results.ePublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(e) unknown generation');
+  assert.deepEqual([results.gBegun, results.gBoundAtBegin, results.gForged], ['reserved', true, 'refused:ATTESTATION_INVALID|reserved|-'], '(g) direct RPC');
+  assert.equal(results.gTableReach, 'permission denied,permission denied,permission denied');
+  assert.deepEqual([results.gReconnect, results.gReplayed, results.gServerRelease, results.g, results.gWrites], ['verifying', '200:reserved', 'refused:CONNECTION_NOT_VERIFIED', 'failed|AUTHORIZATION_CHANGED', [0, 0]], '(g) reserved + reconnect');
+  assert.deepEqual([results.fMode, results.f, results.fBound, results.fPublishes], ['ready', 'published|-', true, 1], '(f) a new attempt posts');
+});
+
+test('32. a reconnect racing the release in PostgreSQL: open first -> the release waits, then refuses; release first -> the reconnect waits for it', { timeout: 120000 }, async () => {
+  const account = threadsAccount(F).id;
+  const results = {};
+  /** A second PostgreSQL session (the runner's owner), statements sent one by one from stdin. */
+  const session = (sql) => {
+    const child = spawn('psql', ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', PG.host, '-p', PG.port, '-U', PG.user, '-d', PG.db, '-f', '-'],
+      { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    child.stdout.on('data', (chunk) => { out += chunk; });
+    child.stderr.on('data', (chunk) => { out += chunk; });
+    child.stdin.end(sql);
+    return new Promise((resolve) => child.on('close', (code) => resolve({ code, out: out.trim() })));
+  };
+  const sleeping = async (tag) => {
+    for (let i = 0; i < 400; i += 1) {
+      if (owner(`select count(*) from pg_stat_activity where wait_event = 'PgSleep' and strpos(query, ${lit(tag)}) > 0`) !== '0') return true;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    return false;
+  };
+  // SYNTHETIC reconnect: the binding write the completion makes (a new connect's state id), without its account lock, so
+  // that only the release's own binding lock can order the two
+  const rebind = `update postona_threads_binding.bindings set oauth_state_id = gen_random_uuid(), bound_at = now() where social_account_id = ${lit(account)};`;
+  const openAttempt = async (label) => {
+    threadsApi.plan[PUID_F] = { status: 'IN_PROGRESS' };
+    const { card, view } = await readyCard();
+    assert.equal(view.context.mode, 'ready', `${label}: ${owner(`select coalesce(string_agg(status, ','), '-') from public.threads_manual_publish_attempts
+      where social_account_id = ${lit(account)} and status not in ('published', 'published_unidentified', 'failed')`)}`);
+    assert.equal(await view.publish(view.pin(label)), true);
+    const shown = await card.settle();
+    finishContainers();
+    threadsApi.plan[PUID_F] = {};
+    return { card, shown };
+  };
+  // (x) the reconnect's transaction is open first: the release (check, then publish) must wait for it and see its generation
+  let { card, shown } = await openAttempt('再接続が先に開いている投稿 x');
+  const x = shown.answer;
+  let gen0 = generationOf(account);
+  let p0 = writes(PUID_F, 'publish');
+  const rebinding = session(`begin;\n${rebind}\nselect pg_sleep(2), 'g4mg_x';\ncommit;\n`);
+  results.xHeld = await sleeping('g4mg_x');
+  let t0 = Date.now();
+  await shown.followUp('resume', x);
+  await card.settle();
+  results.xWaitedMs = Date.now() - t0;
+  results.xRebind = (await rebinding).code;
+  results.x = statusError(x.id);
+  results.xPublishes = writes(PUID_F, 'publish') - p0;
+  results.xGenerationMoved = generationOf(account) !== gen0;
+  await settleOpen(account);
+  // (y) the release commits first (a check release held open 2 s by the server's transaction): the reconnect waits for it
+  ({ card, shown } = await openAttempt('リリースが先に開いている投稿 y'));
+  const y = shown.answer;
+  gen0 = generationOf(account);
+  const releasing = session(releaseAsServerSql(y.id, 'check_container', 2));
+  results.yHeld = await sleeping('g4mg_y');
+  t0 = Date.now();
+  const rebound = psql(`set lock_timeout = '5s'; ${rebind}`);
+  results.yRebindWaitedMs = Date.now() - t0;
+  results.yRebind = rebound.ok;
+  results.yRelease = (await releasing).out.split('\n').filter((line) => /^[a-z]+:/u.test(line)).join(',');
+  results.yGenerationMoved = generationOf(account) !== gen0;
+  p0 = writes(PUID_F, 'publish');
+  await shown.followUp('resume', y);
+  await card.settle();
+  results.y = statusError(y.id);
+  results.yPublishes = writes(PUID_F, 'publish') - p0;
+  console.log(`measured 32: ${JSON.stringify(results)}`);
+  await settleOpen(account);
+  assert.deepEqual([results.xHeld, results.xRebind, results.xGenerationMoved], [true, 0, true]);
+  assert.deepEqual([results.x, results.xPublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(x) the release waited for the open reconnect and refused');
+  assert.ok(results.xWaitedMs >= 800, `(x) the release waited for the reconnect's commit (${results.xWaitedMs} ms)`);
+  assert.deepEqual([results.yHeld, results.yRelease, results.yRebind, results.yGenerationMoved], [true, 'released:-', true, true]);
+  assert.ok(results.yRebindWaitedMs >= 800, `(y) the reconnect waited for the release's commit (${results.yRebindWaitedMs} ms)`);
+  assert.deepEqual([results.y, results.yPublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(y) the next write step refuses');
+  assert.deepEqual(denied, [], 'no request left this process');
 });

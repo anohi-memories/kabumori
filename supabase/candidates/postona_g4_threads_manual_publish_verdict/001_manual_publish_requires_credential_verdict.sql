@@ -19,7 +19,11 @@
 --   NOT_OWN_WORKSPACE -> PUBLISH_FORBIDDEN; CREDENTIAL_MISSING -> CREDENTIALS_MISSING; CREDENTIAL_EXPIRED -> CREDENTIALS_EXPIRED;
 --   NOT_CONNECTED / NOT_BOUND / NOT_VERIFIED / CONNECTION_ERROR / INPUT_INVALID -> CONNECTION_NOT_VERIFIED;
 --   any other code (a G5 service state) -> SERVICE_NOT_ACTIVE.
--- Install after the release candidate and the verdict 001, as the lifecycle owner (the verdict is owner-only).
+-- Install after the release candidate and the verdict 001, as the lifecycle owner (the verdict is owner-only). G4-02 #12:
+-- the verdict must be the reviewed one byte for byte (body md5 fb93a0ad84c44c6781521eec4618fff4, the value G3 pins) with
+-- its owner-only ACL, or the install refuses (G4MP_PRECONDITION_VERDICT_UNPINNED). The authorize body is unchanged by #12.
+-- Not covered (by design, as G3's pin): a verdict replaced AFTER this install; only the owner can do that.
+-- Then 002_manual_publish_attempt_credential_generation.sql binds each attempt to the connection it was begun under.
 -- Rollback: 001_manual_publish_requires_credential_verdict_rollback.sql (restores the release candidate's body exactly).
 
 begin;
@@ -52,8 +56,22 @@ begin
      or (select c.relowner from pg_catalog.pg_class c where c.oid = 'public.threads_manual_publish_attempts'::regclass) is distinct from v_me then
     raise exception 'G4MP_PRECONDITION_OWNER';
   end if;
-  if not (select p.prosecdef and p.provolatile = 's' from pg_catalog.pg_proc p where p.oid = v_verdict) then
-    raise exception 'G4MP_PRECONDITION_VERDICT_SHAPE';
+  -- G4-02 #12 (H1 #40 P3): the REVIEWED verdict, not merely a function with its name, owner and shape. The pin G3's
+  -- reservation consumer uses (013_postona_threads_resv_g4_verdict.sql): body md5, signature + result, plpgsql, SECURITY
+  -- DEFINER, STABLE, empty search_path, an ACL naming only this owner, no API role reaching it. A synthetic body (e.g. one
+  -- that answers VERIFIED for any input) or a widened grant refuses the install; nothing is changed.
+  if not (select p.prosecdef and p.provolatile = 's' and p.proretset
+                 and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                 and p.proconfig is not distinct from array['search_path=""']
+                 and pg_catalog.md5(p.prosrc) = 'fb93a0ad84c44c6781521eec4618fff4'
+                 and pg_catalog.pg_get_function_result(p.oid) = 'TABLE(verified boolean, credential_generation text, code text)'
+                 and p.proacl is not null
+                 and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me)
+            from pg_catalog.pg_proc p where p.oid = v_verdict)
+     or exists (select 1 from pg_catalog.pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                 and (pg_catalog.has_function_privilege(r.oid, v_verdict, 'EXECUTE')
+                      or pg_catalog.has_schema_privilege(r.oid, 'postona_g4_credential', 'USAGE'))) then
+    raise exception 'G4MP_PRECONDITION_VERDICT_UNPINNED';
   end if;
 end $$;
 
