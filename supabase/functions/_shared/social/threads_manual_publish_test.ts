@@ -5,7 +5,10 @@ import {
   reconcileThreadsAttempt,
   resumeThreadsAttempt,
   THREADS_CLAIM_RULES,
+  THREADS_PUBLISH_REQUEST_BOUND_MS,
+  THREADS_PUBLISH_SEND_START_WINDOW_MS,
   THREADS_RECORD_TRANSITIONS,
+  THREADS_STALE_IN_FLIGHT_SECONDS,
   type ThreadsAttempt,
   type ThreadsManualPublishDeps,
   ThreadsStoreError,
@@ -453,4 +456,53 @@ test("a token whose expiry is unknown, past or within 5 minutes is never used; e
   await refuses(publishThreadsTextNow(deps(store, provider.fetch), CALLER, input()), "CREDENTIALS_EXPIRED");
   assert.equal(provider.calls.filter((c) => c.step === "publish").length, 0);
   assert.equal([...store.attempts.values()][0].status, "container_created");
+});
+
+// --- G4-02 #13 (H1 #41 P2): the publish request starts only inside the database's send lease ---------------------------
+
+/** The publish release answered `delayMs` later on the clock the flow reads (a stalled server, or a clock that moved). */
+function stalledAtPublish(store: FakeThreadsPublishStore, delayMs: number) {
+  let skew = 0;
+  const release = store.release.bind(store);
+  store.release = async (caller, input) => {
+    const out = await release(caller, input);
+    if (input.step === "publish") skew += delayMs;
+    return out;
+  };
+  return () => new Date(store.clock + skew);
+}
+
+test("G4-02 #13: a publish release answered after the start window: nothing is sent, failed STEP_INTERRUPTED", async () => {
+  const store = world();
+  const provider = scriptedFetch(golden());
+  const now = stalledAtPublish(store, THREADS_PUBLISH_SEND_START_WINDOW_MS + 1);
+  const attempt = await publishThreadsTextNow(deps(store, provider.fetch, { now }), CALLER, input());
+  assert.deepEqual([attempt.status, attempt.errorCode], ["failed", "STEP_INTERRUPTED"]);
+  assert.deepEqual(provider.calls.map((c) => c.step), ["create", "status"], "no publish request");
+  assert.deepEqual(store.log.slice(-2), ["release:publish", "record:publish:failed"], "the lease ends with the record");
+});
+
+test("G4-02 #13: a clock that moved backwards during the release also refuses to send", async () => {
+  const store = world();
+  const provider = scriptedFetch(golden());
+  const attempt = await publishThreadsTextNow(deps(store, provider.fetch, { now: stalledAtPublish(store, -1) }), CALLER, input());
+  assert.deepEqual([attempt.status, attempt.errorCode], ["failed", "STEP_INTERRUPTED"]);
+  assert.ok(!provider.calls.some((c) => c.step === "publish"));
+});
+
+test("G4-02 #13: at the edge of the window the request is sent once", async () => {
+  const store = world();
+  const provider = scriptedFetch(golden());
+  const attempt = await publishThreadsTextNow(deps(store, provider.fetch, { now: stalledAtPublish(store, THREADS_PUBLISH_SEND_START_WINDOW_MS) }), CALLER, input());
+  assert.equal(attempt.status, "published");
+  assert.equal(provider.calls.filter((c) => c.step === "publish").length, 1);
+});
+
+test("G4-02 #13: window + request bound stay well inside the send lease, and the contract's bound is that bound", async () => {
+  assert.ok(THREADS_PUBLISH_SEND_START_WINDOW_MS + THREADS_PUBLISH_REQUEST_BOUND_MS + 60_000 <= THREADS_STALE_IN_FLIGHT_SECONDS * 1000);
+  const contract = await Deno.readTextFile(new URL("./threads_publish_contract.ts", import.meta.url));
+  assert.equal(contract.split("setTimeout(() => controller.abort(), 10_000)").length - 1, 1);
+  assert.equal(THREADS_PUBLISH_REQUEST_BOUND_MS, 10_000);
+  const sql = await Deno.readTextFile(new URL("../../../candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql", import.meta.url));
+  assert.ok(sql.includes(`t.updated_at > pg_catalog.clock_timestamp() - interval '${THREADS_STALE_IN_FLIGHT_SECONDS} seconds'`), "the fence's lease is the stale bound");
 });

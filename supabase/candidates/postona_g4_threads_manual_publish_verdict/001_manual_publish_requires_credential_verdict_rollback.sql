@@ -4,6 +4,8 @@
 -- ../postona_threads_publish/threads_publish_release_candidate.sql section 2; md5 of the body 8e97121f49f5b934dda0408f9b4044e9).
 -- Refuses unless the current body is 001's. Owner, definer, search_path and ACL are unchanged by both files.
 -- G4-02 #12: refuses while 002 is installed (G4MP_ROLLBACK_002_PRESENT): roll back 002 first.
+-- G4-02 #13 (H1 #41 P3): also refuses a PARTIAL 002 (its bodies / send fence / trigger without its table:
+-- G4MP_ROLLBACK_002_PARTIAL) and begin / release bodies that are neither (G4MP_ROLLBACK_STACK_UNKNOWN), before any change.
 
 begin;
 set local lock_timeout = '2s';
@@ -22,6 +24,23 @@ begin
   -- G4-02 #12: 002 builds on 001 (it checks 001's body at install): roll 002 back first
   if pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null then
     raise exception 'G4MP_ROLLBACK_002_PRESENT';
+  end if;
+  -- G4-02 #13 (H1 #41 P3): ANY part of 002 left without its table (its begin / release bodies, the send fence or its trigger)
+  -- is a partial state: refused before anything changes. The two bodies must be exactly the ones 001 was installed over
+  -- (threads_manual_publish_candidate.sql / threads_publish_release_candidate.sql); anything else is an unknown stack.
+  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
+       where p.oid = pg_catalog.to_regprocedure('public.begin_threads_manual_publish(text,uuid,text)')) = '7d26e42edaf3f7f85083880814983c2e'
+     or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
+          where p.oid = pg_catalog.to_regprocedure('public.release_threads_manual_publish_step(uuid,text,bigint,text,text)')) = 'e92ec523bb1a7a3ba7ca53dce744fb82'
+     or pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is not null
+     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence') then
+    raise exception 'G4MP_ROLLBACK_002_PARTIAL';
+  end if;
+  if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
+       where p.oid = pg_catalog.to_regprocedure('public.begin_threads_manual_publish(text,uuid,text)')) is distinct from '6ae40adbcd203592fbc3847c57f1bccf'
+     or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
+          where p.oid = pg_catalog.to_regprocedure('public.release_threads_manual_publish_step(uuid,text,bigint,text,text)')) is distinct from 'bd5bed5adcbef4d87614613f51c83dbf' then
+    raise exception 'G4MP_ROLLBACK_STACK_UNKNOWN';
   end if;
 end $$;
 

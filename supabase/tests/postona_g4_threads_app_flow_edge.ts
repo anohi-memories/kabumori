@@ -26,7 +26,7 @@ const env = (k: string) => {
   return v;
 };
 const host = env("FLOW_PGHOST"), port = Number(env("FLOW_PGPORT")), user = env("FLOW_PGUSER"), database = env("FLOW_DB");
-if (!/^\/(private\/)?tmp\//.test(host) || !/^kb_tb_owner_\d+$/.test(user) || !/^kabumori_tb_\d+_app(mvp|mut[123]?|mg[0-9]{1,5})?$/.test(database)) {
+if (!/^\/(private\/)?tmp\//.test(host) || !/^kb_tb_owner_\d+$/.test(user) || !/^kabumori_tb_\d+_app(mvp|mut[123]?|mg[0-9]{1,5}|sf[0-9]{1,5})?$/.test(database)) {
   throw new Error("LOCAL_FIXTURE_REQUIRED");
 }
 const jwk = JSON.parse(env("FLOW_JWK")) as JsonWebKey & { kid: string };

@@ -25,10 +25,33 @@
 -- DEFINER, empty search_path, lock_timeout and ACLs (CREATE OR REPLACE keeps them; checked after). New DB object, least
 -- privilege: public.threads_manual_publish_attempt_generations -- RLS on, no policy, no grant to any role (ALL revoked from
 -- PUBLIC / anon / authenticated / service_role); only the owner's SECURITY DEFINER functions read or write it; a cascade from
--- the attempt removes it. No shared table, column, RLS policy, grant, Vault object, G3 or G5 object is touched.
+-- the attempt removes it. G4-02 #13 adds one trigger function in G4's schema postona_threads_binding (no EXECUTE for any API
+-- role) and its trigger on G4's postona_threads_binding.bindings (below). No shared table, column, RLS policy, grant, Vault
+-- object, G3 or G5 object is touched.
 -- Install after 001 (its authorize body f31f16d6ccbb4fc64946337325e93a35 must be in place), as the lifecycle owner. The
 -- verdict must be the reviewed one (the same pin as 001, md5 fb93a0ad84c44c6781521eec4618fff4).
--- Rollback: 002_manual_publish_attempt_credential_generation_rollback.sql (restores both bodies exactly, drops the table).
+--
+-- G4-02 #13 (H1 #41 P2, Issue #306): the publish release COMMITs and hands the credential to the server; a reconnect that
+-- committed after that but before the server's HTTP request still let the old attempt post (the release's locks end at its
+-- COMMIT). The send onset is now a contract between the release and every connection change:
+--   * the SEND LEASE: an attempt in `publishing` whose release is younger than 120 seconds (updated_at is set by the publish
+--     release; the same 120 s after which reconcile treats the step as abandoned). The lease ends when the server records
+--     the answer (publish_returned / failed / uncertain) or when it lapses.
+--   * postona_threads_binding.manual_publish_send_fence(), a BEFORE INSERT OR UPDATE trigger on G4's
+--     postona_threads_binding.bindings (the row every connect / reconnect / re-bind writes): a write that installs another
+--     oauth_state_id (= another credential generation) while that account holds a send lease is refused
+--     THREADS_BINDING_SEND_IN_PROGRESS (the whole connect transaction rolls back: no state, binding or secret change; the
+--     person connects again a moment later). Outside READ COMMITTED such a write is refused THREADS_BINDING_SEND_FENCE_ISOLATION
+--     (its snapshot could miss a lease committed after it began).
+--   * the publish server starts the request within THREADS_PUBLISH_SEND_START_WINDOW_MS (30 s) of asking for the release
+--     and bounds it at 10 s (supabase/functions/_shared/social/threads_manual_publish.ts), well inside the 120 s lease.
+-- So: a reconnect committed BEFORE the publish release -> the release refuses (G4-02 #12, above); a publish release committed
+-- first -> the reconnect cannot commit until that one send is over: the send is ordered before the reconnect, made at most
+-- once, and an unknown outcome is settled read-only. Not closed by any database: the provider still processing a request the
+-- client gave up on (timeout). Disconnect / stop / G5 end are not fenced: they never resume a send, and a send whose lease
+-- began before them is ordered before them. The begin / release bodies above are unchanged by #13.
+-- Rollback: 002_manual_publish_attempt_credential_generation_rollback.sql (restores both bodies exactly, drops the fence and
+-- the table).
 
 begin;
 set local lock_timeout = '2s';
@@ -42,7 +65,9 @@ declare
   v_authorize regprocedure := pg_catalog.to_regprocedure('public.threads_manual_publish_authorize(uuid,text,boolean)');
   v_verdict regprocedure := pg_catalog.to_regprocedure('postona_g4_credential.threads_publish_credential_verdict(uuid,text)');
 begin
-  if pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null then
+  if pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null
+     or pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is not null
+     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence') then
     raise exception 'G4MG_PRECONDITION_ALREADY_APPLIED';
   end if;
   if v_begin is null or v_release is null or v_authorize is null then
@@ -64,7 +89,8 @@ begin
      or exists (select 1 from pg_catalog.pg_proc p where p.oid in (v_begin, v_release, v_authorize, v_verdict) and p.proowner is distinct from v_me)
      or exists (select 1 from pg_catalog.pg_class c
                  where c.oid in ('public.threads_manual_publish_attempts'::regclass, 'postona_threads_binding.bindings'::regclass)
-                   and c.relowner is distinct from v_me) then
+                   and c.relowner is distinct from v_me)
+     or (select n.nspowner from pg_catalog.pg_namespace n where n.nspname = 'postona_threads_binding') is distinct from v_me then
     raise exception 'G4MG_PRECONDITION_OWNER';
   end if;
   -- the reviewed verdict (as 001 and G3's 013): body, shape, owner-only ACL, no API role reaching it
@@ -307,6 +333,34 @@ exception
 end;
 $$;
 
+-- G4-02 #13: the send fence (see the header). A publish release has made the attempt `publishing` (updated_at = its
+-- transaction's start, which is after the server asked for it); until the answer is recorded or 120 s pass, no write may give
+-- the account another oauth_state_id. The release holds the binding FOR SHARE to its COMMIT, so a reconnect's binding write
+-- waits for it and then runs this function, whose query takes a fresh snapshot (READ COMMITTED) and sees that release.
+create function postona_threads_binding.manual_publish_send_fence()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'UPDATE' and new.social_account_id is not distinct from old.social_account_id
+     and new.oauth_state_id is not distinct from old.oauth_state_id then
+    return new;  -- the generation does not move
+  end if;
+  if pg_catalog.current_setting('transaction_isolation') <> 'read committed' then
+    raise exception 'THREADS_BINDING_SEND_FENCE_ISOLATION' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.threads_manual_publish_attempts t
+              where t.social_account_id in (new.social_account_id, case when tg_op = 'UPDATE' then old.social_account_id end)
+                and t.status = 'publishing'
+                and t.updated_at > pg_catalog.clock_timestamp() - interval '120 seconds') then
+    raise exception 'THREADS_BINDING_SEND_IN_PROGRESS' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function postona_threads_binding.manual_publish_send_fence() from public, anon, authenticated, service_role;
+create trigger threads_manual_publish_send_fence
+  before insert or update on postona_threads_binding.bindings
+  for each row execute function postona_threads_binding.manual_publish_send_fence();
+
 -- Postconditions: the exact new bodies; owners / ACLs / definer / settings unchanged; the table reachable by no role but its owner.
 do $$
 declare
@@ -337,6 +391,17 @@ begin
       raise exception 'G4MG_POSTCONDITION_TABLE_ACL %', v_api;
     end if;
   end loop;
+  -- G4-02 #13: the fence exactly as reviewed, owner-only, and its trigger enabled: BEFORE, ROW, INSERT + UPDATE (tgtype 23)
+  if not coalesce((select p.prosecdef and p.proowner = v_me and p.proconfig is not distinct from array['search_path=""']
+                          and pg_catalog.md5(p.prosrc) = '1e9c3cbf99dc053c72eb134cef913cb1'
+                          and p.proacl is not null and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me)
+                     from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')), false)
+     or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
+          where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
+            and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')
+            and t.tgtype = 23 and t.tgenabled = 'O' and not t.tgisinternal and t.tgqual is null) <> 1 then
+    raise exception 'G4MG_POSTCONDITION_FENCE';
+  end if;
 end $$;
 
 commit;
