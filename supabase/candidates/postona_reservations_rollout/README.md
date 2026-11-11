@@ -261,6 +261,11 @@ What it showed, for the operator:
     - A loss that starts later waits for the write.
     - A concurrent INSERT of another membership row is not covered: that needs a G5-side lock contract.
   - P3: `rollout.sh rollback` refuses before any step when the database and the manifest disagree on 017 / 018 (installed but not listed, listed but not installed, or partly present), or when the manifest's install and rollback steps differ.
+- **G3-02 #19 (with G5 PR #645)**:
+  - The local stack (`local_stack/run.sh`) and PG17 (`g4_verdict_run.sh` phase VG5) apply G5's pinned ownership-lock trigger (a4d6c0eb, blob f434be5a) in their throw-away databases only, and roll it back after G3's rollback. `G3LS_MUTANT=no_g5_lock` = the state before.
+  - With it, a second member joining, owning another workspace, or a role change waits for a notification write. While the workspace is not personal, the list writes nothing.
+  - L38 runs submit (3 concurrent replays) → approve with a lost answer → read back → retry → one reservation → the worker sends once; the gated real entry answers 503 with 0 writes.
+  - The G2 #9 P3 decisions are in the G1 contract doc, section 5a. No SQL / Edge change.
 - **Notifications** are one row per event key. `reservation_changed` is derived on the next list. Each new notification gets a `push_outbox` row, which nothing reads or sends.
 - **Rollback**: `018` first, with `G3RO_APPROVAL_DISCARD_ROWS` stated.
 - **Contract for G1**: `docs/postona/g3-approval-notification-contract-20261105.md`.

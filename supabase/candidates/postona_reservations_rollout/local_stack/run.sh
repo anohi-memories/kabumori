@@ -120,6 +120,7 @@ case "${G3LS_MUTANT:-}" in
   tick_key_in_header) mutate16 "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json'," "    headers := pg_catalog.jsonb_build_object('Content-Type', 'application/json', 'x-postona-worker-secret', v_key," ;;
   no_017) grep -v -E '^(install|rollback)\tx01[78]\t' "$bundle/MANIFEST.tsv" > "$WORK/bundle/MANIFEST.tsv" ;;   # the state before G3-02 #15 (018 needs 017)
   no_018) grep -v -E '^(install|rollback)\tx018\t' "$bundle/MANIFEST.tsv" > "$WORK/bundle/MANIFEST.tsv" ;;   # the state before G3-02 #16
+  no_g5_lock) ;;   # G3-02 #19: G5 PR #645's ownership-lock trigger is not applied (the state before)
   g1_writes_stay_on|g1_write_resent) ;;   # applied below, to the extracted G1 copy
   *) fail "unknown G3LS_MUTANT" ;;
 esac
@@ -228,6 +229,18 @@ SQL
 echo "OK 016 worker tick installed (pg_net + Vault + pgcrypto; re-apply refused; production target rule measured); TEST ONLY target: this stack's kong"
 mode=install; o="$(ro 2>&1)" && fail "a second install succeeded"; grep -q G3_ROLLOUT_PREFLIGHT_REFUSED <<<"$o" || fail "second install: $o"
 echo "OK G3 rollout.sh preflight + install ($STEPS steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused"
+
+# G3-02 #19: G5 PR #645's workspace-ownership lock trigger (G5's source, pinned and read only; applied to this throw-away stack only)
+G5WO_HEAD=a4d6c0eb56441abaf00717128720e5bf6209a329; G5WO_DIR=supabase/candidates/postona_workspace_ownership_lock
+git -C "$REPO" cat-file -e "${G5WO_HEAD}^{commit}" 2>/dev/null || fail "G5 head $G5WO_HEAD missing (git fetch origin $G5WO_HEAD)"
+[ "$(git -C "$REPO" rev-parse "${G5WO_HEAD}:${G5WO_DIR}/001_workspace_ownership_lock.sql")" = f434be5a1ca0663fe5b6efe5666cebc9f25e885c ] || fail "G5 001 is not the pinned blob"
+[ "$(git -C "$REPO" rev-parse "${G5WO_HEAD}:${G5WO_DIR}/001_workspace_ownership_lock_rollback.sql")" = 3a8d741d9a3aebab85e158eb2da1007c4d926679 ] || fail "G5 001 rollback is not the pinned blob"
+git -C "$REPO" show "${G5WO_HEAD}:${G5WO_DIR}/001_workspace_ownership_lock.sql" > "$WORK/g5wo.sql"
+git -C "$REPO" show "${G5WO_HEAD}:${G5WO_DIR}/001_workspace_ownership_lock_rollback.sql" > "$WORK/g5wo_rb.sql"
+if [ "${G3LS_MUTANT:-}" != no_g5_lock ]; then
+  own -f "$WORK/g5wo.sql" >/dev/null || fail "G5 001 apply"
+  echo "OK G5 PR #645 ownership-lock trigger applied (pinned a4d6c0eb; this stack only)"
+fi
 
 # the test's LOGIN members (stand-ins for the separately approved rollout step): random passwords, never printed, 0600 file only
 API_PW="$(openssl rand -hex 24)"; WORKER_PW="$(openssl rand -hex 24)"; WORKER_SECRET="$(openssl rand -hex 24)"; TEST_PW="$(openssl rand -hex 24)"
@@ -368,4 +381,7 @@ left="$(own -A -t -c "select (select count(*) from pg_namespace where nspname in
 [ "$left" = "0/0" ] || fail "G3 left after the rollback: $left"
 mode=preflight; o="$(ro 2>&1)" || fail "preflight after rollback: $o"; grep -q 'G3_ROLLOUT_PREFLIGHT_PASS fresh' <<<"$o" || fail "preflight after rollback: $o"
 echo "OK RB refused before any change: live rows, the uncertain rows alone, rows not stated, login members; then $STEPS steps rolled back (X $xrows, Threads $trows discarded), G3 schemas + roles gone, preflight fresh again"
+own -f "$WORK/g5wo_rb.sql" >/dev/null || fail "G5 001 rollback"
+[ "$(own -A -t -c "select count(*) from pg_trigger where tgname = 'postona_workspace_ownership_lock'")" = 0 ] || fail "G5's trigger left"
+echo "OK G5 PR #645 rollback after G3's: the trigger and its function gone"
 echo "G3LS_LOCAL_STACK_PASS"

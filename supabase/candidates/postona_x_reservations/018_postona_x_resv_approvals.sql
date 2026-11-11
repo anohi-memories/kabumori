@@ -1,5 +1,5 @@
--- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16; G3-02 #17: H1 #37 P2-1 / P2-2 fixed; G3-02 #18: H1 #38 P2 race fixed): post
--- approval + the person's notification events. NOT applied anywhere.
+-- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16; G3-02 #17: H1 #37 P2-1 / P2-2 fixed; G3-02 #18: H1 #38 P2 race fixed; G3-02 #19:
+-- the derived sync skips states already written): post approval + the person's notification events. NOT applied anywhere.
 -- Applied last, after 001-006, 008, 010, 012, 014, 015 and 017; rolled back FIRST with 018_..._rollback.sql.
 --
 -- A post candidate is NOT a reservation. The person submits it (pending_approval), may revise it, then approves or rejects it. Only an
@@ -206,6 +206,9 @@ begin
     join postona_x_resv.reservations r on r.id = c.reservation_id and r.user_id = c.user_id
     where c.user_id = p_user_id and c.state = 'approved' and (r.revision > 1 or r.status <> 'planned')
       and postona_x_resv.approval_workspace_live(p_user_id, c.brand_id)
+      -- G3-02 #19: only states not yet written, so a list locks (notify) and inserts only for new events, not for every past one
+      and not exists (select 1 from postona_x_resv.notifications n
+                      where n.user_id = p_user_id and n.event_key = 'reservation:' || r.id || ':r' || r.revision || ':' || r.status)
   loop
     perform postona_x_resv.notify(p_user_id, v.brand_id, 'reservation:' || v.reservation_id || ':r' || v.revision || ':' || v.status,
                                   'reservation_changed', v.candidate_id, v.reservation_id, v.revision, v.status, v.scheduled_at);
