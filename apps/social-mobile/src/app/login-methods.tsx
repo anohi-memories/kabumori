@@ -165,10 +165,10 @@ export default function LoginMethodsScreen() {
         </Card>
 
         <Card>
-          <Text style={{ color: colors.ink, fontWeight: '800' }}>アカウントの削除</Text>
-          <Text style={styles.muted}>削除されるもの・残るものを確認してから削除できます。{accountDeletion === 'available' ? '' : 'アプリ内での削除は現在準備中です。'}</Text>
+          <Text style={{ color: colors.ink, fontWeight: '800' }}>利用終了・共通IDの管理</Text>
+          <Text style={styles.muted}>POSTONAだけの利用終了と、共通IDの完全削除の違いを確認できます。{accountDeletion === 'available' ? '' : '利用終了と完全削除は現在準備中です。'}</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push('/account-deletion')} style={({ pressed }) => [styles.button, { backgroundColor: colors.danger }, pressed && styles.buttonPressed]}>
-            <Text style={styles.buttonText}>アカウントの削除について</Text>
+            <Text style={styles.buttonText}>利用終了・共通IDの管理</Text>
           </Pressable>
         </Card>
 
