@@ -1,0 +1,76 @@
+{
+  "recommended_model": "GPT-6（高）",
+  "scope": "A/B/C approved production stop evidence; no secrets or post bodies",
+  "files": [
+    {
+      "path": "after-A.json",
+      "bytes": 24007,
+      "sha256": "6dff267a03de126e1a45ef40aefa43d5900122c8b8896ac1b7dfdb1ec66d29d3"
+    },
+    {
+      "path": "after-final.json",
+      "bytes": 24007,
+      "sha256": "b47575e7bb8afeb77dff7e9364b1522a55de555065c0d21921d66376222f56e8"
+    },
+    {
+      "path": "atomic-stop.sql",
+      "bytes": 47639,
+      "sha256": "5f095e5c8bf4c9329b923df6cf8c7b8a80b04d111493e3fd0f857874cbe86012"
+    },
+    {
+      "path": "before.json",
+      "bytes": 23998,
+      "sha256": "d47464f3fc2d3e452f192e671f6200fbbd81f7d9161aa1dcb3417d3b107d943e"
+    },
+    {
+      "path": "edge-metadata.json",
+      "bytes": 470,
+      "sha256": "8f268eb96cf7b5d4025f32c381b7859324eb54bb90268b62c67fa610dd31415a"
+    },
+    {
+      "path": "github-after.json",
+      "bytes": 9506,
+      "sha256": "0a3ede1c1e9fd7ec225297980d429134847945a069da01da0fc9379d0763053a"
+    },
+    {
+      "path": "github-before.json",
+      "bytes": 2470,
+      "sha256": "02967ac770776601b40102ddcf74aa289d4948eee7109c501ec9ece2f3ae80a7"
+    },
+    {
+      "path": "github-final.json",
+      "bytes": 2657,
+      "sha256": "05cb9d73de71230dfdadfae2d8c6f3aa7a142c80c88e6aff2513a72742f69c3c"
+    },
+    {
+      "path": "natural-cron-observation.json",
+      "bytes": 1204,
+      "sha256": "fdad37b3d3ebbcd478d0d22d011a99b85d6fcd9fe322305953de956e576ce2bd"
+    },
+    {
+      "path": "preflight-comparison.json",
+      "bytes": 357,
+      "sha256": "54e1dc45ac87044817ad3ac0d66c5b53a7b8d24dc2040dd8bcf6b84ee9dd2d3d"
+    },
+    {
+      "path": "preflight.sql",
+      "bytes": 4305,
+      "sha256": "62dbda84dc9328258e8ae72bb7e4b325b1c1b6dffa4498f5cef20dc2b83ba94a"
+    },
+    {
+      "path": "transaction-audit.json",
+      "bytes": 4217,
+      "sha256": "f58a1d9e5edd2d85e3d80689b7c0833939f2fa3237c1430355b4513daf1786f5"
+    },
+    {
+      "path": "workflow-B.json",
+      "bytes": 1657,
+      "sha256": "7e6394133e06e004656c8e77784d332b1671e71ed2e0f60fc5e8aeb765642f6f"
+    },
+    {
+      "path": "workflow-C.json",
+      "bytes": 1669,
+      "sha256": "7ffd04ab3596b06bc81add213a3ae3affbb2115051c2537a88716ff8e23f1622"
+    }
+  ]
+}

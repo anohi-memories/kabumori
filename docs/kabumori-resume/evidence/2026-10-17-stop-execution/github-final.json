@@ -1,0 +1,66 @@
+{
+  "observed_at": "2026-10-17T10:53:39.762853+00:00",
+  "workflows": {
+    "total_count": 3,
+    "workflows": [
+      {
+        "id": 371309016,
+        "node_id": "W_kwDOUJkyLs4WIbnY",
+        "name": "Sync AI Lab diary snapshot",
+        "path": ".github/workflows/ai-lab-diary-snapshot.yml",
+        "state": "active",
+        "created_at": "2026-10-01T00:29:06.000+09:00",
+        "updated_at": "2026-10-01T00:29:06.000+09:00",
+        "url": "https://api.github.com/repos/anohi-memories/kabumori/actions/workflows/371309016",
+        "html_url": "https://github.com/anohi-memories/kabumori/blob/main/.github/workflows/ai-lab-diary-snapshot.yml",
+        "badge_url": "https://github.com/anohi-memories/kabumori/workflows/Sync%20AI%20Lab%20diary%20snapshot/badge.svg"
+      },
+      {
+        "id": 376087886,
+        "node_id": "W_kwDOUJkyLs4WaqVO",
+        "name": "Check morning greeting image",
+        "path": ".github/workflows/morning-greeting-image-check.yml",
+        "state": "disabled_manually",
+        "created_at": "2026-10-06T15:02:21.000+09:00",
+        "updated_at": "2026-10-17T19:51:12.000+09:00",
+        "url": "https://api.github.com/repos/anohi-memories/kabumori/actions/workflows/376087886",
+        "html_url": "https://github.com/anohi-memories/kabumori/blob/main/.github/workflows/morning-greeting-image-check.yml",
+        "badge_url": "https://github.com/anohi-memories/kabumori/workflows/Check%20morning%20greeting%20image/badge.svg"
+      },
+      {
+        "id": 347498805,
+        "node_id": "W_kwDOUJkyLs4Utmk1",
+        "name": "Generate morning greeting image",
+        "path": ".github/workflows/morning-greeting-image.yml",
+        "state": "disabled_manually",
+        "created_at": "2026-09-01T21:40:16.000+09:00",
+        "updated_at": "2026-10-17T19:50:58.000+09:00",
+        "url": "https://api.github.com/repos/anohi-memories/kabumori/actions/workflows/347498805",
+        "html_url": "https://github.com/anohi-memories/kabumori/blob/main/.github/workflows/morning-greeting-image.yml",
+        "badge_url": "https://github.com/anohi-memories/kabumori/workflows/Generate%20morning%20greeting%20image/badge.svg"
+      }
+    ]
+  },
+  "runs_created_since_A": {
+    "347498805": {
+      "total_count": 0,
+      "runs": []
+    },
+    "376087886": {
+      "total_count": 0,
+      "runs": []
+    }
+  },
+  "nonterminal": {
+    "347498805/queued": 0,
+    "347498805/in_progress": 0,
+    "347498805/waiting": 0,
+    "347498805/pending": 0,
+    "347498805/requested": 0,
+    "376087886/queued": 0,
+    "376087886/in_progress": 0,
+    "376087886/waiting": 0,
+    "376087886/pending": 0,
+    "376087886/requested": 0
+  }
+}
