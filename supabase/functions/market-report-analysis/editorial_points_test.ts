@@ -79,7 +79,8 @@ test("prompt: the points are headlines with a morning role and a close role", ()
     assert.ok(prompt.includes("本文のいちばん最初に「📌 今日のポイント」として同じ3つがそのまま出ます"), "X and the app share the same 3 points");
   }
   assert.ok(closePrompt.includes("causal の claim がある"));
-  assert.ok(closePrompt.includes("理由が確認できないことを正直に書きます"));
+  // A案 (2026-10-14): without a causal claim the points carry the visible facts; her view of the reason goes in the body.
+  assert.ok(closePrompt.includes("理由の見立ては本文（context_ja・app_story）でゆめちゃんの言葉として書きます"));
   assert.ok(!closePrompt.includes("朝刊の3つのポイント"));
 });
 

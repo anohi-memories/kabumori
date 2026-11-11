@@ -81,7 +81,10 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
   test(`X ${label}: a rich packet renders a ~500-character digest with every section`, () => {
     const input = inputOf(fixture);
     const analysis = make(input);
-    assert.deepEqual(localAnalysisCheck(analysis, input), { hard: [], warnings: [] });
+    // These fixtures are the pre-A案 style: they state "no confirmed reason" more than once, which is now recorded
+    // (REASON_ABSENCE_STATED, telemetry only). Nothing else is flagged.
+    const local = localAnalysisCheck(analysis, input);
+    assert.deepEqual({ ...local, warnings: local.warnings.filter((warning) => !warning.startsWith("REASON_ABSENCE_STATED:")) }, { hard: [], warnings: [] });
     const packet = packetOf(analysis, input);
     assert.equal(packet.schema_version, REPORT_SCHEMA_VERSION, "the stored schema_version is unchanged (table check)");
     assert.equal(packet.presentation_version, PRESENTATION_VERSION);
@@ -96,12 +99,13 @@ for (const [label, fixture, make] of [["morning", morning, richMorning1001], ["c
     // 2026-10-14: the header line, then 📌 今日のポイント (same title on both reports), then the lead.
     assert.ok(sections[0].startsWith(label === "morning" ? "【朝刊】きょうの日本株、ここをチェック☀️\n📌 今日のポイント\n・" : "【大引け】きょうの日本株まとめ🌙\n📌 今日のポイント\n・"));
     assert.equal(sections[0].split("\n").filter((line) => line.startsWith("・")).length, 3, "exactly 3 points");
-    assert.equal(sections[1], analysis.x_post.lead_ja, "the lead follows the points");
-    assert.equal(sections[2], analysis.x_post.context_ja, "context paragraph");
-    assert.equal(sections[3], `📰 ${analysis.x_post.news_ja}`, "news paragraph");
-    assert.ok(sections[4].startsWith(label === "morning" ? "👀 今日見るポイント\n" : "👀 明日以降の注目点\n"));
-    assert.ok(sections[5].startsWith("💬 今日のひとこと\n"));
-    assert.equal(sections[6], REPORT_DISCLAIMER_JA);
+    // Phase 2: the lead and the context are one commentary paragraph; news / watch only when written.
+    assert.equal(sections[1], `${analysis.x_post.lead_ja}\n${analysis.x_post.context_ja}`, "the commentary follows the points");
+    assert.equal(sections[2], `📰 ${analysis.x_post.news_ja}`, "news paragraph");
+    assert.ok(sections[3].startsWith(label === "morning" ? "👀 今日見るポイント\n" : "👀 明日以降の注目点\n"));
+    // ゆめちゃん's call closes the post with its own 🔮; a model closing (no call) keeps the 💬 title.
+    assert.ok(sections[4].startsWith(packet.yume ? "🔮" : "💬 今日のひとこと\n"), sections[4]);
+    assert.equal(sections[5], REPORT_DISCLAIMER_JA);
     assert.ok(emojiCount(post) >= 3 && emojiCount(post) <= 8, `emoji ${emojiCount(post)}`);
     assert.ok(!/https?:|[#＃]\S/.test(post), "no URL, no hashtag (fixed hashtags are appended by the X consumer)");
   });
@@ -366,7 +370,7 @@ test("10/1 replay: the packet that led with one company's impairment is reordere
   assert.ok(ordered[3].headline_ja.includes("減損損失"), "the company notice is kept, after the market-wide items");
   // The v2 story lists market-wide items first and names the company only after them.
   const rich = richMorning1001(input);
-  assert.deepEqual(localAnalysisCheck(rich, input).warnings, []);
+  assert.deepEqual(localAnalysisCheck(rich, input).warnings, ["REASON_ABSENCE_STATED:2"], "only the A案 telemetry on the pre-A案 fixture");
   const news = buildAppMarketStory(packetOf(rich, input)).sections.find((item) => item.key === "news")!;
   assert.ok(news.lines_ja[0].startsWith("トランプ氏、AI企業と自主協定を発表") && news.lines_ja[3].includes("減損損失"));
   assert.ok(!formatSharedXPost(packetOf(rich, input)).includes("ニデック"));
@@ -430,13 +434,15 @@ test("content regeneration is recorded apart from transport retry (the 10/1 morn
   assert.deepEqual(calls, ["generate", "generate", "fact"]);
   const { records, ...trace } = outcome.trace;
   assert.deepEqual(trace, {
-    generations: 2, hardRejections: ["local"], rejectionReasons: ["1306"], qualityRewrite: false, deliveredGeneration: 2, warnings: [],
+    generations: 2, hardRejections: ["local"], rejectionReasons: ["1306"], qualityRewrite: false, deliveredGeneration: 2,
+    // A案 telemetry on the pre-A案 fixture; it never buys a rewrite (qualityRewrite stays false).
+    warnings: ["REASON_ABSENCE_STATED:2"],
     removedUnits: [], factStatus: "passed",
   });
   assert.deepEqual(records.map((record) => [record.generationIndex, record.stage, record.selectedForDelivery]), [[1, "local", false], [2, "delivered", true]]);
   assert.deepEqual(generationDiagnostics(outcome.trace), {
     generation_attempts: "2", content_regenerations: "1", hard_rejections: "local", rejection_reasons: "1306", quality_rewrite: "false",
-    delivered_generation: "2", quality_warnings: "", quality_rewrite_request_failed: "false",
+    delivered_generation: "2", quality_warnings: "REASON_ABSENCE_STATED:2", quality_rewrite_request_failed: "false",
     fact_status: "passed", removed_units: "", removed_unit_count: "0",
   });
   assert.equal(outcome.ok && outcome.packet.fact.generation_attempts, 2);
@@ -462,7 +468,7 @@ test("a quality rewrite that breaks a hard fact falls back to the safe original 
     { step: "generate", payload: thin }, { step: "fact", payload: { passed: true, issues: [] } },
     { step: "generate", payload: richMorning1001(input) }, { step: "fact", payload: { passed: true, issues: [] } },
   ]), NOW);
-  assert.deepEqual(better.ok && [better.trace.deliveredGeneration, better.packet.fact.quality_warnings], [2, []]);
+  assert.deepEqual(better.ok && [better.trace.deliveredGeneration, better.packet.fact.quality_warnings], [2, ["REASON_ABSENCE_STATED:2"]]);
   // With no safe draft, the wrong sentence is removed and the rest delivered after one Fact call (2026-10-07).
   const failed = await generateSharedAnalysis(input, requester([
     { step: "generate", payload: broken }, { step: "generate", payload: broken }, { step: "fact", payload: { passed: true, issues: [] } },
@@ -532,7 +538,7 @@ test("handler: a locally rejected first draft is content regeneration (transport
     return Promise.reject(new Error(`UNEXPECTED:${url}`));
   };
   const deps: Deps = {
-    env: (name) => ({ SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-test-key" } as Record<string, string>)[name],
+    env: (name) => ({ SUPABASE_URL: SUPABASE, SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", KABUMORI_MARKET_REPORT_JAPAN_METRICS: "legacy_1306", SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET, OPENAI_API_KEY: "openai-test-key" } as Record<string, string>)[name],
     fetch: fetchMock,
     now: () => new Date("2026-09-30T22:55:00Z"),
     sleep: (ms) => { waits.push(ms); return Promise.resolve(); },

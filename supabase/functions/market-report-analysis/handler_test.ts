@@ -52,7 +52,7 @@ function harness(options: { claimOutcome?: string; dataQuality?: string; factPas
   const deps: Deps = {
     env: (name) => ({
       SUPABASE_URL: SUPABASE,
-      SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all",
+      SUPABASE_SECRET_KEYS: JSON.stringify({ default: "service-secret" }), KABUMORI_MARKET_REPORT_NEWS_SELECTION: "all", KABUMORI_MARKET_REPORT_JAPAN_METRICS: "legacy_1306",
       SEND_PUSH_NOTIFICATIONS_CRON_SECRET: SECRET,
       OPENAI_API_KEY: "openai-test-key",
     } as Record<string, string>)[name],
