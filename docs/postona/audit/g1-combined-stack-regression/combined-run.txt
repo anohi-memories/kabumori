@@ -1,0 +1,20 @@
+# combined tree (origin/main + #400 + #369 + this PR's contract test): counts copied from the runner output
+tsc --noEmit: exit 0
+expo lint: exit 0
+node --test tests/*.test.mjs: ℹ tests 518
+node --test tests/*.test.mjs: ℹ pass 517
+node --test tests/*.test.mjs: ℹ fail 0
+node --test tests/*.test.mjs: ℹ cancelled 0
+node --test tests/*.test.mjs: ℹ skipped 1
+parity with F3 PR #278 single_post_contract.ts (F3_SINGLE_POST_CONTRACT): 7/7 PASS
+g1-combined-stack-contract.test.mjs: 5/5 PASS on the combined tree; 5 skipped when either the post-screen stack or the not-found screen is absent
+negative controls on the contract test: 7/7 detected
+passing test names matching SM1: 5
+passing test names matching SM3: 2
+passing test names matching N1: 2
+passing test names matching N2: 7
+passing test names matching G2-U1\|U1:: 13
+passing test names matching afterFreeze: 8
+passing test names matching uncertain: 25
+passing test names matching hash: 18
+passing test names matching not-found\|not found\|U2\|page not found: 4

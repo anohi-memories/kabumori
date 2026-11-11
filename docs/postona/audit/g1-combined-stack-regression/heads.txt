@@ -1,0 +1,45 @@
+# gh pr view / compare / git output, taken 2026-10-20T15:18:15Z (UTC) — verbatim, no edits
+origin/main 0c42933ca5030ab31a56267529430d0473d9b155
+#274 OPEN draft=true base=main head=007dc3d68bdb6c57e2cfb6831090f6544704a3c3 files=10 mergeable=MERGEABLE
+#277 OPEN draft=true base=claude/f1-postona-x-manual-publish-ui-20261018 head=abd18fc34b5c61b0178187a455a5ade8fc105dc0 files=14 mergeable=MERGEABLE
+#283 OPEN draft=true base=claude/f1-postona-m1-single-post-adapter-20261018 head=b4b761c4dd43cc4c8c1ee1533413b46f088ba21f files=11 mergeable=MERGEABLE
+#288 OPEN draft=true base=claude/f1-postona-m2-restart-guard-20261018 head=c41e20ce508530328570d22c4a0cbc0a43fb2a2e files=13 mergeable=MERGEABLE
+#325 OPEN draft=true base=claude/f1-postona-m3-simulated-afterfreeze-20261019 head=400616ea2efe0504624b9da3e593d9e3d7520a2f files=3 mergeable=MERGEABLE
+#346 OPEN draft=true base=claude/f1-postona-keyboard-avoidance-dark-statusbar-20261019 head=c71f2a1f59d3b1eb72447a73b602adf51639c691 files=3 mergeable=MERGEABLE
+#366 OPEN draft=true base=claude/g1-postona-statusbar-redbox-keyboard-20261019 head=44ab2e6bb812f3484c85f847574de103757e3dfc files=8 mergeable=MERGEABLE
+#398 OPEN draft=true base=claude/g1-postona-manual-draft-preservation-20261020 head=2919d2b2c18bcb656a97b9d827b825b641aa05f5 files=6 mergeable=MERGEABLE
+#400 OPEN draft=true base=claude/g1-postona-draft-session-sm1-sm3-n1-20261020 head=39b9818b40fc7d10a8b9e70cd68fd02692874585 files=4 mergeable=MERGEABLE
+#369 OPEN draft=true base=main head=6c363afeec63327deeedeec4ee37ae8f3206fa96 files=2 mergeable=MERGEABLE
+#396 OPEN draft=true base=main head=b386c8475feb0385f3a1124c481ada8ac6768594 files=3 mergeable=MERGEABLE
+#380 OPEN draft=true base=claude/g1-postona-manual-draft-preservation-20261020 head=825fc837227af9b81c7d6e9db3c0744d9b8f01ed files=4 mergeable=MERGEABLE
+#385 OPEN draft=true base=claude/g2-pr366-sessionmark-offline-qa-20261020 head=fb11542fb2febc592337e83361f2c9462d553c65 files=5 mergeable=MERGEABLE
+#376 OPEN draft=true base=claude/g1-postona-manual-draft-preservation-20261020 head=66cce840924820bbd223e70071efbb4eb125ebcc files=33 mergeable=MERGEABLE
+#361 OPEN draft=true base=claude/g1-postona-statusbar-redbox-keyboard-20261019 head=44a04fc0e9604f02fff2e1a77a452be870c9ecd9 files=5 mergeable=MERGEABLE
+
+# ancestry: GitHub compare base...head
+#277 base=claude/f1-postona-x-manual-publish-ui-20261018 status=ahead ahead=1 behind=0
+#283 base=claude/f1-postona-m1-single-post-adapter-20261018 status=ahead ahead=1 behind=0
+#288 base=claude/f1-postona-m2-restart-guard-20261018 status=ahead ahead=1 behind=0
+#325 base=claude/f1-postona-m3-simulated-afterfreeze-20261019 status=ahead ahead=1 behind=0
+#346 base=claude/f1-postona-keyboard-avoidance-dark-statusbar-20261019 status=ahead ahead=1 behind=0
+#366 base=claude/g1-postona-statusbar-redbox-keyboard-20261019 status=ahead ahead=1 behind=0
+#398 base=claude/g1-postona-manual-draft-preservation-20261020 status=ahead ahead=1 behind=0
+#400 base=claude/g1-postona-draft-session-sm1-sm3-n1-20261020 status=ahead ahead=1 behind=0
+
+# local: is each stack head an ancestor of the #400 head? (git merge-base --is-ancestor)
+pr274 -> pr400: yes
+pr277 -> pr400: yes
+pr283 -> pr400: yes
+pr288 -> pr400: yes
+pr325 -> pr400: yes
+pr346 -> pr400: yes
+pr366 -> pr400: yes
+pr398 -> pr400: yes
+pr369 -> pr400: no  (expected: no, independent)
+merge-base(origin/main, pr400): 74b6b7ceafe6b3683ee985616b3a4e2ddb04763d
+main commits touching apps/social-mobile since that merge-base: 0
+
+# scratch merge (local, not pushed, discarded)
+step 1: merge #400 into main: Merge made by the 'ort' strategy.
+step 2: merge #369 on top:    Merge made by the 'ort' strategy.
+files: #400 side 22, #369 side 2, overlap 0
