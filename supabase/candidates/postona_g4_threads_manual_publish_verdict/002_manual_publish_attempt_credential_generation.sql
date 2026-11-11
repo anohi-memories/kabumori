@@ -63,6 +63,22 @@
 -- a real Threads container takes to report EXPIRED is not verified). Not closed by any database: a provider whose
 -- container status is wrong. Disconnect / stop / G5 end are not fenced: they never resume a send, and a send whose lease
 -- began before them is ordered before them. The begin / release bodies above are unchanged by #13 and #14.
+-- G4-02 #15 (H1 #43 P2): an `uncertain` attempt whose stored credential has EXPIRED could never be settled -- reconcile
+-- needs a valid credential (CREDENTIALS_EXPIRED), the fence refuses the reconnect that would bring one, disconnect keeps the
+-- account (PUBLISH_IN_FLIGHT). Recovery is READ-BEFORE-REBIND, inside the person's own reconnect: G4's owner bridge holds
+-- the freshly granted token of the SAME Threads user (H5's exchange read /me), and BEFORE the completion moves the binding
+-- it asks the provider -- GET only, never a write -- for each open attempt's container status with that token, and records
+-- only final evidence through postona_threads_binding.settle_attempt_before_rebind (PUBLISHED -> published /
+-- published_unidentified; ERROR / EXPIRED -> failed). No final evidence (FINISHED / IN_PROGRESS / a failed read) -> nothing is
+-- recorded and the fence still refuses. The token is never stored for this, and nothing is ever resent. Who may record:
+--   * the caller of this transaction is the person (auth.uid(), an active session, G5's lifecycle fence) who started THIS
+--     connect (public.social_account_oauth_states: initiated_by_user_id, not expired) for that account, and an owner / admin
+--     of its workspace;
+--   * the token's Threads user (as H5's exchange proved it) is the account's platform_user_id AND the binding's
+--     threads_user_id; the attempt is that account's, still `publishing` / `uncertain`, with the SAME container id, and bound
+--     to the binding's current generation (the one this reconnect is replacing).
+--   Only G4's owner bridge calls these (owner-only EXECUTE, no API role reaches the schema).
+-- What the database cannot check: that the evidence came from Threads for that container (the owner bridge did the read).
 -- Rollback: 002_manual_publish_attempt_credential_generation_rollback.sql (restores both bodies exactly, drops the fence and
 -- the table).
 
@@ -80,7 +96,10 @@ declare
 begin
   if pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null
      or pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is not null
-     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence') then
+     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence')
+     or exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'postona_threads_binding'
+                   and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')) then
     raise exception 'G4MG_PRECONDITION_ALREADY_APPLIED';
   end if;
   if v_begin is null or v_release is null or v_authorize is null then
@@ -372,13 +391,107 @@ create trigger threads_manual_publish_send_fence
   before insert or update on postona_threads_binding.bindings
   for each row execute function postona_threads_binding.manual_publish_send_fence();
 
+-- G4-02 #15: read-before-rebind recovery (see the header). The account a reconnect may settle attempts of, or null.
+create function postona_threads_binding.reconnect_recovery_account(p_oauth_state_id uuid, p_platform_user_id text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  v_user uuid := auth.uid();
+  v_session uuid := public.threads_manual_publish_session_id();
+  v_account public.social_accounts%rowtype;
+  v_role text;
+begin
+  if v_user is null or v_session is null or p_oauth_state_id is null
+     or coalesce(p_platform_user_id, '') !~ '^[1-9][0-9]{0,31}$' then
+    return null;
+  end if;
+  if public.threads_manual_publish_fence(v_user) is not null then return null; end if;  -- G5's lifecycle
+  if not exists (select 1 from auth.sessions s where s.id = v_session and s.user_id = v_user
+                  and (s.not_after is null or s.not_after > pg_catalog.clock_timestamp())) then
+    return null;
+  end if;
+  select a.* into v_account
+    from public.social_account_oauth_states s
+    join public.social_accounts a on a.id = s.social_account_id and a.brand_id = s.brand_id
+   where s.id = p_oauth_state_id and s.initiated_by_user_id = v_user and s.expires_at > pg_catalog.clock_timestamp();
+  if v_account.id is null or v_account.platform is distinct from 'threads'
+     or v_account.platform_user_id is distinct from p_platform_user_id then
+    return null;
+  end if;
+  select m.role into v_role from public.brand_memberships m where m.brand_id = v_account.brand_id and m.user_id = v_user;
+  if v_role is null or v_role not in ('owner', 'admin') then return null; end if;
+  if not exists (select 1 from postona_threads_binding.bindings b
+                  where b.social_account_id = v_account.id and b.threads_user_id = p_platform_user_id) then
+    return null;
+  end if;
+  return v_account.id;
+end;
+$$;
+
+-- The attempts the bridge may read evidence for: still open, with a container, bound to the binding's current generation.
+create function postona_threads_binding.reconnect_recovery_candidates(p_oauth_state_id uuid, p_platform_user_id text)
+returns table (attempt_id uuid, container_id text, created_at timestamptz, post_text text)
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_account text := postona_threads_binding.reconnect_recovery_account(p_oauth_state_id, p_platform_user_id);
+begin
+  if v_account is null then return; end if;
+  return query
+    select t.id, t.container_id, t.created_at, t.post_text
+      from public.threads_manual_publish_attempts t
+      join public.threads_manual_publish_attempt_generations g on g.attempt_id = t.id
+      join postona_threads_binding.bindings b on b.social_account_id = t.social_account_id
+     where t.social_account_id = v_account and t.status in ('publishing', 'uncertain') and t.container_id is not null
+       and g.credential_generation = 'g4t1:' || b.oauth_state_id::text
+     order by t.created_at;
+end;
+$$;
+
+-- Records ONE final piece of evidence for ONE attempt (compare-and-set on its status and container); never a write step.
+create function postona_threads_binding.settle_attempt_before_rebind(
+  p_oauth_state_id uuid, p_platform_user_id text, p_attempt_id uuid, p_container_id text,
+  p_to_status text, p_provider_post_id text, p_permalink text, p_error_code text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  v_account text := postona_threads_binding.reconnect_recovery_account(p_oauth_state_id, p_platform_user_id);
+  v_row public.threads_manual_publish_attempts%rowtype;
+begin
+  if v_account is null then return 'NOT_PERMITTED'; end if;
+  if not ((p_to_status = 'published' and coalesce(p_provider_post_id, '') ~ '^[1-9][0-9]{0,31}$'
+           and coalesce(p_permalink, '') ~ '^https://www[.]threads[.](net|com)/' and p_error_code is null)
+       or (p_to_status = 'published_unidentified' and p_provider_post_id is null and p_permalink is null
+           and p_error_code in ('PUBLISHED_POST_AMBIGUOUS', 'PUBLISHED_POST_NOT_FOUND'))
+       or (p_to_status = 'failed' and p_provider_post_id is null and p_permalink is null
+           and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED'))) then
+    return 'REQUEST_INVALID';
+  end if;
+  select t.* into v_row from public.threads_manual_publish_attempts t where t.id = p_attempt_id for update;
+  if v_row.id is null or v_row.social_account_id is distinct from v_account then return 'NOT_PERMITTED'; end if;
+  if v_row.status not in ('publishing', 'uncertain') or v_row.container_id is null
+     or v_row.container_id is distinct from p_container_id
+     or not exists (select 1 from public.threads_manual_publish_attempt_generations g
+                      join postona_threads_binding.bindings b on b.social_account_id = v_row.social_account_id
+                     where g.attempt_id = v_row.id and g.credential_generation = 'g4t1:' || b.oauth_state_id::text) then
+    return 'STALE';
+  end if;
+  update public.threads_manual_publish_attempts t
+     set status = p_to_status, provider_post_id = p_provider_post_id, permalink = p_permalink, error_code = p_error_code,
+         grant_hash = null, grant_step = null, grant_state = null, grant_expires_at = null, grant_user_id = null,
+         grant_session_id = null, updated_at = pg_catalog.now()
+   where t.id = v_row.id;
+  return 'SETTLED';
+end;
+$$;
+revoke all on function postona_threads_binding.reconnect_recovery_account(uuid, text),
+                       postona_threads_binding.reconnect_recovery_candidates(uuid, text),
+                       postona_threads_binding.settle_attempt_before_rebind(uuid, text, uuid, text, text, text, text, text)
+  from public, anon, authenticated, service_role;
+
 -- Postconditions: the exact new bodies; owners / ACLs / definer / settings unchanged; the table reachable by no role but its owner.
 do $$
 declare
   v_me oid := (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user);
   v_begin regprocedure := pg_catalog.to_regprocedure('public.begin_threads_manual_publish(text,uuid,text)');
   v_release regprocedure := pg_catalog.to_regprocedure('public.release_threads_manual_publish_step(uuid,text,bigint,text,text)');
-  v_api text;
 begin
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_begin) is distinct from '7d26e42edaf3f7f85083880814983c2e'
      or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_release) is distinct from 'e92ec523bb1a7a3ba7ca53dce744fb82' then
@@ -389,19 +502,43 @@ begin
         from pg_catalog.pg_proc p where p.oid in (v_begin, v_release)) is distinct from pg_catalog.current_setting('g4mg.before', true) then
     raise exception 'G4MG_POSTCONDITION_SHAPE';
   end if;
-  if not (select c.relrowsecurity and c.relowner = v_me and c.relacl is not null
-                 and not exists (select 1 from pg_catalog.aclexplode(c.relacl) e where e.grantee <> v_me)
-            from pg_catalog.pg_class c where c.oid = 'public.threads_manual_publish_attempt_generations'::regclass)
-     or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.threads_manual_publish_attempt_generations'::regclass) then
+  -- G4-02 #15 (H1 #43 P3): the generation table as 002 made it, column by column: RLS on, owner-only, no policy, exactly its
+  -- three columns (none dropped), no column ACL, and no API role holding any table OR column privilege on it.
+  if not coalesce((select c.relrowsecurity and c.relowner = v_me and c.relacl is not null
+                          and not exists (select 1 from pg_catalog.aclexplode(c.relacl) e where e.grantee <> v_me)
+                     from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations')), false)
+     or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations'))
+     or (select pg_catalog.string_agg(a.attname || ':' || pg_catalog.format_type(a.atttypid, a.atttypmod), ',' order by a.attnum)
+           from pg_catalog.pg_attribute a
+          where a.attrelid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') and a.attnum > 0)
+        is distinct from 'attempt_id:uuid,credential_generation:text,bound_at:timestamp with time zone'
+     or exists (select 1 from pg_catalog.pg_attribute a
+                 where a.attrelid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') and a.attnum > 0
+                   and a.attacl is not null)
+     or exists (select 1 from pg_catalog.pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                 and (pg_catalog.has_table_privilege(r.oid, 'public.threads_manual_publish_attempt_generations',
+                                                     'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                      or pg_catalog.has_any_column_privilege(r.oid, 'public.threads_manual_publish_attempt_generations',
+                                                             'SELECT, INSERT, UPDATE, REFERENCES'))) then
     raise exception 'G4MG_POSTCONDITION_TABLE_ACL';
   end if;
-  foreach v_api in array array['anon', 'authenticated', 'service_role', 'authenticator'] loop
-    if pg_catalog.to_regrole(v_api) is not null
-       and pg_catalog.has_table_privilege(v_api, 'public.threads_manual_publish_attempt_generations',
-                                          'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER') then
-      raise exception 'G4MG_POSTCONDITION_TABLE_ACL %', v_api;
-    end if;
-  end loop;
+  -- G4-02 #15: the three recovery functions exactly as reviewed: SECURITY DEFINER, VOLATILE, empty search_path, plpgsql,
+  -- owned by the owner and executable by nobody else; nothing else of those names in the schema.
+  if (select pg_catalog.count(*) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'postona_threads_binding'
+         and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')) <> 3
+     or (select pg_catalog.string_agg(p.oid::regprocedure::text || '=' || pg_catalog.md5(p.prosrc), ' ' order by p.proname)
+           from pg_catalog.pg_proc p
+          where p.oid in (pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(uuid,text)'),
+                          pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(uuid,text)'),
+                          pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)'))
+            and p.prosecdef and p.proowner = v_me and p.provolatile = 'v'
+            and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+            and p.proconfig is not distinct from array['search_path=""']
+            and p.proacl is not null and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me))
+        is distinct from 'postona_threads_binding.reconnect_recovery_account(uuid,text)=b94a07ac0411d2a8749069c242952c31 postona_threads_binding.reconnect_recovery_candidates(uuid,text)=0a884c8b3e81fc28ba342255bf4731c3 postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)=28d8ca0670a37b9b387a7b667e2daa6e' then
+    raise exception 'G4MG_POSTCONDITION_RECOVERY';
+  end if;
   -- G4-02 #13 / #14: the fence exactly as reviewed and owner-only, used by exactly one trigger, which has the reviewed shape:
   -- BEFORE, ROW, INSERT + UPDATE (tgtype 23), enabled as origin (tgenabled 'O'), no WHEN / column list / arguments / constraint /
   -- transition tables. The rollback refuses (G4MG_ROLLBACK_FENCE_DRIFT) unless the same predicate still holds.

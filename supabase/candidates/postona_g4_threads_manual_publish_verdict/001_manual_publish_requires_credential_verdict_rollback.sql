@@ -33,7 +33,11 @@ begin
      or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
           where p.oid = pg_catalog.to_regprocedure('public.release_threads_manual_publish_step(uuid,text,bigint,text,text)')) = 'e92ec523bb1a7a3ba7ca53dce744fb82'
      or pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is not null
-     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence') then
+     or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence')
+     -- G4-02 #15: 002's read-before-rebind recovery functions
+     or exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'postona_threads_binding'
+                   and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')) then
     raise exception 'G4MP_ROLLBACK_002_PARTIAL';
   end if;
   if (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p

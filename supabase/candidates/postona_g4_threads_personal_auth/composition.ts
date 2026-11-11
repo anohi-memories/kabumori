@@ -80,7 +80,8 @@ export function createG4ThreadsSourceServer(config: RuntimeConfig, ports: G4Cons
   const runtime = createThreadsRuntime({
     verify: createActorVerifier(auth),
     // The one difference from H5's factory: G4's bridge instead of createOwnerTransport.
-    bridge: createG4ThreadsOwnerBridge(ports.ownerConnect ?? createPostgresConnector(c), Date.now, pinned),
+    // G4-02 #15: the bridge's read-before-rebind recovery reads Threads (GET only) through the same network port.
+    bridge: createG4ThreadsOwnerBridge(ports.ownerConnect ?? createPostgresConnector(c), Date.now, pinned, { fetch: (u, i) => http(u, i) }),
     settings: { appId: c.appId, appSecret: c.appSecret, redirectUri: c.callback },
     attestationKey: c.attestationKey,
     fetch: (u, i) => http(u, i),

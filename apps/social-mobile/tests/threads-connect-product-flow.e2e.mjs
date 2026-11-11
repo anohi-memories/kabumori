@@ -14,6 +14,8 @@
 // middle of a post (at the provider boundary, or racing the release in PostgreSQL) never lets the old attempt write.
 // G4-02 #13 (scenario 33): the send onset is the publish release's COMMIT; .../002's send fence refuses a reconnect / re-bind
 // while that send is leased, so no old attempt posts after a reconnect committed (H1 #41's order, a race).
+// G4-02 #15 (scenario 34): an unknown outcome under an EXPIRED credential is settled by the same Threads user's reconnect,
+// which reads the container first (GET only, through the connect Edge's own network) and records only final evidence.
 // G4-02 #14 (scenario 33, 31 (d)): no clock ends that lease, only a recorded outcome (the server's, or the provider's final
 // container status read by reconcile): the database's clock alone ahead, the Edge's clock alone ahead / behind, a stalled
 // server the database gave up on (H1 #42's order and its neighbours).
@@ -77,8 +79,27 @@ const publishHttp = await import('../../../supabase/functions/social-mobile-thre
 
 // ---- the Threads connect Edge (Deno child, 127.0.0.1) ---------------------------------------------------------------------
 const edgeCmd = JSON.parse(env('FLOW_EDGE_CMD'));
+// G4-02 #15: the connect Edge's read-before-rebind recovery reads the fake Threads publish API (below) through this loopback
+// server: GET only; any other method is refused and counted (it must stay 0)
+const connectGraphReads = [];
+const graphWritesFromConnect = [];
+const graphServer = (await import('node:http')).createServer(async (req, res) => {
+  if (req.method !== 'GET') {
+    graphWritesFromConnect.push(`${req.method} ${req.url}`);
+    res.writeHead(405, { 'content-type': 'application/json' });
+    res.end('{"error":{"code":100}}');
+    return;
+  }
+  connectGraphReads.push(String(req.url).split('?')[0]);
+  const answer = await fakeThreadsPublish(`https://graph.threads.net${req.url}`, { method: 'GET' });
+  res.writeHead(answer.status, { 'content-type': 'application/json' });
+  res.end(await answer.text());
+});
+await new Promise((resolve) => graphServer.listen(0, '127.0.0.1', resolve));
+test.after(() => { graphServer.closeAllConnections?.(); graphServer.close(); });
 const edge = spawn(edgeCmd[0], edgeCmd.slice(1), {
-  env: { ...process.env, FLOW_JWK: JSON.stringify(JWK) }, stdio: ['pipe', 'pipe', 'inherit'],
+  env: { ...process.env, FLOW_JWK: JSON.stringify(JWK), FLOW_GRAPH: `http://127.0.0.1:${graphServer.address().port}` },
+  stdio: ['pipe', 'pipe', 'inherit'],
 });
 // the Deno child never outlives this process, whatever fails: it exits when its stdin (this process) closes
 process.on('exit', () => edge.kill());
@@ -652,6 +673,7 @@ function fakeThreadsPublish(url, init) {
     return Response.json({ data: mine.map((p) => ({ id: p.id, text: p.text, permalink: permalinkOf(p), timestamp: p.timestamp })) });
   }
   if (!isPost && !edgeName) {
+    if (plan.read === 'fail') return new Response('upstream timeout', { status: 503 }); // G4-02 #15: a failed read
     const container = threadsApi.containers.get(id);
     if (container && container.puid === who) return Response.json({ id, status: container.status, error_message: null });
     const post = threadsApi.posts.find((p) => p.id === id);
@@ -1163,8 +1185,9 @@ test('31. a reconnect in the middle of a post: the old attempt never writes agai
   results.c = statusError(c);
   results.cWrites = [writes(PUID_F, 'container') - c0[0], writes(PUID_F, 'publish') - c0[1]];
   await settleOpen(account);
-  // (d) the outcome is unknown, then the person reconnects: G4-02 #14 -- refused while unknown (a post may still come); reconcile
-  //     settles it read-only, never resends; then the reconnect goes through
+  // (d) the outcome is unknown, then the person reconnects: G4-02 #14 -- never past an unknown outcome; G4-02 #15 -- the
+  //     reconnect first reads the container with the NEW token (GET only): PUBLISHED is final, so the attempt is settled
+  //     `published` and the reconnect goes through; nothing is resent, the later reconcile only reads it back
   threadsApi.plan[PUID_F] = { publish: 'lost' };
   ({ card, view } = await readyCard());
   assert.equal(await view.publish(view.pin('結果不明のあとに再接続した投稿 d')), true);
@@ -1242,8 +1265,8 @@ test('31. a reconnect in the middle of a post: the old attempt never writes agai
   assert.deepEqual([results.a, results.aPublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(a) container_created + reconnect');
   assert.deepEqual([results.bReconnect, results.bAnswered, results.b, results.bPublishes], ['verifying', false, 'failed|AUTHORIZATION_CHANGED', 0], '(b) reconnect at the status read');
   assert.deepEqual([results.cReconnect, results.cAnswered, results.c, results.cWrites], ['verifying', false, 'failed|AUTHORIZATION_CHANGED', [1, 0]], '(c) reconnect while creating');
-  assert.deepEqual([results.dOpen, results.dReconnect.startsWith('failed:'), results.d, results.dPublishes, results.dReconnectAfter],
-    ['uncertain', true, 'published|-', 0, 'verifying'], `(d) refused while unknown (${results.dReconnect}), settled read-only, then reconnected`);
+  assert.deepEqual([results.dOpen, results.dReconnect, results.d, results.dPublishes, results.dReconnectAfter],
+    ['uncertain', 'verifying', 'published|-', 0, 'verifying'], '(d) settled from the provider\'s final status before the rebind; nothing resent');
   assert.deepEqual([results.e, results.ePublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(e) unknown generation');
   assert.deepEqual([results.gBegun, results.gBoundAtBegin, results.gForged], ['reserved', true, 'refused:ATTESTATION_INVALID|reserved|-'], '(g) direct RPC');
   assert.equal(results.gTableReach, 'permission denied,permission denied,permission denied');
@@ -1518,8 +1541,9 @@ test('33. send onset vs reconnect: a reconnect after the publish release COMMIT 
   assert.deepEqual([refused(results.dReconnect), results.dMovedBeforeSend], [true, false], `(d) H1 #42: only the database's clock ahead -- the reconnect is still refused (${results.dReconnect})`);
   assert.ok(results.dGaveUp.split('|')[1] === 'uncertain', `(d) the database gave up on the step (${results.dGaveUp})`);
   assert.deepEqual([refused(results.dReconnectAbandoned), results.dMovedAbandoned], [true, false], `(d) ... and after it gave up, still refused (${results.dReconnectAbandoned})`);
-  assert.deepEqual([results.dPublishes, results.dAfterSend.split('|')[0], refused(results.dReconnectUnsettled)], [1, 'uncertain', true], '(d) the one send went out; unsettled, the reconnect is still refused');
-  assert.deepEqual([results.d, results.dReconnectAfter, results.dMovedAfter], ['published|-', 'verifying', true], '(d) settled read-only from the provider, then the reconnect');
+  // G4-02 #15: after the send the container is PUBLISHED (final): the next reconnect reads it first, settles `published`, rebinds
+  assert.deepEqual([results.dPublishes, results.dAfterSend.split('|')[0], results.dReconnectUnsettled], [1, 'uncertain', 'verifying'], '(d) the one send went out; the reconnect read its final status first');
+  assert.deepEqual([results.d, results.dReconnectAfter, results.dMovedAfter], ['published|-', 'verifying', true], '(d) settled read-only from the provider');
   for (const label of ['f', 'h']) {
     assert.deepEqual([refused(results[`${label}Reconnect`]), results[`${label}MovedBeforeRecord`]], [true, false], `(${label}) refused until the server records (${results[`${label}Reconnect`]})`);
     assert.deepEqual([results[label], results[`${label}Publishes`], results[`${label}ReconnectAfter`], results[`${label}MovedAfter`]],
@@ -1534,5 +1558,177 @@ test('33. send onset vs reconnect: a reconnect after the publish release COMMIT 
   assert.equal(results.eRebindDbClockAhead, 'THREADS_BINDING_SEND_IN_PROGRESS', '(e) the database clock alone ends nothing');
   assert.equal(results.eRepeatableRead, 'THREADS_BINDING_SEND_FENCE_ISOLATION');
   assert.deepEqual([results.e, results.eRebindAfter], ['failed|CONTAINER_EXPIRED', 'verifying'], '(e) settled read-only; the reconnect then goes through');
+  assert.deepEqual(denied, [], 'no request left this process');
+});
+
+// ---- G4-02 #15 (H1 #43 P2): an `uncertain` attempt with an EXPIRED credential -> read-before-rebind recovery ------------------
+// H1 #43's deadlock: reconcile refuses (CREDENTIALS_EXPIRED), the send fence refuses the reconnect, disconnect keeps the account
+// (PUBLISH_IN_FLIGHT). The way out is the person's reconnect of the SAME Threads user: before the completion moves the binding,
+// G4's owner bridge reads the attempt's container with the NEW token (GET only, through `graphServer` above) and records only
+// final evidence (.../002: postona_threads_binding.settle_attempt_before_rebind). Fail-before (the runner): #14's 002 (no
+// recovery SQL) leaves the reconnect refused and scenario 34 fails.
+const containerIdOf = (attemptId) => String(owner(`select container_id from public.threads_manual_publish_attempts where id = ${lit(attemptId)}::uuid`));
+const expireCredential = (accountId) => owner(`update public.threads_account_credential_custody set expires_at = now() - interval '1 hour' where social_account_id = ${lit(accountId)}`);
+async function lostAttempt(text) {
+  threadsApi.plan[PUID_F] = { publish: 'lost' };
+  const { card, view } = await readyCard();
+  assert.equal(await view.publish(view.pin(text)), true);
+  const shown = await card.settle();
+  threadsApi.plan[PUID_F] = {};
+  assert.equal(shown.answer.status, 'uncertain');
+  return shown.answer.id;
+}
+/** SYNTHETIC: the provider says the container was never published (its post removed from the fake). */
+function notPublished(attemptId, status) {
+  const c = containerOf(attemptId);
+  c.status = status;
+  threadsApi.posts = threadsApi.posts.filter((p) => p.text !== c.text);
+}
+async function disconnectResult() {
+  const acc = threadsAccount(F);
+  const app = await screen({ session: SESSION_F });
+  app.setAccounts([{ id: acc.id, platform: 'threads', connectionStatus: 'connected' }]);
+  app.render().disconnect.ask({ id: acc.id, handle: acc.handle });
+  await app.render().disconnect.confirm();
+  const st = app.render().disconnect.state;
+  return JSON.stringify(st.result ?? st.kind);
+}
+const reconcileCall = async (id) => {
+  const r = await publishCall({ action: 'reconcile', attempt_id: id }, SESSION_F.access_token);
+  return `${r.status}:${r.json.error ?? r.json.attempt?.status}`;
+};
+/** As F (claims of F's session) through the owner's connection: what only G4's owner bridge does. */
+const asF = (sql) => psql(`begin; select set_config('request.jwt.claims', ${lit(JSON.stringify({ sub: uid(F), role: 'authenticated', session_id: sid(F), is_anonymous: false }))}, true) is null; ${sql}; commit;`);
+const lastLine = (r) => (r.ok ? r.out.split('\n').filter(Boolean).pop() : `ERROR:${r.message}`);
+
+test('34. an unknown outcome under an EXPIRED credential: the same Threads user\'s reconnect reads the container first (GET only) and settles only final evidence; nothing is sent', { timeout: 180000 }, async () => {
+  const account = threadsAccount(F).id;
+  const results = {};
+  // measured even when a step throws (the fail-before shows where it stopped)
+  try {
+    results.start = await reconnectResult();
+    // (a) H1 #43: Threads published, its answer was lost (`uncertain`), then the stored credential expired (SYNTHETIC)
+    let id = await lostAttempt('結果不明のあとに資格情報が失効した投稿 a');
+    expireCredential(account);
+    let gen0 = generationOf(account);
+    let w0 = writes(PUID_F);
+    let r0 = connectGraphReads.length;
+    results.aReconcile = await reconcileCall(id);
+    results.aDisconnect = await disconnectResult();
+    results.aBefore = statusError(id);
+    results.aReconnect = await reconnectResult();
+    results.a = statusError(id);
+    results.aMoved = generationOf(account) !== gen0;
+    results.aWrites = writes(PUID_F) - w0;
+    results.aReads = connectGraphReads.slice(r0).map((p) => (p === `/v1.0/${containerIdOf(id)}` ? 'container' : p.endsWith('/threads') ? 'list' : 'post'));
+    // the account is usable again: a new attempt (the disconnect above withdrew the permission; the card asks again) posts once
+    let p0 = writes(PUID_F, 'publish');
+    let { card, view } = await readyCard();
+    results.aNextMode = view.context.mode;
+    await view.publish(view.pin('復旧のあとの新しい投稿 a'));
+    await card.settle();
+    results.aNext = statusError(latestAttempt(account));
+    results.aNextPublishes = writes(PUID_F, 'publish') - p0;
+    await settleOpen(account);
+    // (b) the container was never published and is still FINISHED: no final evidence -> nothing recorded, reconnect refused
+    id = await lostAttempt('失効後も確定しない投稿 b');
+    notPublished(id, 'FINISHED');
+    expireCredential(account);
+    gen0 = generationOf(account);
+    w0 = writes(PUID_F);
+    r0 = connectGraphReads.length;
+    results.bReconnect = await reconnectResult();
+    results.bAfter = statusError(id);
+    results.bMoved = generationOf(account) !== gen0;
+    results.bReads = connectGraphReads.length - r0;
+    // (e) another Threads user meanwhile: refused (existing checks); the recovery does not even read for F's attempt
+    r0 = connectGraphReads.length;
+    results.eOtherUser = await reconnectResult('17841400000009706');
+    results.eReads = connectGraphReads.length - r0;
+    results.eAfter = statusError(id);
+    // (f) the recovery SQL directly (what only the owner bridge can do): API roles cannot reach it; every check refuses
+    const brand = owner(`select brand_id from public.social_accounts where id = ${lit(account)}`);
+    const state = (user) => owner(`insert into public.social_account_oauth_states (social_account_id, brand_id, state_hash, redirect_uri, expires_at, initiated_by_user_id)
+      values (${lit(account)}, ${lit(brand)}, md5(random()::text), 'https://postona.invalid/cb', now() + interval '10 minutes', ${lit(uid(user))}::uuid) returning id`).split('\n')[0];
+    const mine = state(F);
+    const foreign = state(E);
+    const container = containerIdOf(id);
+    const settle = (st, puid, attempt, ctr, to, post, link, code) =>
+      lastLine(asF(`select postona_threads_binding.settle_attempt_before_rebind(${lit(st)}::uuid, ${lit(puid)}, ${lit(attempt)}::uuid, ${lit(ctr)}, ${lit(to)}, ${lit(post)}, ${lit(link)}, ${lit(code)})`));
+    results.fApiRoles = ['anon', 'authenticated', 'service_role'].map((role) => {
+      const r = psql(`begin; set local role ${role}; select postona_threads_binding.settle_attempt_before_rebind(${lit(mine)}::uuid, ${lit(PUID_F)}, ${lit(id)}::uuid, ${lit(container)}, 'failed', null, null, 'CONTAINER_EXPIRED'); commit;`);
+      return r.ok ? 'CALLED' : r.message.replace(/ for schema.*/u, '');
+    }).join(',');
+    results.fCandidates = lastLine(asF(`select count(*) from postona_threads_binding.reconnect_recovery_candidates(${lit(mine)}::uuid, ${lit(PUID_F)})`));
+    results.fForeignState = settle(foreign, PUID_F, id, container, 'failed', null, null, 'CONTAINER_EXPIRED');
+    results.fOtherThreadsUser = settle(mine, '17841400000009706', id, container, 'failed', null, null, 'CONTAINER_EXPIRED');
+    results.fWrongContainer = settle(mine, PUID_F, id, '18000000000999999', 'failed', null, null, 'CONTAINER_EXPIRED');
+    results.fNotFinal = settle(mine, PUID_F, id, container, 'failed', null, null, 'STEP_INTERRUPTED');
+    results.fWriteStep = settle(mine, PUID_F, id, container, 'publishing', null, null, null);
+    results.fUnknownAsNotPosted = settle(mine, PUID_F, id, container, 'failed', null, null, 'PUBLISH_OUTCOME_UNKNOWN');
+    results.fNoSuchAttempt = settle(mine, PUID_F, randomUUID(), container, 'failed', null, null, 'CONTAINER_EXPIRED');
+    const g0 = owner(`select credential_generation from public.threads_manual_publish_attempt_generations where attempt_id = ${lit(id)}::uuid`);
+    owner(`update public.threads_manual_publish_attempt_generations set credential_generation = 'g4t1:' || gen_random_uuid() where attempt_id = ${lit(id)}::uuid`);
+    results.fOtherGeneration = settle(mine, PUID_F, id, container, 'failed', null, null, 'CONTAINER_EXPIRED');
+    owner(`update public.threads_manual_publish_attempt_generations set credential_generation = ${lit(g0)} where attempt_id = ${lit(id)}::uuid`);
+    results.fAfter = statusError(id);
+    owner(`delete from public.social_account_oauth_states where id in (${lit(mine)}::uuid, ${lit(foreign)}::uuid)`);
+    // (b) a failed read (the provider answers 5xx): still no evidence, still refused
+    threadsApi.plan[PUID_F] = { read: 'fail' };
+    results.bReadFail = await reconnectResult();
+    threadsApi.plan[PUID_F] = {};
+    results.bAfterReadFail = statusError(id);
+    // (b) the container now reports EXPIRED: final -> failed CONTAINER_EXPIRED, then the reconnect goes through
+    containerOf(id).status = 'EXPIRED';
+    results.bExpired = await reconnectResult();
+    results.b = statusError(id);
+    results.bMovedAfter = generationOf(account) !== gen0;
+    results.bWrites = writes(PUID_F) - w0;
+    // a second settle of the same attempt is stale (compare-and-set)
+    const again = state(F);
+    results.bSettleAgain = settle(again, PUID_F, id, container, 'failed', null, null, 'CONTAINER_EXPIRED');
+    owner(`delete from public.social_account_oauth_states where id = ${lit(again)}::uuid`);
+    await settleOpen(account);
+    // (c) ERROR -> failed CONTAINER_ERROR; (d) PUBLISHED but its post cannot be identified -> published_unidentified
+    for (const [label, prepare, expect] of [
+      ['c', (x) => notPublished(x, 'ERROR'), 'failed|CONTAINER_ERROR'],
+      ['d', (x) => { const c = containerOf(x); for (const p of threadsApi.posts) if (p.text === c.text) p.text = `${p.text}（編集）`; }, 'published_unidentified|PUBLISHED_POST_NOT_FOUND'],
+    ]) {
+      const x = await lostAttempt(`失効後に確認する投稿 ${label}`);
+      prepare(x);
+      expireCredential(account);
+      const before = writes(PUID_F);
+      results[`${label}Reconnect`] = await reconnectResult();
+      results[label] = statusError(x);
+      results[`${label}Writes`] = writes(PUID_F) - before;
+      results[`${label}Expect`] = expect;
+      await settleOpen(account);
+    }
+  } finally {
+    results.connectGraphWrites = graphWritesFromConnect.length;
+    console.log(`measured 34: ${JSON.stringify(results)}`);
+  }
+  const refused = (r) => typeof r === 'string' && r.startsWith('failed:');
+  assert.equal(results.start, 'verifying');
+  assert.equal(results.aReconcile, '409:CREDENTIALS_EXPIRED', 'H1 #43 setup: reconcile cannot read');
+  assert.ok(results.aBefore.startsWith('uncertain|'), results.aBefore);
+  assert.ok(results.aDisconnect.includes('PUBLISH_IN_FLIGHT'), `H1 #43 setup: disconnect keeps the account (${results.aDisconnect})`);
+  assert.deepEqual([results.aReconnect, results.a, results.aMoved, results.aWrites], ['verifying', 'published|-', true, 0], '(a) the reconnect read the post first, then rebound; nothing sent');
+  assert.deepEqual(results.aReads, ['container', 'list', 'post'], '(a) GET only: the container, the listing, the post');
+  assert.deepEqual([results.aNext, results.aNextPublishes], ['published|-', 1], '(a) a new attempt posts once');
+  assert.deepEqual([refused(results.bReconnect), results.bAfter.split('|')[0], results.bMoved, results.bReads], [true, 'uncertain', false, 1], '(b) FINISHED: no evidence, refused');
+  assert.deepEqual([refused(results.eOtherUser), results.eReads, results.eAfter.split('|')[0]], [true, 0, 'uncertain'], '(e) another Threads user: refused, no read');
+  assert.equal(results.fApiRoles, 'permission denied,permission denied,permission denied');
+  assert.equal(results.fCandidates, '1');
+  assert.deepEqual([results.fForeignState, results.fOtherThreadsUser, results.fWrongContainer, results.fNotFinal, results.fWriteStep, results.fUnknownAsNotPosted, results.fOtherGeneration],
+    ['NOT_PERMITTED', 'NOT_PERMITTED', 'STALE', 'REQUEST_INVALID', 'REQUEST_INVALID', 'REQUEST_INVALID', 'STALE'], '(f) every check refuses');
+  assert.equal(results.fNoSuchAttempt, 'NOT_PERMITTED', '(f) an attempt that is not this account\'s');
+  assert.equal(results.fAfter.split('|')[0], 'uncertain', '(f) nothing changed');
+  assert.deepEqual([refused(results.bReadFail), results.bAfterReadFail.split('|')[0]], [true, 'uncertain'], '(b) a failed read: refused');
+  assert.deepEqual([results.bExpired, results.b, results.bMovedAfter, results.bWrites, results.bSettleAgain], ['verifying', 'failed|CONTAINER_EXPIRED', true, 0, 'STALE'], '(b) EXPIRED: settled, then rebound');
+  for (const label of ['c', 'd']) {
+    assert.deepEqual([results[`${label}Reconnect`], results[label], results[`${label}Writes`]], ['verifying', results[`${label}Expect`], 0], `(${label})`);
+  }
+  assert.equal(results.connectGraphWrites, 0, 'the connect side never wrote to Threads');
   assert.deepEqual(denied, [], 'no request left this process');
 });

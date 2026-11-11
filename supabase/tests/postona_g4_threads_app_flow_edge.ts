@@ -113,6 +113,12 @@ const fakeFetch: typeof fetch = (input, init) => {
     const puid = (url.searchParams.get("access_token") ?? "").replace(/^long|abcdefghijklmnop$/g, "");
     return json({ id: puid, username: `flow_${puid.slice(-4)}` });
   }
+  // G4-02 #15: the owner bridge's read-before-rebind recovery reads (containers / posts) go to the e2e's fake Threads publish
+  // API over loopback, GET only (the e2e counts anything else); without FLOW_GRAPH they stay unanswered (404)
+  const graph = Deno.env.get("FLOW_GRAPH");
+  if (graph && url.origin === "https://graph.threads.net" && url.pathname.startsWith("/v1.0/") && (init?.method ?? "GET") === "GET") {
+    return fetch(`${graph}${url.pathname}${url.search}`, { method: "GET", signal: init?.signal ?? undefined });
+  }
   return json({}, 404);
 };
 
