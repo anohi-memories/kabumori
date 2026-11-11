@@ -1,15 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { xConnectAuthSessionOptions } from '../src/features/x-connect/auth-session-options.ts';
 import * as oauth from '../src/lib/x-oauth-onboarding.ts';
+import * as recoveryBinding from '../src/domain/recovery-binding.ts';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const stripComments = (text) => text.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '');
 const plain = (value) => JSON.parse(JSON.stringify(value));
+const b64url = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+// A synthetic app session (unsigned JWT shape: only the sub / session_id claims are read, never trusted).
+const SESSION = { access_token: `${b64url({ alg: 'none' })}.${b64url({ sub: 'user-a', session_id: 'sess-a' })}.sig`, user: { id: 'user-a' } };
 
 // Execute the actual hook with synthetic dependencies. Browser/Functions calls
 // are captured locally; neither network access nor provider credentials exist.
@@ -46,12 +51,16 @@ async function hookHarness({ os = 'ios', browserResult, authorizationUrl = 'http
       },
     },
     '@/features/x-connect/auth-session-options': { xConnectAuthSessionOptions },
+    '@/domain/recovery-binding': recoveryBinding,
     '@/lib/x-oauth-onboarding': oauth,
-    '@/providers/auth-provider': { useAuth: () => ({ session: { access_token: 'synthetic_app_jwt' } }) },
-    '@/lib/supabase': { supabase: { functions: { invoke: async (name, options) => {
-      requests.push({ name, options: plain(options) });
-      return name.endsWith('/callback') ? { data: callbackData, error: callbackError } : { data: { authorization_url: authorizationUrl }, error: startError };
-    } } } },
+    '@/providers/auth-provider': { useAuth: () => ({ session: SESSION }) },
+    '@/lib/supabase': { supabase: {
+      auth: { getSession: async () => ({ data: { session: SESSION }, error: null }) },
+      functions: { invoke: async (name, options) => {
+        requests.push({ name, options: plain(options) });
+        return name.endsWith('/callback') ? { data: callbackData, error: callbackError } : { data: { authorization_url: authorizationUrl }, error: startError };
+      } },
+    } },
   };
   const source = await read('src/features/x-connect/use-x-connect.ts');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -95,7 +104,7 @@ test('executed success preserves PKCE/state, callback body and authenticated own
   const harness = await hookHarness();
   await harness.render().connect();
   const state = '01'.repeat(32), verifier = '02'.repeat(32), redirect = 'kabumori-social://oauth-callback';
-  const headers = { Authorization: 'Bearer synthetic_app_jwt' };
+  const headers = { Authorization: `Bearer ${SESSION.access_token}` };
   assert.deepEqual(harness.requests, [
     { name: 'x-oauth-connect-user', options: { headers, body: { state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), redirect_uri: redirect } } },
     { name: 'x-oauth-connect-user/callback', options: { headers, body: { code: 'fixture_code', state, code_verifier: verifier, redirect_uri: redirect } } },
