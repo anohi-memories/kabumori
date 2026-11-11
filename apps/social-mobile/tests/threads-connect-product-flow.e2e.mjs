@@ -13,7 +13,10 @@
 // G4-02 #12 (scenarios 31-32): an attempt is bound to the connection it was begun under (+ .../002): a reconnect in the
 // middle of a post (at the provider boundary, or racing the release in PostgreSQL) never lets the old attempt write.
 // G4-02 #13 (scenario 33): the send onset is the publish release's COMMIT; .../002's send fence refuses a reconnect / re-bind
-// while that send is leased, so no old attempt posts after a reconnect committed (H1 #41's order, a lapsed lease, a race).
+// while that send is leased, so no old attempt posts after a reconnect committed (H1 #41's order, a race).
+// G4-02 #14 (scenario 33, 31 (d)): no clock ends that lease, only a recorded outcome (the server's, or the provider's final
+// container status read by reconcile): the database's clock alone ahead, the Edge's clock alone ahead / behind, a stalled
+// server the database gave up on (H1 #42's order and its neighbours).
 // Not part of `npm test` (*.test.mjs): it needs the runner's database.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -690,7 +693,7 @@ const publishEntries = {
     store: publishHttp.createStore({ supabaseUrl: SUPABASE_URL, anonKey: ANON_KEY, attestationKey: PUBLISH_KEY }, edgeFetch),
     fetch: edgeFetch,
     sleep: () => Promise.resolve(),
-    // G4-02 #13: the Edge's wall clock (scenario 33 (d) moves it, as a server stalled past its send window would see it)
+    // G4-02 #13 / #14: the Edge's wall clock (scenario 33 (d) (f) (g) (h) move it, as a stalled server or a jumped clock would)
     now: () => new Date(Date.now() + pub.clockSkewMs),
   }),
 };
@@ -1160,7 +1163,8 @@ test('31. a reconnect in the middle of a post: the old attempt never writes agai
   results.c = statusError(c);
   results.cWrites = [writes(PUID_F, 'container') - c0[0], writes(PUID_F, 'publish') - c0[1]];
   await settleOpen(account);
-  // (d) the outcome is unknown, then the person reconnects: reconcile settles it read-only, never resends
+  // (d) the outcome is unknown, then the person reconnects: G4-02 #14 -- refused while unknown (a post may still come); reconcile
+  //     settles it read-only, never resends; then the reconnect goes through
   threadsApi.plan[PUID_F] = { publish: 'lost' };
   ({ card, view } = await readyCard());
   assert.equal(await view.publish(view.pin('結果不明のあとに再接続した投稿 d')), true);
@@ -1168,12 +1172,13 @@ test('31. a reconnect in the middle of a post: the old attempt never writes agai
   threadsApi.plan[PUID_F] = {};
   results.dOpen = shown.answer.status;
   const d = shown.answer;
-  results.dReconnect = await reconnectF();
+  results.dReconnect = await reconnectResult();
   p0 = writes(PUID_F, 'publish');
   await shown.followUp('reconcile', d);
   shown = await card.settle();
   results.d = statusError(d.id);
   results.dPublishes = writes(PUID_F, 'publish') - p0;
+  results.dReconnectAfter = await reconnectF();
   await settleOpen(account);
   // (e) an attempt with no stored generation (SYNTHETIC: begun before 002 was installed): unknown -> no write
   threadsApi.plan[PUID_F] = { status: 'IN_PROGRESS' };
@@ -1237,7 +1242,8 @@ test('31. a reconnect in the middle of a post: the old attempt never writes agai
   assert.deepEqual([results.a, results.aPublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(a) container_created + reconnect');
   assert.deepEqual([results.bReconnect, results.bAnswered, results.b, results.bPublishes], ['verifying', false, 'failed|AUTHORIZATION_CHANGED', 0], '(b) reconnect at the status read');
   assert.deepEqual([results.cReconnect, results.cAnswered, results.c, results.cWrites], ['verifying', false, 'failed|AUTHORIZATION_CHANGED', [1, 0]], '(c) reconnect while creating');
-  assert.deepEqual([results.dOpen, results.dReconnect, results.d, results.dPublishes], ['uncertain', 'verifying', 'published|-', 0], '(d) read-only');
+  assert.deepEqual([results.dOpen, results.dReconnect.startsWith('failed:'), results.d, results.dPublishes, results.dReconnectAfter],
+    ['uncertain', true, 'published|-', 0, 'verifying'], `(d) refused while unknown (${results.dReconnect}), settled read-only, then reconnected`);
   assert.deepEqual([results.e, results.ePublishes], ['failed|AUTHORIZATION_CHANGED', 0], '(e) unknown generation');
   assert.deepEqual([results.gBegun, results.gBoundAtBegin, results.gForged], ['reserved', true, 'refused:ATTESTATION_INVALID|reserved|-'], '(g) direct RPC');
   assert.equal(results.gTableReach, 'permission denied,permission denied,permission denied');
@@ -1323,18 +1329,22 @@ test('32. a reconnect racing the release in PostgreSQL: open first -> the releas
   assert.deepEqual(denied, [], 'no request left this process');
 });
 
-// ---- G4-02 #13 (H1 #41 P2): the send onset is the publish release's COMMIT ----------------------------------------------------
+// ---- G4-02 #13 (H1 #41 P2) / #14 (H1 #42 P2): the send onset is the publish release's COMMIT; no clock ends the lease -------
 // .../002's send fence (trigger threads_manual_publish_send_fence on postona_threads_binding.bindings) refuses a write that
-// moves the account's oauth_state_id while its publish is leased (`publishing`, younger than 120 s); the publish server
-// starts the request within THREADS_PUBLISH_SEND_START_WINDOW_MS of asking for the release. Without the fence (PR #650's
-// 002, the runner's G4-02 #13 fail-before) the old attempt in (a) posts AFTER the reconnect committed and scenario 33 fails.
+// moves the account's oauth_state_id while it has an attempt in `publishing` or `uncertain` (#14: a recorded state, no
+// clock); the publish server starts the request within THREADS_PUBLISH_SEND_START_WINDOW_MS of asking for the release, on
+// its own clocks. Fail-before (the runner): PR #650's 002 (no fence) and #13's 002 (a lease that lapses on the database's
+// clock) both let an old attempt post after a reconnect committed, and scenario 33 fails.
 async function reconnectResult(puid = PUID_F) {
   const state = await connectAs(await screen({ session: SESSION_F }), puid);
   return state.kind === 'done' ? `${state.result.kind}:${state.result.code}` : state.kind;
 }
 const bindingRow = (accountId) => owner(`select threads_user_id || '|' || oauth_state_id from postona_threads_binding.bindings where social_account_id = ${lit(accountId)}`);
+/** SYNTHETIC: the database's clock is `seconds` ahead of the publish server's for this attempt (its release looks that old). */
+const dbClockAhead = (attemptId, seconds) => owner(`update public.threads_manual_publish_attempts set updated_at = updated_at - interval '${seconds} seconds' where id = ${lit(attemptId)}::uuid`);
+const containerOf = (attemptId) => threadsApi.containers.get(String(owner(`select container_id from public.threads_manual_publish_attempts where id = ${lit(attemptId)}::uuid`)));
 
-test('33. send onset vs reconnect: a reconnect after the publish release COMMIT waits for that one send (refused, then retried); a lapsed lease never sends; the race in PostgreSQL', { timeout: 120000 }, async () => {
+test('33. send onset vs reconnect: a reconnect after the publish release COMMIT waits until that send is recorded or settled by the provider; no clock (database or server, ahead, behind) lets it in earlier; the race in PostgreSQL', { timeout: 180000 }, async () => {
   const account = threadsAccount(F).id;
   const results = {};
   results.start = await reconnectResult(); // a clean, real binding (scenario 32 left a synthetic one)
@@ -1372,24 +1382,87 @@ test('33. send onset vs reconnect: a reconnect after the publish release COMMIT 
   results.bBound = boundGeneration(b) === generationOf(account);
   results.bPublishes = writes(PUID_F, 'publish') - p0;
   await settleOpen(account);
-  // (d) the lease lapses (SYNTHETIC: the release backdated 121 s and the Edge's clock moved 121 s, a server stalled that long):
-  //     the reconnect goes through, and the stalled server does not send
+  // (d) H1 #42: ONLY the database's clock is ahead (SYNTHETIC: the release looks 121 s old to it; the Edge's clocks are
+  //     untouched, so its start window allows the send). #13 let the reconnect commit here and the old attempt then posted.
+  //     Then the database gives up on the step (reconcile: publishing -> uncertain STEP_INTERRUPTED) while the server is
+  //     still about to send: the reconnect is still refused. The send goes out once; its record is refused (the database
+  //     already gave up on it); the read-only reconcile finds the post; only then does the reconnect go through.
   ({ card, view } = await readyCard());
   gen0 = generationOf(account);
   p0 = writes(PUID_F, 'publish');
   onPublishRelease(async (args) => {
-    owner(`update public.threads_manual_publish_attempts set updated_at = updated_at - interval '121 seconds' where id = ${lit(args.p_attempt_id)}::uuid`);
-    pub.clockSkewMs = 121000;
+    dbClockAhead(args.p_attempt_id, 121);
     results.dReconnect = await reconnectResult();
-    results.dMoved = generationOf(account) !== gen0;
+    results.dMovedBeforeSend = generationOf(account) !== gen0;
+    const gaveUp = await publishCall({ action: 'reconcile', attempt_id: args.p_attempt_id }, SESSION_F.access_token);
+    results.dGaveUp = `${gaveUp.status}|${statusError(args.p_attempt_id)}`;
+    results.dReconnectAbandoned = await reconnectResult();
+    results.dMovedAbandoned = generationOf(account) !== gen0;
   });
-  results.dAnswered = await view.publish(view.pin('送信期限を過ぎた投稿 d'));
+  results.dAnswered = await view.publish(view.pin('データベースの時計だけ進んだ投稿 d'));
+  await card.settle();
+  pgApi.afterRelease = null;
+  const d = latestAttempt(account);
+  results.dAfterSend = statusError(d);
+  results.dPublishes = writes(PUID_F, 'publish') - p0;
+  results.dReconnectUnsettled = await reconnectResult();
+  await settleOpen(account);
+  results.d = statusError(d);
+  results.dReconnectAfter = await reconnectResult();
+  results.dMovedAfter = generationOf(account) !== gen0;
+  await settleOpen(account);
+  // (f) ONLY the Edge's wall clock jumps ahead 121 s while the release is answered: the reconnect is refused (nothing recorded
+  //     yet); the Edge sends nothing and records failed STEP_INTERRUPTED; that record ends the lease and the reconnect goes through
+  // (h) the Edge's wall clock moves BACK 5 s instead: the same
+  for (const [label, skewMs] of [['f', 121000], ['h', -5000]]) {
+    ({ card, view } = await readyCard());
+    gen0 = generationOf(account);
+    p0 = writes(PUID_F, 'publish');
+    onPublishRelease(async () => {
+      pub.clockSkewMs = skewMs;
+      results[`${label}Reconnect`] = await reconnectResult();
+      results[`${label}MovedBeforeRecord`] = generationOf(account) !== gen0;
+    });
+    await view.publish(view.pin(`サーバーの時計だけ動いた投稿 ${label}`));
+    await card.settle();
+    pgApi.afterRelease = null;
+    pub.clockSkewMs = 0;
+    const id = latestAttempt(account);
+    results[label] = statusError(id);
+    results[`${label}Publishes`] = writes(PUID_F, 'publish') - p0;
+    results[`${label}ReconnectAfter`] = await reconnectResult();
+    results[`${label}MovedAfter`] = generationOf(account) !== gen0;
+    await settleOpen(account);
+  }
+  // (g) stalled AND given up on: the database's clock says 121 s and it gives up on the step, the Edge's clock also jumped
+  //     121 s. The Edge sends nothing; its failed record is refused (the database already gave up), so the attempt stays
+  //     `uncertain`. Its container is still FINISHED (not published, not expired): reconcile cannot settle it, and the reconnect
+  //     stays refused -- the liveness price of a lease no clock can end. When the container reports EXPIRED, reconcile records
+  //     failed CONTAINER_EXPIRED and the reconnect goes through. Nothing is ever sent.
+  ({ card, view } = await readyCard());
+  gen0 = generationOf(account);
+  p0 = writes(PUID_F, 'publish');
+  onPublishRelease(async (args) => {
+    dbClockAhead(args.p_attempt_id, 121);
+    await publishCall({ action: 'reconcile', attempt_id: args.p_attempt_id }, SESSION_F.access_token);
+    pub.clockSkewMs = 121000;
+    results.gReconnect = await reconnectResult();
+  });
+  await view.publish(view.pin('止まって見放された投稿 g'));
   await card.settle();
   pgApi.afterRelease = null;
   pub.clockSkewMs = 0;
-  const d = latestAttempt(account);
-  results.d = statusError(d);
-  results.dPublishes = writes(PUID_F, 'publish') - p0;
+  const g = latestAttempt(account);
+  results.gAfterStall = statusError(g);
+  await settleOpen(account);
+  results.gFinished = `${containerOf(g)?.status}|${statusError(g)}`;
+  results.gReconnectFinished = await reconnectResult();
+  containerOf(g).status = 'EXPIRED';
+  await settleOpen(account);
+  results.g = statusError(g);
+  results.gPublishes = writes(PUID_F, 'publish') - p0;
+  results.gReconnectAfter = await reconnectResult();
+  results.gMovedAfter = generationOf(account) !== gen0;
   await settleOpen(account);
   // (e) PostgreSQL: the publish release (the server's, held open 2 s) and a re-bind (the binding write, owner session)
   threadsApi.plan[PUID_F] = { status: 'IN_PROGRESS' };
@@ -1421,27 +1494,44 @@ test('33. send onset vs reconnect: a reconnect after the publish release COMMIT 
   results.eRebind = rebound.ok ? 'committed' : rebound.message.replace(/^ERROR: +/u, '').split('\n')[0];
   results.eBindingKept = bindingRow(account) === rowE;
   results.eStatus = statusError(e.id);
+  // #14: the database's clock alone (the release looks 121 s old) does not end the lease either
+  dbClockAhead(e.id, 121);
+  const late = psql(`update postona_threads_binding.bindings set oauth_state_id = gen_random_uuid() where social_account_id = ${lit(account)};`);
+  results.eRebindDbClockAhead = late.ok ? 'committed' : late.message.replace(/^ERROR: +/u, '').split('\n')[0];
   // REPEATABLE READ: a snapshot could miss a lease, so a generation-moving write there is refused outright
   const rr = psql(`begin isolation level repeatable read; update postona_threads_binding.bindings set oauth_state_id = gen_random_uuid() where social_account_id = ${lit(account)}; commit;`);
   results.eRepeatableRead = rr.ok ? 'committed' : rr.message.replace(/^ERROR: +/u, '').split('\n')[0];
   // settle (e) read-only: nothing was sent for it; the container expires, the abandoned publish is reconciled
-  threadsApi.containers.get(String(owner(`select container_id from public.threads_manual_publish_attempts where id = ${lit(e.id)}::uuid`))).status = 'EXPIRED';
-  owner(`update public.threads_manual_publish_attempts set updated_at = updated_at - interval '121 seconds' where id = ${lit(e.id)}::uuid`);
+  containerOf(e.id).status = 'EXPIRED';
   await settleOpen(account);
   results.e = statusError(e.id);
   results.eRebindAfter = await reconnectResult();
   console.log(`measured 33: ${JSON.stringify(results)}`);
+  const refused = (r) => typeof r === 'string' && r.startsWith('failed:');
   assert.equal(results.start, 'verifying');
   assert.deepEqual([results.aCommitted, results.aAnswered], ['publishing|-|bound=true|sent=0', true], 'H1 #41 setup: the publish release committed, nothing sent yet');
-  assert.deepEqual([results.aReconnect.startsWith('failed:'), results.aMovedBeforeSend], [true, false], `(a) the reconnect cannot commit during the send (${results.aReconnect})`);
+  assert.deepEqual([refused(results.aReconnect), results.aMovedBeforeSend], [true, false], `(a) the reconnect cannot commit during the send (${results.aReconnect})`);
   assert.deepEqual([results.a, results.aPublishes], ['published|-', 1], '(a) the one send that started first, once');
-  assert.deepEqual([results.cRebind.startsWith('failed:'), results.cBindingKept], [true, true], '(c) another Threads user is refused (by the existing completion checks; not a fence proof)');
+  assert.deepEqual([refused(results.cRebind), results.cBindingKept], [true, true], '(c) another Threads user is refused (by the existing completion checks; not a fence proof)');
   assert.deepEqual([results.aRetry, results.aMovedAfterRetry], ['verifying', true], '(a) after the send the reconnect goes through');
   assert.deepEqual([results.b, results.bBound, results.bPublishes], ['published|-', true, 1], '(b) a new attempt posts under the new connection');
-  assert.deepEqual([results.dReconnect, results.dMoved, results.d, results.dPublishes], ['verifying', true, 'failed|STEP_INTERRUPTED', 0], '(d) a lapsed lease: reconnect allowed, nothing sent');
+  assert.deepEqual([refused(results.dReconnect), results.dMovedBeforeSend], [true, false], `(d) H1 #42: only the database's clock ahead -- the reconnect is still refused (${results.dReconnect})`);
+  assert.ok(results.dGaveUp.split('|')[1] === 'uncertain', `(d) the database gave up on the step (${results.dGaveUp})`);
+  assert.deepEqual([refused(results.dReconnectAbandoned), results.dMovedAbandoned], [true, false], `(d) ... and after it gave up, still refused (${results.dReconnectAbandoned})`);
+  assert.deepEqual([results.dPublishes, results.dAfterSend.split('|')[0], refused(results.dReconnectUnsettled)], [1, 'uncertain', true], '(d) the one send went out; unsettled, the reconnect is still refused');
+  assert.deepEqual([results.d, results.dReconnectAfter, results.dMovedAfter], ['published|-', 'verifying', true], '(d) settled read-only from the provider, then the reconnect');
+  for (const label of ['f', 'h']) {
+    assert.deepEqual([refused(results[`${label}Reconnect`]), results[`${label}MovedBeforeRecord`]], [true, false], `(${label}) refused until the server records (${results[`${label}Reconnect`]})`);
+    assert.deepEqual([results[label], results[`${label}Publishes`], results[`${label}ReconnectAfter`], results[`${label}MovedAfter`]],
+      ['failed|STEP_INTERRUPTED', 0, 'verifying', true], `(${label}) only the Edge's clock moved: nothing sent, its record ends the lease`);
+  }
+  assert.deepEqual([refused(results.gReconnect), results.gAfterStall.split('|')[0], results.gFinished.split('|').slice(0, 2), refused(results.gReconnectFinished)],
+    [true, 'uncertain', ['FINISHED', 'uncertain'], true], `(g) given up and unsettled: refused (${results.gFinished})`);
+  assert.deepEqual([results.g, results.gPublishes, results.gReconnectAfter, results.gMovedAfter], ['failed|CONTAINER_EXPIRED', 0, 'verifying', true], '(g) the container expired: settled, then the reconnect; nothing sent');
   assert.deepEqual([results.eHeld, results.eRelease, results.eRebind, results.eBindingKept, results.eStatus],
     [true, 'released:-', 'THREADS_BINDING_SEND_IN_PROGRESS', true, 'publishing|-'], '(e) the re-bind waited for the release, then was refused');
   assert.ok(results.eWaitedMs >= 800, `(e) the re-bind waited for the release's commit (${results.eWaitedMs} ms)`);
+  assert.equal(results.eRebindDbClockAhead, 'THREADS_BINDING_SEND_IN_PROGRESS', '(e) the database clock alone ends nothing');
   assert.equal(results.eRepeatableRead, 'THREADS_BINDING_SEND_FENCE_ISOLATION');
   assert.deepEqual([results.e, results.eRebindAfter], ['failed|CONTAINER_EXPIRED', 'verifying'], '(e) settled read-only; the reconnect then goes through');
   assert.deepEqual(denied, [], 'no request left this process');

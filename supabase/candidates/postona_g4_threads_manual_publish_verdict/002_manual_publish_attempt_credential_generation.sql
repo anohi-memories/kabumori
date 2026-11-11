@@ -1,4 +1,5 @@
--- NOT A MIGRATION. G4 SOURCE CANDIDATE ONLY (G4-02 #12, Issue #561). Kept outside supabase/migrations: no tool applies it.
+-- NOT A MIGRATION. G4 SOURCE CANDIDATE ONLY (G4-02 #12; the send fence #13, made clock-free by #14; Issue #561).
+-- Kept outside supabase/migrations: no tool applies it.
 --
 -- H1 #40 P2 (Issue #306): a manual post begun under one Threads connection could still go out after the SAME person
 -- reconnected the SAME Threads user in the middle of it (social_account_id and G5's lifecycle_version unchanged, only G4's
@@ -33,23 +34,35 @@
 --
 -- G4-02 #13 (H1 #41 P2, Issue #306): the publish release COMMITs and hands the credential to the server; a reconnect that
 -- committed after that but before the server's HTTP request still let the old attempt post (the release's locks end at its
--- COMMIT). The send onset is now a contract between the release and every connection change:
---   * the SEND LEASE: an attempt in `publishing` whose release is younger than 120 seconds (updated_at is set by the publish
---     release; the same 120 s after which reconcile treats the step as abandoned). The lease ends when the server records
---     the answer (publish_returned / failed / uncertain) or when it lapses.
+-- COMMIT). The send onset is a contract between the release and every connection change.
+-- G4-02 #14 (H1 #42 P2): #13 ended that lease after 120 s on the DATABASE's clock while the server decided to send on ITS
+-- clocks; with only the database's clock ahead, a reconnect committed and the old attempt still posted. No clock decides
+-- the lease any more:
+--   * the SEND LEASE is a recorded state, not a duration: the account has an attempt in `publishing` (the publish release
+--     committed; the server may be sending) or `uncertain` (a post may exist or may still come: the server's answer was
+--     lost, or the database gave up waiting for it). It ends ONLY when a state that no later send can change is recorded:
+--     the server's own answer for that request (publish_returned; failed: nothing was sent, or the provider refused it),
+--     or the read-only reconcile's provider evidence (published / published_unidentified: the post exists; failed: the
+--     container is ERROR / EXPIRED and can never be published). Reconcile turning an abandoned `publishing` into
+--     `uncertain` after 120 s does NOT end it, so no clock (fast, slow or jumping, the database's or the server's) lets a
+--     reconnect in while a server could still send.
 --   * postona_threads_binding.manual_publish_send_fence(), a BEFORE INSERT OR UPDATE trigger on G4's
 --     postona_threads_binding.bindings (the row every connect / reconnect / re-bind writes): a write that installs another
 --     oauth_state_id (= another credential generation) while that account holds a send lease is refused
---     THREADS_BINDING_SEND_IN_PROGRESS (the whole connect transaction rolls back: no state, binding or secret change; the
---     person connects again a moment later). Outside READ COMMITTED such a write is refused THREADS_BINDING_SEND_FENCE_ISOLATION
---     (its snapshot could miss a lease committed after it began).
---   * the publish server starts the request within THREADS_PUBLISH_SEND_START_WINDOW_MS (30 s) of asking for the release
---     and bounds it at 10 s (supabase/functions/_shared/social/threads_manual_publish.ts), well inside the 120 s lease.
+--     THREADS_BINDING_SEND_IN_PROGRESS (the whole connect transaction rolls back: no state, binding or secret change).
+--     Outside READ COMMITTED such a write is refused THREADS_BINDING_SEND_FENCE_ISOLATION (its snapshot could miss a lease
+--     committed after it began).
+--   * the publish server starts the request within THREADS_PUBLISH_SEND_START_WINDOW_MS (30 s, on its own monotonic and
+--     wall clocks) of asking for the release, or records `failed` STEP_INTERRUPTED and sends nothing; the request is
+--     bounded at 10 s (supabase/functions/_shared/social/threads_manual_publish.ts). That keeps a send from going out stale
+--     and the lease short; the fence's safety depends neither on it nor on two clocks agreeing.
 -- So: a reconnect committed BEFORE the publish release -> the release refuses (G4-02 #12, above); a publish release committed
--- first -> the reconnect cannot commit until that one send is over: the send is ordered before the reconnect, made at most
--- once, and an unknown outcome is settled read-only. Not closed by any database: the provider still processing a request the
--- client gave up on (timeout). Disconnect / stop / G5 end are not fenced: they never resume a send, and a send whose lease
--- began before them is ordered before them. The begin / release bodies above are unchanged by #13.
+-- first -> the reconnect cannot commit until that send's outcome is recorded by the server or settled from the provider's
+-- own container status (read-only, never resent). The price is liveness, not safety: a server that dies after the release,
+-- or whose answer is lost, keeps the account's reconnect refused until reconcile reads a final container status (how long
+-- a real Threads container takes to report EXPIRED is not verified). Not closed by any database: a provider whose
+-- container status is wrong. Disconnect / stop / G5 end are not fenced: they never resume a send, and a send whose lease
+-- began before them is ordered before them. The begin / release bodies above are unchanged by #13 and #14.
 -- Rollback: 002_manual_publish_attempt_credential_generation_rollback.sql (restores both bodies exactly, drops the fence and
 -- the table).
 
@@ -333,10 +346,9 @@ exception
 end;
 $$;
 
--- G4-02 #13: the send fence (see the header). A publish release has made the attempt `publishing` (updated_at = its
--- transaction's start, which is after the server asked for it); until the answer is recorded or 120 s pass, no write may give
--- the account another oauth_state_id. The release holds the binding FOR SHARE to its COMMIT, so a reconnect's binding write
--- waits for it and then runs this function, whose query takes a fresh snapshot (READ COMMITTED) and sees that release.
+-- G4-02 #13 / #14: the send fence (see the header). The publish release holds the binding FOR SHARE to its COMMIT, so a
+-- reconnect's binding write waits for it and then runs this function, whose query takes a fresh snapshot (READ COMMITTED)
+-- and sees that release. No time is read: the lease is the attempt's recorded state.
 create function postona_threads_binding.manual_publish_send_fence()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -349,8 +361,7 @@ begin
   end if;
   if exists (select 1 from public.threads_manual_publish_attempts t
               where t.social_account_id in (new.social_account_id, case when tg_op = 'UPDATE' then old.social_account_id end)
-                and t.status = 'publishing'
-                and t.updated_at > pg_catalog.clock_timestamp() - interval '120 seconds') then
+                and t.status in ('publishing', 'uncertain')) then
     raise exception 'THREADS_BINDING_SEND_IN_PROGRESS' using errcode = 'P0001';
   end if;
   return new;
@@ -391,15 +402,24 @@ begin
       raise exception 'G4MG_POSTCONDITION_TABLE_ACL %', v_api;
     end if;
   end loop;
-  -- G4-02 #13: the fence exactly as reviewed, owner-only, and its trigger enabled: BEFORE, ROW, INSERT + UPDATE (tgtype 23)
-  if not coalesce((select p.prosecdef and p.proowner = v_me and p.proconfig is not distinct from array['search_path=""']
-                          and pg_catalog.md5(p.prosrc) = '1e9c3cbf99dc053c72eb134cef913cb1'
+  -- G4-02 #13 / #14: the fence exactly as reviewed and owner-only, used by exactly one trigger, which has the reviewed shape:
+  -- BEFORE, ROW, INSERT + UPDATE (tgtype 23), enabled as origin (tgenabled 'O'), no WHEN / column list / arguments / constraint /
+  -- transition tables. The rollback refuses (G4MG_ROLLBACK_FENCE_DRIFT) unless the same predicate still holds.
+  if not coalesce((select p.prosecdef and p.proowner = v_me and p.provolatile = 'v' and p.pronargs = 0 and not p.proretset
+                          and p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
+                          and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                          and p.proconfig is not distinct from array['search_path=""']
                           and p.proacl is not null and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me)
+                          and pg_catalog.md5(p.prosrc) = '4992a4a16baad53a9eb17c3cfb71a3f6'
                      from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')), false)
+     or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
+          where t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1
      or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
           where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
             and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')
-            and t.tgtype = 23 and t.tgenabled = 'O' and not t.tgisinternal and t.tgqual is null) <> 1 then
+            and t.tgtype = 23 and t.tgenabled = 'O' and not t.tgisinternal and t.tgqual is null and t.tgnargs = 0
+            and t.tgattr::text = '' and t.tgconstraint = 0 and not t.tgdeferrable and not t.tginitdeferred
+            and t.tgoldtable is null and t.tgnewtable is null and t.tgparentid = 0) <> 1 then
     raise exception 'G4MG_POSTCONDITION_FENCE';
   end if;
 end $$;

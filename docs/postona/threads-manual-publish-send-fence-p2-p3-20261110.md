@@ -11,6 +11,9 @@ are unchanged (`7d26e42e…` / `e92ec523…`, as H1 #41 reviewed them).
 
 ## 1. P2 — the send onset
 
+> **G4-02 #14 (2026-11-11):** the 120 s lease below was found unsafe when only the database's clock runs ahead (H1 #42 P2).
+> It is replaced by a lease no clock ends: see `threads-manual-publish-send-lease-clockfree-p2-p3-20261111.md`.
+
 H1's order: the publish release COMMITs (attempt `publishing`, old generation stored), the person reconnects the same Threads
 user before the server's HTTP request, then the old attempt posts (+1) under a connection that has already been replaced. No
 read before the request can close this: a reconnect can always commit between that read and the request.
