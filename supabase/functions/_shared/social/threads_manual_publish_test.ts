@@ -8,7 +8,6 @@ import {
   THREADS_PUBLISH_REQUEST_BOUND_MS,
   THREADS_PUBLISH_SEND_START_WINDOW_MS,
   THREADS_RECORD_TRANSITIONS,
-  THREADS_STALE_IN_FLIGHT_SECONDS,
   type ThreadsAttempt,
   type ThreadsManualPublishDeps,
   ThreadsStoreError,
@@ -458,7 +457,7 @@ test("a token whose expiry is unknown, past or within 5 minutes is never used; e
   assert.equal([...store.attempts.values()][0].status, "container_created");
 });
 
-// --- G4-02 #13 (H1 #41 P2): the publish request starts only inside the database's send lease ---------------------------
+// --- G4-02 #13 / #14: the publish request starts only inside its start window, on this server's own clocks ---------------
 
 /** The publish release answered `delayMs` later on the clock the flow reads (a stalled server, or a clock that moved). */
 function stalledAtPublish(store: FakeThreadsPublishStore, delayMs: number) {
@@ -498,11 +497,14 @@ test("G4-02 #13: at the edge of the window the request is sent once", async () =
   assert.equal(provider.calls.filter((c) => c.step === "publish").length, 1);
 });
 
-test("G4-02 #13: window + request bound stay well inside the send lease, and the contract's bound is that bound", async () => {
-  assert.ok(THREADS_PUBLISH_SEND_START_WINDOW_MS + THREADS_PUBLISH_REQUEST_BOUND_MS + 60_000 <= THREADS_STALE_IN_FLIGHT_SECONDS * 1000);
+test("G4-02 #14: the send fence reads no clock (its lease is the attempt's recorded state); the contract's bound is that bound", async () => {
   const contract = await Deno.readTextFile(new URL("./threads_publish_contract.ts", import.meta.url));
   assert.equal(contract.split("setTimeout(() => controller.abort(), 10_000)").length - 1, 1);
   assert.equal(THREADS_PUBLISH_REQUEST_BOUND_MS, 10_000);
   const sql = await Deno.readTextFile(new URL("../../../candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql", import.meta.url));
-  assert.ok(sql.includes(`t.updated_at > pg_catalog.clock_timestamp() - interval '${THREADS_STALE_IN_FLIGHT_SECONDS} seconds'`), "the fence's lease is the stale bound");
+  const at = sql.indexOf("create function postona_threads_binding.manual_publish_send_fence()");
+  assert.ok(at > 0);
+  const body = sql.slice(sql.indexOf("as $$", at), sql.indexOf("$$;", at));
+  assert.ok(body.includes("and t.status in ('publishing', 'uncertain')) then"), "the lease: publishing or uncertain");
+  assert.ok(!/clock_timestamp|now\(|interval|updated_at|_timestamp|epoch/u.test(body), "no clock decides the fence");
 });

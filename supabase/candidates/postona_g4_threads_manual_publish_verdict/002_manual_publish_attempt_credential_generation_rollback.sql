@@ -4,8 +4,11 @@
 -- exactly, then drops G4-02 #13's send fence (trigger threads_manual_publish_send_fence on postona_threads_binding.bindings and
 -- postona_threads_binding.manual_publish_send_fence()) and public.threads_manual_publish_attempt_generations. Owners and ACLs
 -- stay (CREATE OR REPLACE; checked).
--- Refuses (nothing changed) unless 002 is applied byte for byte. After it, write steps are again gated by 001 only (the P2
--- gap returns): roll back only together with a decision to stop manual publishing, or before 001's rollback.
+-- Refuses (nothing changed) unless 002 is applied byte for byte. G4-02 #14 (H1 #42 P3): and unless the fence, its trigger and
+-- the table still have the shape 002's postconditions checked (a disabled or reshaped trigger, a changed function
+-- attribute / ACL / body, a changed table ACL / RLS -> G4MG_ROLLBACK_FENCE_DRIFT / G4MG_ROLLBACK_TABLE_DRIFT).
+-- After it, write steps are again gated by 001 only (the P2 gap returns): roll back only together with a decision to stop
+-- manual publishing, or before 001's rollback.
 -- Run as the lifecycle owner.
 
 begin;
@@ -14,6 +17,7 @@ set local search_path = '';
 
 do $$
 declare
+  v_me oid := (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user);
   v_begin regprocedure := pg_catalog.to_regprocedure('public.begin_threads_manual_publish(text,uuid,text)');
   v_release regprocedure := pg_catalog.to_regprocedure('public.release_threads_manual_publish_step(uuid,text,bigint,text,text)');
 begin
@@ -21,17 +25,44 @@ begin
      or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_begin) is distinct from '7d26e42edaf3f7f85083880814983c2e'
      or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p where p.oid = v_release) is distinct from 'e92ec523bb1a7a3ba7ca53dce744fb82'
      -- G4-02 #13: the send fence and its trigger, as installed
-     or (select pg_catalog.md5(p.prosrc) from pg_catalog.pg_proc p
-          where p.oid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) is distinct from '1e9c3cbf99dc053c72eb134cef913cb1'
+     or pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is null
      or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
           where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
             and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1 then
     raise exception 'G4MG_ROLLBACK_NOT_APPLIED';
   end if;
   if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user)
-     or exists (select 1 from pg_catalog.pg_proc p where p.oid in (v_begin, v_release)
-                 and p.proowner is distinct from (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user)) then
+     or exists (select 1 from pg_catalog.pg_proc p where p.oid in (v_begin, v_release) and p.proowner is distinct from v_me)
+     or (select c.relowner from pg_catalog.pg_class c where c.oid = 'postona_threads_binding.bindings'::regclass) is distinct from v_me then
     raise exception 'G4MG_ROLLBACK_OWNER';
+  end if;
+  -- G4-02 #13 / #14: the fence exactly as reviewed and owner-only, used by exactly one trigger, which has the reviewed shape:
+  -- BEFORE, ROW, INSERT + UPDATE (tgtype 23), enabled as origin (tgenabled 'O'), no WHEN / column list / arguments / constraint /
+  -- transition tables. The rollback refuses (G4MG_ROLLBACK_FENCE_DRIFT) unless the same predicate still holds.
+  -- (= 002's G4MG_POSTCONDITION_FENCE)
+  if not coalesce((select p.prosecdef and p.proowner = v_me and p.provolatile = 'v' and p.pronargs = 0 and not p.proretset
+                          and p.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
+                          and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+                          and p.proconfig is not distinct from array['search_path=""']
+                          and p.proacl is not null and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me)
+                          and pg_catalog.md5(p.prosrc) = '4992a4a16baad53a9eb17c3cfb71a3f6'
+                     from pg_catalog.pg_proc p where p.oid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')), false)
+     or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
+          where t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1
+     or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
+          where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
+            and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')
+            and t.tgtype = 23 and t.tgenabled = 'O' and not t.tgisinternal and t.tgqual is null and t.tgnargs = 0
+            and t.tgattr::text = '' and t.tgconstraint = 0 and not t.tgdeferrable and not t.tginitdeferred
+            and t.tgoldtable is null and t.tgnewtable is null and t.tgparentid = 0) <> 1 then
+    raise exception 'G4MG_ROLLBACK_FENCE_DRIFT';
+  end if;
+  -- the table as 002 left it (= 002's G4MG_POSTCONDITION_TABLE_ACL): RLS on, owner-only, no policy
+  if not (select c.relrowsecurity and c.relowner = v_me and c.relacl is not null
+                 and not exists (select 1 from pg_catalog.aclexplode(c.relacl) e where e.grantee <> v_me)
+            from pg_catalog.pg_class c where c.oid = 'public.threads_manual_publish_attempt_generations'::regclass)
+     or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.threads_manual_publish_attempt_generations'::regclass) then
+    raise exception 'G4MG_ROLLBACK_TABLE_DRIFT';
   end if;
   perform pg_catalog.set_config('g4mg.before', (
     select pg_catalog.string_agg(p.oid::regprocedure::text || ':' || p.proowner::text || ':' || coalesce(p.proacl::text, '-')

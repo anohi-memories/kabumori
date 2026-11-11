@@ -26,13 +26,17 @@
 // the 10 s request bound) a lifecycle change cannot stop a request already released. Every LATER write
 // needs a new release.
 //
-// The send onset (G4-02 #13, H1 #41 P2) is the publish release's COMMIT. From then until this server records
-// the answer, or THREADS_STALE_IN_FLIGHT_SECONDS pass, the database refuses a reconnect / re-bind of the account
-// (candidate postona_g4_threads_manual_publish_verdict/002's send fence), so the one publish request is ordered
-// before any new connection. This server keeps its side: it starts that request within
+// The send onset (G4-02 #13, H1 #41 P2) is the publish release's COMMIT. From then the database refuses a
+// reconnect / re-bind of the account (candidate postona_g4_threads_manual_publish_verdict/002's send fence) while
+// the attempt is `publishing` or `uncertain`, so the one publish request is ordered before any new connection.
+// G4-02 #14 (H1 #42 P2): no clock ends that lease. It ends only when this server records its answer for the
+// request (publish_returned / failed), or when the read-only reconcile records the provider's own final container
+// status (PUBLISHED -> published*, ERROR / EXPIRED -> failed). The database turning an abandoned `publishing` into
+// `uncertain` (THREADS_STALE_IN_FLIGHT_SECONDS) keeps it. This server also starts that request within
 // THREADS_PUBLISH_SEND_START_WINDOW_MS of asking for the release (or records that nothing was sent), and the
-// request is bounded at 10 s. A disconnect / stop / G5 end is not fenced: it never resumes a send, and a send
-// already leased is ordered before it.
+// request is bounded at 10 s: that keeps a send from going out stale and the lease short, and is checked on this
+// server's own clocks only; the fence does not rely on it. A disconnect / stop / G5 end is not fenced: it never
+// resumes a send, and a send already leased is ordered before it.
 //
 // Statuses (THREADS_ATTEMPT_STATUSES): reserved -> creating_container -> container_created -> publishing
 // -> publish_returned -> published, plus failed / uncertain / published_unidentified. Only `published`
@@ -110,8 +114,8 @@ export const THREADS_STALE_IN_FLIGHT_SECONDS = 120;
  * G4-02 #13: the publish request must start within this long of asking for its release, measured on both the
  * monotonic clock and `deps.now()` (a clock that moved backwards also refuses). Otherwise nothing is sent and
  * the attempt is recorded `failed` STEP_INTERRUPTED (no post can exist: the container was never published).
- * With the 10 s request bound this keeps the request inside the database's send lease
- * (THREADS_STALE_IN_FLIGHT_SECONDS, counted from the release transaction, which starts after this server asks).
+ * G4-02 #14: both are this server's own clocks, compared only with themselves. The database's send lease is not a
+ * duration (see the header), so no comparison with the database's clock is needed or made.
  */
 export const THREADS_PUBLISH_SEND_START_WINDOW_MS = 30_000;
 export const THREADS_PUBLISH_REQUEST_BOUND_MS = 10_000;
