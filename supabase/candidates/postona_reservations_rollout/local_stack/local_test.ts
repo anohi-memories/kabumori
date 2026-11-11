@@ -1108,4 +1108,86 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await Promise.all([ap("notifications", { limit: 100 }), ap("notifications", { limit: 100 })]);
     assert.deepStrictEqual(await noteRows(), plus1(r1));
   });
+
+  await t.step("L38 G3-02 #19: approve -> reservation -> notifications with G5 PR #645's ownership lock; a second member joining waits for a notification write; replays and a lost answer make nothing twice; the gated real entry writes nothing", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const plus = (r: string, k: number) => r.split("/").map((x) => String(Number(x) + k)).join("/");
+    const resvCount = () => countOf(`select count(*) from postona_x_resv.reservations where user_id = '${d.userId}'`);
+    const candCount = () => countOf(`select count(*) from postona_x_resv.approval_candidates where user_id = '${d.userId}'`);
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    // the real entry (gate OFF in source): 503, nothing read or written
+    const r0 = await noteRows();
+    const c0 = await candCount();
+    const off = await http("postona-x-approvals", { action: "submit", payload: { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "off", scheduledAt: at(60) } }, d.token);
+    assert.deepStrictEqual([code(off), await candCount(), await noteRows()], ["503 NOT_AVAILABLE", c0, r0]);
+    // the same request three times at once: one candidate, one event, one outbox row
+    const req = { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #19 flow", scheduledAt: at(61) };
+    const three = await Promise.all([ap("submit", req), ap("submit", req), ap("submit", req)]);
+    assert.deepStrictEqual(three.map((x) => x.status), [200, 200, 200], JSON.stringify(three.map((x) => x.body)));
+    const c = cands(three[0])[0];
+    assert.ok(three.every((x) => cands(x)[0].candidateId === c.candidateId));
+    assert.deepStrictEqual([await candCount(), await noteRows()], [c0 + 1, plus(r0, 1)]);
+    // approve whose answer is lost (the client gives up while the server is still writing: a test-only 2 s barrier on the event insert)
+    await owner("create function public.g3ls19_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(2); return new; end $$; create trigger g3ls19_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls19_barrier();", {});
+    const n0 = await resvCount();
+    const abort = new AbortController();
+    const lost = fetch(`${API}/functions/v1/${AP}`, { method: "POST", signal: abort.signal,
+      headers: { apikey: PUBLISHABLE, "content-type": "application/json", authorization: `Bearer ${d.token}` },
+      body: JSON.stringify({ action: "approve", payload: { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 } }) });
+    await sleep(500);
+    abort.abort();
+    await lost.then((r) => r.body?.cancel(), () => undefined);
+    await sleep(2500);
+    await owner("drop trigger g3ls19_barrier on postona_x_resv.notifications; drop function public.g3ls19_barrier();", {});
+    // UNCERTAIN on the client: it reads back, then retries the same approval: the same reservation, nothing new
+    const back = await ap("get", { candidateId: c.candidateId });
+    const seen = cands(back)[0]?.state as string;
+    assert.ok(seen === "approved" || seen === "pending_approval", `read back: ${seen}`);   // the server either finished or rolled back; never half
+    console.log(`G3LS_L38_LOST_ANSWER read back ${seen}`);
+    const again = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+    assert.deepStrictEqual([again.status, cands(again)[0].state], [200, "approved"], JSON.stringify(again.body));
+    if (seen === "approved") assert.deepStrictEqual(cands(again)[0].reservationId, cands(back)[0].reservationId);
+    assert.deepStrictEqual([await resvCount(), await noteRows()], [n0 + 1, plus(r0, 2)], "one reservation, approval_requested + approval_approved once each");
+    // the worker reads it like any reservation (live checks), and the fake X is called once
+    const rid = cands(again)[0].reservationId as string;
+    await makeDue(rid);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const calls = await xCalls();
+    const run = await deliver();
+    assert.deepStrictEqual([run.report?.sends, await xCalls()], [1, calls + 1], JSON.stringify(run));
+    const twice = await deliver();
+    assert.deepStrictEqual([twice.report?.claimed ?? 0, await xCalls()], [0, calls + 1], "never sent twice");
+    // a second member joins the person's workspace while a notification is being written: with G5's trigger it waits
+    const drained = await ap("notifications", { limit: 100 });   // every pending derived event written first, so the race writes exactly one
+    assert.strictEqual(drained.status, 200);
+    await owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: one new state to report
+    await owner(`create function public.g3ls19_barrier() returns trigger language plpgsql as $$ begin if new.reservation_id = '${rid}' then perform pg_sleep(3); end if; return new; end $$; create trigger g3ls19_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls19_barrier();`, {});
+    const r1 = await noteRows();
+    const dl0 = await owner("select deadlocks from pg_stat_database where datname = current_database()", {});
+    const tl = Date.now();
+    const listing = ap("notifications", { limit: 100 });
+    await sleep(1000);
+    const t0 = Date.now();
+    await owner("set lock_timeout = '20s'; insert into public.brand_memberships (brand_id, user_id, role) select brand_id, :'b', 'member' from public.brand_memberships where user_id = :'u' and role = 'owner';", { u: d.userId, b: b.userId });
+    const waited = Date.now() - t0;
+    const listed = await listing;
+    const listMs = Date.now() - tl;
+    const dl1 = await owner("select deadlocks from pg_stat_database where datname = current_database()", {});
+    console.log(`G3LS_L38_RACE list ${listed.status} ${JSON.stringify(listed.body).slice(0, 80)} in ${listMs} ms; insert waited ${waited} ms; deadlocks ${dl0} -> ${dl1}`);
+    assert.strictEqual(listed.status, 200);
+    await owner("drop trigger g3ls19_barrier on postona_x_resv.notifications; drop function public.g3ls19_barrier();", {});
+    assert.ok(waited >= 1500, `a second member joined during a notification write (waited ${waited} ms): G5's ownership lock is not in place`);
+    assert.deepStrictEqual(await noteRows(), plus(r1, 1), "the event written while the workspace was still personal");
+    // with the second member the workspace is no longer the person's own personal one: the next state writes nothing
+    await owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC
+    const r2 = await noteRows();
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    assert.deepStrictEqual(await noteRows(), r2, "no write while the workspace has a second member");
+    await owner("delete from public.brand_memberships where user_id = :'b' and role = 'member' and brand_id in (select brand_id from public.brand_memberships where user_id = :'u' and role = 'owner');", { u: d.userId, b: b.userId });
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    assert.deepStrictEqual(await noteRows(), plus(r2, 1), "personal again: the pending event once");
+  });
 });

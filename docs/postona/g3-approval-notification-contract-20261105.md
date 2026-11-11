@@ -89,6 +89,17 @@ There is no post text, token or account handle in a notification.
   - A deleted workspace or X account takes its candidates and notifications with it. This is a foreign-key cascade, checked in the catalog only.
   - A person who no longer owns the workspace sees nothing and can change nothing.
 
+## 5a. Decisions on G2 #9's P3 findings (G3-02 #19)
+
+- **After a service end, `list` / `get` / `notifications` still answer 200** with the person's own rows. This is the contract and stays.
+  - It follows G5's lifecycle contract (#589 6579654668): the same person may keep reading their own items and cancelling. Writes that can lead to a post stop (`submit` / `revise` / `approve`: 403 `SERVICE_NOT_ACTIVE`); `reject` and `markRead` stay allowed.
+  - Measured: PG17 AP12, local L35.
+  - Nothing of another person is ever returned. A former owner sees nothing (#17 / #18). G1 shows the answer as it is and adds the "start the service" way out from the 403.
+- **Each submit and each revise writes one `approval_requested`**, keyed by `subjectRevision`. This is per revision by design, not a duplicate: a retry of the same request writes nothing more (measured: L38, three concurrent submits give 1 row).
+  - Rows are immutable history, kept for push and audit.
+  - G1 should group by `candidateId` and show only the newest `approval_requested` per candidate as unread. When the person opens it, G1 may mark the older ones of the same candidate read with `markRead`, one call each.
+  - The server does not merge or hide them, so a push that already went out for revision 1 is never contradicted.
+
 ## 6. Push (for a later, separately reviewed step)
 
 Each new notification gets one `postona_x_resv.push_outbox` row (`state = 'pending'`). Nothing reads it in this candidate, and no role can.
@@ -123,3 +134,4 @@ Note: `reservation_changed` is written when the person lists notifications. Push
 - G5's deletion saga over these tables; only the cascade is checked.
 - A push provider.
 - The real X.
+- G5 PR #645's ownership-lock trigger outside a throw-away local database (G3-02 #19 applies it only there).

@@ -377,6 +377,47 @@ python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18
 own -c "drop table g48.bm43" >/dev/null
 [ "$(catalog)" = "$c_018" ] || fail "VR18 left something in the catalog"
 echo "OK VR18: the loss during a write waits for it (W, +1 while the owner); a loss in flight first makes the list wait and write 0 (L); two owner lists write once (B); a workspace profile change waits for a write (P); G5's restart waits for a write (S)"
+# --- VG5 (G3-02 #19): G5 PR #645's ownership-lock trigger (pinned, read only, applied in this throw-away world only) against notify() --
+g5head=a4d6c0eb56441abaf00717128720e5bf6209a329; g5dir=supabase/candidates/postona_workspace_ownership_lock
+git -C "$repo" cat-file -e "${g5head}^{commit}" 2>/dev/null || { echo "RUN_NOT_AVAILABLE: G5 head $g5head missing; git fetch origin $g5head" >&2; exit 3; }
+[ "$(git -C "$repo" rev-parse "${g5head}:${g5dir}/001_workspace_ownership_lock.sql")" = f434be5a1ca0663fe5b6efe5666cebc9f25e885c ] || fail "G5 001 is not the pinned blob"
+[ "$(git -C "$repo" rev-parse "${g5head}:${g5dir}/001_workspace_ownership_lock_rollback.sql")" = 3a8d741d9a3aebab85e158eb2da1007c4d926679 ] || fail "G5 001 rollback is not the pinned blob"
+git -C "$repo" show "${g5head}:${g5dir}/001_workspace_ownership_lock.sql" > "$work/g5wo.sql"
+git -C "$repo" show "${g5head}:${g5dir}/001_workspace_ownership_lock_rollback.sql" > "$work/g5wo_rb.sql"
+# one race: a membership write ($1) arrives while notify() waits in the barrier; prints "waited" or "not waited"; $2 undoes it
+member_race() {
+  moved43; barrier 3
+  listing43 > "$work/g5_list.txt" 2>&1 & lp=$!
+  sleep 1
+  t0="$(now_s)"; own -c "set lock_timeout = '20s'" -c "$1" >/dev/null || fail "VG5 the write failed: $1"; t1="$(now_s)"
+  wait "$lp" || fail "VG5 the list failed: $(cat "$work/g5_list.txt")"
+  unbarrier
+  grep -q '^ERR' "$work/g5_list.txt" && fail "VG5 the list answered an error during the race: $(cat "$work/g5_list.txt")"
+  own -c "$2" >/dev/null
+  python3 -I -c "print('waited' if $t1 - $t0 >= 1.5 else 'not waited')"
+}
+add_member="insert into public.brand_memberships (brand_id, user_id, role) values (g48.ws(4843), g48.u(4842), 'member')"
+del_member="delete from public.brand_memberships where brand_id = g48.ws(4843) and user_id = g48.u(4842)"
+add_other="insert into public.brand_memberships (brand_id, user_id, role) values (g48.ws(4842), g48.u(4843), 'owner')"
+del_other="delete from public.brand_memberships where brand_id = g48.ws(4842) and user_id = g48.u(4843)"
+demote="update public.brand_memberships set role = 'member' where brand_id = g48.ws(4843) and user_id = g48.u(4843)"
+promote="update public.brand_memberships set role = 'owner' where brand_id = g48.ws(4843) and user_id = g48.u(4843)"
+# BEFORE G5's trigger (the gap G3 PR #644 reported): a second member joining does not wait for the notification write
+[ "$(member_race "$add_member" "$del_member")" = "not waited" ] || fail "VG5-B0 expected the open gap before G5's trigger"
+own -f "$work/g5wo.sql" >/dev/null || fail "VG5 G5 001 apply"
+# AFTER: every eligibility-changing membership write waits for the write, and the next list writes nothing
+[ "$(member_race "$add_member" "$del_member")" = waited ] || fail "VG5-I1 a second member joining did not wait for the notification write"
+[ "$(member_race "$add_other" "$del_other")" = waited ] || fail "VG5-I2 owning another workspace did not wait for the notification write"
+[ "$(member_race "$demote" "$promote")" = waited ] || fail "VG5-I3 a role change did not wait for the notification write"
+moved43; r0="$(rows43)"
+own -c "$add_member" >/dev/null
+answer="$(listing43)"
+[ "$(rows43)" = "$r0" ] || fail "VG5-I4 a list after a second member joined wrote $r0 -> $(rows43)"
+own -c "$del_member" >/dev/null
+[ "$(rows43)" = "$r0" ] || fail "VG5-I4 the member removal wrote something"
+answer="$(listing43)"
+[ "$(rows43)" = "$(python3 -I -c "a, b = '$r0'.split('/'); print(f'{int(a) + 1}/{int(b) + 1}')")" ] || fail "VG5-I4 personal again: expected the pending event once ($r0 -> $(rows43))"
+echo "OK VG5: G5 PR #645 001 (pinned a4d6c0eb, applied here only): BEFORE it a second member joining did not wait (the gap); AFTER it a second member (I1), owning another workspace (I2) and a role change (I3) each wait for a notification write; with a second member the list writes 0, personal again it writes the event once (I4)"
 counts="$(sval -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text")"
 expect_err "VA5 018 rollback as a superuser" G3_APPROVALS_ROLLBACK_OWNER sval -c "set postona_resv_approval_rollback.discard = '$counts'" -f "$x018rb"
 expect_err "VA6 018 rollback, counts not stated" G3_APPROVALS_ROLLBACK_ROWS own -f "$x018rb"
@@ -390,4 +431,7 @@ expect_err "VA7 018 rollback twice" G3_APPROVALS_ROLLBACK_NOT_APPLIED own -f "$x
 own -f "$x018" >/dev/null || fail "VA8 018 re-apply"
 [ "$(catalog)" = "$c_018" ] || fail "VA8 the re-applied catalog is not the first apply"
 echo "OK VA: 018 refusals (superuser, also the owner itself, 017 missing, a widened grant, re-apply), behaviour $va_n checks, rollback refusals (superuser, counts not stated / wrong), rollback = the catalog before 018 and reservations kept ($resv_before), twice refused, re-apply = the first apply"
+own -f "$work/g5wo_rb.sql" >/dev/null || fail "VG5 G5 001 rollback"
+[ "$(val -c "select count(*) from pg_trigger where tgname = 'postona_workspace_ownership_lock'")" = 0 ] || fail "VG5 G5's trigger is still there"
+echo "OK VG5-RB: G3 018 rollback / re-apply ran with G5's trigger in place (VA5-VA8); G5's own rollback then removed it"
 echo G3_G4_VERDICT_PASS
