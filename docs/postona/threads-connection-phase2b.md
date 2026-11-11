@@ -3,6 +3,7 @@
 - 作成: 2026-10-07（G4、TASK `postona-multisocial-phase2a2-account-schema-candidate-20261007`）
 - 更新: 2026-10-07（G4、TASK `postona-multisocial-phase2a2-security-corrective-20261007`。§0.5 を追加し、§2・§5・§10・§11 を更新）
 - 更新: 2026-10-10（G4、TASK `postona-threads-phase2b-source-preparation-20261010`。§0.6〜§0.8 を追加し、§11 を更新。公式ドキュメントを再取得）
+- 更新: 2026-10-10（G4、TASK `postona-threads-phase2b-workspace-oauth-candidate-20261010`。共有契約 `threads-g5-t9-t10-t13-shared-contract-20261010.md` に合わせ、§0.9〜§0.10 を追加し、§0.8・§9・§11 を更新）
 - 状態: Phase 2a-2 の migration は main にマージ済み（`68aaf3e5`）だが、**本番には未適用**。
 - 前提:
   - Phase 1 の設計 `docs/postona/multi-social-phase1.md`（§3.2 接続アカウント、§5 段階計画）
@@ -85,6 +86,8 @@
 
 ## 0.8 G5 との境界で止めたところ（DB の begin / complete RPC）
 
+> 2026-10-10 の共有契約で T9 / T10 / T13 が決まり、RPC は §0.9 の候補になった。この節は当時の記録で、「ワークスペースは作らない」などの仕様は §0.9 に置き換わっている。
+
 **begin / complete の RPC と migration は、今回は作っていない。** TASK の「G5 の境界に重なる変更の前に止めて報告する」に従った。理由は次のとおり。
 
 - Threads の接続は、ワークスペースに `social_accounts` の行を足す。G5 の `private.account_lifecycle_footprint` は、この行を POSTONA（`x_autopost`）の足跡として数える。
@@ -109,6 +112,147 @@
   - 行を `identity_verified`、`publish_enabled=false` にする。
   - 一意制約の違反は `failed` と `THREADS_ACCOUNT_ALREADY_CONNECTED`。
 - 必要なテスト（使い捨て DB）: state の再利用、同時の complete、X の state の流用、他人の state、期限切れ、本人情報の不一致、二重接続、service_role の直接書き込みの拒否（2a-2）、退会との競合、G5 の判定の拒否、レビュー済みの書き込み関数一覧の更新。
+
+## 0.9 ワークスペースと begin / consume / complete の候補（未適用・到達不能）
+
+TASK `postona-threads-phase2b-workspace-oauth-candidate-20261010`。共有契約の T9 / T13 に合わせた**候補**で、本番にも main の migration にも入っていない。
+
+**置き場所と状態**
+- `supabase/candidates/postona_threads_oauth_workspace_candidate.sql`
+  - **migration ではない**（`supabase/migrations` の外に置いた）。Supabase のツールは適用しない。
+  - 最初の前提条件の1つが G5 の T13 関数の実在なので、T13 がない DB には適用できない。
+  - 関数を4つ作るが、EXECUTE は所有者だけ。anon / authenticated / service_role には付与しない。3つの RPC を authenticated に付与するのは、後の有効化 migration（別レビュー）。
+- `supabase/functions/_shared/social/threads_connect_rpc_contract.ts`（とテスト）
+  - Edge 側の型付きの境界: RPC の名前と引数、attestation、拒否コード、T10 の結果の型。
+  - どこからも import されない（テストで固定）。PR #118 のモジュールも import しない。
+
+**呼び出しの順序**（共有契約 T13 のロック順: `auth.users` KEY SHARE → `common_accounts` FOR UPDATE → `service_entitlements` FOR UPDATE → ワークスペース → OAuth state → `social_accounts` / Vault）
+
+| RPC | 順序 |
+| --- | --- |
+| begin | ① 入力の形だけを見る（ロックも書き込みもしない）<br>② T13 `private.account_lifecycle_assert_active_service_write(auth.uid(), 'x_autopost')`。ロックは commit まで持つ<br>③ T9 の provisioner（中でもう一度 T13 → ワークスペースの advisory lock → 退会 tombstone → brand → 所属）<br>④ Threads の行を FOR UPDATE（なければ作る）<br>⑤ state を INSERT |
+| consume | ① 形 ② T13 ③ 読み取りだけ（本人が始めた、本人の決定論的ワークスペースの、Threads 行の、未使用で期限内の state） |
+| complete | ① 形 ② T13 ③ attestation の検証（Vault の鍵）④ ワークスペースの lock → owner の所属を FOR SHARE ⑤ state を1文で消費 ⑥ Threads の行を FOR UPDATE ⑦ Vault（作成、または同じ参照の更新）⑧ 行の更新 |
+
+- READ COMMITTED 以外は T13 が拒否する。
+- Threads のトークン交換（HTTP）は consume と complete の間に行い、DB のトランザクションの外にある。code は再試行しない（PR #118 のモジュール）。complete が拒否されたら、新しい begin からやり直す。
+
+**T9 の provisioner** `private.social_mobile_ensure_personal_workspace(uuid)`
+- SECURITY INVOKER で、実行できるのは所有者だけ。所有者の SECURITY DEFINER の RPC の中から呼ぶ。
+- 最初に自分でも T13 を呼ぶ。だから T13 なしでは何も作れない。同じトランザクションの2回目の T13 は、持っているロックを取り直すだけ。
+- ワークスペースは決定論的な `social_mobile_account_deletion_workspace(uid)`。X と退会が使うのと同じ id。
+  - なければ作る: brand（`My Workspace`、無効、`publish_mode='disabled'`、`social_mobile_user_v1`）と owner の所属。
+  - あれば確かめる: self-service であること、所属が本人だけであること、本人が owner であること。
+- 拒否するもの（引き取りも移動もしない）:
+  - 本人が別のワークスペースを所有している（`SOCIAL_MOBILE_WORKSPACE_CONFLICT`）
+  - 他の所属者がいる（`_SHARED`）
+  - self-service でない（`_NOT_SELF_SERVICE`）
+  - 本人が owner でない（`_ROLE_MISMATCH`）
+  - 退会の tombstone がある（`SOCIAL_MOBILE_ACCOUNT_DELETION_IN_PROGRESS`）
+- `common_accounts` と `service_entitlements` は変えない（テストで確認）。
+
+**attestation（今回新しく入れたもの）**
+- 問題: complete の引数（provider user id、handle、長期トークン）は呼び出し側が自由に決められる。authenticated に EXECUTE を与えると、本人がコード交換をしないまま、他人の Threads id を自分のワークスペースに結び付けられる。X の complete には今この弱点がある（§0.10）。
+- 対策: Edge のコード交換だけが持つ鍵での HMAC-SHA256 を、complete の必須の引数にした。
+  - メッセージは次を改行でつないだもの: `postona-threads-connect-v1`、state id、provider user id、handle（なければ空）、トークンの SHA-256（16進）。トークン自体はメッセージに入れない。
+  - 鍵は Vault の `postona_threads_connect_attestation_v1`（ちょうど1つ、32文字以上）。なければ `THREADS_CONNECT_ATTESTATION_UNAVAILABLE`。
+  - Edge 側の同じ鍵は、有効化のときに Supabase secrets に置く（ユーザーの承認が必要。§11 T14）。
+- SQL（pgcrypto の `extensions.hmac`）と TS（WebCrypto）が同じ既知解を出すことを、両方のテストで固定した。
+
+**その他の決めごと**
+- state:
+  - 64桁の16進のハッシュ
+  - redirect は https だけ（`#` `*` `@` と空白は不可、2048文字まで）
+  - 有効期限は今から10分以内
+  - 同じハッシュは拒否。ハッシュがあるかどうかは T13 の後でしか分からないので、拒否された人は探れない。
+- 再接続:
+  - 本人確認済みの行は、新しい begin のあとも `identity_verified` のまま。
+  - 別の Threads id なら `THREADS_IDENTITY_ACCOUNT_MISMATCH`。state もトークンも変えない。
+  - 同じ id なら、同じ Vault の参照を上書きする。
+- 資格情報の形が異常なら `THREADS_CREDENTIAL_SHAPE_INVALID` で全体を取り消す:
+  - refresh の参照がある
+  - 参照が他の行と共有されている
+  - 参照先の secret がない
+  - 行の名前の secret がすでに残っている（後始末の途中）
+- 同じ Threads id がほかで接続済みなら `THREADS_ACCOUNT_ALREADY_CONNECTED` で全体を取り消す。X と違い、`failed` も書かない。
+- 接続後も `publish_enabled=false`、refresh の参照は NULL。
+- エラーは固定コードだけ（SQLSTATE は P0001。T13 のものは 42501）。
+  - Vault 自体の失敗は Vault のエラーのまま返る（トークンは含まない）。
+  - Edge は、一覧にないエラーを汎用の失敗として扱う。
+
+**T10（対応付けだけ）**
+- `PROVIDER_CLEANUP_RESULTS` と `classifyThreadsCleanup` を置いた。分類は次のとおり:
+  - secret が共有されている → `blocked`
+  - Vault の削除が失敗・結果不明、または読み直しで消えていない → `reconciliation_required`
+  - それ以外 → `local_removed_remote_unverified`
+- `THREADS_REMOTE_REVOKE_AVAILABLE=false` の間は、`confirmed_remote_revoked` を返さない。
+- 後始末の DB 処理と G5 の状態機械は、今回は作っていない。
+
+**検証**（使い捨て PostgreSQL 17、`supabase/tests/postona_threads_oauth_run.sh`）
+- 2つのモードで同じ証明を通した:
+  - `POSTONA_T13=mock`: T13 の代わり。**MOCK_ONLY**（後述）
+  - `POSTONA_T13=g5`: G5 の Draft PR #121（head `76b50e1e`）の本物の候補とその fixture
+- 環境: G5 の世界（Phase 1 / service start / Phase 3a、X オンボーディング、退会）＋ 2a-2。
+- 適用の拒否（16件。拒否の後に何も残らないことも確認）:
+  - T13 がない
+  - T13 を API ロールが実行できる（直接、PUBLIC 経由、所属経由）
+  - T13 の所有者や形が違う
+  - 2a-2 がない
+  - 別の作成者、superuser、別の所有者の表
+  - pgcrypto がない、Vault に名前がない、`UNIQUE (state_hash)` がない
+  - 再適用
+- 挙動の証明（`postona_threads_oauth_behavior.sql`）:
+  - 到達できるもの（API ロール、owner、claims）
+  - T13 の全拒否コードを3つの RPC それぞれで確認。拒否のときは何も書かれない
+  - ワークスペースの冪等性と、X との共有
+  - begin の入力
+  - consume の結び付き
+  - complete の attestation、再利用、再接続、二重接続、Vault の障害、資格情報の形
+  - begin と complete の間に利用権やアカウントの状態が変わる場合
+  - X との並存（§0.10）
+  - ライフサイクルの行が変わらないこと
+- 2セッションの競合:
+  - begin どうし
+  - X begin と Threads begin（両方の順序）
+  - ロック順。T13 で待っている間はワークスペースのロックを持たない。ワークスペースで待っている間はアカウントと利用権のロックを持ったまま
+  - begin と全削除（両方の順序）
+  - complete と POSTONA のみの終了（両方の順序）
+  - 同じ state への complete どうし
+  - 同じ Threads id を2人が同時に complete
+- 適用した後に T13 を消すと、3つの RPC がすべて失敗し、何も書かない。
+- 変異テスト（作業用、コミットしない）: 候補の主要な性質を壊した版を33個作り、33個とも検出された。
+- **MOCK_ONLY**: mock モードの結果は、「取り決めどおりに動く判定を、候補が正しく使うこと」の確認にすぎない。G5 の判定、Supabase Auth、セッションの安全性の証明ではない。
+  - 「T13 が最初の書き込みより前に動く」の記録による確認は mock モードだけ。
+  - ロック順の競合テストは、両方のモードで順序を確認している。
+- **未証明**:
+  - 本物の Supabase Auth / GoTrue / PostgREST
+  - 本番の ACL（T11 / T12）
+  - 本物の Vault（pgsodium。テストは簡易版、§11 T15）
+  - Meta の API
+
+## 0.10 X 側の所見と、次の TASK（X の委譲）
+
+見つけたことは記録だけで、既存の X の RPC は変えていない。適用前後で X の3つの RPC の定義が同じであることも確認した。
+
+1. **X begin のワークスペースの作り方が T9 と違う。**
+   - X begin は「owner の brand がちょうど1つならそれ」を使う。決定論的な id でなくてもよい。
+   - T13 を呼ばない。
+   - ワークスペースのロックは、brand を INSERT するときのトリガーが取るだけ。
+   - 共有契約どおり、Threads を一般に出す前に、X begin を provisioner に委譲し、先頭で T13 を呼ぶ。それまで Threads のゲートは false のまま。
+2. **X complete は、本人なら任意の provider user id とトークンで直接呼べる**（authenticated に EXECUTE があり、attestation がない）。
+   - 他人の X アカウントの id を先に自分の行に結び付ける（squatting）と、本当の持ち主の接続が `X_ACCOUNT_ALREADY_CONNECTED` で止まる。
+   - トークンが偽物なので投稿はできないが、可用性の問題になる。
+   - X にも同じ attestation を入れるか、Edge だけが通れる経路にする。
+3. **X の consume / complete は provider を確かめない。**
+   - X consume は、同じ人の Threads の state を返す（読み取りだけ）。
+   - X complete に Threads の state を渡すと、全体が失敗して何も残らない（テストで確認）:
+     - 本人確認済みの Threads 行なら `X_IDENTITY_ACCOUNT_MISMATCH`
+     - 未確認の行なら 2a-2 の CHECK（refresh の参照）違反
+   - ただしこれは 2a-2 の CHECK に頼っている。X 側の条件に `platform='x'` を入れる。
+4. X complete の `unique_violation` のハンドラーは、行を `failed` にしてから例外を投げ直す。そのため `failed` の更新も取り消され、残らない。記録するという意図は実現していない。
+5. **次の TASK（案）**: X の begin / consume / complete を、T13 → provisioner、`platform='x'`、attestation（または Edge 専用）に移す source-only の候補。
+   - 既存の X の証明（投稿許可、退会、Stage 3B、2a-2）と、この runner の X の部分を通す。
+   - 本番の X オンボーディングを壊さないよう、付与の切り替えの順序を有効化と一緒に決める。
 
 ## 1. 2b でやること・やらないこと
 
@@ -262,6 +406,7 @@
      - Threads の begin も作る
      - POSTONA のサービス開始（G5）に一本化する
    - 推奨は「作る場所を1つにする」こと。決まるまで、Threads の begin はワークスペースを作らず、既存の自分用ワークスペースへの owner の所属だけを確認する。
+   - **決定（2026-10-10、共有契約 T9）**: G4 の provider 中立の provisioner に一本化する。候補は §0.9。X begin の委譲は次の TASK（§0.10）。
 4. **退会の足跡**:
    - G5 の `private.account_lifecycle_footprint` は、ワークスペースの `social_accounts` を、プラットフォームを問わず `x_autopost` の足跡として数える。つまり Threads の行も POSTONA（`x_autopost`）の足跡になり、新しい `service_key` は要らない。
    - `x_autopost` という名前の扱いは、Phase 1 §9-8 の決定事項のまま。
@@ -305,8 +450,10 @@
 | T6 | 連携解除・データ削除のコールバックのペイロードと署名 | 一部確認（Meta 共通の `signed_request`、HMAC-SHA256）。Threads 固有の形はテスターで確認 |
 | T7 | 延長したときにトークンの文字列が変わるか | 要検証 |
 | T8 | 有効期限の保存場所（列か状態表か） | 要決定（2c） |
-| T9 | Threads だけのユーザーのワークスペースを誰が作るか | 要決定（G5 と） |
-| T10 | 退会をプロバイダ別に対応させる範囲と時期 | 要決定（G5 と） |
+| T9 | Threads だけのユーザーのワークスペースを誰が作るか | 決定（共有契約）。候補 `private.social_mobile_ensure_personal_workspace` は §0.9（未適用）。X begin の委譲は次の TASK（§0.10） |
+| T10 | 退会をプロバイダ別に対応させる範囲と時期 | 決定（共有契約）。今回は結果の型と分類だけ（§0.9）。DB の後始末と G5 の状態機械は未実装 |
 | T11 | service_role（と anon / authenticated）が、所有者の SECURITY DEFINER 関数が書く他のテーブル（brands など）に TRIGGER 権限を持つか。持つ場合、所有者として自分のコードを走らせて Meta 行のガードを迂回できる。public スキーマへの CREATE 権限も含めて確認する | 要検証（本番 preflight） |
 | T12 | 本番に、repo にない SECURITY DEFINER 関数で `social_accounts` を書くものがないか（レビュー済み一覧は7つ） | 要検証（本番 preflight） |
-| T13 | 足跡を作る書き込み経路の前に呼ぶ G5 の判定（利用権、ライフサイクル、削除との直列化）の名前・引数・ロック順・拒否コード（§0.8） | 要決定（G5 が所有。Threads の RPC はこれを待つ） |
+| T13 | 足跡を作る書き込み経路の前に呼ぶ G5 の判定（利用権、ライフサイクル、削除との直列化）の名前・引数・ロック順・拒否コード（§0.8） | 決定（共有契約）。G5 の候補は Draft PR #121（`76b50e1e`、main にない）。§0.9 の候補はこれを前提にし、mock と G5 の候補の両方で検証した |
+| T14 | attestation の鍵の作成・保管・入れ替え（Vault と Edge の secrets の2か所。値は誰も見ない形で） | 要決定（有効化のとき、ユーザーの承認） |
+| T15 | 本番の Vault（supabase_vault / pgsodium）で、`vault.secrets` の名前の一意性、存在しない id への `update_secret` の動き、所有者からの読み取り権限 | 要検証（本番の読み取り専用 preflight） |
