@@ -400,7 +400,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     || fail "run 'npm ci --ignore-scripts' in apps/social-mobile first (the real SDK and TypeScript are needed)"
   edge_cmd="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' deno run --cached-only --no-lock \
     --config "$repo/supabase/candidates/postona_threads_auth_runtime/wiring/deno.json" \
-    --allow-env=FLOW_PGHOST,FLOW_PGPORT,FLOW_PGUSER,FLOW_DB,FLOW_JWK,FLOW_PROFILE --allow-read="$repo,$host" \
+    --allow-env=FLOW_PGHOST,FLOW_PGPORT,FLOW_PGUSER,FLOW_DB,FLOW_JWK,FLOW_PROFILE,FLOW_GRAPH --allow-read="$repo,$host" \
     --allow-write="$host/.s.PGSQL.$port" --allow-net="127.0.0.1,unix:$host/.s.PGSQL.$port" \
     "$repo/supabase/tests/postona_g4_threads_app_flow_edge.ts")"
   # One run of the e2e; no timeout and no kill: the node process must end by itself (G4-02 #2: a leaked deadline timer
@@ -506,7 +506,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     nc_db="$(mvp_world appmut1)"
     for f in "$g5pv" "${stack_before_g4mp[@]}"; do need "$nc_db" "$f"; done
     if flow_run personal "$nc_db"; then fail "the e2e passed without the verdict gate"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "30 31 32 33" ] || { echo "$out"; fail "without 001: expected only scenarios 30 31 32 33 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "30 31 32 33 34" ] || { echo "$out"; fail "without 001: expected only scenarios 30 31 32 33 34 to fail"; }
     echo "FAIL_BEFORE without 001: $(grep -E '^# measured 30' <<<"$out" | cut -c1-260)"
     # (b) install / refusals / rollback on copies of a world that has the stack up to the verdict
     base_db="$(mvp_world g4mpbase)"
@@ -585,7 +585,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     ng_db="$(mvp_world appmut3)"
     for f in "$g5pv" "${stack_before_g4mg[@]}"; do need "$ng_db" "$f"; done
     if flow_run personal "$ng_db"; then fail "the e2e passed without the generation gate"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 32 33" ] || { echo "$out"; fail "without 002: expected only scenarios 31 32 33 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 32 33 34" ] || { echo "$out"; fail "without 002: expected only scenarios 31 32 33 34 to fail"; }
     echo "FAIL_BEFORE without 002: $(grep -E '^# measured 31' <<<"$out" | cut -c1-900)"
     echo "FAIL_BEFORE without 002: $(grep -E '^# measured 32' <<<"$out" | cut -c1-400)"
     # (b) install / refusals / partial application / rollback on copies of a world with the stack up to 001
@@ -711,14 +711,14 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
       echo "MUTANT_CAUGHT $name by: $(grep -E '^not ok' <<<"$out" | cut -c1-90 | paste -sd ';' -) | $(grep -E "^# measured $expect" <<<"$out" | cut -c1-300)"
     done
     echo "== G4-02 #13 send onset vs reconnect (002's send fence + the Edge's start window) and 001's rollback on a partial 002"
-    # (d) fail-before: PR #650's 002 exactly as H1 #41 reviewed it (no fence) fails scenarios 31 (G4-02 #14: (d), a reconnect
-    #     while the outcome is unknown) and 33, and nothing else
+    # (d) fail-before: PR #650's 002 exactly as H1 #41 reviewed it (no fence) fails scenarios 33 and 34 (G4-02 #15: no
+    #     recovery SQL), and nothing else (31 (d) passes since #15: its reconnect is settled by final evidence either way)
     git -C "$repo" show 141d44fdf704bd0877a2976e9cf2c5d6dd8694f4:supabase/candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql > "$tree/g4mg_pr650.sql"
     [ "$(md5 -q "$tree/g4mg_pr650.sql")" != "$(md5 -q "$g4mg")" ] && ! grep -q manual_publish_send_fence "$tree/g4mg_pr650.sql" || fail "PR #650's 002 not extracted"
     pr650_db="$(mvp_world appsf650)"
     for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr650.sql"; do need "$pr650_db" "$f"; done
     if flow_run personal "$pr650_db"; then fail "the e2e passed with PR #650's 002 (no send fence)"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33" ] || { echo "$out"; fail "with PR #650's 002: expected only scenarios 31 33 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "33 34" ] || { echo "$out"; fail "with PR #650's 002: expected only scenarios 33 34 to fail"; }
     echo "FAIL_BEFORE with PR #650's 002: $(grep -E '^# measured 33' <<<"$out" | cut -c1-1200)"
     # (e) mutants of the fence (its md5 pin follows the mutant body so that it installs); each must fail exactly its scenarios
     make_fence_mutant() { # name sed-expression [extra sed-expression]
@@ -730,7 +730,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     make_fence_mutant no_isolation_guard "s/^  if pg_catalog.current_setting('transaction_isolation') <> 'read committed' then\$/  if false then -- MUTANT/"
     # insert_only: the completion's INSERT ... ON CONFLICT DO UPDATE fires the BEFORE INSERT trigger before the conflict check,
     # so the app's reconnects are still refused; only a plain UPDATE of the binding (33 (e)) shows the mutant
-    for m in "insert_only:33" "publishing_only:31 33" "no_isolation_guard:33"; do
+    for m in "insert_only:33" "publishing_only:33 34" "no_isolation_guard:33"; do
       name="${m%%:*}"; expect="${m##*:}"
       mut_db="$(mvp_world "appsf$RANDOM")"
       for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4sf_mutant_$name.sql"; do need "$mut_db" "$f"; done
@@ -741,13 +741,13 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     echo "== G4-02 #14 the send lease is a recorded state (no clock) and 002's rollback refuses a drifted fence / trigger / table"
     # (f) fail-before: #13's 002 exactly as H1 #42 reviewed it (PR #651 @ aed29e94: the lease lapses after 120 s on the
     #     database's clock) fails scenario 33 ((d) H1 #42: a reconnect committed while only the database's clock was ahead, then
-    #     the old attempt posted) and 31 ((d) a reconnect while the outcome is unknown), and nothing else
+    #     the old attempt posted) and 34 (no recovery SQL), and nothing else
     git -C "$repo" show aed29e945d679476085c8a0664f2394c56a61baf:supabase/candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql > "$tree/g4mg_pr651.sql"
     grep -q "interval '120 seconds') then" "$tree/g4mg_pr651.sql" && [ "$(md5 -q "$tree/g4mg_pr651.sql")" != "$(md5 -q "$g4mg")" ] || fail "#13's 002 not extracted"
     pr651_db="$(mvp_world appsf651)"
     for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr651.sql"; do need "$pr651_db" "$f"; done
     if flow_run personal "$pr651_db"; then fail "the e2e passed with #13's 002 (a lease on the database's clock)"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33" ] || { echo "$out"; fail "with #13's 002: expected only scenarios 31 33 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "33 34" ] || { echo "$out"; fail "with #13's 002: expected only scenarios 33 34 to fail"; }
     echo "FAIL_BEFORE with #13's 002: $(grep -E '^# measured 33' <<<"$out" | cut -c1-1400)"
     echo "FAIL_BEFORE with #13's 002: $(grep -E '^# measured 31' <<<"$out" | cut -c1-600)"
     # (g) H1 #42 P3: 002's rollback refuses a fence / trigger / table that is not as 002 left it, before ANY change
@@ -758,8 +758,15 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
         (select string_agg(t.tgname || ':' || t.tgtype || ':' || t.tgenabled::text || ':' || t.tgattr::text || ':' || coalesce(pg_get_expr(t.tgqual, t.tgrelid), '-'), ',' order by t.tgname)
            from pg_trigger t where t.tgrelid = 'postona_threads_binding.bindings'::regclass and not t.tgisinternal),
         (select relrowsecurity || ':' || coalesce(relacl::text, '-') || ':' || (select count(*) from pg_policy where polrelid = c.oid)
-           from pg_class c where c.oid = to_regclass('public.threads_manual_publish_attempt_generations')))"; }
+           from pg_class c where c.oid = to_regclass('public.threads_manual_publish_attempt_generations')),
+        (select string_agg(a.attname || ':' || a.attisdropped::text || ':' || coalesce(a.attacl::text, '-'), ',' order by a.attnum)
+           from pg_attribute a where a.attrelid = to_regclass('public.threads_manual_publish_attempt_generations') and a.attnum > 0),
+        (select string_agg(p.proname || ':' || md5(p.prosrc) || ':' || p.prosecdef || ':' || p.provolatile::text || ':' || coalesce(p.proacl::text, '-') || ':' || coalesce(p.proconfig::text, '-'), ',' order by p.proname)
+           from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'postona_threads_binding' and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')))"; }
     fence_fn="postona_threads_binding.manual_publish_send_fence()"
+    settle_fn="postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)"
+    account_fn="postona_threads_binding.reconnect_recovery_account(uuid,text)"
     for drift in "FENCE:alter table postona_threads_binding.bindings disable trigger threads_manual_publish_send_fence" \
                  "FENCE:alter table postona_threads_binding.bindings enable replica trigger threads_manual_publish_send_fence" \
                  "FENCE:alter table postona_threads_binding.bindings enable always trigger threads_manual_publish_send_fence" \
@@ -774,7 +781,17 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
                  "FENCE:do \$x\$ begin execute replace(pg_get_functiondef('$fence_fn'::regprocedure), '''uncertain''', '''failed'''); end \$x\$" \
                  "TABLE:grant select on public.threads_manual_publish_attempt_generations to authenticated" \
                  "TABLE:alter table public.threads_manual_publish_attempt_generations disable row level security" \
-                 "TABLE:create policy g4mg_drift on public.threads_manual_publish_attempt_generations for select using (true)"; do
+                 "TABLE:create policy g4mg_drift on public.threads_manual_publish_attempt_generations for select using (true)" \
+                 "TABLE:grant select (attempt_id) on public.threads_manual_publish_attempt_generations to authenticated" \
+                 "TABLE:grant update (bound_at) on public.threads_manual_publish_attempt_generations to service_role" \
+                 "TABLE:grant references (credential_generation) on public.threads_manual_publish_attempt_generations to public" \
+                 "TABLE:alter table public.threads_manual_publish_attempt_generations add column g4mg_drift int" \
+                 "TABLE:alter table public.threads_manual_publish_attempt_generations add column g4mg_drift int; alter table public.threads_manual_publish_attempt_generations drop column g4mg_drift" \
+                 "RECOVERY:alter function $settle_fn security invoker" \
+                 "RECOVERY:grant execute on function $settle_fn to authenticated" \
+                 "RECOVERY:alter function $account_fn reset search_path" \
+                 "RECOVERY:do \$x\$ begin execute replace(pg_get_functiondef('$account_fn'::regprocedure), 'and s.initiated_by_user_id = v_user', ''); end \$x\$" \
+                 "RECOVERY:create function postona_threads_binding.settle_attempt_before_rebind(uuid) returns text language sql as 'select null::text'"; do
       kind="${drift%%:*}"; sql="${drift#*:}"
       db="$(copy "g4mg$RANDOM" "$gbase")"
       need "$db" "$g4mg"
@@ -791,13 +808,66 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     r="$(apply "$db" "$tree/g4mg_disabled.sql")"; [ "$r" = G4MG_POSTCONDITION_FENCE ] || fail "002 installing a disabled trigger: $r"
     [ "$(has_table "$db") $(fence "$db")" = "f none" ] || fail "a refused 002 left something behind"
     echo "ok 002 install refused when its trigger would be disabled ($r, nothing left)"
+    # (h) H1 #43 P3: a role outside the API roles holding ONE column's SELECT (table privilege false, column privilege true)
+    fixture="g4mg_fixture_$RANDOM"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    need "$db" "$g4mg"
+    q "$db" -c "create role $fixture nologin; grant select (attempt_id) on public.threads_manual_publish_attempt_generations to $fixture" > /dev/null
+    priv="$(q "$db" -c "select has_table_privilege('$fixture', 'public.threads_manual_publish_attempt_generations', 'SELECT')::text || '/' || has_column_privilege('$fixture', 'public.threads_manual_publish_attempt_generations', 'attempt_id', 'SELECT')::text")"
+    s0="$(shape "$db")"
+    r="$(apply "$db" "$g4mg_rb")"
+    s1="$(shape "$db")"
+    q "$db" -c "revoke select (attempt_id) on public.threads_manual_publish_attempt_generations from $fixture; drop role $fixture" > /dev/null
+    [ "$priv" = "false/true" ] && [ "$r" = G4MG_ROLLBACK_TABLE_DRIFT ] && [ "$s1" = "$s0" ] || fail "H1 #43's column fixture: priv=$priv rollback=$r"
+    echo "ok 002 rollback refused on H1 #43's fixture (table privilege false, column privilege true: $r, nothing changed)"
+    # a 002 copy that grants one column on the way is refused by its own postcondition, leaving nothing
+    perl -pe 's/^(revoke all on table public\.threads_manual_publish_attempt_generations from public, anon, authenticated, service_role;)$/$1\ngrant select (attempt_id) on public.threads_manual_publish_attempt_generations to authenticated; -- MUTANT/' "$g4mg" > "$tree/g4mg_colgrant.sql"
+    [ "$(grep -c MUTANT "$tree/g4mg_colgrant.sql")" = 1 ] || fail "column-grant install copy not made"
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    r="$(apply "$db" "$tree/g4mg_colgrant.sql")"; [ "$r" = G4MG_POSTCONDITION_TABLE_ACL ] || fail "002 installing a column grant: $r"
+    [ "$(has_table "$db") $(fence "$db")" = "f none" ] || fail "a refused 002 left something behind"
+    echo "ok 002 install refused when it would leave a column grant ($r, nothing left)"
+    # partial: a lone recovery function -> install refused, 002 rollback refused, 001 rollback refused (nothing changed)
+    db="$(copy "g4mg$RANDOM" "$gbase")"
+    q "$db" -c "create function postona_threads_binding.reconnect_recovery_account(uuid, text) returns text language sql as 'select null::text'" > /dev/null
+    m0="$(md5s "$db")"
+    r="$(apply "$db" "$g4mg")"; r2="$(apply "$db" "$g4mg_rb")"; r3="$(apply "$db" "$g4mp_rb")"
+    [ "$r $r2 $r3" = "G4MG_PRECONDITION_ALREADY_APPLIED G4MG_ROLLBACK_NOT_APPLIED G4MP_ROLLBACK_002_PARTIAL" ] && [ "$(md5s "$db")" = "$m0" ] \
+      || fail "a lone recovery function: $r / $r2 / $r3"
+    echo "ok a lone recovery function refused three ways ($r / $r2 / $r3, nothing changed)"
+    echo "== G4-02 #15 an unknown outcome under an expired credential: read-before-rebind recovery (002's recovery SQL + the owner bridge)"
+    # (i) fail-before: #14's 002 exactly as H1 #43 reviewed it (PR #652 @ 0381c704: no recovery SQL) fails 34 (H1 #43's
+    #     expired-credential deadlock) and the reconnects of 31 (d) / 33 (d) that #15 settles from a final status first, only
+    git -C "$repo" show 0381c704c3d123621c02953d3e9f53ba17894cf0:supabase/candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql > "$tree/g4mg_pr652.sql"
+    ! grep -q settle_attempt_before_rebind "$tree/g4mg_pr652.sql" && grep -q manual_publish_send_fence "$tree/g4mg_pr652.sql" || fail "#14's 002 not extracted"
+    pr652_db="$(mvp_world appsf652)"
+    for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr652.sql"; do need "$pr652_db" "$f"; done
+    if flow_run personal "$pr652_db"; then fail "the e2e passed with #14's 002 (no recovery)"; fi
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34" ] || { echo "$out"; fail "with #14's 002: expected only scenarios 31 33 34 to fail"; }
+    echo "FAIL_BEFORE with #14's 002: $(grep -E '^# measured 34' <<<"$out" | cut -c1-900)"
+    # (j) mutants of the recovery SQL (the install's signature pin follows the mutant so that it installs): each fails 34 only
+    make_recovery_mutant() { # name sed-expression
+      sed -e "s/^        is distinct from 'postona_threads_binding.reconnect_recovery_account.* then\$/        is null then/" -e "$2" "$g4mg" > "$tree/g4rc_mutant_$1.sql"
+      [ "$(grep -c MUTANT "$tree/g4rc_mutant_$1.sql")" = 1 ] && [ "$(grep -c '^        is null then$' "$tree/g4rc_mutant_$1.sql")" = 1 ] || fail "recovery mutant $1 not made"
+    }
+    make_recovery_mutant no_state_owner 's/^   where s.id = p_oauth_state_id and s.initiated_by_user_id = v_user and s.expires_at > pg_catalog.clock_timestamp();$/   where s.id = p_oauth_state_id and s.expires_at > pg_catalog.clock_timestamp(); -- MUTANT/'
+    make_recovery_mutant no_container_cas 's/^     or v_row.container_id is distinct from p_container_id$/     -- MUTANT/'
+    make_recovery_mutant no_generation_pin "s/^                     where g.attempt_id = v_row.id and g.credential_generation = 'g4t1:' || b.oauth_state_id::text) then\$/                     where g.attempt_id = v_row.id) then -- MUTANT/"
+    make_recovery_mutant not_final_allowed "s/^           and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED'))) then\$/           and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED', 'STEP_INTERRUPTED', 'PUBLISH_OUTCOME_UNKNOWN'))) then -- MUTANT/"
+    for name in no_state_owner no_container_cas no_generation_pin not_final_allowed; do
+      mut_db="$(mvp_world "appsf$RANDOM")"
+      for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4rc_mutant_$name.sql"; do need "$mut_db" "$f"; done
+      if flow_run personal "$mut_db"; then fail "the e2e passed with recovery mutant $name"; fi
+      [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "34" ] || { echo "$out"; fail "recovery mutant $name: expected only scenario 34 to fail"; }
+      echo "MUTANT_CAUGHT recovery_$name by: $(grep -E '^not ok' <<<"$out" | cut -c1-90) | $(grep -E '^# +(AssertionError|Expected|actual|expected|\(.\))' <<<"$out" | head -3 | cut -c1-160 | paste -sd ';' -)"
+    done
     # the normal path still removes every candidate object: 002 -> rollback -> 001 rollback
     db="$(copy "g4mg$RANDOM" "$gbase")"
     need "$db" "$g4mg"
     need "$db" "$g4mg_rb"
     need "$db" "$g4mp_rb"
-    [ "$(has_table "$db") $(fence "$db") $(q "$db" -c "select count(*) from pg_trigger where tgname like 'threads_manual_publish_send_fence%'")" = "f none 0" ] || fail "002 -> 001 rollback left a candidate object"
-    echo "ok 002 rollback -> 001 rollback leaves no table / fence / trigger"
+    [ "$(has_table "$db") $(fence "$db") $(q "$db" -c "select count(*) from pg_trigger where tgname like 'threads_manual_publish_send_fence%'") $(q "$db" -c "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'postona_threads_binding' and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')")" = "f none 0 0" ] || fail "002 -> 001 rollback left a candidate object"
+    echo "ok 002 rollback -> 001 rollback leaves no table / fence / trigger / recovery function"
   fi
   echo "G4T_APP_FLOW_ALL_PASS"
   exit 0

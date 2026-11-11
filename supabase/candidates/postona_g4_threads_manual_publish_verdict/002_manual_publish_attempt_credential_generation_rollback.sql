@@ -6,7 +6,9 @@
 -- stay (CREATE OR REPLACE; checked).
 -- Refuses (nothing changed) unless 002 is applied byte for byte. G4-02 #14 (H1 #42 P3): and unless the fence, its trigger and
 -- the table still have the shape 002's postconditions checked (a disabled or reshaped trigger, a changed function
--- attribute / ACL / body, a changed table ACL / RLS -> G4MG_ROLLBACK_FENCE_DRIFT / G4MG_ROLLBACK_TABLE_DRIFT).
+-- attribute / ACL / body, a changed table ACL / RLS -> G4MG_ROLLBACK_FENCE_DRIFT / G4MG_ROLLBACK_TABLE_DRIFT). G4-02 #15: also
+-- a column ACL / column privilege / column set on the table (H1 #43 P3) -> G4MG_ROLLBACK_TABLE_DRIFT, and the three
+-- recovery functions -> G4MG_ROLLBACK_NOT_APPLIED (missing) / G4MG_ROLLBACK_RECOVERY_DRIFT (changed); they are dropped too.
 -- After it, write steps are again gated by 001 only (the P2 gap returns): roll back only together with a decision to stop
 -- manual publishing, or before 001's rollback.
 -- Run as the lifecycle owner.
@@ -28,7 +30,11 @@ begin
      or pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is null
      or (select pg_catalog.count(*) from pg_catalog.pg_trigger t
           where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
-            and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1 then
+            and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1
+     -- G4-02 #15: the recovery functions
+     or pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(uuid,text)') is null
+     or pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(uuid,text)') is null
+     or pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)') is null then
     raise exception 'G4MG_ROLLBACK_NOT_APPLIED';
   end if;
   if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user)
@@ -57,12 +63,42 @@ begin
             and t.tgoldtable is null and t.tgnewtable is null and t.tgparentid = 0) <> 1 then
     raise exception 'G4MG_ROLLBACK_FENCE_DRIFT';
   end if;
-  -- the table as 002 left it (= 002's G4MG_POSTCONDITION_TABLE_ACL): RLS on, owner-only, no policy
-  if not (select c.relrowsecurity and c.relowner = v_me and c.relacl is not null
-                 and not exists (select 1 from pg_catalog.aclexplode(c.relacl) e where e.grantee <> v_me)
-            from pg_catalog.pg_class c where c.oid = 'public.threads_manual_publish_attempt_generations'::regclass)
-     or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'public.threads_manual_publish_attempt_generations'::regclass) then
+  -- (= 002's G4MG_POSTCONDITION_TABLE_ACL) G4-02 #15 (H1 #43 P3): the generation table as 002 made it, column by column: RLS on, owner-only, no policy, exactly its
+  -- three columns (none dropped), no column ACL, and no API role holding any table OR column privilege on it.
+  if not coalesce((select c.relrowsecurity and c.relowner = v_me and c.relacl is not null
+                          and not exists (select 1 from pg_catalog.aclexplode(c.relacl) e where e.grantee <> v_me)
+                     from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations')), false)
+     or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations'))
+     or (select pg_catalog.string_agg(a.attname || ':' || pg_catalog.format_type(a.atttypid, a.atttypmod), ',' order by a.attnum)
+           from pg_catalog.pg_attribute a
+          where a.attrelid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') and a.attnum > 0)
+        is distinct from 'attempt_id:uuid,credential_generation:text,bound_at:timestamp with time zone'
+     or exists (select 1 from pg_catalog.pg_attribute a
+                 where a.attrelid = pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') and a.attnum > 0
+                   and a.attacl is not null)
+     or exists (select 1 from pg_catalog.pg_roles r where r.rolname in ('anon', 'authenticated', 'service_role', 'authenticator')
+                 and (pg_catalog.has_table_privilege(r.oid, 'public.threads_manual_publish_attempt_generations',
+                                                     'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER')
+                      or pg_catalog.has_any_column_privilege(r.oid, 'public.threads_manual_publish_attempt_generations',
+                                                             'SELECT, INSERT, UPDATE, REFERENCES'))) then
     raise exception 'G4MG_ROLLBACK_TABLE_DRIFT';
+  end if;
+  -- (= 002's G4MG_POSTCONDITION_RECOVERY) G4-02 #15: the three recovery functions exactly as reviewed: SECURITY DEFINER, VOLATILE, empty search_path, plpgsql,
+  -- owned by the owner and executable by nobody else; nothing else of those names in the schema.
+  if (select pg_catalog.count(*) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'postona_threads_binding'
+         and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')) <> 3
+     or (select pg_catalog.string_agg(p.oid::regprocedure::text || '=' || pg_catalog.md5(p.prosrc), ' ' order by p.proname)
+           from pg_catalog.pg_proc p
+          where p.oid in (pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(uuid,text)'),
+                          pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(uuid,text)'),
+                          pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)'))
+            and p.prosecdef and p.proowner = v_me and p.provolatile = 'v'
+            and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
+            and p.proconfig is not distinct from array['search_path=""']
+            and p.proacl is not null and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me))
+        is distinct from 'postona_threads_binding.reconnect_recovery_account(uuid,text)=b94a07ac0411d2a8749069c242952c31 postona_threads_binding.reconnect_recovery_candidates(uuid,text)=0a884c8b3e81fc28ba342255bf4731c3 postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)=28d8ca0670a37b9b387a7b667e2daa6e' then
+    raise exception 'G4MG_ROLLBACK_RECOVERY_DRIFT';
   end if;
   perform pg_catalog.set_config('g4mg.before', (
     select pg_catalog.string_agg(p.oid::regprocedure::text || ':' || p.proowner::text || ':' || coalesce(p.proacl::text, '-')
@@ -243,6 +279,9 @@ end;
 $$;
 
 drop trigger threads_manual_publish_send_fence on postona_threads_binding.bindings;
+drop function postona_threads_binding.settle_attempt_before_rebind(uuid, text, uuid, text, text, text, text, text);
+drop function postona_threads_binding.reconnect_recovery_candidates(uuid, text);
+drop function postona_threads_binding.reconnect_recovery_account(uuid, text);
 drop function postona_threads_binding.manual_publish_send_fence();
 drop table public.threads_manual_publish_attempt_generations;
 
@@ -257,6 +296,9 @@ begin
   end if;
   if pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()') is not null
      or exists (select 1 from pg_catalog.pg_trigger t where t.tgname = 'threads_manual_publish_send_fence')
+     or exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'postona_threads_binding'
+                   and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind'))
      or pg_catalog.to_regclass('public.threads_manual_publish_attempt_generations') is not null then
     raise exception 'G4MG_ROLLBACK_POSTCONDITION_LEFTOVER';
   end if;
