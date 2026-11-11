@@ -391,6 +391,8 @@ test('stack, with G3 #629: each row\'s connection generation on the real screen:
   await openRowOf(h, 'gen drop');
   await pressButton(h, '予約を取り消す');
   tree = await pressButton(h, '本当に取り消す');
+  // G1 TASK 45: on a loaded machine the screen settles before the cancel's commit is visible; wait for it (at most 10 s), never retry it
+  for (let i = 0; i < 50 && !/^cancelled\/2\//u.test(await stack.rowState(drop.reservationId)); i++) await new Promise((resolve) => setTimeout(resolve, 200));
   assert.match(await stack.rowState(drop.reservationId), /^cancelled\/2\//u, 'an earlier row can still be cancelled');
   tree = await openRowOf(h, 'gen new');
   field(tree, '新しい日時').onChangeText('2026-11-20 10:00');
