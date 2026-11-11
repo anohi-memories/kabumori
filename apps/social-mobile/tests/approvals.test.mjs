@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as client from '../src/features/approvals/approval-client.ts';
 import * as view from '../src/features/approvals/approval-view.ts';
-import { button, field, has, mountApprovals, pressables, sha } from './approvals-harness.mjs';
+import { button, field, has, mountApprovals, pressables, sha, texts } from './approvals-harness.mjs';
 
 const REAL_FETCH = globalThis.fetch;
 test.afterEach(() => { globalThis.fetch = REAL_FETCH; });
@@ -168,8 +168,9 @@ test('承認に回す: a pending candidate, no reservation; the inputs clear; th
   assert.deepEqual(Object.keys(h.srv.requests.find((r) => r.action === 'submit').payload).sort(), ['body', 'clientRequestId', 'scheduledAt', 'socialAccountId']);
 });
 
-test('承認に回す, answer lost: 「確認できませんでした」; the next press is the same request id; one candidate', async () => {
-  const srv = g3(); srv.after.submit = [true];
+test('承認に回す, answer lost and the list cannot tell: 「確認できませんでした」; the next press is the same request id; one candidate', async () => {
+  // G1 TASK 45: when the refresh can read the list, it tells (see T45 below); here it cannot, so the press-again path is what is left
+  const srv = g3(); srv.after.submit = [true]; srv.inject.list = [undefined, new TypeError('offline')];
   const h = await mount({ srv });
   await h.render();
   let tree = await submitOne(h);
@@ -348,4 +349,128 @@ test('boundaries: settings opens both screens, the stack registers them; the scr
     const text = await readFile(new URL(rel, import.meta.url), 'utf8');
     assert.doesNotMatch(text, /supabase\/functions|_shared|reservation-store|remote-reservation|expo-notifications|push_outbox|AsyncStorage|SecureStore|console\./u, rel);
   }
+});
+
+// ---- G1 TASK 45: G2 #9 P3 -- what a failed read, an unknown outcome and a successful re-read each say ------------------------------------
+const CLAIMS_READ = /最新の内容を読み込みました|結果を確認しました/u;
+
+test('T45 A17 notifications: a failed read says it could not read, never that it did; the re-read that works clears it', async () => {
+  const srv = g3();
+  srv.inject.notifications = [new TypeError('offline')];
+  const h = await mount({ srv, screen: 'notifications' });
+  let tree = await h.render();
+  assert.ok(has(tree, 'お知らせを読み込めませんでした'));
+  assert.ok(!texts(tree).some((t) => CLAIMS_READ.test(t)), 'no line claims a read that failed');
+  tree = await h.press('もう一度読み込む');
+  assert.ok(has(tree, 'お知らせはありません'));
+  assert.ok(!has(tree, '読み込めませんでした') && !has(tree, '確認できませんでした'), 'nothing of the failure stays');
+});
+
+test('T45 A17 approvals: a failed list read says it could not read; the re-read that works clears it', async () => {
+  const srv = g3();
+  srv.inject.list = [{ status: 503, body: { ok: false, code: 'STORE_UNAVAILABLE' } }];
+  const h = await mount({ srv });
+  let tree = await h.render();
+  assert.ok(has(tree, '投稿候補を読み込めませんでした'));
+  assert.ok(!texts(tree).some((t) => CLAIMS_READ.test(t)));
+  tree = await h.press('もう一度読み込む');
+  assert.ok(has(tree, '投稿候補はまだありません'));
+  assert.ok(!has(tree, '読み込めませんでした'));
+});
+
+test('T45 A18 an approve whose answer was lost: read back, the server\'s result, then a later refresh leaves no stale yellow banner', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '答えが消える承認');
+  await h.open('投稿候補 ');
+  srv.after.approve = [true];
+  let tree = await h.press('承認する');
+  assert.ok(has(tree, '承認済み（予約に登録済み）'), 'the read back says approved');
+  assert.ok(has(tree, view.UNCERTAIN_REREAD_OK_TEXT));
+  tree = await h.press('最新の状態を読み込む');
+  assert.ok(!has(tree, view.UNCERTAIN_REREAD_OK_TEXT), 'the banner went with the successful refresh');
+  assert.equal(srv.reservations, 1, 'one reservation');
+  assert.equal(srv.count('approve'), 1, 'not sent again');
+});
+
+test('T45 an unknown outcome whose read back fails too: says the latest could not be read (not that it was), and nothing is sent again', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '読み戻しも失敗');
+  await h.open('投稿候補 ');
+  srv.after.approve = [true];
+  srv.inject.get = [new TypeError('offline')];
+  let tree = await h.press('承認する');
+  assert.ok(has(tree, view.REREAD_FAILED_TEXT));
+  assert.ok(!texts(tree).some((t) => CLAIMS_READ.test(t)), 'no claim of a read that failed');
+  assert.equal(srv.count('approve'), 1);
+  tree = await h.press('最新の状態を読み込む');
+  assert.ok(has(tree, '承認済み（予約に登録済み）'));
+  assert.ok(!has(tree, view.REREAD_FAILED_TEXT));
+  assert.equal(srv.reservations, 1);
+});
+
+test('T45 承認に回す, answer lost: the refresh finds it -> 「承認に回せていました」, no second candidate; not found -> the press-again text stays', async () => {
+  const srv = g3(); srv.after.submit = [true];
+  const h = await mount({ srv });
+  await h.render();
+  let tree = await submitOne(h, '答えが消えた候補');
+  assert.ok(has(tree, view.SUBMIT_CONFIRMED_TEXT), 'the list read after the lost answer shows it was made');
+  assert.ok(!has(tree, view.SUBMIT_PENDING_TEXT));
+  assert.equal(srv.candidates.size, 1);
+  const other = g3(); other.inject.submit = [new TypeError('offline')];
+  const h2 = await mount({ srv: other });
+  await h2.render();
+  tree = await submitOne(h2, '届かなかった候補');
+  assert.ok(has(tree, view.SUBMIT_PENDING_TEXT), 'not made: the press-again words stay after the refresh');
+  assert.equal(other.candidates.size, 0);
+});
+
+test('T45 a banner of person A is not shown to B, nor restored when A comes back', async () => {
+  const srv = g3();
+  srv.inject.list = [undefined, { status: 503, body: { ok: false, code: 'STORE_UNAVAILABLE' } }];
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, 'Aの候補');
+  assert.ok(has(h.once(), view.SUBMITTED_TEXT));
+  h.world.session = B;
+  let tree = await h.render();
+  assert.ok(!has(tree, view.SUBMITTED_TEXT));
+  h.world.session = A;
+  tree = await h.render();
+  assert.ok(!has(tree, view.SUBMITTED_TEXT), 'not restored');
+});
+
+test('T45 runner: the G1 runner sets G1T39_G3_629=1 itself (the G3 #629 world this tree carries), unless the caller says otherwise', async () => {
+  const runner = await readFile(new URL('./local-stack/run-x-disconnected.sh', import.meta.url), 'utf8');
+  assert.match(runner, /^export G1T39_G3_629="\$\{G1T39_G3_629:-1\}"$/mu);
+});
+
+test('T45 a lost 承認に回す is matched by its own text and time only: another candidate in the list does not count as it', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, 'もとからある候補', inDays(2));
+  srv.inject.submit = [new TypeError('offline')];
+  const tree = await submitOne(h, '届かなかった別の候補', inDays(5));
+  assert.ok(has(tree, view.SUBMIT_PENDING_TEXT), 'the press-again words stay');
+  assert.ok(!has(tree, view.SUBMIT_CONFIRMED_TEXT));
+  assert.equal(srv.candidates.size, 1);
+});
+
+test('T45 notifications: a mark-read that failed says so, and the next read that works clears it', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '既読の失敗');
+  let tree = await h.show('notifications');
+  srv.inject.markRead = [new TypeError('offline')];
+  pressables(tree, 'お知らせ ')[0].onPress();
+  tree = await h.render();
+  assert.ok(has(tree, view.MARK_READ_FAILED_TEXT));
+  assert.ok(has(tree, '未読 1件'), 'still unread');
+  tree = await h.press('最新の状態を読み込む');
+  assert.ok(!has(tree, view.MARK_READ_FAILED_TEXT), 'gone with the successful read');
 });

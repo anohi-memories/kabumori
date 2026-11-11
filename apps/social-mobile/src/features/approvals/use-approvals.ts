@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { parseJstInput } from '@/features/reservations/reservation-view';
 import type { ApprovalAnswer, Candidate } from './approval-client';
-import { actionOf, ACTION_TEXT, APPROVED_TEXT, type ApprovalAction, type ApprovalBlock, HASH_MISMATCH_TEXT, REJECTED_TEXT, rereads, REVISED_TEXT, SUBMIT_PENDING_TEXT, SUBMITTED_TEXT } from './approval-view';
+import { actionOf, ACTION_TEXT, APPROVED_TEXT, type ApprovalAction, type ApprovalBlock, HASH_MISMATCH_TEXT, REJECTED_TEXT, REREAD_FAILED_TEXT, rereads, REVISED_TEXT, SUBMIT_CONFIRMED_TEXT, SUBMIT_PENDING_TEXT, SUBMITTED_TEXT } from './approval-view';
 import { useApprovalEnv } from './use-approval-env';
 
 export type ApprovalNotice = { tone: 'success' | 'warning' | 'danger'; text: string };
@@ -33,6 +33,20 @@ const upsert = (list: CandidateList, row: Candidate): CandidateList => (list.sta
   : list);
 const without = (list: CandidateList, id: string): CandidateList => (list.state === 'ready' ? { state: 'ready', items: list.items.filter((item) => item.candidateId !== id) } : list);
 const sha256 = (text: string) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, text);
+const sameTime = (a: string, b: string) => new Date(a).getTime() === new Date(b).getTime();
+/**
+ * A list that answered (G1 TASK 45, G2 #9 A18): an older warning goes with it, except the 「承認に回す」 whose answer was lost -- the
+ * list then says whether it was made (the same text and time, pending), or the press-again words stay.
+ */
+function listed(current: Box, items: Candidate[]): Box {
+  const list: CandidateList = { state: 'ready', items };
+  const pending = current.pending;
+  if (pending) {
+    const made = items.some((c) => c.state === 'pending_approval' && c.body === pending.body && sameTime(c.scheduledAt, pending.scheduledAt));
+    return made ? { ...current, list, pending: null, notice: { tone: 'success', text: SUBMIT_CONFIRMED_TEXT } } : { ...current, list };
+  }
+  return { ...current, list, notice: current.notice?.tone === 'success' ? current.notice : null };
+}
 
 /**
  * The selected X account's post candidates (G3 contract §7). Nothing becomes a reservation before 「承認」; the shown revision and the hash
@@ -57,7 +71,7 @@ export function useApprovals(): ApprovalsView {
     let cancelled = false;
     void client.list(accountId).then((answer) => {
       if (cancelled || live.current !== mine) return;
-      if (answer.ok) { update(mine, (current) => ({ ...current, list: { state: 'ready', items: answer.value } })); return; }
+      if (answer.ok) { update(mine, (current) => listed(current, answer.value)); return; }
       const action = actionOf(answer.code, answer.definite);
       if (action === 'sign_in' || action === 'forbidden') dropAll(mine, action);
       else update(mine, (current) => ({ ...current, list: { state: 'error', action } }));
@@ -80,14 +94,19 @@ export function useApprovals(): ApprovalsView {
       update(mine, (current) => ({ ...current, busy: null, list: without(current.list, candidate.candidateId), notice: { tone: 'warning', text: ACTION_TEXT.not_found } }));
       return;
     }
+    // The words say what the read back did (G1 TASK 45, G2 #9 A17): read, or could not be read.
+    let readBack: 'none' | 'ok' | 'failed' = 'none';
     if (rereads(action)) {
       const back = await client.get(candidate.candidateId);
       if (live.current !== mine) return;
-      if (back.ok) update(mine, (current) => ({ ...current, list: upsert(current.list, back.value) }));
-      else if (actionOf(back.code, back.definite) === 'not_found') update(mine, (current) => ({ ...current, list: without(current.list, candidate.candidateId) }));
-      else if (['sign_in', 'forbidden'].includes(actionOf(back.code, back.definite))) { dropAll(mine, actionOf(back.code, back.definite)); return; }
+      const backAction = back.ok ? null : actionOf(back.code, back.definite);
+      if (back.ok) { readBack = 'ok'; update(mine, (current) => ({ ...current, list: upsert(current.list, back.value) })); }
+      else if (backAction === 'not_found') { readBack = 'ok'; update(mine, (current) => ({ ...current, list: without(current.list, candidate.candidateId) })); }
+      else if (backAction === 'sign_in' || backAction === 'forbidden') { dropAll(mine, backAction); return; }
+      else readBack = 'failed';
     }
-    update(mine, (current) => ({ ...current, busy: null, notice: { tone: action === 'uncertain' || action === 'later' ? 'warning' : 'danger', text: ACTION_TEXT[action] } }));
+    const text = readBack === 'failed' ? REREAD_FAILED_TEXT : ACTION_TEXT[action];
+    update(mine, (current) => ({ ...current, busy: null, notice: { tone: action === 'uncertain' || action === 'later' || readBack === 'failed' ? 'warning' : 'danger', text } }));
   };
 
   const decided = (row: Candidate, text: string) => update(mine, (current) => ({ ...current, busy: null, list: upsert(current.list, row), notice: { tone: 'success', text } }));

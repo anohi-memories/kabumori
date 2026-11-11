@@ -70,15 +70,25 @@ export const ACTION_TEXT: Record<ApprovalAction, string> = {
   change_time: '同じ時間帯の投稿が多すぎるか、上限に達しています。日時を変えてください。',
   show_again: '表示していた本文から変わっていたため、承認していません。最新の本文を確認してください。',
   fix_input: '入力内容を確認してください（本文は280文字相当まで、日時は5分後から90日後まで）。',
-  later: 'いまはサーバーが応答できません。結果を確認しました。時間をおいてもう一度お試しください。',
+  later: 'いまはサーバーが応答できません。最新の内容を読み込みました。時間をおいてもう一度お試しください。',
   uncertain: '結果を確認できませんでした。最新の内容を読み込みました。表示が変わっていなければ、もう一度お試しください（同じ操作として扱われ、二重には作られません）。',
 };
+/** G1 TASK 45 (G2 #9 A17 / A18): an unknown outcome is told apart by what the read back did. */
+export const UNCERTAIN_REREAD_OK_TEXT = ACTION_TEXT.uncertain;
+export const REREAD_FAILED_TEXT = '結果を確認できず、最新の内容も読み込めませんでした。表示は古いままの可能性があります。「最新の状態を読み込む」で確かめてから操作してください（同じ操作として扱われ、二重には作られません）。';
+/** A list that could not be read: it says so, and nothing else (no claim of a read). */
+export function readFailedText(action: ApprovalAction): string {
+  if (action === 'sign_in' || action === 'forbidden' || action === 'reconnect_x' || action === 'not_found') return ACTION_TEXT[action];
+  return 'サーバーに接続できないか、答えを確認できませんでした。時間をおいて「もう一度読み込む」を押してください。';
+}
+export const MARK_READ_FAILED_TEXT = 'お知らせを既読にできませんでした。時間をおいてもう一度開いてください。';
 
 export const SUBMITTED_TEXT = '承認待ちにしました。承認するまで予約には登録されず、投稿されません。';
 export const REVISED_TEXT = '修正しました。もう一度確認してから承認してください。';
 export const APPROVED_TEXT = '承認しました。予約に登録しました（「予約の管理」で確認できます。投稿を保証するものではありません）。';
 export const REJECTED_TEXT = '却下しました。この候補は投稿されません。';
 export const HASH_MISMATCH_TEXT = '表示中の本文を確認できなかったため、承認していません。最新の内容を読み込んでください。';
+export const SUBMIT_CONFIRMED_TEXT = '承認に回せていました（サーバーで確認済み）。承認するまで予約には登録されず、投稿されません。';
 export const SUBMIT_PENDING_TEXT = '承認に回せたか確認できませんでした。もう一度「承認に回す」を押すと、同じ内容として確認します（二重には作られません）。';
 
 // ---- notifications ------------------------------------------------------------------------------------------------------------
