@@ -54,6 +54,14 @@ with open(os.path.join(TESTS, 'zz-x-disconnected-tab.generated.mjs'), 'w', encod
 # ---- the runtime: G3's run.sh up to "functions serve is ready", then these tests
 r = read(os.path.join(LOCAL_STACK, 'run.sh'))
 r = sub(r, 'here="$(cd "$(dirname "$0")" && pwd)"', 'here="%s"' % LOCAL_STACK)
+# G1 TASK 45: G1's own project and ports (g1xs, 565xx), so this run never meets G3's own run (g3ls, 559xx) on the same machine.
+r = sub(r, 'API_PORT=55921 DB_PORT=55922', 'API_PORT=56521 DB_PORT=56522')
+r = sub(r, 'for old, new in [("54321", "55921"), ("54322", "55922"), ("54320", "55920"), ("54329", "55929"), ("54323", "55923"), ("54324", "55924"), ("54327", "55927")]:',
+        'for old, new in [("54321", "56521"), ("54322", "56522"), ("54320", "56520"), ("54329", "56529"), ("54323", "56523"), ("54324", "56524"), ("54327", "56527")]:')
+assert r.count('"g3ls"') == 2, r.count('"g3ls"')
+r = r.replace('"g3ls"', '"g1xs"')
+r = sub(r, 'WORK="$(mktemp -d /private/tmp/g3ls.XXXXXX)"', 'WORK="$(mktemp -d /private/tmp/g1xs.XXXXXX)"')
+assert not re.search(r'\b559\d\d\b', r), 'a G3 port is left'
 cut = r.index('env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT"')
 r = r[:cut] + '''
 export G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLISHABLE" G3LS_DB_PORT="$DB_PORT"

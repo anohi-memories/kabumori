@@ -4,7 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import type { Candidate } from '@/features/approvals/approval-client';
-import { ACTION_TEXT, APPROVAL_BLOCK_TEXT, shortHash, STATE_LABEL, stateTone } from '@/features/approvals/approval-view';
+import { ACTION_TEXT, APPROVAL_BLOCK_TEXT, readFailedText, shortHash, STATE_LABEL, stateTone } from '@/features/approvals/approval-view';
 import { useApprovals } from '@/features/approvals/use-approvals';
 import { formatJst } from '@/features/reservations/reservation-view';
 
@@ -94,7 +94,7 @@ export default function ApprovalsScreen() {
           <ActionButton label={view.busy === 'submit' ? '送っています…' : '承認に回す'} disabled={busy || !draft.trim()} onPress={() => void view.submit(draft, draftTime).then((ok) => { if (ok) { setDraft(''); setDraftTime(''); } })} />
         </Card>
         {view.list.state === 'loading' ? <Card><Text style={styles.muted}>投稿候補を読み込んでいます…</Text></Card> : null}
-        {view.list.state === 'error' ? <Card><Text style={styles.muted}>{`投稿候補を読み込めませんでした。${ACTION_TEXT[view.list.action]}`}</Text><ActionButton label="もう一度読み込む" onPress={view.reload} /></Card> : null}
+        {view.list.state === 'error' ? <Card><Text style={styles.muted}>{`投稿候補を読み込めませんでした。${readFailedText(view.list.action)}`}</Text><ActionButton label="もう一度読み込む" onPress={view.reload} /></Card> : null}
         {view.list.state === 'ready' && !items.length ? <EmptyState title="投稿候補はまだありません" detail="上の「承認に回す」から作れます。" /> : null}
         {items.map(row)}
         {view.list.state === 'ready' ? <ActionButton label="最新の状態を読み込む" onPress={view.reload} /> : null}

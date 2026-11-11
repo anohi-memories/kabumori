@@ -2,6 +2,9 @@
 # G1 TASK 36: the disconnected-X check on G3's throw-away local runtime (real GoTrue -> Kong -> Edge twin -> Postgres, 127.0.0.1 only).
 # Needs what G3's run.sh needs (docker or podman, supabase CLI, deno, psql). Run alone. Nothing here reaches a hosted project or X.
 # G1T36_AFTER: optional command run with the runtime still up, after the tests (the Simulator check). G3's files are not edited.
+# G1T39_G3_629: this tree carries G3 PR #629 (each row's connectionGeneration), so its expectations are the default (G1 TASK 45: without
+# it one #624-era test fails and the run stops). Only a tree without #629 would pass G1T39_G3_629=0. Test-only: the product flags stay OFF.
+export G1T39_G3_629="${G1T39_G3_629:-1}"
 here="$(cd "$(dirname "$0")" && pwd)"
 tests="$(dirname "$here")"
 tmp="$(mktemp -d)"

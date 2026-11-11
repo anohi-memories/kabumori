@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApprovalNotification } from './approval-client';
-import { actionOf, ACTION_TEXT, type ApprovalAction, type ApprovalBlock, unreadCount } from './approval-view';
+import { actionOf, ACTION_TEXT, type ApprovalAction, type ApprovalBlock, MARK_READ_FAILED_TEXT, unreadCount } from './approval-view';
 import { useApprovalEnv } from './use-approval-env';
 
 export type NotificationList = { state: 'loading' } | { state: 'ready'; items: ApprovalNotification[] } | { state: 'error'; action: ApprovalAction };
@@ -24,7 +24,10 @@ export function useApprovalNotifications(): NotificationsView {
 
   if (scope === null ? box !== null : box?.scope !== scope) setBox(scope === null ? null : { scope, list: { state: 'loading' }, notice: null });
   const update = (mine: string, change: (current: Box) => Box) => setBox((current) => (current && current.scope === mine ? change(current) : current));
-  const refused = (mine: string, action: ApprovalAction) => setBox((current) => (current && current.scope === mine ? { scope: mine, list: { state: 'error', action }, notice: ACTION_TEXT[action] } : current));
+  // A read that failed shows no list and says only that it could not read (the card); an end of the person's access also says why.
+  const refused = (mine: string, action: ApprovalAction) => setBox((current) => (current && current.scope === mine
+    ? { scope: mine, list: { state: 'error', action }, notice: action === 'sign_in' || action === 'forbidden' ? ACTION_TEXT[action] : null }
+    : current));
 
   useEffect(() => {
     live.current = scope;
@@ -33,7 +36,8 @@ export function useApprovalNotifications(): NotificationsView {
     let cancelled = false;
     void client.notifications(50).then((answer) => {
       if (cancelled || live.current !== mine) return;
-      if (answer.ok) { update(mine, (current) => ({ ...current, list: { state: 'ready', items: answer.value } })); return; }
+      // A list that answered: an older warning goes with it (G1 TASK 45, G2 #9 A18).
+      if (answer.ok) { update(mine, (current) => ({ ...current, list: { state: 'ready', items: answer.value }, notice: null })); return; }
       refused(mine, actionOf(answer.code, answer.definite));
     });
     return () => { cancelled = true; };
@@ -59,7 +63,7 @@ export function useApprovalNotifications(): NotificationsView {
       if (action === 'sign_in' || action === 'forbidden') { refused(mine, action); return; }
       // Gone (or never the person's): the list says what is left.
       if (action === 'not_found') setReads((value) => value + 1);
-      update(mine, (current) => ({ ...current, notice: action === 'not_found' ? 'このお知らせは見つかりませんでした。最新の一覧を読み込みました。' : ACTION_TEXT[action] }));
+      update(mine, (current) => ({ ...current, notice: action === 'not_found' ? 'このお知らせは見つかりませんでした。最新の一覧を読み込みます。' : MARK_READ_FAILED_TEXT }));
     });
   };
 

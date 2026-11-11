@@ -24,7 +24,16 @@ const raw = async (action, payload, token) => {
 const jstIn = (days, hour = 9) => { const at = new Date(Date.now() + days * 864e5); const j = new Date(at.getTime() + 9 * 3600e3); return `${j.getUTCFullYear()}-${String(j.getUTCMonth() + 1).padStart(2, '0')}-${String(j.getUTCDate()).padStart(2, '0')} ${String(hour).padStart(2, '0')}:00`; };
 // what the screens sent and got (kept to explain a failure)
 const wire = [];
-const recorded = async (url, init) => { const r = await REAL_FETCH(url, init); const c = await r.clone().json().catch(() => null); wire.push(`${JSON.parse(init.body).action} ${r.status} ${c?.code ?? 'ok'}`); return r; };
+// G1 TASK 45: `lose` holds actions whose next answer is lost after the server has done it (the request reached the Edge and committed;
+// the app sees a network failure), and `fail` actions whose next request never leaves the device.
+const lose = []; const fail = [];
+const recorded = async (url, init) => {
+  const action = JSON.parse(init.body).action;
+  if (fail.includes(action)) { fail.splice(fail.indexOf(action), 1); wire.push(`${action} (not sent)`); throw new TypeError('Network request failed'); }
+  const r = await REAL_FETCH(url, init); const c = await r.clone().json().catch(() => null); wire.push(`${action} ${r.status} ${c?.code ?? 'ok'}`);
+  if (lose.includes(action)) { lose.splice(lose.indexOf(action), 1); wire.push(`${action} answer lost`); throw new TypeError('Network request failed'); }
+  return r;
+};
 const mountFor = (p, extra = {}) => mountApprovals({
   session: { token: p.token, userId: p.userId }, workspace: { kind: 'ready', workspaceId: p.workspace },
   account: { id: p.account, brandId: p.workspace, platform: 'x', connectionStatus: 'connected', profile: { handle: '@h', displayName: 'h' } },
@@ -159,4 +168,102 @@ test('two notification reads at once write one reservation_changed; with G5\'s o
   assert.equal((await raw('notifications', {}, A.token)).status, 200);
   assert.equal(await q("select count(*) from postona_x_resv.notifications where user_id = :'u' and kind = 'reservation_changed' and reservation_id = :'r'", { u: A.userId, r: resv }), '2', 'the held-back change is written now');
   console.log('G1T44_APPROVALS_LOCAL_STACK_PASS');
+});
+
+// ---- G1 TASK 45: what G2 #9 could not run on the Simulator, on the real runtime -------------------------------------------------------
+const sent = (action) => wire.filter((w) => w.startsWith(`${action} `) && !w.endsWith('(not sent)') && !w.endsWith('answer lost')).length;
+let R;
+test('T45 reconfirm: another session revises the shown candidate -> 「承認」 gets 409 STALE -> the screen reads back the new text and version; the next 承認 uses them', opts, async () => {
+  R = await stack.person('apr');
+  const h = await mountFor(R);
+  await until(h, (t) => has(t, '投稿候補はまだありません'), 'empty');
+  await compose(h, 'G1第45 画面に出ている本文', jstIn(4));
+  await pressables(h.once(), '投稿候補 ')[0].onPress();
+  await until(h, (t) => !!button(t, '承認する'), 'open');
+  const id = await q("select id from postona_x_resv.approval_candidates where user_id = :'u'", { u: R.userId });
+  const other = await stack.signIn(R);
+  const revised = await raw('revise', { candidateId: id, expectedRevision: 1, body: 'G1第45 別の端末で直した本文', scheduledAt: new Date(Date.now() + 4 * 864e5).toISOString() }, other.token);
+  assert.equal(revised.status, 200, JSON.stringify(revised.body));
+  const before = sent('approve');
+  let tree = await approveShown(h, 'stale approve');
+  assert.ok(has(tree, view.ACTION_TEXT.reread), texts(tree).join(' / '));
+  assert.ok(has(tree, 'G1第45 別の端末で直した本文'), 'the read back shows the new text');
+  assert.ok(texts(tree).some((t) => t.includes('版 2')), 'and the new version');
+  assert.equal(sent('approve') - before, 1, 'not sent again on its own');
+  assert.equal(await stack.rowCount(R.account), '0');
+  tree = await approveShown(h, 'approve the new text');
+  assert.ok(has(tree, view.APPROVED_TEXT), texts(tree).join(' / '));
+  assert.equal(await stack.rowCount(R.account), '1');
+  const shaSent = await q("select content_sha256 = encode(sha256(convert_to(body, 'UTF8')), 'hex') from postona_x_resv.approval_candidates where id = :'i'", { i: id });
+  assert.equal(shaSent, 't', 'the approved hash is the hash of the text shown last');
+});
+
+test('T45 a text that is not what the server hashed (SYNTHETIC: the row\'s body changed under it) is never approved: no approve leaves the device', opts, async () => {
+  const h = await mountFor(R);
+  await until(h, (t) => has(t, '承認済み'), 'list');
+  await compose(h, 'G1第45 ハッシュの確認', jstIn(8));
+  await q("update postona_x_resv.approval_candidates set body = body || '（書き換え）' where user_id = :'u' and state = 'pending_approval'", { u: R.userId });
+  h.world.refocus += 1;
+  let tree = await until(h, (t) => has(t, 'G1第45 ハッシュの確認（書き換え）'), 'the changed row read');
+  const target = pressables(tree, '投稿候補 ').find((p) => p.accessibilityLabel.includes(jstIn(8).slice(0, 10)));
+  target.onPress();
+  tree = await until(h, (t) => !!button(t, '承認する'), 'open');
+  const before = sent('approve');
+  button(tree, '承認する').onPress();
+  tree = await until(h, (t) => has(t, view.HASH_MISMATCH_TEXT), 'refused here');
+  assert.equal(sent('approve'), before, 'nothing sent');
+  await q("update postona_x_resv.approval_candidates set state = 'rejected', decided_at = now() where user_id = :'u' and state = 'pending_approval'", { u: R.userId });
+});
+
+test('T45 UNCERTAIN on the real runtime: a lost approve answer is read back as approved (one reservation); a lost submit answer is found by the list (one candidate); a submit that never left is sent again with the same request id', opts, async () => {
+  const h = await mountFor(R);
+  await until(h, (t) => has(t, '承認済み'), 'list');
+  await compose(h, 'G1第45 答えが消える承認', jstIn(12));
+  const rows = Number(await stack.rowCount(R.account));
+  const target = pressables(h.once(), '投稿候補 ').find((p) => p.accessibilityLabel.includes(jstIn(12).slice(0, 10)));
+  target.onPress();
+  await until(h, (t) => !!button(t, '承認する'), 'open');
+  lose.push('approve');
+  button(h.once(), '承認する').onPress();
+  let tree = await until(h, (t) => has(t, view.UNCERTAIN_REREAD_OK_TEXT) && has(t, '承認済み（予約に登録済み）') && !button(t, '承認する'), 'read back approved');
+  assert.equal(Number(await stack.rowCount(R.account)), rows + 1, 'exactly one reservation');
+  assert.ok(wire.includes('approve answer lost') && wire.at(-1).startsWith('get 200'), wire.slice(-4).join(' | '));
+  button(h.once(), '最新の状態を読み込む').onPress();
+  tree = await until(h, (t) => !has(t, view.UNCERTAIN_REREAD_OK_TEXT), 'the banner goes with the refresh');
+  assert.equal(Number(await stack.rowCount(R.account)), rows + 1);
+
+  const count = async () => Number(await q("select count(*) from postona_x_resv.approval_candidates where user_id = :'u'", { u: R.userId }));
+  let n = await count();
+  lose.push('submit');
+  await h.type('投稿候補の本文', 'G1第45 答えが消えた候補');
+  await h.type('投稿候補の日時', jstIn(15));
+  button(h.once(), '承認に回す').onPress();
+  tree = await until(h, (t) => has(t, view.SUBMIT_CONFIRMED_TEXT), 'the list says it was made');
+  assert.equal(await count(), n + 1);
+
+  n = await count();
+  fail.push('submit', 'list');
+  await h.type('投稿候補の本文', 'G1第45 届かなかった候補');
+  await h.type('投稿候補の日時', jstIn(18));
+  button(h.once(), '承認に回す').onPress();
+  tree = await until(h, (t) => has(t, view.SUBMIT_PENDING_TEXT), 'press again');
+  assert.equal(await count(), n, 'nothing was made');
+  const submits = () => wire.filter((w) => w.startsWith('submit '));
+  button(h.once(), '承認に回す').onPress();
+  tree = await until(h, (t) => has(t, view.SUBMITTED_TEXT), 'made on the press again');
+  assert.equal(await count(), n + 1);
+  console.log(`G1T45 measured wire tail: ${wire.slice(-7).join(' | ')} (submits: ${submits().length})`);
+});
+
+test('T45 flag OFF (the product\'s gate constant): the same screens on the same runtime send nothing', opts, async () => {
+  const gate = await readFile(new URL('../../src/features/approvals/approval-gate.ts', import.meta.url), 'utf8');
+  assert.match(gate, /export const POSTONA_APPROVAL_UI_ENABLED = false;/u);
+  const before = wire.length;
+  for (const screen of ['approvals', 'notifications']) {
+    const h = await mountFor(R, { gate: false, screen });
+    const tree = await h.render(4);
+    assert.ok(has(tree, view.POSTONA_APPROVAL_UI_GATE_TEXT), screen);
+  }
+  assert.equal(wire.length, before, 'no request at all');
+  console.log('G1T45_APPROVALS_LOCAL_STACK_PASS');
 });

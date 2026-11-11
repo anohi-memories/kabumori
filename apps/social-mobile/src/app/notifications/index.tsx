@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import type { ApprovalNotification } from '@/features/approvals/approval-client';
-import { ACTION_TEXT, APPROVAL_BLOCK_TEXT, notificationText, PUSH_NOTE, RESERVATION_STATE_TEXT } from '@/features/approvals/approval-view';
+import { APPROVAL_BLOCK_TEXT, notificationText, PUSH_NOTE, readFailedText, RESERVATION_STATE_TEXT } from '@/features/approvals/approval-view';
 import { useApprovalNotifications } from '@/features/approvals/use-approval-notifications';
 import { formatJst } from '@/features/reservations/reservation-view';
 
@@ -26,7 +26,7 @@ export default function NotificationsScreen() {
         {view.list.state === 'ready' ? <Pill tone={view.unread ? 'warning' : 'neutral'}>{`未読 ${view.unread}件`}</Pill> : null}
         {view.notice ? <Pill tone="warning">{view.notice}</Pill> : null}
         {view.list.state === 'loading' ? <Card><Text style={styles.muted}>お知らせを読み込んでいます…</Text></Card> : null}
-        {view.list.state === 'error' ? <Card><Text style={styles.muted}>{`お知らせを読み込めませんでした。${ACTION_TEXT[view.list.action]}`}</Text><ActionButton label="もう一度読み込む" onPress={view.reload} /></Card> : null}
+        {view.list.state === 'error' ? <Card><Text style={styles.muted}>{`お知らせを読み込めませんでした。${readFailedText(view.list.action)}`}</Text><ActionButton label="もう一度読み込む" onPress={view.reload} /></Card> : null}
         {view.list.state === 'ready' && !items.length ? <EmptyState title="お知らせはありません" detail="投稿候補を承認に回すと、ここに表示されます。" /> : null}
         {items.map((n) => (
           <Pressable key={n.notificationId} accessibilityRole="button" accessibilityLabel={`お知らせ ${notificationText(n)}`} onPress={() => go(n)}>
