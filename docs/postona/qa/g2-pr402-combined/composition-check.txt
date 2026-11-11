@@ -1,0 +1,10 @@
+# G2 independent composition check 2026-10-21 00:49 JST
+origin/main 0c42933ca5030ab31a56267529430d0473d9b155
+merge-base(main, #400) 74b6b7ceafe6b3683ee985616b3a4e2ddb04763d
+main commits touching apps/social-mobile since merge-base: 0
+#400 side files: 22  #369 side files: 2  overlap: 0
+merge #400: ok
+merge #369: ok
+combined vs main: 24 files, apps/social-mobile/src/app/(tabs)/index.tsx 
+files compared one by one (corrected loop): 24  blob mismatches vs the PR heads: 0
+(tabs)/index.tsx: removed lines vs main = 0 (additions only)
