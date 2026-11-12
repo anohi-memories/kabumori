@@ -15,6 +15,8 @@ export default function NotificationsScreen() {
   }
   const items = view.groups;
   const go = (n: ApprovalNotification) => {
+    // G1 TASK 47: an ended service leaves the list to read only; a line opens nothing and marks nothing.
+    if (view.readOnly) return;
     view.open(n);
     if (n.candidateId) router.push({ pathname: '/approvals', params: { candidate: n.candidateId } });
     else if (n.reservationId) router.push('/reservations');
@@ -29,7 +31,7 @@ export default function NotificationsScreen() {
         {view.list.state === 'error' ? <Card><Text style={styles.muted}>{`お知らせを読み込めませんでした。${readFailedText(view.list.action)}`}</Text><ActionButton label="もう一度読み込む" onPress={view.reload} /></Card> : null}
         {view.list.state === 'ready' && !items.length ? <EmptyState title="お知らせはありません" detail="投稿候補を承認に回すと、ここに表示されます。" /> : null}
         {items.map(({ row: n, older }) => (
-          <Pressable key={n.notificationId} accessibilityRole="button" accessibilityLabel={`お知らせ ${notificationText(n)}`} onPress={() => go(n)}>
+          <Pressable key={n.notificationId} accessibilityRole="button" accessibilityLabel={`お知らせ ${notificationText(n)}`} accessibilityState={{ disabled: view.readOnly }} disabled={view.readOnly} onPress={() => go(n)}>
             <Card>
               <View style={{ gap: 4 }}>
                 {n.readAt === null ? <Pill tone="warning">未読</Pill> : null}

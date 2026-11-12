@@ -84,6 +84,9 @@ export function readFailedText(action: ApprovalAction): string {
   return 'サーバーに接続できないか、答えを確認できませんでした。時間をおいて「もう一度読み込む」を押してください。';
 }
 export const MARK_READ_FAILED_TEXT = 'お知らせを既読にできませんでした。時間をおいてもう一度開いてください。';
+// G1 TASK 47 (G2 #11 P3): a read is marked only after the service gate confirmed, just then, that the service still runs.
+export const NOTIFICATIONS_ENDED_TEXT = 'X自動投稿は退会済みのため、お知らせは見ることだけができます。既読にはしていません。';
+export const LIFECYCLE_UNKNOWN_TEXT = 'サービスの利用状態を確認できなかったため、既読にしていません。通信状態を確かめて、もう一度開いてください。';
 
 export const SUBMITTED_TEXT = '承認待ちにしました。承認するまで予約には登録されず、投稿されません。';
 export const REVISED_TEXT = '修正しました。もう一度確認してから承認してください。';

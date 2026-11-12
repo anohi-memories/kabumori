@@ -381,3 +381,87 @@ test('T46 service ended on the real runtime: writes 403 SERVICE_NOT_ACTIVE, read
   assert.ok(!has(tree, 'G1第46 退会前の候補'));
   console.log('G1T46_APPROVALS_LOCAL_STACK_PASS');
 });
+
+// G1 TASK 47 (G2 #11 P3): the notification screen left open while the service ends, on the real runtime. The screen's fresh check is the
+// gate's: the same start RPC (start_x_autopost_service, through Kong and PostgREST with the person's own JWT) mapped as
+// service-enrollment-gate.tsx maps it (its own tests drive the real gate). Measured: what the app sent, what the server holds.
+import { createSessionBoundTransport, startServiceAutomatically } from '../../src/domain/service-enrollment.ts';
+const gateCheck = (p, asked) => async () => {
+  // Its own fetch: the screens' `recorded` wire keeps only what the approval client sent.
+  const transport = createSessionBoundTransport({ url: stack.API, apiKey: stack.PUBLISHABLE, accessToken: p.token, fetch: REAL_FETCH });
+  let outcome;
+  try { outcome = await startServiceAutomatically(transport, 'x_autopost', new AbortController().signal); } catch { asked.push('no answer'); return 'unknown'; }
+  asked.push(outcome.kind);
+  if (outcome.kind === 'reenroll_required') asked.version = outcome.lifecycleVersion;
+  return outcome.kind === 'ready' ? 'active' : outcome.kind === 'reenroll_required' ? 'ended' : 'unknown';
+};
+const readAtOf = (p) => q("select coalesce(string_agg((read_at is not null)::text, ',' order by created_at), '') from postona_x_resv.notifications where user_id = :'u'", { u: p.userId });
+
+test('T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once', opts, async () => {
+  const P = await stack.person('apq');
+  const asked = [];
+  const h = await mountFor(P, { lifecycle: gateCheck(P, asked) });
+  await until(h, (t) => has(t, '投稿候補はまだありません'), 'empty');
+  await compose(h, 'G1第47 退会前の候補', jstIn(4));
+  let tree = await h.show('notifications');
+  tree = await until(h, (t) => has(t, '未読 1件'), 'one unread');
+  assert.equal(await readAtOf(P), 'false');
+  assert.ok(asked.includes('ready'), `the screen asked the gate on its read: ${asked.join(',')}`);
+
+  await stack.endService(P);   // ended elsewhere (another device / tab): this app decided 'ready' at sign-in
+  const at = wire.length;
+  pressables(tree, 'お知らせ ')[0].onPress();
+  tree = await until(h, (t) => has(t, view.NOTIFICATIONS_ENDED_TEXT), 'read-only');
+  assert.equal(asked.at(-1), 'reenroll_required', 'the start RPC answered the end; it restarted nothing');
+  assert.equal(await q("select status from public.service_entitlements where user_id = :'u' and service_key = 'x_autopost'", { u: P.userId }), 'ended');
+  assert.deepEqual(wire.slice(at).filter((w) => w.startsWith('markRead')), [], 'no markRead left the app');
+  assert.equal(await readAtOf(P), 'false', 'the server row is unread');
+  assert.ok(pressables(tree, 'お知らせ ').every((r) => r.disabled === true));
+  h.world.refocus += 1;   // back to the screen
+  tree = await until(h, (t) => has(t, view.NOTIFICATIONS_ENDED_TEXT) && has(t, '未読 1件'), 'still read-only after the re-read');
+  pressables(tree, 'お知らせ ')[0].onPress();
+  await h.render(3);
+  assert.deepEqual(wire.slice(at).filter((w) => w.startsWith('markRead')), [], 'nor after the re-read');
+  const sentActions = [...new Set(wire.slice(at).map((w) => w.split(' ')[0]))];
+  assert.deepEqual(sentActions, ['notifications'], `only reads: ${wire.slice(at).join(' | ')}`);
+
+  // The residual G3 boundary, measured with the person's own token outside the app (not something the app does): still 200.
+  const noteId = await q("select id from postona_x_resv.notifications where user_id = :'u'", { u: P.userId });
+  const direct = await raw('markRead', { notificationId: noteId }, P.token);
+  console.log(`G1T47 measured: after the end the app sent markRead 0 (read_at stayed null); a direct markRead with the same JWT answered ${direct.status} ${direct.body?.code ?? 'ok'} (G3 server-side guard absent)`);
+  assert.equal(direct.status, 200, 'G3 still accepts it: the server guard is G3\'s to add');
+  await q("update postona_x_resv.notifications set read_at = null where id = :'n'", { n: noteId });
+
+  // The person's own restart (the gate's reactivate RPC at the version the check reported), then a fresh screen: the read goes once.
+  const restarted = await stack.rpc('reactivate_x_autopost_service', P.token, { p_expected_lifecycle_version: asked.version });
+  assert.deepEqual([restarted.status, restarted.body?.status], [200, 'active'], JSON.stringify(restarted.body));
+  const again = await mountFor(P, { lifecycle: gateCheck(P, asked), screen: 'notifications' });
+  tree = await until(again, (t) => has(t, '未読 1件') && !has(t, view.NOTIFICATIONS_ENDED_TEXT), 'active again');
+  const before = wire.length;
+  pressables(tree, 'お知らせ ')[0].onPress();
+  await until(again, (t) => has(t, '未読 0件'), 'read');
+  assert.deepEqual(wire.slice(before).filter((w) => w.startsWith('markRead')), ['markRead 200 ok']);
+  assert.equal(await readAtOf(P), 'true');
+  console.log(`G1T47 measured: checks ${asked.join(' -> ')}; after the restart markRead sent 1`);
+  console.log('G1T47_APPROVALS_LOCAL_STACK_PASS');
+});
+
+test('T47 on the real runtime: an expired / foreign JWT gives the check no answer -> nothing marked; another person\'s screen reads none of P\'s rows', opts, async () => {
+  const P = await stack.person('apr');
+  const R = await stack.person('aps');
+  const asked = [];
+  const h = await mountFor(P, { lifecycle: gateCheck({ ...P, token: `${P.token.slice(0, -4)}AAAA` }, asked) });
+  await until(h, (t) => has(t, '投稿候補はまだありません'), 'empty');
+  await compose(h, 'G1第47 署名の壊れたJWT', jstIn(4));
+  let tree = await h.show('notifications');
+  tree = await until(h, (t) => has(t, '未読 1件'), 'one unread');
+  const at = wire.length;
+  pressables(tree, 'お知らせ ')[0].onPress();
+  tree = await until(h, (t) => has(t, view.LIFECYCLE_UNKNOWN_TEXT), 'not confirmed');
+  assert.ok(asked.every((a) => a === 'no answer'), asked.join(','));
+  assert.deepEqual(wire.slice(at).filter((w) => w.startsWith('markRead')), []);
+  assert.equal(await readAtOf(P), 'false');
+  const other = await mountFor(R, { lifecycle: gateCheck(R, []), screen: 'notifications' });
+  tree = await until(other, (t) => has(t, 'お知らせはありません'), 'R empty');
+  assert.ok(other.frames.every((f) => !has(f, 'G1第47')), 'R never sees P\'s rows');
+});

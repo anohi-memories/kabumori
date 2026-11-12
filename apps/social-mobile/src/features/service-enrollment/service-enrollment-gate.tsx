@@ -21,6 +21,7 @@ import {
 import { POSTONA_APPROVAL_UI_ENABLED } from '@/features/approvals/approval-gate';
 import { EndedHistory } from '@/features/approvals/ended-history';
 import { markXServiceRestarted } from '@/features/reservations/x-reconnect-signal';
+import { type LifecycleCheck, type ServiceLifecycle, ServiceLifecycleContext } from '@/features/service-enrollment/service-lifecycle';
 import { getSupabaseConfig } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 import AccountDeletionScreen from '@/app/account-deletion';
@@ -36,7 +37,9 @@ function transportFor(context: EnrollmentContext) {
   return createSessionBoundTransport({ url: config.config.url, apiKey: config.config.publishableKey, accessToken: context.accessToken });
 }
 
-const enrollment = createEnrollmentGate((context, signal) => startServiceAutomatically(transportFor(context), 'x_autopost', signal));
+// The automatic start: at sign-in through the gate below, and (G1 TASK 47) as the fresh check a screen asks for before it writes.
+const startX = (context: EnrollmentContext, signal: AbortSignal) => startServiceAutomatically(transportFor(context), 'x_autopost', signal);
+const enrollment = createEnrollmentGate(startX);
 
 type Owner = { userId: string | null; loginId: string | null };
 type GateView =
@@ -78,8 +81,12 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   // Leaving the signed-in tree (sign-out, recovery) cancels pending work and forgets the outcome.
   useEffect(() => () => enrollment.reset(), []);
 
+  // G1 TASK 47: the fresh lifecycle checks under way; another person or login (or leaving the tree) cancels them unanswered.
+  const checks = useRef<AbortController[]>([]);
+
   useEffect(() => {
     currentOwner.current = { userId, loginId };
+    return () => { for (const controller of checks.current) controller.abort(); checks.current = []; };
   }, [userId, loginId]);
 
   // Automatic enrollment for the current login (first render, another person, another login of the same
@@ -141,12 +148,36 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
       .finally(() => { explicitInFlight.current = false; });
   }, [accessToken, loginId, userId, view]);
 
+  // G1 TASK 47 (G2 #11 P3): a screen asks before it writes. The same start RPC as at sign-in, with this login's token; it never
+  // restarts an ended service. Only 'ready' for the same person and login is 'active'. An ended (or definitely refused) service closes
+  // the app to this gate's own screen for that login, where the read-only history is; no answer changes nothing and confirms nothing.
+  const confirmActive = useCallback((): Promise<LifecycleCheck> => {
+    if (selection.kind === 'mock' || !userId || !accessToken || !loginId) return Promise.resolve('unknown');
+    const asked: Owner = { userId, loginId };
+    const controller = new AbortController();
+    checks.current = [...checks.current, controller];
+    // transportFor throws when the server is not configured: that is no answer, not a crash.
+    return Promise.resolve().then(() => startX({ userId, accessToken }, controller.signal)).then(
+      (outcome): LifecycleCheck => {
+        if (controller.signal.aborted || !isOwner(currentOwner.current, asked.userId, asked.loginId)) return 'unknown';
+        if (outcome.kind === 'ready') return 'active';
+        if (outcome.kind === 'blocked' && outcome.reason === 'UNKNOWN') return 'unknown';
+        // Decided by the server: the next automatic run for this login asks again rather than reusing the earlier 'ready'.
+        enrollment.reset();
+        setView({ ...asked, request: ++request.current, kind: 'outcome', outcome, noticeAcknowledged: false });
+        return outcome.kind === 'reenroll_required' ? 'ended' : 'unknown';
+      },
+      (): LifecycleCheck => 'unknown',
+    ).finally(() => { checks.current = checks.current.filter((running) => running !== controller); });
+  }, [accessToken, loginId, selection, userId]);
+  const lifecycle = useMemo<ServiceLifecycle>(() => ({ userId, confirmActive }), [confirmActive, userId]);
+
   if (selection.kind === 'mock') return <>{children}</>;
   // Everything decided is tagged with the person and login it belongs to; nobody else sees it.
   const current: GateView = isOwner(view, userId, loginId) ? view : { userId, loginId, request: 0, kind: 'loading' };
   if (loginId !== null && current.kind === 'outcome' && current.outcome.kind === 'ready'
       && (!current.outcome.sharedAccountNotice || current.noticeAcknowledged)) {
-    return <>{children}</>;
+    return <ServiceLifecycleContext.Provider value={lifecycle}>{children}</ServiceLifecycleContext.Provider>;
   }
 
   if (userId !== null && deletionOpenFor === userId) {

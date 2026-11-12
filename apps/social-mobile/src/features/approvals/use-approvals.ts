@@ -62,7 +62,11 @@ export function useApprovals(): ApprovalsView {
 
   if (scope === null ? box !== null : box?.scope !== scope) setBox(scope === null ? null : fresh(scope));
   const update = (mine: string, change: (current: Box) => Box) => setBox((current) => (current && current.scope === mine ? change(current) : current));
-  const dropAll = (mine: string, action: ApprovalAction) => setBox((current) => (current && current.scope === mine ? fresh(mine, { state: 'error', action }, { tone: 'danger', text: ACTION_TEXT[action] }) : current));
+  const dropAll = (mine: string, action: ApprovalAction) => {
+    setBox((current) => (current && current.scope === mine ? fresh(mine, { state: 'error', action }, { tone: 'danger', text: ACTION_TEXT[action] }) : current));
+    // G1 TASK 47: the server said the service is not active; the gate checks it and, when it ended, closes the app to its own screen.
+    if (action === 'forbidden' && live.current === mine) void env.confirmActive();
+  };
 
   useEffect(() => {
     live.current = scope;

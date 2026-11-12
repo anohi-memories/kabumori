@@ -172,6 +172,8 @@ async function gateHarness(server, options = {}) {
     // G1 TASK 46: the approval UI gate (off unless a test says otherwise) and the read-only history, as an element only.
     '@/features/approvals/approval-gate': { get POSTONA_APPROVAL_UI_ENABLED() { return options.approvalUi === true; } },
     '@/features/approvals/ended-history': { EndedHistory: 'EndedHistory' },
+    // G1 TASK 47: the context the gate gives the app, as an element whose value the tests call.
+    '@/features/service-enrollment/service-lifecycle': { ServiceLifecycleContext: { Provider: 'LifecycleProvider' } },
     '@/lib/supabase': { getSupabaseConfig: () => ({ ok: true, config: { url: 'https://fixture.supabase.co', publishableKey: 'sb_publishable_fixture' } }) },
     '@/providers/auth-provider': { useAuth: () => ({ session }) },
     '@/app/account-deletion': { __esModule: true, default: 'AccountDeletionScreen' },
@@ -179,7 +181,7 @@ async function gateHarness(server, options = {}) {
   const source = await read('src/features/service-enrollment/service-enrollment-gate.tsx');
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   const module = { exports: {} };
-  vm.runInNewContext(js, { module, exports: module.exports, require: (name) => { assert.ok(Object.hasOwn(modules, name), `unexpected import ${name}`); return modules[name]; } });
+  vm.runInNewContext(js, { module, exports: module.exports, AbortController, require: (name) => { assert.ok(Object.hasOwn(modules, name), `unexpected import ${name}`); return modules[name]; } });
   const originalFetch = globalThis.fetch;
   globalThis.fetch = server.fetchImpl;
   const CHILDREN = { type: 'APP' };
@@ -215,6 +217,7 @@ async function gateHarness(server, options = {}) {
     isApp: () => tree === CHILDREN || find(tree, (n) => n === CHILDREN) !== null || tree?.props?.children === CHILDREN,
     button: (label) => find(tree, (n) => n.type === 'ActionButton' && n.props.label === label),
     hasSignOut: () => find(tree, (n) => n.type === 'SignOutButton') !== null,
+    lifecycle: () => find(tree, (n) => n.type === 'LifecycleProvider')?.props.value ?? null,
     history: () => find(tree, (n) => n.type === 'EndedHistory'),
     back: () => find(tree, (n) => n.type === 'Pressable' && JSON.stringify(n.props.children ?? '').includes('戻る')),
     unmount() { for (const slot of slots) if (slot && typeof slot.cleanup === 'function') slot.cleanup(); },
@@ -658,6 +661,138 @@ test('T46 active service + approval UI on: the app opens, no history entry exist
     h.setSession(sessionOf('A'));
     await h.settle();
     assert.ok(h.isApp());
+    assert.equal(h.history(), null);
+  } finally { h.unmount(); h.restore(); }
+});
+
+// ---- G1 TASK 47 (G2 #11 P3): a fresh check of the service, asked by a screen before it writes -------------------------------------
+const ACTIVE_AGAIN = { status: 'active', service: 'x_autopost', started: false, shared_account: false };
+const starts = (server) => server.requests.filter((r) => r.fn === 'start_x_autopost_service');
+
+test('T47 check, service still active: \'active\', one start RPC with this login\'s own token, the app stays open; nothing restarts', async () => {
+  const server = fakeServer(() => ({ body: ACTIVE_AGAIN }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    assert.ok(h.isApp());
+    assert.equal(h.lifecycle().userId, 'user-A');
+    const before = starts(server).length;
+    assert.equal(await h.lifecycle().confirmActive(), 'active');
+    await h.settle();
+    assert.equal(starts(server).length, before + 1);
+    assert.equal(starts(server).at(-1).token, tokenOf('A'));
+    assert.ok(h.isApp());
+    assert.equal(server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service').length, 0);
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T47 check, service ended while the app was open: \'ended\'; the app closes to the restart screen with the read-only history; the person\'s restart opens it again', async () => {
+  let ended = false;
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? { body: ACTIVE } : ended ? ENDED(4) : { body: ACTIVE_AGAIN }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    assert.ok(h.isApp());
+    ended = true;   // another device / tab ended it: the gate decided 'ready' at sign-in and has not asked since
+    assert.equal(await h.lifecycle().confirmActive(), 'ended');
+    await h.settle();
+    assert.equal(h.isApp(), false, 'the app (with its notification screen) is closed');
+    assert.ok(h.button('利用登録する'));
+    assert.ok(h.button(HISTORY), 'the read-only history is the way in');
+    h.button(HISTORY).props.onPress();
+    h.render();
+    assert.equal(h.history()?.props.userId, 'user-A');
+    assert.equal(server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service').length, 0, 'nothing restarted');
+    h.back().props.onPress();
+    h.render();
+    h.button('利用登録する').props.onPress();
+    await h.settle();
+    const restart = server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service');
+    assert.equal(restart.length, 1);
+    assert.deepEqual(restart[0].body, { p_expected_lifecycle_version: 4 }, 'at the version the check reported');
+    assert.ok(h.isApp() || h.button('はじめる'), 'the restarted service opens the app again');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T47 check without an answer (5xx, expired token, an answer not understood, offline): \'unknown\', the app stays as it was', async () => {
+  let reply = { body: ACTIVE_AGAIN };
+  const server = fakeServer(() => reply);
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    reply = { ok: false, status: 500, body: { message: 'boom' } };
+    assert.equal(await h.lifecycle().confirmActive(), 'unknown');
+    reply = { ok: false, status: 401, body: { code: 'PGRST301', message: 'JWT expired' } };
+    assert.equal(await h.lifecycle().confirmActive(), 'unknown');
+    reply = { body: { status: 'something_else' } };
+    assert.equal(await h.lifecycle().confirmActive(), 'unknown');
+    globalThis.fetch = () => Promise.reject(new TypeError('Network request failed'));
+    assert.equal(await h.lifecycle().confirmActive(), 'unknown');
+    globalThis.fetch = server.fetchImpl;
+    await h.settle();
+    assert.ok(h.isApp(), 'no answer closes nothing and confirms nothing');
+  } finally { globalThis.fetch = server.fetchImpl; h.unmount(); h.restore(); }
+});
+
+test('T47 check of A still out when B signs in: cancelled, \'unknown\'; B\'s gate is not changed by it', { timeout: 10000 }, async () => {
+  let holdA = false;
+  const server = fakeServer((entry) => (holdA && entry.token === tokenOf('A') ? 'hold' : { body: ACTIVE_AGAIN }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    holdA = true;
+    const pending = h.lifecycle().confirmActive();
+    await flush();
+    await flush();
+    assert.equal(server.held.length, 1, 'A\'s check is out');
+    h.setSession(sessionOf('B'));
+    await h.settle();
+    assert.equal(await pending, 'unknown');
+    assert.ok(server.held[0].entry.signal.aborted, 'the switch cancelled A\'s check');
+    server.held[0].release(ENDED(9));
+    await h.settle();
+    assert.ok(h.isApp(), 'B\'s app is open');
+    assert.equal(h.lifecycle().userId, 'user-B');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T47 A\'s check answered \'ended\' at the moment B signs in: A\'s answer is \'unknown\' and changes nothing of B (B\'s own start still opens B\'s app)', { timeout: 10000 }, async () => {
+  let holdA = false;
+  const server = fakeServer((entry) => (holdA && entry.token === tokenOf('A') ? 'hold' : { body: ACTIVE_AGAIN }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    holdA = true;
+    const pending = h.lifecycle().confirmActive();
+    await flush();
+    await flush();
+    assert.equal(server.held.length, 1);
+    server.held[0].release(ENDED(9));   // the answer is on its way back ...
+    h.setSession(sessionOf('B'));       // ... as B signs in, before the app has read it
+    h.render();
+    assert.equal(await pending, 'unknown');
+    await h.settle();
+    assert.ok(h.isApp(), 'B\'s app is open: A\'s ended answer was not applied to the gate');
+    assert.equal(h.button('利用登録する'), null);
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T47 check, a definite refusal (account locked): the app closes to that refusal; the check is not \'active\'', async () => {
+  let locked = false;
+  const server = fakeServer(() => (locked ? { body: { status: 'blocked', reason: 'ACCOUNT_LOCKED' } } : { body: ACTIVE_AGAIN }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    locked = true;
+    assert.equal(await h.lifecycle().confirmActive(), 'unknown');
+    await h.settle();
+    assert.equal(h.isApp(), false);
     assert.equal(h.history(), null);
   } finally { h.unmount(); h.restore(); }
 });
