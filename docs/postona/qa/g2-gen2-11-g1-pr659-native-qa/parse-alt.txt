@@ -1,0 +1,21 @@
+ACCEPT	ascii ok	2026-11-20T09:30:00+09:00
+ACCEPT	full-width digits + full-width minus	2026-11-20T09:30:00+09:00
+ACCEPT	full-width year only	2026-11-20T09:30:00+09:00
+ACCEPT	katakana long mark U+30FC	2026-11-20T09:30:00+09:00
+ACCEPT	em dash U+2014	2026-11-20T09:30:00+09:00
+ACCEPT	en dash U+2013	2026-11-20T09:30:00+09:00
+ACCEPT	minus sign U+2212	2026-11-20T09:30:00+09:00
+ACCEPT	full-width hyphen-minus U+FF0D	2026-11-20T09:30:00+09:00
+ACCEPT	non-breaking hyphen U+2011	2026-11-20T09:30:00+09:00
+ACCEPT	ideographic space U+3000	2026-11-20T09:30:00+09:00
+ACCEPT	full-width colon U+FF1A	2026-11-20T09:30:00+09:00
+ACCEPT	no space (kana IME drop)	2026-11-20T09:30:00+09:00
+REFUSE	slash	日時は「2026-11-01 09:30」の形で入力してください（日本時間）。
+REFUSE	T separator	日時は「2026-11-01 09:30」の形で入力してください（日本時間）。
+ACCEPT	trailing ideographic space	2026-11-20T09:30:00+09:00
+REFUSE	Arabic-Indic digits	日時は「2026-11-01 09:30」の形で入力してください（日本時間）。
+REFUSE	not a real day	その日時はありません。
+REFUSE	past	これからの日時を入力してください。
+REFUSE	24:00	その日時はありません。
+ACCEPT	kana-full mixed ２０２６ー１１ー２０　０９：３０	2026-11-20T09:30:00+09:00
+ACCEPT	halfwidth katakana long mark U+FF70	2026-11-20T09:30:00+09:00

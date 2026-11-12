@@ -1,0 +1,35 @@
+== a
+cand | G2T11-A1 (other session) | approved | 4 | t
+cand | G2T11-A2 | approved | 2 | t
+cand | G2T11-A3 (other session) | approved | 3 | t
+cand | G2T11-A4x | pending_approval | 1 | f
+resv | 3
+notes | 11:6
+outbox | 11
+== b
+resv | 0
+notes | 0:0
+outbox | 0
+== c
+cand | G2T10-dup | approved | 2 | t
+resv | 1
+notes | 2:0
+outbox | 2
+== A notes
+approval_requested | t | bcb64146 | 21:44:52
+approval_requested | f | 4cc64846 | 21:53:18
+approval_requested | t | bcb64146 | 21:53:44
+approval_requested | t | bcb64146 | 21:53:44
+approval_approved | f | bcb64146 | 21:56:33
+approval_approved | f | 4cc64846 | 22:01:15
+reservation_changed | f | bcb64146 | 22:01:30
+approval_requested | t | dc0e4f25 | 22:01:30
+approval_requested | f | dc0e4f25 | 22:02:37
+approval_approved | t | dc0e4f25 | 22:04:58
+approval_requested | t | 9024e6a9 | 22:05:20
+== outbox dup per notification
+0
+== reservations per candidate dup
+0
+== entitlement a
+ended
