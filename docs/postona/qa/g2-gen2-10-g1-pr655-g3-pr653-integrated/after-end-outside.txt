@@ -1,0 +1,3 @@
+A list 200 ok candidates=4 
+A notifications 200 ok  notifications=12
+A submit 403 POSTONA_RESV_SERVICE_NOT_ACTIVE  

@@ -1,0 +1,60 @@
+== a
+cand | 2T10AfullwidthdatecheckG | approved | 2 | t
+cand | G2T10-reject | rejected | 2 | f
+cand | G2T10-revise (other sess | approved | 5 | t
+cand | G2T10-gen | rejected | 3 | f
+resv | 2
+notes | 12:2
+outbox | 12
+== b
+resv | 0
+notes | 0:0
+outbox | 0
+== c
+cand | G2T10-dup | approved | 2 | t
+resv | 1
+notes | 2:0
+outbox | 2
+== notes a
+approval_requested | t | 1658d083 | 13:51:07
+approval_approved | f | 1658d083 | 13:52:58
+approval_requested | f | 795793e9 | 13:54:46
+approval_requested | f | fb8713ac | 13:54:47
+approval_requested | f | ab64e2ae | 13:54:47
+approval_rejected | f | 795793e9 | 13:56:16
+approval_requested | f | fb8713ac | 13:56:57
+approval_requested | f | fb8713ac | 13:59:16
+approval_requested | t | fb8713ac | 14:00:09
+approval_approved | f | fb8713ac | 14:00:30
+approval_requested | f | ab64e2ae | 14:06:37
+approval_rejected | f | ab64e2ae | 14:08:27
+== app requests (all, in order)
+[G2AP] list 200 -
+[G2AP] submit 200 -
+[G2AP] notifications 200 -
+[G2AP] list 200 -
+[G2AP] markRead 200 -
+[G2AP] approve 200 -
+[G2AP] list 200 -
+[G2AP] reject 200 -
+[G2AP] approve 409 POSTONA_RESV_STALE_REVISION
+[G2AP] get 200 -
+[G2AP] revise 200 -
+[G2AP] approve 409 POSTONA_RESV_APPROVAL_GENERATION_CHANGED
+[G2AP] get 200 -
+[G2AP] revise 200 -
+[G2AP] approve 200 -
+[G2AP] notifications 200 -
+[G2AP] markRead 200 -
+[G2AP] list 200 -
+[G2AP] notifications 200 -
+[G2AP] list 200 -
+[G2AP] approve 403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED
+[G2AP] approve 409 POSTONA_RESV_APPROVAL_GENERATION_CHANGED
+[G2AP] get 200 -
+[G2AP] revise 200 -
+[G2AP] approve 403 POSTONA_RESV_SERVICE_NOT_ACTIVE
+[G2AP] list 200 -
+[G2AP] reject 200 -
+[G2AP] list 200 -
+[G2AP] notifications 200 -

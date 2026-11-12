@@ -1,0 +1,10 @@
+submit#1 200 ok candidates=1 
+submit#2 200 ok candidates=1 
+submit#3 200 ok candidates=1 
+approve#1 200 ok candidates=1 
+approve#2 200 ok candidates=1 
+approve#3 200 ok candidates=1 
+cand | G2T10-dup | approved | 2 | t
+resv | 1
+notes | 2:0
+outbox | 2
