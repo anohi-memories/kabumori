@@ -474,3 +474,142 @@ test('T45 notifications: a mark-read that failed says so, and the next read that
   tree = await h.press('最新の状態を読み込む');
   assert.ok(!has(tree, view.MARK_READ_FAILED_TEXT), 'gone with the successful read');
 });
+
+// ---- G1 TASK 46 (G2 #10) -----------------------------------------------------------------------------------------------------------
+async function reviseOnce(h, text) {
+  await h.press('修正する');
+  await h.type('修正する本文', text);
+  return h.press('修正を保存');
+}
+
+test('T46 grouping (pure): one line per candidate for approval_requested, newest first; other kinds and rows without a candidate stay one line each', () => {
+  const row = (id, kind, candidateId, minute, readAt = null) => ({ notificationId: id, kind, candidateId, reservationId: null, subjectRevision: null, state: null, scheduledAt: null, createdAt: new Date(Date.UTC(2026, 10, 6, 3, minute)).toISOString(), readAt });
+  const rows = [row('x1', 'approval_requested', 'X', 1), row('y1', 'approval_requested', 'Y', 2), row('x2', 'approval_requested', 'X', 3, 'r'), row('xa', 'approval_approved', 'X', 4),
+    row('x3', 'approval_requested', 'X', 5), row('n1', 'approval_requested', null, 6), row('n2', 'approval_requested', null, 7)];
+  const groups = view.groupNotifications(rows);
+  assert.deepEqual(groups.map((g) => [g.row.notificationId, g.older.map((o) => o.notificationId)]), [['n2', []], ['n1', []], ['x3', ['x2', 'x1']], ['xa', []], ['y1', []]]);
+  assert.equal(view.groupedUnreadCount(groups), 5, 'x1 is not counted on top of x3');
+  assert.equal(view.unreadCount(rows), 6, 'the raw rows would have counted it');
+  assert.deepEqual(view.groupNotifications([]), []);
+});
+
+test('T46 notifications: revised twice + another candidate = 2 lines, 未読 2件; opening one marks its 3 rows read, one call each; the other stays unread', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '候補X');
+  await h.open('投稿候補 ');
+  await reviseOnce(h, '候補X 改1');
+  await reviseOnce(h, '候補X 改2');
+  await submitOne(h, '候補Y');
+  const [x, y] = [...srv.candidates.keys()];
+  assert.equal(srv.notes.filter((n) => n.candidateId === x).length, 3, 'G3 keeps every request as history');
+  let tree = await h.show('notifications');
+  let rows = pressables(tree, 'お知らせ ');
+  assert.equal(rows.length, 2);
+  assert.ok(has(tree, '未読 2件'), 'not 4');
+  assert.ok(has(tree, view.olderRequestsText(2)));
+  const before = srv.count('markRead');
+  rows[1].onPress();   // X (the older line: Y was submitted last)
+  tree = await h.render();
+  const marked = srv.requests.filter((r) => r.action === 'markRead').slice(before).map((r) => r.payload.notificationId);
+  assert.deepEqual(marked.sort(), srv.notes.filter((n) => n.candidateId === x).map((n) => n.notificationId).sort(), 'exactly X\'s three, one call each');
+  assert.ok(srv.notes.filter((n) => n.candidateId === y).every((n) => n.readAt === null), 'Y untouched');
+  assert.ok(has(tree, '未読 1件'));
+  assert.deepEqual(JSON.parse(JSON.stringify(h.world.pushes.at(-1))), { pathname: '/approvals', params: { candidate: x } });
+  rows = pressables(tree, 'お知らせ ');
+  rows[1].onPress();
+  await h.render();
+  assert.equal(srv.count('markRead'), before + 3, 'nothing read is marked again');
+});
+
+test('T46 notifications: an older row whose mark-read failed stays unread and is the only one sent again; the shown read state is the server\'s answer only', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '候補X');
+  await h.open('投稿候補 ');
+  await reviseOnce(h, '候補X 改1');
+  await reviseOnce(h, '候補X 改2');
+  let tree = await h.show('notifications');
+  srv.inject.markRead = [null, new TypeError('offline')];
+  pressables(tree, 'お知らせ ')[0].onPress();
+  tree = await h.render();
+  assert.ok(has(tree, view.MARK_READ_FAILED_TEXT));
+  const unread = srv.notes.filter((n) => n.readAt === null);
+  assert.equal(unread.length, 1, 'the server read two of three');
+  assert.ok(has(tree, '未読 0件'), 'the line is read: its newest row is');
+  const before = srv.count('markRead');
+  pressables(tree, 'お知らせ ')[0].onPress();
+  await h.render();
+  assert.deepEqual(srv.requests.filter((r) => r.action === 'markRead').slice(before).map((r) => r.payload.notificationId), [unread[0].notificationId]);
+  assert.ok(srv.notes.every((n) => n.readAt !== null));
+});
+
+test('T46 notifications: A\'s grouped lines are never shown to B (no frame), B\'s badge counts B only, and a stale line of A pressed after the switch reads nothing of anyone', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, 'Aの候補');
+  await h.open('投稿候補 ');
+  await reviseOnce(h, 'Aの候補 改1');
+  h.world.session = B;
+  await h.render();
+  await submitOne(h, 'Bの候補');
+  h.world.session = A;
+  let tree = await h.show('notifications');
+  assert.ok(has(tree, view.olderRequestsText(1)));
+  const aLine = pressables(tree, 'お知らせ ')[0];
+  h.frames.length = 0;
+  h.world.session = B;
+  tree = await h.render();
+  assert.ok(h.frames.every((f) => !has(f, view.olderRequestsText(1))), 'B never sees A\'s grouped line');
+  assert.ok(has(tree, '未読 1件'));
+  aLine.onPress();   // a handle of A's line, pressed after the switch: it goes with B's token, for A's rows
+  await h.render();
+  assert.ok(srv.notes.every((n) => n.readAt === null), 'neither A\'s nor B\'s rows were marked');
+  assert.ok(h.frames.every((f) => !has(f, view.olderRequestsText(1))));
+  h.world.session = null;
+  tree = await h.render();
+  assert.equal(pressables(tree, 'お知らせ ').length, 0, 'sign-out shows no line');
+});
+
+test('T46 owner join: approve refused 403 X_ACCOUNT_NOT_VERIFIED says the connection OR the workspace could not be confirmed; no definitive reconnect, no owner claim; nothing approved', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '二人目の所有者');
+  await h.open('投稿候補 ');
+  srv.inject.approve = [{ status: 403, body: { ok: false, code: 'POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED' } }];
+  const tree = await h.press('承認する');
+  const text = view.ACTION_TEXT.reconnect_x;
+  assert.ok(has(tree, text));
+  assert.match(text, /ワークスペース/u);
+  assert.match(text, /接続し直すだけでは解決しないことがあります/u);
+  assert.doesNotMatch(text, /接続し直してください。$/u);
+  assert.doesNotMatch(text, /所有者|オーナー|増え/u);
+  assert.equal([...srv.candidates.values()][0].state, 'pending_approval');
+  assert.equal(srv.reservations, 0);
+});
+
+test('T46 date fields: digits-and-punctuation keyboard, no autocorrect / capitalisation, the hint; a full-width time from a Japanese keyboard submits the same JST instant', async () => {
+  const { DATE_TIME_HINT } = await import('../src/features/reservations/reservation-view.ts');
+  const srv = g3();
+  const h = await mount({ srv });
+  let tree = await h.render();
+  const f = field(tree, '投稿候補の日時');
+  assert.deepEqual([f.keyboardType, f.autoCorrect, f.autoCapitalize, f.spellCheck], ['numbers-and-punctuation', false, 'none', false]);
+  assert.ok(has(tree, DATE_TIME_HINT));
+  const when = inDays(3);
+  const wide = jstText(when).replace(/[0-9]/gu, (d) => String.fromCharCode(d.charCodeAt(0) + 0xfee0)).replace(/-/gu, 'ー').replace(':', '：').replace(' ', '　');
+  await h.type('投稿候補の本文', '全角の日時');
+  await h.type('投稿候補の日時', wide);
+  tree = await h.press('承認に回す');
+  assert.ok(has(tree, view.SUBMITTED_TEXT));
+  const sent = srv.requests.find((r) => r.action === 'submit').payload.scheduledAt;
+  assert.equal(sent, `${jstText(when).replace(' ', 'T')}:00+09:00`);
+  await h.open('投稿候補 ');
+  tree = await h.press('修正する');
+  const e = field(tree, '修正する日時');
+  assert.deepEqual([e.keyboardType, e.autoCorrect, e.autoCapitalize, e.spellCheck], ['numbers-and-punctuation', false, 'none', false]);
+});

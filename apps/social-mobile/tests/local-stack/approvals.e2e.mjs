@@ -9,6 +9,7 @@ import { readFile } from 'node:fs/promises';
 import * as stack from './x-disconnected-world.mjs';
 import * as view from '../../src/features/approvals/approval-view.ts';
 import { button, has, mountApprovals, pressables, texts } from '../approvals-harness.mjs';
+import { mountEndedHistory } from '../ended-history-harness.mjs';
 
 const REAL_FETCH = globalThis.fetch;
 const FN = 'postona-x-approvals-localtest';
@@ -161,7 +162,9 @@ test('two notification reads at once write one reservation_changed; with G5\'s o
   assert.deepEqual([await notesOf(A), await outboxOf(A)], before, 'the workspace is no longer A\'s personal one: no new notification, no outbox row');
   const h = await mountFor(A, { screen: 'notifications' });
   const tree = await until(h, (t) => !has(t, '読み込んでいます'), 'the screen answers');
-  assert.equal(pressables(tree, 'お知らせ ').length, listed ?? 0, 'the screen shows what the server returned, nothing more');
+  // G1 TASK 46: one line per candidate for its approval requests (G3 §5a), so the lines are the server's rows, grouped
+  const lines = after.status === 200 ? view.groupNotifications(after.body.notifications).length : 0;
+  assert.equal(pressables(tree, 'お知らせ ').length, lines, 'the screen shows what the server returned, nothing more');
   console.log(`G1T44 measured: after the membership insert the notifications call answered ${after.status} ${after.body?.code ?? `rows=${listed}`}; notifications:read ${before[0]} -> ${await notesOf(A)}, outbox ${before[1]} -> ${await outboxOf(A)}`);
   // the zero was the eligibility: once the workspace is A's personal one again, the next read writes the change that was held back
   await q("delete from public.brand_memberships where brand_id = :'b' and user_id = :'u'", { b: A.workspace, u: C.userId });
@@ -266,4 +269,115 @@ test('T45 flag OFF (the product\'s gate constant): the same screens on the same 
   }
   assert.equal(wire.length, before, 'no request at all');
   console.log('G1T45_APPROVALS_LOCAL_STACK_PASS');
+});
+
+// ---- G1 TASK 46 (G2 #10) on the real runtime --------------------------------------------------------------------------------------
+async function reviseShown(h, text) {
+  button(h.once(), '修正する').onPress();
+  await until(h, (t) => texts(t).some((x) => x === '修正を保存') || !!button(t, '修正を保存'), 'edit open');
+  await h.type('修正する本文', text);
+  button(h.once(), '修正を保存').onPress();
+  return until(h, (t) => has(t, view.REVISED_TEXT) && has(t, text), `revise ${text}`);
+}
+const unreadOf = async (p) => (await raw('notifications', {}, p.token)).body.notifications.filter((n) => n.readAt === null);
+
+test('T46 grouping on the real runtime: revised twice + another candidate = 2 lines / 未読 2件; opening one marks its 3 rows read, one call each; no outbox change', opts, async () => {
+  const G = await stack.person('apg');
+  const h = await mountFor(G);
+  await until(h, (t) => has(t, '投稿候補はまだありません'), 'empty');
+  await compose(h, 'G1第46 候補X', jstIn(3));
+  await pressables(h.once(), '投稿候補 ')[0].onPress();
+  await until(h, (t) => !!button(t, '修正する'), 'open X');
+  await reviseShown(h, 'G1第46 候補X 改1');
+  await reviseShown(h, 'G1第46 候補X 改2');
+  await compose(h, 'G1第46 候補Y', jstIn(4));
+  const all = (await raw('notifications', {}, G.token)).body.notifications;
+  const ids = [...new Set(all.map((n) => n.candidateId))];
+  const x = ids.find((id) => all.filter((n) => n.candidateId === id && n.kind === 'approval_requested').length === 3);
+  assert.ok(x, `G3 keeps three approval_requested rows for X: ${JSON.stringify(all.map((n) => [n.kind, n.candidateId, n.subjectRevision]))}`);
+  const outbox = await outboxOf(G);
+  let tree = await h.show('notifications');
+  tree = await until(h, (t) => has(t, '未読 2件'), 'two lines unread');
+  assert.equal(pressables(tree, 'お知らせ ').length, 2);
+  assert.ok(has(tree, view.olderRequestsText(2)));
+  const before = sent('markRead');
+  pressables(tree, 'お知らせ ')[1].onPress();
+  tree = await until(h, (t) => has(t, '未読 1件'), 'X read');
+  assert.equal(sent('markRead') - before, 3, 'one call per row of X');
+  const left = await unreadOf(G);
+  assert.ok(left.length === 1 && left[0].candidateId !== x, `only Y is unread: ${JSON.stringify(left)}`);
+  assert.equal(await outboxOf(G), outbox, 'reading changes no push outbox row');
+  console.log(`G1T46 measured: X rows=${all.filter((n) => n.candidateId === x).length}, lines=2, markRead sent=${sent('markRead') - before}, outbox ${outbox} -> ${await outboxOf(G)}`);
+});
+
+test('T46 owner join on the real runtime: approve answers 403 X_ACCOUNT_NOT_VERIFIED; the screen says connection OR workspace, nothing is approved', opts, async () => {
+  const O = await stack.person('apo');
+  const C = await stack.person('apoc');
+  const h = await mountFor(O);
+  await until(h, (t) => has(t, '投稿候補はまだありません'), 'empty');
+  await compose(h, 'G1第46 二人目の所有者', jstIn(5));
+  await pressables(h.once(), '投稿候補 ')[0].onPress();
+  await until(h, (t) => !!button(t, '承認する'), 'open');
+  assert.equal(await q("insert into public.brand_memberships (brand_id, user_id, role) values (:'b', :'u', 'owner') returning 'joined'", { b: O.workspace, u: C.userId }), 'joined');
+  try {
+    button(h.once(), '承認する').onPress();
+    const tree = await until(h, (t) => has(t, view.ACTION_TEXT.reconnect_x) || has(t, view.ACTION_TEXT.forbidden) || has(t, view.ACTION_TEXT.not_found), 'refused');
+    const last = wire.filter((w) => w.startsWith('approve ')).at(-1);
+    console.log(`G1T46 measured: approve after the 2nd owner joined answered ${last}`);
+    assert.equal(last, 'approve 403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED');
+    assert.ok(has(tree, view.ACTION_TEXT.reconnect_x));
+    assert.match(await candidatesOf(O), /^pending_approval:1:false$/u);
+    assert.equal(await stack.rowCount(O.account), '0');
+  } finally {
+    await q("delete from public.brand_memberships where brand_id = :'b' and user_id = :'u'", { b: O.workspace, u: C.userId });
+  }
+});
+
+test('T46 service ended on the real runtime: writes 403 SERVICE_NOT_ACTIVE, reads 200; the read-only history shows the person\'s own only and sends no write; another person sees none of it', opts, async () => {
+  const E = await stack.person('ape');
+  const F = await stack.person('apf');
+  const h = await mountFor(E);
+  await until(h, (t) => has(t, '投稿候補はまだありません'), 'empty');
+  await compose(h, 'G1第46 退会前の候補', jstIn(6));
+  await pressables(h.once(), '投稿候補 ')[0].onPress();
+  await until(h, (t) => !!button(t, '修正する'), 'open');
+  await reviseShown(h, 'G1第46 退会前の候補 改1');
+  const id = await q("select id from postona_x_resv.approval_candidates where user_id = :'u'", { u: E.userId });
+  await stack.endService(E);
+  const answers = {
+    submit: await raw('submit', { socialAccountId: E.account, clientRequestId: crypto.randomUUID(), body: 'x', scheduledAt: new Date(Date.now() + 7 * 864e5).toISOString() }, E.token),
+    revise: await raw('revise', { candidateId: id, expectedRevision: 2, body: 'y', scheduledAt: new Date(Date.now() + 7 * 864e5).toISOString() }, E.token),
+    approve: await raw('approve', { candidateId: id, expectedRevision: 2, contentSha256: stack.sha256('G1第46 退会前の候補 改1') }, E.token),
+    get: await raw('get', { candidateId: id }, E.token),
+    notifications: await raw('notifications', {}, E.token),
+  };
+  console.log(`G1T46 measured (service ended): ${Object.entries(answers).map(([k, v]) => `${k} ${v.status} ${v.body?.code ?? 'ok'}`).join(', ')}`);
+  for (const k of ['submit', 'revise', 'approve']) assert.deepEqual([answers[k].status, answers[k].body?.code], [403, 'POSTONA_RESV_SERVICE_NOT_ACTIVE'], k);
+  assert.deepEqual([answers.get.status, answers.notifications.status], [200, 200]);
+  assert.match(await candidatesOf(E), /^pending_approval:2:false$/u, 'nothing was written');
+
+  const base = { endpoint: { functionName: FN, allowLoopbackHttpForTests: true }, config: { ok: true, config: { url: stack.API, publishableKey: stack.PUBLISHABLE } }, fetch: recorded, wait: () => new Promise((resolve) => setTimeout(resolve, 60)) };
+  const at = wire.length;
+  const mine = await mountEndedHistory({ ...base, userId: E.userId, session: { token: E.token, userId: E.userId } });
+  let tree = await mine.render(4);
+  for (let i = 0; i < 100 && !has(tree, 'G1第46 退会前の候補 改1'); i++) { await new Promise((resolve) => setTimeout(resolve, 100)); tree = await mine.render(2); }
+  assert.ok(has(tree, 'G1第46 退会前の候補 改1'), `history: ${texts(tree).join(' / ')}`);
+  assert.ok(has(tree, view.ENDED_HISTORY_NOTE));
+  assert.ok(has(tree, view.olderRequestsText(1)), 'the two requests are one line');
+  const actions = wire.slice(at).map((w) => w.split(' ')[0]);
+  assert.deepEqual([...new Set(actions)].sort(), ['get', 'notifications'], `only reads: ${wire.slice(at).join(' | ')}`);
+
+  const other = await mountEndedHistory({ ...base, userId: F.userId, session: { token: F.token, userId: F.userId } });
+  tree = await other.render(4);
+  for (let i = 0; i < 100 && !has(tree, 'お知らせはありません'); i++) { await new Promise((resolve) => setTimeout(resolve, 100)); tree = await other.render(2); }
+  assert.ok(other.frames.every((f) => !has(f, 'G1第46 退会前の候補')), 'F never sees E\'s rows');
+  assert.ok(has(tree, '表示できる投稿候補はありません。'));
+  assert.equal((await raw('get', { candidateId: id }, F.token)).status, 404, 'E\'s candidate is not F\'s');
+
+  const crossed = wire.length;
+  const stale = await mountEndedHistory({ ...base, userId: E.userId, session: { token: F.token, userId: F.userId } });
+  tree = await stale.render(4);
+  assert.equal(wire.length, crossed, 'E\'s view sends nothing with F\'s session');
+  assert.ok(!has(tree, 'G1第46 退会前の候補'));
+  console.log('G1T46_APPROVALS_LOCAL_STACK_PASS');
 });

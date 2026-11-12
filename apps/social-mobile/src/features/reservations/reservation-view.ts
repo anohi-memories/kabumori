@@ -108,11 +108,23 @@ export const GATE_OFF_TEXT = {
   threads: 'Threadsの予約は、公開前の準備中のため、まだ使えません。ここで「予約済み」と表示されることはありません。',
 } as const;
 
-const JST_INPUT = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/u;
+const JST_INPUT = /^(\d{4})-(\d{2})-(\d{2}) ?(\d{2}):(\d{2})$/u;
+// G1 TASK 46 (G2 #10): what a Japanese keyboard types for '-' (long vowel mark, dashes, minus sign) once NFKC has made full-width digits,
+// '－', '：' and the ideographic space plain. Only these become '-'; every other character is left for the same check to refuse.
+const DASHES = /[ー‐‑‒–—―−]/gu;
+
+/** What a date-time field types with: digits and punctuation, nothing rewritten by the keyboard. */
+export const DATE_TIME_INPUT_PROPS = { keyboardType: 'numbers-and-punctuation', autoCorrect: false, autoCapitalize: 'none', spellCheck: false } as const;
+export const DATE_TIME_HINT = '半角の数字と「-」「:」で入力してください（全角や「ー」で入力しても読み取ります）。';
+
+/** A typed date-time as the check reads it: NFKC, the dashes above as '-', runs of spaces as one. Nothing else changes. */
+export function normalizeJstInput(text: string): string {
+  return text.normalize('NFKC').replace(DASHES, '-').replace(/\s+/gu, ' ').trim();
+}
 
 /** 'YYYY-MM-DD HH:mm' in Japan time -> ISO with +09:00; only a real date in the future. */
 export function parseJstInput(text: string, now: Date): { ok: true; iso: string } | { ok: false; message: string } {
-  const match = JST_INPUT.exec(text.trim());
+  const match = JST_INPUT.exec(normalizeJstInput(text));
   if (!match) return { ok: false, message: '日時は「2026-11-01 09:30」の形で入力してください（日本時間）。' };
   const [, y, mo, d, h, mi] = match;
   const iso = `${y}-${mo}-${d}T${h}:${mi}:00+09:00`;

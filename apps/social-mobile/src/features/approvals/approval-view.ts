@@ -63,7 +63,9 @@ export const rereads = (action: ApprovalAction) => action === 'reread' || action
 export const ACTION_TEXT: Record<ApprovalAction, string> = {
   sign_in: 'ログインを確認できませんでした。ログインし直してください。表示していた内容は閉じました。',
   forbidden: 'X自動投稿の利用登録が有効でないため、使えません。表示していた内容は閉じました。',
-  reconnect_x: 'Xアカウントの接続を確認できないため、承認できません。アカウント画面でXを接続し直してください。',
+  // G1 TASK 46 (G2 #10): G3 answers this same code when the X connection cannot be verified AND when the workspace stopped being the
+  // person's own (another owner joined). The app cannot tell them apart, so it names both and claims neither.
+  reconnect_x: 'Xアカウントの接続、またはこのワークスペースの状態をサーバーで確認できなかったため、承認していません。アカウント画面でXの接続を確認し、このワークスペースをご自身だけで使っているかを確かめてください（接続し直すだけでは解決しないことがあります）。',
   not_found: 'この投稿候補は見つかりませんでした。',
   reread: 'ほかの操作で内容が変わっていました。最新の内容を読み込みました。確認してからもう一度操作してください。',
   generation_changed: 'この投稿候補は、X自動投稿の再開またはXの再接続より前に作られたため、このままでは承認できません。「修正して承認に回し直す」で今の接続の候補にしてから、もう一度承認してください。',
@@ -104,6 +106,35 @@ export const RESERVATION_STATE_TEXT: Readonly<Record<string, string>> = {
 };
 /** The badge: rows the person has not opened. Nothing here says a push was delivered. */
 export const unreadCount = (rows: readonly ApprovalNotification[]) => rows.filter((n) => n.readAt === null).length;
+
+/** One line of the notification list: a row, and the older approval requests of the same candidate it stands for. */
+export type NotificationGroup = { row: ApprovalNotification; older: ApprovalNotification[] };
+/**
+ * G3 contract §5a (G3-02 #19): each submit and revise writes one approval_requested, kept as history. The list shows a candidate's newest
+ * request only; the older ones of that candidate are behind it and are not counted again. Every other kind stays one line per row.
+ */
+export function groupNotifications(rows: readonly ApprovalNotification[]): NotificationGroup[] {
+  const newestFirst = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || (b.subjectRevision ?? 0) - (a.subjectRevision ?? 0));
+  const out: NotificationGroup[] = [];
+  const requests = new Map<string, NotificationGroup>();
+  for (const row of newestFirst) {
+    if (row.kind === 'approval_requested' && row.candidateId) {
+      const shown = requests.get(row.candidateId);
+      if (shown) { shown.older.push(row); continue; }
+      const group = { row, older: [] };
+      requests.set(row.candidateId, group);
+      out.push(group);
+      continue;
+    }
+    out.push({ row, older: [] });
+  }
+  return out;
+}
+/** The badge over groups: a candidate's older requests are never counted on top of its newest. */
+export const groupedUnreadCount = (groups: readonly NotificationGroup[]) => groups.filter((g) => g.row.readAt === null).length;
+export const olderRequestsText = (count: number) => `この候補の以前の承認待ちのお知らせ ${count}件（修正のたびに届きます）`;
+/** The service-ended history (G1 TASK 46): what it is and what it cannot do. */
+export const ENDED_HISTORY_NOTE = 'X自動投稿は退会済みのため、これまでの内容を見ることだけができます。承認・修正・新しい投稿候補の作成はできません（もう一度使うには「利用登録する」から登録し直してください）。';
 export const PUSH_NOTE = 'お知らせはアプリを開いたときに表示されます。端末への通知（プッシュ）はまだ送られません。';
 
 export function shortHash(candidate: Pick<Candidate, 'contentSha256'>): string {

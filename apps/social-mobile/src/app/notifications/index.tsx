@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import type { ApprovalNotification } from '@/features/approvals/approval-client';
-import { APPROVAL_BLOCK_TEXT, notificationText, PUSH_NOTE, readFailedText, RESERVATION_STATE_TEXT } from '@/features/approvals/approval-view';
+import { APPROVAL_BLOCK_TEXT, notificationText, olderRequestsText, PUSH_NOTE, readFailedText, RESERVATION_STATE_TEXT } from '@/features/approvals/approval-view';
 import { useApprovalNotifications } from '@/features/approvals/use-approval-notifications';
 import { formatJst } from '@/features/reservations/reservation-view';
 
@@ -13,7 +13,7 @@ export default function NotificationsScreen() {
   if (view.kind === 'blocked') {
     return <Screen><ScrollView contentContainerStyle={{ gap: 16 }}><SectionTitle detail={PUSH_NOTE}>お知らせ</SectionTitle><Card><Text style={styles.muted}>{APPROVAL_BLOCK_TEXT[view.block]}</Text></Card></ScrollView></Screen>;
   }
-  const items = view.list.state === 'ready' ? view.list.items : [];
+  const items = view.groups;
   const go = (n: ApprovalNotification) => {
     view.open(n);
     if (n.candidateId) router.push({ pathname: '/approvals', params: { candidate: n.candidateId } });
@@ -28,7 +28,7 @@ export default function NotificationsScreen() {
         {view.list.state === 'loading' ? <Card><Text style={styles.muted}>お知らせを読み込んでいます…</Text></Card> : null}
         {view.list.state === 'error' ? <Card><Text style={styles.muted}>{`お知らせを読み込めませんでした。${readFailedText(view.list.action)}`}</Text><ActionButton label="もう一度読み込む" onPress={view.reload} /></Card> : null}
         {view.list.state === 'ready' && !items.length ? <EmptyState title="お知らせはありません" detail="投稿候補を承認に回すと、ここに表示されます。" /> : null}
-        {items.map((n) => (
+        {items.map(({ row: n, older }) => (
           <Pressable key={n.notificationId} accessibilityRole="button" accessibilityLabel={`お知らせ ${notificationText(n)}`} onPress={() => go(n)}>
             <Card>
               <View style={{ gap: 4 }}>
@@ -37,6 +37,7 @@ export default function NotificationsScreen() {
                 {n.kind === 'reservation_changed' && n.state ? <Text style={styles.muted}>{`予約の状態: ${RESERVATION_STATE_TEXT[n.state] ?? n.state}`}</Text> : null}
                 {n.scheduledAt ? <Text style={styles.muted}>{`投稿予定: ${formatJst(n.scheduledAt)}`}</Text> : null}
                 <Text style={styles.muted}>{formatJst(n.createdAt)}</Text>
+                {older.length ? <Text style={styles.muted}>{olderRequestsText(older.length)}</Text> : null}
               </View>
             </Card>
           </Pressable>
