@@ -126,6 +126,9 @@ const genGet = async (s: { get(id: string): Promise<{ ok: boolean; value?: { con
   assert.ok(read.ok, JSON.stringify(read));
   return read.value?.connectionGeneration;
 };
+// G3-02 #20: a SYNTHETIC reservation change that tests the list-time path, with 018's change trigger off around it (when it exists)
+const TRIGGER_TOGGLE = (on: boolean) => `do $g$ begin if exists (select 1 from pg_trigger where tgname = 'reservations_changed_notify') then alter table postona_x_resv.reservations ${on ? "enable" : "disable"} trigger reservations_changed_notify; end if; end $g$;`;
+const listPathChange = (sql: string, vars: Record<string, string>) => owner(`begin; ${TRIGGER_TOGGLE(false)} ${sql}; ${TRIGGER_TOGGLE(true)} commit;`, vars);
 const rowDump = (id: string) => owner("select md5(r::text) from postona_x_resv.reservations r where id = :'i'", { i: id });
 const rowState = (id: string) => owner("select status || '/' || revision || '/' || coalesce(outcome_code, '-') from postona_x_resv.reservations where id = :'i'", { i: id });
 const countOf = (sql: string) => owner(sql).then(Number);
@@ -1032,7 +1035,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual([approved.status, cands(approved)[0]?.state], [200, "approved"], "the person's explicit revise under the new connection");
     const rid = cands(approved)[0].reservationId as string;
     // P2-2: the reservation changes, then the person is no longer the owner; two lists at once answer nothing and write nothing
-    await owner("update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC (operator)
+    await listPathChange("update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC (operator)
     await owner("create table public.g3ls17_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });
     await owner("delete from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });   // SYNTHETIC ownership loss
     const before = await noteRows();
@@ -1071,7 +1074,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
     assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
     const rid = cands(ok)[0].reservationId as string;
-    const moved = () => owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: a new state to report
+    const moved = () => listPathChange("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: a new state to report
     await owner("create table public.g3ls18_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'", { u: d.userId });
     const restore = () => owner("insert into public.brand_memberships select * from public.g3ls18_bm", {});
     const lose = "delete from public.brand_memberships where user_id = :'u' and role = 'owner';";
@@ -1163,7 +1166,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     // a second member joins the person's workspace while a notification is being written: with G5's trigger it waits
     const drained = await ap("notifications", { limit: 100 });   // every pending derived event written first, so the race writes exactly one
     assert.strictEqual(drained.status, 200);
-    await owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: one new state to report
+    await listPathChange("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC: one new state to report
     await owner(`create function public.g3ls19_barrier() returns trigger language plpgsql as $$ begin if new.reservation_id = '${rid}' then perform pg_sleep(3); end if; return new; end $$; create trigger g3ls19_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls19_barrier();`, {});
     const r1 = await noteRows();
     const dl0 = await owner("select deadlocks from pg_stat_database where datname = current_database()", {});
@@ -1182,12 +1185,78 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.ok(waited >= 1500, `a second member joined during a notification write (waited ${waited} ms): G5's ownership lock is not in place`);
     assert.deepStrictEqual(await noteRows(), plus(r1, 1), "the event written while the workspace was still personal");
     // with the second member the workspace is no longer the person's own personal one: the next state writes nothing
-    await owner("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC
+    await listPathChange("update postona_x_resv.reservations set revision = revision + 1 where id = :'i'", { i: rid });   // SYNTHETIC
     const r2 = await noteRows();
     assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
     assert.deepStrictEqual(await noteRows(), r2, "no write while the workspace has a second member");
     await owner("delete from public.brand_memberships where user_id = :'b' and role = 'member' and brand_id in (select brand_id from public.brand_memberships where user_id = :'u' and role = 'owner');", { u: d.userId, b: b.userId });
     assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
     assert.deepStrictEqual(await noteRows(), plus(r2, 1), "personal again: the pending event once");
+  });
+
+  await t.step("L39 G3-02 #20: the worker's result is enqueued in its own transaction (published / uncertain, once, no list needed); markRead after a service end is 403 and writes nothing (G2 #11); after the restart it works", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const plus = (r: string, k: number) => r.split("/").map((x) => String(Number(x) + k)).join("/");
+    const eventOf = (rid: string, state: string) => owner("select count(*) from postona_x_resv.notifications where reservation_id = :'i' and kind = 'reservation_changed' and state = :'s'", { i: rid, s: state });
+    const approved = async (name: string, days: number) => {
+      const c = cands(await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: `G3-02 #20 ${name}`, scheduledAt: at(days) }))[0];
+      const a = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body));
+      return cands(a)[0].reservationId as string;
+    };
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);   // drain anything earlier steps left pending
+    // published: due -> claim -> fake X -> finish; the event and its outbox row exist right after the run, before any list
+    const p1 = await approved("p1", 58);
+    await makeDue(p1);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const r0 = await noteRows();
+    const calls = await xCalls();
+    const run = await deliver();
+    assert.deepStrictEqual([run.report?.sends, run.report?.published, await xCalls()], [1, 1, calls + 1], JSON.stringify(run));
+    assert.deepStrictEqual([await eventOf(p1, "published"), await eventOf(p1, "claimed"), await noteRows()], ["1", "0", plus(r0, 1)], "enqueued by the worker's transaction; 'claimed' is no event");
+    const again = await deliver();
+    assert.deepStrictEqual([again.report?.claimed ?? 0, await xCalls(), await noteRows()], [0, calls + 1, plus(r0, 1)], "nothing re-sent, nothing re-enqueued");
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    assert.deepStrictEqual(await noteRows(), plus(r0, 1), "a list adds nothing (one event key)");
+    // an unknown X answer: uncertain, enqueued once, never re-sent
+    const u1 = await approved("u1", 59);
+    await makeDue(u1);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const r1 = await noteRows();
+    await xMode("unknown");
+    const unsure = await deliver();
+    await xMode("ok");
+    assert.deepStrictEqual([unsure.report?.uncertain, await eventOf(u1, "uncertain"), await noteRows()], [1, "1", plus(r1, 1)], JSON.stringify(unsure));
+    const after = await deliver();
+    assert.deepStrictEqual([after.report?.claimed ?? 0, await noteRows()], [0, plus(r1, 1)]);
+    // the service ends (SYNTHETIC end): a due approved reservation is not claimed and nothing is enqueued; markRead is 403 and writes nothing
+    const e1 = await approved("e1", 57);
+    await makeDue(e1);
+    const unread = await owner("select id from postona_x_resv.notifications where user_id = :'u' and read_at is null order by created_at limit 1", { u: d.userId });
+    assert.ok(unread.length > 0, "an unread notification to mark");
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: d.userId });
+    const r2 = await noteRows();
+    const stopped = await deliver();
+    assert.deepStrictEqual([stopped.report?.sends ?? 0, await noteRows()], [0, r2], JSON.stringify(stopped));
+    assert.deepStrictEqual(code(await ap("markRead", { notificationId: unread })), "403 POSTONA_RESV_SERVICE_NOT_ACTIVE");
+    assert.deepStrictEqual(await owner("select coalesce(read_at::text, 'unread') from postona_x_resv.notifications where id = :'n'", { n: unread }), "unread", "read_at unchanged");
+    const still = await ap("notifications", { limit: 100 });
+    assert.deepStrictEqual([still.status, ((still.body.notifications ?? []) as unknown[]).length > 0], [200, true], "reading goes on");
+    assert.strictEqual((await ap("get", { candidateId: cands(await ap("list", { socialAccountId: d.account })).at(0)?.candidateId })).status, 200);
+    // restarted: markRead works again; the due reservation of the earlier generation is closed by the worker and that is enqueued too
+    const asked = await rpcAs(d, "start_x_autopost_service", {});
+    const back = await rpcAs(d, "reactivate_x_autopost_service", { p_expected_lifecycle_version: asked.body.lifecycle_version });
+    assert.deepStrictEqual(back.body.status, "active", JSON.stringify(back.body));
+    const marked = await ap("markRead", { notificationId: unread });
+    assert.deepStrictEqual([marked.status, typeof ((marked.body.notifications ?? []) as Array<Record<string, unknown>>)[0]?.readAt], [200, "string"]);
+    assert.deepStrictEqual(await xConnect(d, "d7", "62301"), d.account);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const r3 = await noteRows();
+    const closing = await deliver();
+    assert.deepStrictEqual([closing.report?.sends ?? 0, await xCalls(), await outcome(e1)], [0, calls + 2, "failed/SERVICE_GENERATION_CHANGED/-"], JSON.stringify(closing));
+    assert.deepStrictEqual([await eventOf(e1, "failed"), await noteRows()], ["1", plus(r3, 1)], "the close is enqueued by the worker's transaction");
   });
 });

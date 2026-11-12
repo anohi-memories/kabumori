@@ -266,6 +266,10 @@ What it showed, for the operator:
   - With it, a second member joining, owning another workspace, or a role change waits for a notification write. While the workspace is not personal, the list writes nothing.
   - L38 runs submit (3 concurrent replays) → approve with a lost answer → read back → retry → one reservation → the worker sends once; the gated real entry answers 503 with 0 writes.
   - The G2 #9 P3 decisions are in the G1 contract doc, section 5a. No SQL / Edge change.
+- **G3-02 #20 (G2 #11)**:
+  - `mark_notification_read` now needs the X service (the G5 writer gate first): 403 `SERVICE_NOT_ACTIVE` after a service end, with `read_at` unchanged.
+  - A new trigger `reservations_changed_notify` (not a definer, granted to nobody) enqueues `reservation_changed` and its outbox row in the transaction that changed the reservation (the worker's finish, the claim's close, a reschedule / cancel). `claimed` is not an event; any notification error is skipped, never failing the change, and the next list writes it.
+  - Proof: PG17 AP21–AP23 and VM20 (markRead vs a committing service end); local L39 (published / uncertain enqueued by the worker run, the markRead gate, the earlier generation's close).
 - **Notifications** are one row per event key. `reservation_changed` is derived on the next list. Each new notification gets a `push_outbox` row, which nothing reads or sends.
 - **Rollback**: `018` first, with `G3RO_APPROVAL_DISCARD_ROWS` stated.
 - **Contract for G1**: `docs/postona/g3-approval-notification-contract-20261105.md`.

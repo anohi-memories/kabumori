@@ -321,7 +321,7 @@ va_n="$(printf '%s\n' "$out" | grep -c '|ok$' || true)"
 # --- VR18 (G3-02 #18, H1 #38 P2): an ownership loss vs a notification write, in two real sessions (person 4843 of approvals.sql) -------
 now_s() { python3 -I -c 'import time; print(f"{time.time():.3f}")'; }
 rows43() { val -c "select (select count(*) from postona_x_resv.notifications where user_id = g48.u(4843))::text || '/' || (select count(*) from postona_x_resv.push_outbox where user_id = g48.u(4843))::text"; }
-moved43() { own -c "update postona_x_resv.reservations set revision = revision + 1, updated_at = now() where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'))" >/dev/null; }   # SYNTHETIC: a new reservation state to report
+moved43() { own -c "begin" -c "select g48.notify_trigger(false)" -c "update postona_x_resv.reservations set revision = revision + 1, updated_at = now() where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'))" -c "select g48.notify_trigger(true)" -c "commit" >/dev/null; }   # the list-time path (#20: the change trigger off around it)   # SYNTHETIC: a new reservation state to report
 lose43() { echo "delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843) and role = 'owner';"; }
 own -c "create table g48.bm43 as select * from public.brand_memberships where user_id = g48.u(4843) and role = 'owner'" >/dev/null
 restore43() { own -c "insert into public.brand_memberships select * from g48.bm43 b where not exists (select 1 from public.brand_memberships m where m.brand_id = b.brand_id and m.user_id = b.user_id)" >/dev/null; }
@@ -418,6 +418,22 @@ own -c "$del_member" >/dev/null
 answer="$(listing43)"
 [ "$(rows43)" = "$(python3 -I -c "a, b = '$r0'.split('/'); print(f'{int(a) + 1}/{int(b) + 1}')")" ] || fail "VG5-I4 personal again: expected the pending event once ($r0 -> $(rows43))"
 echo "OK VG5: G5 PR #645 001 (pinned a4d6c0eb, applied here only): BEFORE it a second member joining did not wait (the gap); AFTER it a second member (I1), owning another workspace (I2) and a role change (I3) each wait for a notification write; with a second member the list writes 0, personal again it writes the event once (I4)"
+# --- VM20 (G3-02 #20, G2 #11): markRead vs a service end committing at the same time (real sessions; SYNTHETIC end) ------------------
+nid20="$(val -c "select id from postona_x_resv.notifications where user_id = g48.u(4843) and read_at is null order by created_at limit 1")"
+[ -n "$nid20" ] || fail "VM20 no unread notification to mark"
+mark20() { val -c "select g48.ap(4843, format('select kind from postona_x_resv.mark_notification_read(%L::uuid)', '$nid20'))"; }
+own -c "begin" -c "update public.service_entitlements set status = 'ended', ended_at = now() where user_id = g48.u(4843) and service_key = 'x_autopost'" -c "select pg_sleep(3)" -c "commit" >/dev/null & ep=$!
+sleep 1
+t0="$(now_s)"; m="$(mark20)"; t1="$(now_s)"
+wait "$ep" || fail "VM20 the end failed"
+[ "$m" = "ERR:POSTONA_RESV_SERVICE_NOT_ACTIVE" ] || fail "VM20 markRead during a committing service end answered $m"
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VM20 markRead did not wait for the service end (G5's writer gate)"
+[ "$(val -c "select coalesce(read_at::text, 'unread') from postona_x_resv.notifications where id = '$nid20'")" = unread ] || fail "VM20 read_at changed"
+[ "$(val -c "select g48.cg_restart(4843)")" = active ] || fail "VM20 restart"
+own -c "select g48.nobody()" >/dev/null
+[ "$(mark20)" = "reservation_changed" ] || [ "$(val -c "select coalesce(read_at::text, 'unread') from postona_x_resv.notifications where id = '$nid20'")" != unread ] || fail "VM20 markRead after the restart"
+[ "$(val -c "select coalesce(read_at::text, 'unread') from postona_x_resv.notifications where id = '$nid20'")" != unread ] || fail "VM20 not read after the restart"
+echo "OK VM20: markRead during a committing service end waited for it and refused (SERVICE_NOT_ACTIVE, read_at unchanged); after the restart it marks read"
 counts="$(sval -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text")"
 expect_err "VA5 018 rollback as a superuser" G3_APPROVALS_ROLLBACK_OWNER sval -c "set postona_resv_approval_rollback.discard = '$counts'" -f "$x018rb"
 expect_err "VA6 018 rollback, counts not stated" G3_APPROVALS_ROLLBACK_ROWS own -f "$x018rb"
