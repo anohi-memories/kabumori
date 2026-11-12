@@ -11,9 +11,11 @@
 // when BOTH the JWT claims and GoTrue's user say is_anonymous === false (verified_actor.ts), and requireVerified
 // refuses anything else before a connection is opened. Nothing is granted, no ACL is widened, nothing is retried.
 // G4-02 #15 (H1 #43 P2): with `recovery` set, complete first runs read-before-rebind recovery (reconnect_recovery.ts): GET-only
-// reads with the NEW token of the SAME Threads user, final evidence recorded for the account's open publish attempts, each in
-// its own transaction BEFORE the completion's. Any refusal or failure there changes nothing and the completion decides as
-// before (the send fence still refuses while an attempt stays open).
+// reads with the NEW token of the SAME Threads user (one container read per open attempt), BEFORE any transaction. G4-02 #16
+// (H1 #44 P3): the final evidence is then written INSIDE the completion's own transaction -- after its claimed-state check,
+// before complete_and_attest_binding (PR #124's state, G5's generation and session checks, the binding write and its send
+// fence) -- so it commits only if the whole completion commits. Any refusal or failure there changes nothing (a savepoint)
+// and the completion decides as before (the send fence still refuses while an attempt stays open).
 // Not wired: H5's server factory constructs its own transport (no port for this bridge yet) and the Edge entry stays
 // hard-disabled; production stays NO_GO.
 
@@ -26,7 +28,13 @@ import type { Claim, OwnerSqlClient } from "../postona_threads_auth_runtime/owne
 import { assertCustodyContract, writeCustody } from "../postona_threads_auth_runtime/wiring/custody_port.ts";
 import { beginRpcPayload, type completeRpcPayload } from "../../functions/_shared/social/threads_connect_rpc_contract.ts";
 import type { FetchLike } from "../../functions/_shared/social/threads_publish_contract.ts";
-import { readOnlyFetch, readRecoveryEvidence, type RecoveryCandidate, THREADS_RECOVERY_READ_BUDGET_MS } from "./reconnect_recovery.ts";
+import {
+  readOnlyFetch,
+  readRecoveryEvidence,
+  type RecoveryCandidate,
+  type RecoveryEvidence,
+  THREADS_RECOVERY_READ_BUDGET_MS,
+} from "./reconnect_recovery.ts";
 
 /** G4-02 #15: the network the recovery reads go through (Threads Graph, GET only). */
 export type G4ReconnectRecovery = Readonly<{ fetch: FetchLike }>;
@@ -98,48 +106,37 @@ export function createG4ThreadsOwnerBridge(
     }
   }
 
-  /** G4-02 #15: read-before-rebind recovery; never throws (the completion that follows decides). */
-  async function recoverBeforeRebind(
+  /**
+   * G4-02 #15 / #16: the reads of read-before-rebind recovery, outside any transaction; never throws. The candidates are
+   * asked under this connect's claimed state (postona_threads_binding.reconnect_recovery_candidates checks it again).
+   */
+  async function readRecovery(
     actor: VerifiedActor,
+    hash: string,
     payload: Awaited<ReturnType<typeof completeRpcPayload>>,
     r: G4ReconnectRecovery,
-  ): Promise<void> {
+  ): Promise<{ candidate: RecoveryCandidate; evidence: RecoveryEvidence }[]> {
     const credential = { threadsUserId: payload.p_platform_user_id, accessToken: payload.p_access_token };
     let candidates: RecoveryCandidate[];
     try {
       candidates = await tx(actor, async (c) => {
         await c.queryObject("select postona_threads_runtime.assert_actor($1::uuid,$2::uuid)", [actor.userId, actor.sessionId]);
-        const rows = await c.queryObject<{ attempt_id: string; container_id: string; created_at: Date | string; post_text: string | null }>(
-          "select attempt_id::text, container_id, created_at, post_text from postona_threads_binding.reconnect_recovery_candidates($1::uuid,$2)",
-          [payload.p_oauth_state_id, payload.p_platform_user_id],
+        const rows = await c.queryObject<{ attempt_id: string; container_id: string }>(
+          "select attempt_id::text, container_id from postona_threads_binding.reconnect_recovery_candidates($1,$2::uuid,$3)",
+          [hash, payload.p_oauth_state_id, payload.p_platform_user_id],
         );
-        return rows.rows.map((x) => ({ attemptId: x.attempt_id, containerId: x.container_id, createdAt: x.created_at, text: x.post_text }));
+        return rows.rows.map((x) => ({ attemptId: x.attempt_id, containerId: x.container_id }));
       });
     } catch {
-      return; // no recovery SQL (an older 002) or refused: nothing to do here
+      return []; // no recovery SQL (an older 002) or refused: nothing to do here
     }
     const reads = readOnlyFetch(r.fetch, Date.now() + THREADS_RECOVERY_READ_BUDGET_MS);
+    const found: { candidate: RecoveryCandidate; evidence: RecoveryEvidence }[] = [];
     for (const candidate of candidates) {
       const evidence = await readRecoveryEvidence(reads, credential, candidate);
-      if (evidence === null) continue;
-      try {
-        await tx(actor, async (c) => {
-          await c.queryObject("select postona_threads_runtime.assert_actor($1::uuid,$2::uuid)", [actor.userId, actor.sessionId]);
-          await c.queryObject("select postona_threads_binding.settle_attempt_before_rebind($1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8)", [
-            payload.p_oauth_state_id,
-            payload.p_platform_user_id,
-            candidate.attemptId,
-            candidate.containerId,
-            evidence.to,
-            evidence.to === "published" ? evidence.providerPostId : null,
-            evidence.to === "published" ? evidence.permalink : null,
-            evidence.to === "published" ? null : evidence.errorCode,
-          ]);
-        });
-      } catch {
-        // refused or failed: nothing recorded for this attempt
-      }
+      if (evidence !== null) found.push({ candidate, evidence });
     }
+    return found;
   }
 
   return Object.freeze({
@@ -209,7 +206,7 @@ export function createG4ThreadsOwnerBridge(
       });
     },
     async complete(actor: VerifiedActor, hash: string, payload: Awaited<ReturnType<typeof completeRpcPayload>>, expiry: Date) {
-      if (recovery) await recoverBeforeRebind(actor, payload, recovery);
+      const evidence = recovery ? await readRecovery(actor, hash, payload, recovery) : [];
       await tx(actor, async (c) => {
         await c.queryObject("select postona_threads_runtime.assert_actor($1::uuid,$2::uuid)", [actor.userId, actor.sessionId]);
         await assertCustodyContract(c);
@@ -224,6 +221,24 @@ export function createG4ThreadsOwnerBridge(
           [hash, actor.userId, actor.sessionId, payload.p_oauth_state_id],
         );
         if (r.rows.length !== 1 || r.rows[0].allowed !== true) throw new RuntimeRefusal("DB_OPERATION_REFUSED");
+        // G4-02 #16: the recovery evidence, in this transaction (rolled back with it if the completion below refuses)
+        for (const { candidate, evidence: e } of evidence) {
+          await c.queryObject("savepoint g4_reconnect_recovery");
+          try {
+            await c.queryObject("select postona_threads_binding.settle_attempt_before_rebind($1,$2::uuid,$3,$4::uuid,$5,$6,$7)", [
+              hash,
+              payload.p_oauth_state_id,
+              payload.p_platform_user_id,
+              candidate.attemptId,
+              candidate.containerId,
+              e.to,
+              e.errorCode,
+            ]);
+            await c.queryObject("release savepoint g4_reconnect_recovery");
+          } catch {
+            await c.queryObject("rollback to savepoint g4_reconnect_recovery"); // nothing recorded for this attempt
+          }
+        }
         await c.queryObject("select postona_threads_binding.complete_and_attest_binding($1::uuid,$2,$3,$4,$5)", [
           payload.p_oauth_state_id,
           payload.p_platform_user_id,

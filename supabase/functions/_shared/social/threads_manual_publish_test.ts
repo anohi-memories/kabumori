@@ -14,7 +14,7 @@ import {
   type VerifiedCaller,
 } from "./threads_manual_publish.ts";
 import { ATTEMPT_MAX_AGE_MS, FakeThreadsPublishStore } from "./threads_manual_publish_fake.ts";
-import type { FetchLike } from "./threads_publish_contract.ts";
+import { type FetchLike, isThreadsPermalink, THREADS_PERMALINK_HOSTS } from "./threads_publish_contract.ts";
 
 // Fake values only.
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -309,7 +309,8 @@ test("unknown publish outcome (timeout, 5xx, transient, unreadable): uncertain, 
   }
 });
 
-test("reconcile (read-only): PUBLISHED + exactly one exact-text post -> published with its permalink", async () => {
+// G4-02 #16 (H1 #44 P2-1): PUBLISHED proves a post exists, not which one; no listing is read and no post id is attributed
+test("reconcile (read-only): PUBLISHED -> published_unidentified, even with exactly one exact-text post in the listing", async () => {
   const store = world();
   const provider = scriptedFetch({
     ...golden(),
@@ -321,8 +322,9 @@ test("reconcile (read-only): PUBLISHED + exactly one exact-text post -> publishe
   const d = deps(store, provider.fetch);
   const uncertain = await publishThreadsTextNow(d, CALLER, input());
   const resolved = await reconcileThreadsAttempt(d, CALLER, uncertain.attemptId);
-  assert.deepEqual([resolved.status, resolved.providerPostId, resolved.permalink, resolved.errorCode], ["published", MEDIA, PERMALINK, null]);
+  assert.deepEqual([resolved.status, resolved.providerPostId, resolved.permalink, resolved.errorCode], ["published_unidentified", null, null, "PUBLISHED_POST_NOT_FOUND"]);
   assert.equal(provider.calls.filter((c) => c.step === "publish").length, 1);
+  assert.deepEqual(provider.calls.filter((c) => c.step === "list" || c.step === "readback"), [], "no listing, no post read-back");
 });
 
 test("reconcile: ERROR / EXPIRED container -> provably never published; FINISHED -> still uncertain; ambiguous -> unidentified", async () => {
@@ -339,7 +341,8 @@ test("reconcile: ERROR / EXPIRED container -> provably never published; FINISHED
   assert.deepEqual(pick(await run({ status: [status("ERROR")] })), ["failed", "CONTAINER_ERROR"]);
   assert.deepEqual(pick(await run({ status: [status("FINISHED")] })), ["uncertain", "PUBLISH_OUTCOME_UNKNOWN"]);
   assert.deepEqual(pick(await run({ status: [new Response("{}", { status: 500 })] })), ["uncertain", "THREADS_UNAVAILABLE"]);
-  assert.deepEqual(pick(await run({ status: [status("PUBLISHED")], list: [ok({ data: [{ id: "1", text: TEXT }, { id: "2", text: TEXT }] })] })), ["published_unidentified", "PUBLISHED_POST_AMBIGUOUS"]);
+  // G4-02 #16: whatever a listing would say, PUBLISHED alone settles as unidentified
+  assert.deepEqual(pick(await run({ status: [status("PUBLISHED")], list: [ok({ data: [{ id: "1", text: TEXT }, { id: "2", text: TEXT }] })] })), ["published_unidentified", "PUBLISHED_POST_NOT_FOUND"]);
   assert.deepEqual(pick(await run({ status: [status("PUBLISHED")], list: [ok({ data: [] })] })), ["published_unidentified", "PUBLISHED_POST_NOT_FOUND"]);
 });
 const pick = (a: ThreadsAttempt) => [a.status, a.errorCode];
@@ -411,7 +414,7 @@ test("an abandoned publish becomes uncertain and is then reconciled read-only fr
   await store.release(CALLER, { attemptId: attempt.attemptId, step: "publish" });
   store.clock += 121_000;
   const resolved = await reconcileThreadsAttempt(d, CALLER, attempt.attemptId);
-  assert.equal(resolved.status, "published");
+  assert.deepEqual([resolved.status, resolved.providerPostId], ["published_unidentified", null]);
   assert.equal(provider.calls.filter((x) => x.step === "publish").length, 0, "reconcile never publishes");
 });
 
@@ -507,4 +510,25 @@ test("G4-02 #14: the send fence reads no clock (its lease is the attempt's recor
   const body = sql.slice(sql.indexOf("as $$", at), sql.indexOf("$$;", at));
   assert.ok(body.includes("and t.status in ('publishing', 'uncertain')) then"), "the lease: publishing or uncertain");
   assert.ok(!/clock_timestamp|now\(|interval|updated_at|_timestamp|epoch/u.test(body), "no clock decides the fence");
+});
+
+// --- G4-02 #16 (H1 #44 P2-2): one permalink policy -- the TypeScript contract and the attempts table's CHECK agree; 002 has none
+test("G4-02 #16: the contract's permalink hosts and the attempts table's CHECK accept and refuse the same URLs; 002 writes no permalink", async () => {
+  const table = await Deno.readTextFile(new URL("../../../candidates/postona_threads_publish/threads_manual_publish_candidate.sql", import.meta.url));
+  const m = /permalink ~ '(\^https:\/\/[^']+)'/u.exec(table);
+  assert.ok(m, "the table's permalink CHECK");
+  const sqlRe = new RegExp(m[1].replace("[^[:space:]]", "[^\\s]"), "u");
+  for (const host of THREADS_PERMALINK_HOSTS) {
+    const url = `https://${host}/@flow_4706/post/C18000000000000136`;
+    assert.deepEqual([isThreadsPermalink(url), sqlRe.test(url)], [true, true], host);
+  }
+  for (const bad of ["https://threads.com.evil.example/@a/post/C1", "https://evil.example/threads.com/@a/post/C1", "https://user@threads.com/@a/post/C1",
+    "http://threads.com/@a/post/C1", "https://xthreads.com/@a/post/C1", "https://threads.com:443/@a/post/C1", "https://m.threads.net/@a/post/C1"]) {
+    assert.deepEqual([isThreadsPermalink(bad), sqlRe.test(bad)], [false, false], bad);
+  }
+  const g002 = await Deno.readTextFile(new URL("../../../candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql", import.meta.url));
+  const at = g002.indexOf("create function postona_threads_binding.settle_attempt_before_rebind(");
+  const settle = g002.slice(at, g002.indexOf("$$;", g002.indexOf("as $$", at)));
+  assert.ok(settle.includes("provider_post_id = null, permalink = null"), "recovery never writes a post id or a permalink");
+  assert.ok(!/threads[.\\[]|https:/u.test(settle), "no URL policy of its own");
 });

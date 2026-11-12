@@ -51,7 +51,6 @@ import {
   checkThreadsText,
   createThreadsTextContainer,
   type FetchLike,
-  listRecentThreadsPosts,
   publishThreadsContainer,
   readThreadsContainerStatus,
   readThreadsPublishedPost,
@@ -311,9 +310,27 @@ export async function resumeThreadsAttempt(deps: ThreadsManualPublishDeps, calle
 }
 
 /**
- * Resolve an uncertain publish read-only: the container's own status decides. PUBLISHED -> find the post
- * (exactly one post with the exact text since the attempt began) or record that it exists unidentified;
- * ERROR / EXPIRED -> provably never published; anything else stays uncertain. Never publishes.
+ * G4-02 #16 (H1 #44 P2-1): what a container's own status proves, and nothing more. PUBLISHED proves a post exists from that
+ * container; it does NOT say which post (the container answer carries no post id, and a listing matched by text, time or
+ * "the only one" can pick another post of the same account -- measured by H1 #44). So an attempt whose publish answer never
+ * arrived is settled `published_unidentified` (PUBLISHED_POST_NOT_FOUND: no post was attributed) and never gets a post id
+ * or a permalink here; a post id is only ever stored from the provider's own publish answer (publish_returned -> confirm).
+ * ERROR / EXPIRED prove it can never be published. Anything else (FINISHED, IN_PROGRESS) proves nothing: null.
+ */
+export function containerStatusEvidence(status: ThreadsContainerStatus):
+  | Readonly<{ to: "published_unidentified"; errorCode: "PUBLISHED_POST_NOT_FOUND" }>
+  | Readonly<{ to: "failed"; errorCode: "CONTAINER_ERROR" | "CONTAINER_EXPIRED" }>
+  | null {
+  if (status === "published") return { to: "published_unidentified", errorCode: "PUBLISHED_POST_NOT_FOUND" };
+  if (status === "error") return { to: "failed", errorCode: "CONTAINER_ERROR" };
+  if (status === "expired") return { to: "failed", errorCode: "CONTAINER_EXPIRED" };
+  return null;
+}
+
+/**
+ * Resolve an uncertain publish read-only: the container's own status decides (containerStatusEvidence). PUBLISHED ->
+ * `published_unidentified` (a post exists; which one is not provable); ERROR / EXPIRED -> provably never published;
+ * anything else stays uncertain. Never publishes, never lists posts to guess an id.
  */
 export async function reconcileThreadsAttempt(deps: ThreadsManualPublishDeps, caller: VerifiedCaller, attemptId: string): Promise<ThreadsAttempt> {
   const attempt = await deps.store.read(caller, attemptId);
@@ -334,24 +351,7 @@ export async function reconcileThreadsAttempt(deps: ThreadsManualPublishDeps, ca
   } catch (error) {
     return await record({ to: "uncertain", errorCode: providerCode(error) });
   }
-  if (status === "error" || status === "expired") return await record({ to: "failed", errorCode: status === "error" ? "CONTAINER_ERROR" : "CONTAINER_EXPIRED" });
-  if (status !== "published") return await record({ to: "uncertain", errorCode: "PUBLISH_OUTCOME_UNKNOWN" });
-  const since = Math.floor(Date.parse(redeemed.attemptCreatedAt) / 1000) - 60;
-  let matches: string[] = [];
-  let permalink: string | null = null;
-  try {
-    const posts = await listRecentThreadsPosts(deps.fetch, redeemed.credential, since);
-    const exact = posts.filter((post) => redeemed.text !== null && post.text === redeemed.text);
-    matches = exact.map((post) => post.mediaId);
-    if (exact.length === 1) {
-      const confirmed = await readThreadsPublishedPost(deps.fetch, redeemed.credential, exact[0].mediaId);
-      permalink = confirmed.permalink;
-    }
-  } catch {
-    matches = [];
-  }
-  if (matches.length === 1 && permalink !== null) return await record({ to: "published", providerPostId: matches[0], permalink });
-  return await record({ to: "published_unidentified", errorCode: matches.length > 1 ? "PUBLISHED_POST_AMBIGUOUS" : "PUBLISHED_POST_NOT_FOUND" });
+  return await record(containerStatusEvidence(status) ?? { to: "uncertain", errorCode: "PUBLISH_OUTCOME_UNKNOWN" });
 }
 
 // --- Internals -------------------------------------------------------------------------------------------
