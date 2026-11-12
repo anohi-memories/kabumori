@@ -352,7 +352,7 @@ const longDraft =
   detail +
   "日付と通知を一緒に見るほうが予定を追いやすいです。日付と通知を一緒に見るほうが予定を追いやすいです。以上が今回の話です。\n#個人開発 @sample_dev https://example.test/notes";
 const longEdited =
-  "私は、2026年11月12日にPOSTONAの通知画面を2台で確認しました。\nただ、片方では予定の見出しが残りました。画面の表示は「確認中」です。" +
+  "私は2026年11月12日にPOSTONAの通知画面を2台で確認しました。\nただ、片方では予定の見出しが残りました。画面の表示は「確認中」です。" +
   detail +
   "日付と通知を一緒に見るほうが予定を追いやすいです。\n#個人開発 @sample_dev https://example.test/notes";
 
@@ -365,7 +365,7 @@ const structuralExamples: readonly [
 ][] = [
   ["regular", 0, longDraft, longEdited, [
     ["結論から言うと、", ""],
-    ["私自身は、", "私は、"],
+    ["私自身は、", "私は"],
     ["しましたが、", "しました。\nただ、"],
     ["日付と通知を一緒に見るほうが予定を追いやすいです。", ""],
     ["以上が今回の話です。", ""],
@@ -374,15 +374,15 @@ const structuralExamples: readonly [
     "regular",
     0,
     "私自身は、通知の順番を確認しました。以上が今回の話です。",
-    "私は、通知の順番を確認しました。",
-    [["私自身は、", "私は、"], ["以上が今回の話です。", ""]],
+    "私は通知の順番を確認しました。",
+    [["私自身は、", "私は"], ["以上が今回の話です。", ""]],
   ],
   [
     "experience",
     2,
     "私自身の体験としては、朝は通知から確認します。通知を見落としたことがありますか？",
-    "私の場合は、朝は通知から確認します。\n通知を見落としたことありますか？",
-    [["私自身の体験としては、", "私の場合は、"], ["", "\n"], [
+    "私の場合は朝は通知から確認します。\n通知を見落としたことありますか？",
+    [["私自身の体験としては、", "私の場合は"], ["", "\n"], [
       "ことがありますか？",
       "ことありますか？",
     ]],
@@ -401,8 +401,8 @@ const structuralExamples: readonly [
     "opinion",
     5,
     "私自身は、通知時刻の表示を確認しました。予定にも時刻を出す案、どう思いますか？",
-    "私は、通知時刻の表示を確認しました。予定にも時刻を出す案、どう思います？",
-    [["私自身は、", "私は、"], ["どう思いますか？", "どう思います？"]],
+    "私は通知時刻の表示を確認しました。予定にも時刻を出す案、どう思います？",
+    [["私自身は、", "私は"], ["どう思いますか？", "どう思います？"]],
   ],
   [
     "opinion",
@@ -471,6 +471,225 @@ for (
     },
   );
 }
+
+// Synthetic fixtures. Statements about the author in this table are not real experiences.
+const preservedLines =
+  "\n#個人開発 @sample_dev https://example.test/記録。笑、全文\n「私、先に、確認しました。笑」\n" +
+  JSON.stringify({ text: '私、先に、確認しました。笑 "メモ["', count: 2 });
+const chatExamples: typeof structuralExamples = [
+  [
+    "regular",
+    0,
+    "まぁエラーはしょっちゅう出るし、AIが意味わからんことする時もあるけど。笑",
+    "まぁエラーはしょっちゅう出るし、AIが意味わからんことする時もあるけど😂",
+    [["。笑", "😂"]],
+  ],
+  [
+    "regular",
+    0,
+    "私、プログラミングなんてほとんどわからないんですよ。",
+    "プログラミングなんてほとんどわからないんですよ。",
+    [["私、", ""]],
+  ],
+  [
+    "regular",
+    0,
+    detail + "田中さんと2026年11月12日の記録を2台で確認できてほっとしました。" +
+    preservedLines,
+    detail + "田中さんと2026年11月12日の記録を2台で確認できてほっとしました😊" +
+    preservedLines,
+    [["ほっとしました。", "ほっとしました😊"]],
+  ],
+  [
+    "experience",
+    2,
+    "私、設定の説明がわからないんです。ちなみに、通知は多いし、迷ったことがありますか？",
+    "設定の説明がわからないんです。ちなみに通知は多いし、迷ったことありますか？",
+    [["私、", ""], ["、", ""], ["ことがありますか？", "ことありますか？"]],
+  ],
+  [
+    "experience",
+    2,
+    "朝は、手順どおりに確認したつもりでしたね。　笑\n同じ経験ありますか？",
+    "朝は、手順どおりに確認したつもりでしたね笑\n同じ経験ありますか？",
+    [["。　笑", "笑"]],
+  ],
+  [
+    "opinion",
+    5,
+    "たとえば、予定の横に、通知時刻を出す案はどう思いますか？",
+    "たとえば予定の横に、通知時刻を出す案はどう思います？",
+    [["、", ""], ["どう思いますか？", "どう思います？"]],
+  ],
+  [
+    "opinion",
+    5,
+    "私は、並び順が見えると、ほっとしました。今の並びはどう思いますか？",
+    "私は並び順が見えると、ほっとしました。今の並びはどう思います？",
+    [["私は、", "私は"], ["どう思いますか？", "どう思います？"]],
+  ],
+  [
+    "choices",
+    8,
+    "私は、最初の画面で迷うことがあるし、朝に開くならどれを選びますか？",
+    "私は最初の画面で迷うことがあるし、朝に開くならどれを選びます？",
+    [["私は、", "私は"], ["どれを選びますか？", "どれを選びます？"]],
+  ],
+  [
+    "choices",
+    8,
+    "まず、朝に画面を開くとき、どれを選びますか？",
+    "まず朝に画面を開くとき、どれを選びます？",
+    [["、", ""], ["どれを選びますか？", "どれを選びます？"]],
+  ],
+];
+
+for (
+  const [number, [mode, rotation, original, edited, selections]] of chatExamples
+    .entries()
+) {
+  test(
+    "synthetic chat voice " + mode + " " + (number + 1) +
+      " publishes the verified text only",
+    async () => {
+      const pollOptions = mode === "choices" ? options : undefined;
+      const f = fixture((call, index) =>
+        providerResponse(
+          index
+            ? editedReply(call, edited, selections)
+            : pollOptions
+            ? { text: original, poll_options: pollOptions }
+            : { text: original },
+        ), { rotation });
+      const result = await dispatchAiLabScheduledBrandPost(f.args);
+      assert.equal(result.voiceRewriteDecision, "edited");
+      assert.deepEqual(f.payloads, [{ text: edited, pollOptions }]);
+      assert.deepEqual(f.completedFingerprints, [
+        await fingerprintText(edited),
+      ]);
+      assert.deepEqual(f.events, [
+        "claim",
+        "Claude:0",
+        "Claude:1",
+        "start X",
+        "X",
+        "settle",
+        "complete",
+      ]);
+      const { system } = f.recorder.calls[1].body as { system: string };
+      assert.match(system, /友達と話す/u);
+      assert.match(system, /一文に最大1個/u);
+      assert.match(system, /けど😂/u);
+      assert.equal(rewriteInput(f.recorder.calls[1]).original, original);
+    },
+  );
+}
+
+for (const rotation of [0, 2, 5, 8]) {
+  for (
+    const [kind, original] of [
+      [
+        "commas across a line break",
+        "通知を、朝に見て、\n予定は後で見ます。どれを選びますか？",
+      ],
+      [
+        "period before laughter",
+        "確認できました。 \u200B\n（ 笑 ）\nどれを選びますか？",
+      ],
+      [
+        "unnecessary subject comma",
+        "私、設定の説明がわからないんです。どれを選びますか？",
+      ],
+    ] as const
+  ) {
+    test(
+      "keep holds " + kind + " before X in format slot " + rotation,
+      async () => {
+        const f = fixture((_call, index) =>
+          providerResponse(
+            index
+              ? { decision: "keep", text: original, edits: [] }
+              : rotation === 8
+              ? { text: original, poll_options: options }
+              : { text: original },
+          ), { rotation });
+        await assert.rejects(
+          dispatchAiLabScheduledBrandPost(f.args),
+          /AI_LAB_VOICE_STYLE_REJECTED/,
+        );
+        assert.deepEqual(f.events, [
+          "claim",
+          "Claude:0",
+          "Claude:1",
+          "release:PRE_X_CONTENT_REJECTED",
+        ]);
+        assert.deepEqual(f.payloads, []);
+      },
+    );
+  }
+}
+
+test("valid edit IDs cannot publish when another body sentence still breaks the style rule", async () => {
+  const original = "通知を、朝に見て、予定は後で見ます。確認できました。笑";
+  const edited = "通知を、朝に見て、予定は後で見ます。確認できました笑";
+  const f = fixture((call, index) =>
+    providerResponse(
+      index ? editedReply(call, edited, [["。笑", "笑"]]) : { text: original },
+    )
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  );
+  assert.deepEqual(f.payloads, []);
+});
+
+test("an ambiguous protected boundary and alternate first-person forms hold before X", async () => {
+  for (
+    const original of [
+      "メモに「確認できました。笑",
+      "僕は予定から確認しました。",
+    ]
+  ) {
+    const f = fixture((_call, index) =>
+      providerResponse(
+        index
+          ? { decision: "keep", text: original, edits: [] }
+          : { text: original },
+      )
+    );
+    await assert.rejects(
+      dispatchAiLabScheduledBrandPost(f.args),
+      /AI_LAB_VOICE_STYLE_REJECTED/,
+    );
+    assert.deepEqual(f.payloads, []);
+  }
+});
+
+test("voice edits allow at most one new emoji and cannot add a first-person claim", async () => {
+  const original = "確認しましたけど。笑\nほっとしました。";
+  for (
+    const [edited, selections, expected] of [
+      ["確認しましたけど😂\nほっとしました😊", [["。笑", "😂"], [
+        "ほっとしました。",
+        "ほっとしました😊",
+      ]], /AI_LAB_VOICE_STYLE_REJECTED/],
+      [
+        "私は確認しましたけど笑\nほっとしました。",
+        [["。笑", "笑"]],
+        /AI_LAB_VOICE_REWRITE_REJECTED/,
+      ],
+    ] as const
+  ) {
+    const f = fixture((call, index) =>
+      providerResponse(
+        index ? editedReply(call, edited, selections) : { text: original },
+      )
+    );
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), expected);
+    assert.deepEqual(f.payloads, []);
+  }
+});
 
 test("flag OFF uses the existing OpenAI path and reads no Anthropic credential", async () => {
   const f = fixture(() => assert.fail("unexpected Claude call"), {
