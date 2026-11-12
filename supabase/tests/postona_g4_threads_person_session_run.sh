@@ -506,7 +506,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     nc_db="$(mvp_world appmut1)"
     for f in "$g5pv" "${stack_before_g4mp[@]}"; do need "$nc_db" "$f"; done
     if flow_run personal "$nc_db"; then fail "the e2e passed without the verdict gate"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "30 31 32 33 34" ] || { echo "$out"; fail "without 001: expected only scenarios 30 31 32 33 34 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "30 31 32 33 34 35" ] || { echo "$out"; fail "without 001: expected only scenarios 30 31 32 33 34 35 to fail"; }
     echo "FAIL_BEFORE without 001: $(grep -E '^# measured 30' <<<"$out" | cut -c1-260)"
     # (b) install / refusals / rollback on copies of a world that has the stack up to the verdict
     base_db="$(mvp_world g4mpbase)"
@@ -585,7 +585,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     ng_db="$(mvp_world appmut3)"
     for f in "$g5pv" "${stack_before_g4mg[@]}"; do need "$ng_db" "$f"; done
     if flow_run personal "$ng_db"; then fail "the e2e passed without the generation gate"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 32 33 34" ] || { echo "$out"; fail "without 002: expected only scenarios 31 32 33 34 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 32 33 34 35" ] || { echo "$out"; fail "without 002: expected only scenarios 31 32 33 34 35 to fail"; }
     echo "FAIL_BEFORE without 002: $(grep -E '^# measured 31' <<<"$out" | cut -c1-900)"
     echo "FAIL_BEFORE without 002: $(grep -E '^# measured 32' <<<"$out" | cut -c1-400)"
     # (b) install / refusals / partial application / rollback on copies of a world with the stack up to 001
@@ -718,7 +718,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     pr650_db="$(mvp_world appsf650)"
     for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr650.sql"; do need "$pr650_db" "$f"; done
     if flow_run personal "$pr650_db"; then fail "the e2e passed with PR #650's 002 (no send fence)"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "33 34" ] || { echo "$out"; fail "with PR #650's 002: expected only scenarios 33 34 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "33 34 35" ] || { echo "$out"; fail "with PR #650's 002: expected only scenarios 33 34 35 to fail"; }
     echo "FAIL_BEFORE with PR #650's 002: $(grep -E '^# measured 33' <<<"$out" | cut -c1-1200)"
     # (e) mutants of the fence (its md5 pin follows the mutant body so that it installs); each must fail exactly its scenarios
     make_fence_mutant() { # name sed-expression [extra sed-expression]
@@ -747,7 +747,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     pr651_db="$(mvp_world appsf651)"
     for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr651.sql"; do need "$pr651_db" "$f"; done
     if flow_run personal "$pr651_db"; then fail "the e2e passed with #13's 002 (a lease on the database's clock)"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "33 34" ] || { echo "$out"; fail "with #13's 002: expected only scenarios 33 34 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "33 34 35" ] || { echo "$out"; fail "with #13's 002: expected only scenarios 33 34 35 to fail"; }
     echo "FAIL_BEFORE with #13's 002: $(grep -E '^# measured 33' <<<"$out" | cut -c1-1400)"
     echo "FAIL_BEFORE with #13's 002: $(grep -E '^# measured 31' <<<"$out" | cut -c1-600)"
     # (g) H1 #42 P3: 002's rollback refuses a fence / trigger / table that is not as 002 left it, before ANY change
@@ -843,7 +843,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     pr652_db="$(mvp_world appsf652)"
     for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr652.sql"; do need "$pr652_db" "$f"; done
     if flow_run personal "$pr652_db"; then fail "the e2e passed with #14's 002 (no recovery)"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34" ] || { echo "$out"; fail "with #14's 002: expected only scenarios 31 33 34 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34 35" ] || { echo "$out"; fail "with #14's 002: expected only scenarios 31 33 34 35 to fail"; }
     echo "FAIL_BEFORE with #14's 002: $(grep -E '^# measured 34' <<<"$out" | cut -c1-900)"
     echo "== G4-02 #16 H1 #44: no post id from a listing, no URL policy in 002, recovery only under this connect's claimed state"
     # (k) fail-before: #15's 002 exactly as H1 #44 reviewed it (PR #654 @ 1463cccb: the old recovery signatures) -- the bridge
@@ -853,7 +853,7 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     pr654_db="$(mvp_world appsf654)"
     for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr654.sql"; do need "$pr654_db" "$f"; done
     if flow_run personal "$pr654_db"; then fail "the e2e passed with #15's 002"; fi
-    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34" ] || { echo "$out"; fail "with #15's 002: expected only scenarios 31 33 34 to fail"; }
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34 35" ] || { echo "$out"; fail "with #15's 002: expected only scenarios 31 33 34 35 to fail"; }
     echo "FAIL_BEFORE with #15's 002: $(grep -E '^# measured 34' <<<"$out" | cut -c1-700)"
     # (j) mutants of the recovery SQL (the install's signature pin follows the mutant so that it installs): each fails 34 only
     make_recovery_mutant() { # name sed-expression
