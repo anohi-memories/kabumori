@@ -1,0 +1,14 @@
+# POSTONA push devices (G5 source candidate, G5-02 task 9)
+
+**Not applied anywhere. Production NO_GO.** New SECURITY DEFINER RPCs over a new owner-only table holding push tokens (secrets): an independent H review, the owner's approval and a read-only check of the managed project come first. Nothing here sends a push or talks to APNs / FCM / Expo.
+
+| file | what |
+| --- | --- |
+| `001_push_devices.sql` | As the lifecycle owner (never a superuser): `private.postona_push_devices` (owner-only, row security on, no policy), three RPCs for `authenticated` (register / unregister / list; the only definers), and the owner-only worker side (delivery targets, provider-receipt invalidation, purge). Refuses on a world it is not for, changing nothing; a re-run changes nothing. |
+| `001_push_devices_stop.sql` | No new registration (EXECUTE taken away), every active device revoked `stopped` with its token erased: the worker side answers no target. Keeps the table; the install starts it again. |
+| `001_push_devices_rollback.sql` | Drops everything. Refuses while a device is active (stop first) or while another function names the worker side. |
+| `client.ts` | The app's contract (G1): `syncPushDevice` / `registerPushDevice` / `unregisterPushDevice` / `listPushDevices`, and the app lifecycle in its header. |
+
+- The contract (binding, the G1 app lifecycle, the G3 delivery read, what is not covered, the remaining push worker design): `docs/common-account/g5-02-09-push-device-contract.md`.
+- The proof: `supabase/tests/postona_push_devices_local_test.ts`, run by `supabase/tests/postona_personal_workspace_local_run.sh` (local Supabase stack; fake tokens only; every container log scanned for them afterwards).
+- Not the KabuMori app's `public.device_push_tokens`: that table is left as it is (another app's; see the contract, section 1).
