@@ -32,9 +32,9 @@ begin
           where t.tgrelid = 'postona_threads_binding.bindings'::regclass and t.tgname = 'threads_manual_publish_send_fence'
             and t.tgfoid = pg_catalog.to_regprocedure('postona_threads_binding.manual_publish_send_fence()')) <> 1
      -- G4-02 #15: the recovery functions
-     or pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(uuid,text)') is null
-     or pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(uuid,text)') is null
-     or pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)') is null then
+     or pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(text,uuid,text)') is null
+     or pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(text,uuid,text)') is null
+     or pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(text,uuid,text,uuid,text,text,text)') is null then
     raise exception 'G4MG_ROLLBACK_NOT_APPLIED';
   end if;
   if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user)
@@ -90,14 +90,14 @@ begin
          and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')) <> 3
      or (select pg_catalog.string_agg(p.oid::regprocedure::text || '=' || pg_catalog.md5(p.prosrc), ' ' order by p.proname)
            from pg_catalog.pg_proc p
-          where p.oid in (pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(uuid,text)'),
-                          pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(uuid,text)'),
-                          pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)'))
+          where p.oid in (pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_account(text,uuid,text)'),
+                          pg_catalog.to_regprocedure('postona_threads_binding.reconnect_recovery_candidates(text,uuid,text)'),
+                          pg_catalog.to_regprocedure('postona_threads_binding.settle_attempt_before_rebind(text,uuid,text,uuid,text,text,text)'))
             and p.prosecdef and p.proowner = v_me and p.provolatile = 'v'
             and p.prolang = (select l.oid from pg_catalog.pg_language l where l.lanname = 'plpgsql')
             and p.proconfig is not distinct from array['search_path=""']
             and p.proacl is not null and not exists (select 1 from pg_catalog.aclexplode(p.proacl) e where e.grantee <> v_me))
-        is distinct from 'postona_threads_binding.reconnect_recovery_account(uuid,text)=b94a07ac0411d2a8749069c242952c31 postona_threads_binding.reconnect_recovery_candidates(uuid,text)=0a884c8b3e81fc28ba342255bf4731c3 postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)=28d8ca0670a37b9b387a7b667e2daa6e' then
+        is distinct from 'postona_threads_binding.reconnect_recovery_account(text,uuid,text)=162ff57cf514b5be5d722baa63aa9206 postona_threads_binding.reconnect_recovery_candidates(text,uuid,text)=ec05fa2b45bdddd77ec8d9da6dc78ad8 postona_threads_binding.settle_attempt_before_rebind(text,uuid,text,uuid,text,text,text)=dba022f199158a4142ac51dbc89b6978' then
     raise exception 'G4MG_ROLLBACK_RECOVERY_DRIFT';
   end if;
   perform pg_catalog.set_config('g4mg.before', (
@@ -279,9 +279,9 @@ end;
 $$;
 
 drop trigger threads_manual_publish_send_fence on postona_threads_binding.bindings;
-drop function postona_threads_binding.settle_attempt_before_rebind(uuid, text, uuid, text, text, text, text, text);
-drop function postona_threads_binding.reconnect_recovery_candidates(uuid, text);
-drop function postona_threads_binding.reconnect_recovery_account(uuid, text);
+drop function postona_threads_binding.settle_attempt_before_rebind(text, uuid, text, uuid, text, text, text);
+drop function postona_threads_binding.reconnect_recovery_candidates(text, uuid, text);
+drop function postona_threads_binding.reconnect_recovery_account(text, uuid, text);
 drop function postona_threads_binding.manual_publish_send_fence();
 drop table public.threads_manual_publish_attempt_generations;
 

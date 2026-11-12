@@ -1,4 +1,11 @@
-import { assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1";
+// G4-02 #16: node's assert (no inline jsr: import; the wiring deno.json is H5's), with @std/assert's semantics kept:
+// the error is an instance of the class and its message contains the text
+import assert from "node:assert/strict";
+type ErrorClass = new (...args: never[]) => Error;
+const assertEquals = (actual: unknown, expected: unknown) => assert.deepStrictEqual(actual, expected);
+const matches = (cls: ErrorClass, text?: string) => (e: unknown) => e instanceof cls && (text === undefined || e.message.includes(text));
+const assertThrows = (fn: () => unknown, cls: ErrorClass, text?: string) => assert.throws(fn, matches(cls, text));
+const assertRejects = (fn: () => Promise<unknown>, cls: ErrorClass, text?: string) => assert.rejects(fn, matches(cls, text));
 import { createG4ThreadsOwnerBridge, verifiedActorClaims } from "./owner_bridge.ts";
 import { createActorVerifier, RuntimeRefusal } from "../postona_threads_auth_runtime/verified_actor.ts";
 

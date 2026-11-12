@@ -765,8 +765,8 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
           where n.nspname = 'postona_threads_binding' and p.proname in ('reconnect_recovery_account', 'reconnect_recovery_candidates', 'settle_attempt_before_rebind')))"; }
     fence_fn="postona_threads_binding.manual_publish_send_fence()"
-    settle_fn="postona_threads_binding.settle_attempt_before_rebind(uuid,text,uuid,text,text,text,text,text)"
-    account_fn="postona_threads_binding.reconnect_recovery_account(uuid,text)"
+    settle_fn="postona_threads_binding.settle_attempt_before_rebind(text,uuid,text,uuid,text,text,text)"
+    account_fn="postona_threads_binding.reconnect_recovery_account(text,uuid,text)"
     for drift in "FENCE:alter table postona_threads_binding.bindings disable trigger threads_manual_publish_send_fence" \
                  "FENCE:alter table postona_threads_binding.bindings enable replica trigger threads_manual_publish_send_fence" \
                  "FENCE:alter table postona_threads_binding.bindings enable always trigger threads_manual_publish_send_fence" \
@@ -845,16 +845,29 @@ if [ -n "${G4T_APP_FLOW:-}" ]; then
     if flow_run personal "$pr652_db"; then fail "the e2e passed with #14's 002 (no recovery)"; fi
     [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34" ] || { echo "$out"; fail "with #14's 002: expected only scenarios 31 33 34 to fail"; }
     echo "FAIL_BEFORE with #14's 002: $(grep -E '^# measured 34' <<<"$out" | cut -c1-900)"
+    echo "== G4-02 #16 H1 #44: no post id from a listing, no URL policy in 002, recovery only under this connect's claimed state"
+    # (k) fail-before: #15's 002 exactly as H1 #44 reviewed it (PR #654 @ 1463cccb: the old recovery signatures) -- the bridge
+    #     finds no recovery SQL it can call, so the expired-credential deadlock and the unknown-outcome reconnects return
+    git -C "$repo" show 1463cccbbc8a263fcd7bae6b026e353d7e48c389:supabase/candidates/postona_g4_threads_manual_publish_verdict/002_manual_publish_attempt_credential_generation.sql > "$tree/g4mg_pr654.sql"
+    grep -q "reconnect_recovery_candidates(p_oauth_state_id uuid, p_platform_user_id text)" "$tree/g4mg_pr654.sql" || fail "#15's 002 not extracted"
+    pr654_db="$(mvp_world appsf654)"
+    for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4mg_pr654.sql"; do need "$pr654_db" "$f"; done
+    if flow_run personal "$pr654_db"; then fail "the e2e passed with #15's 002"; fi
+    [ "$(grep -E '^not ok' <<<"$out" | cut -d' ' -f3 | paste -sd ' ' -)" = "31 33 34" ] || { echo "$out"; fail "with #15's 002: expected only scenarios 31 33 34 to fail"; }
+    echo "FAIL_BEFORE with #15's 002: $(grep -E '^# measured 34' <<<"$out" | cut -c1-700)"
     # (j) mutants of the recovery SQL (the install's signature pin follows the mutant so that it installs): each fails 34 only
     make_recovery_mutant() { # name sed-expression
       sed -e "s/^        is distinct from 'postona_threads_binding.reconnect_recovery_account.* then\$/        is null then/" -e "$2" "$g4mg" > "$tree/g4rc_mutant_$1.sql"
       [ "$(grep -c MUTANT "$tree/g4rc_mutant_$1.sql")" = 1 ] && [ "$(grep -c '^        is null then$' "$tree/g4rc_mutant_$1.sql")" = 1 ] || fail "recovery mutant $1 not made"
     }
-    make_recovery_mutant no_state_owner 's/^   where s.id = p_oauth_state_id and s.initiated_by_user_id = v_user and s.expires_at > pg_catalog.clock_timestamp();$/   where s.id = p_oauth_state_id and s.expires_at > pg_catalog.clock_timestamp(); -- MUTANT/'
+    make_recovery_mutant no_state_owner 's/^   where s.id = p_oauth_state_id and s.initiated_by_user_id = v_user and s.consumed_at is null$/   where s.id = p_oauth_state_id and s.consumed_at is null -- MUTANT/'
+    make_recovery_mutant no_consumed_check 's/^   where s.id = p_oauth_state_id and s.initiated_by_user_id = v_user and s.consumed_at is null$/   where s.id = p_oauth_state_id and s.initiated_by_user_id = v_user -- MUTANT/'
+    make_recovery_mutant no_claimed_check "s/^                    and h.session_id = v_session and h.status = 'claimed' and h.expires_at > pg_catalog.clock_timestamp()\$/                    and true -- MUTANT/"
     make_recovery_mutant no_container_cas 's/^     or v_row.container_id is distinct from p_container_id$/     -- MUTANT/'
     make_recovery_mutant no_generation_pin "s/^                     where g.attempt_id = v_row.id and g.credential_generation = 'g4t1:' || b.oauth_state_id::text) then\$/                     where g.attempt_id = v_row.id) then -- MUTANT/"
-    make_recovery_mutant not_final_allowed "s/^           and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED'))) then\$/           and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED', 'STEP_INTERRUPTED', 'PUBLISH_OUTCOME_UNKNOWN'))) then -- MUTANT/"
-    for name in no_state_owner no_container_cas no_generation_pin not_final_allowed; do
+    make_recovery_mutant not_final_allowed "s/^       or (p_to_status = 'failed' and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED'))) then\$/       or (p_to_status = 'failed' and p_error_code in ('CONTAINER_ERROR', 'CONTAINER_EXPIRED', 'STEP_INTERRUPTED', 'PUBLISH_OUTCOME_UNKNOWN'))) then -- MUTANT/"
+    make_recovery_mutant published_allowed "s/^  if not ((p_to_status = 'published_unidentified' and p_error_code = 'PUBLISHED_POST_NOT_FOUND')\$/  if not ((p_to_status in ('published_unidentified', 'published') and p_error_code is not distinct from case when p_to_status = 'published' then null else 'PUBLISHED_POST_NOT_FOUND' end) -- MUTANT/"
+    for name in no_state_owner no_consumed_check no_claimed_check no_container_cas no_generation_pin not_final_allowed published_allowed; do
       mut_db="$(mvp_world "appsf$RANDOM")"
       for f in "$g5pv" "${stack_before_g4mg[@]}" "$tree/g4rc_mutant_$name.sql"; do need "$mut_db" "$f"; done
       if flow_run personal "$mut_db"; then fail "the e2e passed with recovery mutant $name"; fi
