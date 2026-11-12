@@ -1,5 +1,6 @@
 -- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16; G3-02 #17: H1 #37 P2-1 / P2-2 fixed; G3-02 #18: H1 #38 P2 race fixed; G3-02 #19:
--- the derived sync skips states already written): post approval + the person's notification events. NOT applied anywhere.
+-- the derived sync skips states already written; G3-02 #20: markRead needs the service, the worker's result is enqueued in its own
+-- transaction): post approval + the person's notification events. NOT applied anywhere.
 -- Applied last, after 001-006, 008, 010, 012, 014, 015 and 017; rolled back FIRST with 018_..._rollback.sql.
 --
 -- A post candidate is NOT a reservation. The person submits it (pending_approval), may revise it, then approves or rejects it. Only an
@@ -204,7 +205,7 @@ begin
     select c.id as candidate_id, c.brand_id, r.id as reservation_id, r.revision, r.status, r.scheduled_at
     from postona_x_resv.approval_candidates c
     join postona_x_resv.reservations r on r.id = c.reservation_id and r.user_id = c.user_id
-    where c.user_id = p_user_id and c.state = 'approved' and (r.revision > 1 or r.status <> 'planned')
+    where c.user_id = p_user_id and c.state = 'approved' and (r.revision > 1 or r.status <> 'planned') and r.status <> 'claimed'
       and postona_x_resv.approval_workspace_live(p_user_id, c.brand_id)
       -- G3-02 #19: only states not yet written, so a list locks (notify) and inserts only for new events, not for every past one
       and not exists (select 1 from postona_x_resv.notifications n
@@ -420,8 +421,13 @@ language plpgsql volatile security definer set search_path = '' as $$
 -- G3_APPROVALS (G3-02 #16)
 declare v_user uuid := postona_x_resv.caller(); v postona_x_resv.notifications%rowtype;
 begin
+  -- G3-02 #20 (G2 #11): marking read is a write: the X service must be active (the same G5 writer gate as every write, taken first, in
+  -- G5's lock order; a service end committing meanwhile is waited for and then refuses). Reading (list / get) stays allowed.
+  if postona_x_resv.g5_x_autopost_allowed(v_user) is not true then
+    raise exception 'POSTONA_RESV_SERVICE_NOT_ACTIVE' using errcode = 'P0001';
+  end if;
   select * into v from postona_x_resv.notifications n where n.id = p_notification_id for update;
-  if not found or v.user_id is distinct from v_user or not postona_x_resv.approval_owned(v_user, v.brand_id) then
+  if not found or v.user_id is distinct from v_user or not postona_x_resv.approval_workspace_live(v_user, v.brand_id) then
     raise exception 'POSTONA_RESV_NOT_FOUND' using errcode = 'P0001';
   end if;
   update postona_x_resv.notifications n set read_at = coalesce(n.read_at, pg_catalog.now()) where n.id = v.id;
@@ -429,7 +435,38 @@ begin
                from postona_x_resv.notifications n where n.id = v.id;
 end $$;
 
+/**
+ * G3-02 #20: an approved candidate's reservation changed (the worker's finish, a sweep, the person's reschedule / reconfirm / cancel):
+ * reservation_changed is enqueued in THAT transaction (notification + outbox), not only on the person's next list. The same event key as
+ * the sync, so the two never write it twice. 'claimed' (a send in progress) is not an event. notify()'s own rules apply (the workspace
+ * still the person's own personal one, its row locks). It never fails the change: any error (a lock timeout, an exception) skips the
+ * event, and the next list writes it. Internal: not a definer, granted to nobody.
+ */
+create function postona_x_resv.reservation_changed_notify() returns trigger
+language plpgsql volatile set search_path = '' as $$
+-- G3_APPROVALS (G3-02 #20)
+declare v record;
+begin
+  if new.status = 'claimed' or (new.status = 'planned' and new.revision = 1) then
+    return null;
+  end if;
+  for v in select c.id, c.brand_id from postona_x_resv.approval_candidates c
+           where c.reservation_id = new.id and c.user_id = new.user_id and c.state = 'approved' loop
+    begin
+      perform postona_x_resv.notify(new.user_id, v.brand_id, 'reservation:' || new.id || ':r' || new.revision || ':' || new.status,
+                                    'reservation_changed', v.id, new.id, new.revision, new.status, new.scheduled_at);
+    exception when others then
+      null;   -- the change itself must never fail on its notification; the next list writes it
+    end;
+  end loop;
+  return null;
+end $$;
+create trigger reservations_changed_notify after update of status, revision on postona_x_resv.reservations
+  for each row when (old.status is distinct from new.status or old.revision is distinct from new.revision)
+  execute function postona_x_resv.reservation_changed_notify();
+
 revoke all on function
+  postona_x_resv.reservation_changed_notify(),
   postona_x_resv.approval_generation_active(uuid, text, bigint),
   postona_x_resv.approval_workspace_live(uuid, text),
   postona_x_resv.approval_credential_generation(text),
@@ -467,7 +504,7 @@ begin
    where n.nspname = 'postona_x_resv' and pg_catalog.has_function_privilege('postona_resv_api', p.oid, 'EXECUTE')
      and p.proname in ('submit_approval', 'revise_approval', 'approve_candidate', 'reject_candidate', 'list_approvals', 'get_approval',
                        'list_notifications', 'mark_notification_read', 'approval_generation_active', 'approval_workspace_live', 'approval_credential_generation', 'notify', 'sync_reservation_notifications',
-                       'approval_owned', 'approval_check_input', 'lock_own_candidate', 'approval_row');
+                       'approval_owned', 'approval_check_input', 'lock_own_candidate', 'approval_row', 'reservation_changed_notify');
   if v_api is distinct from 'postona_x_resv.approve_candidate(uuid,integer,text),postona_x_resv.get_approval(uuid),postona_x_resv.list_approvals(text),postona_x_resv.list_notifications(integer),postona_x_resv.mark_notification_read(uuid),postona_x_resv.reject_candidate(uuid,integer),postona_x_resv.revise_approval(uuid,integer,text,timestamp with time zone),postona_x_resv.submit_approval(text,uuid,text,timestamp with time zone)' then
     raise exception 'G3_APPROVALS_POSTCONDITION: the API role reaches %', v_api;
   end if;
@@ -477,7 +514,7 @@ begin
    where n.nspname = 'postona_x_resv' and pg_catalog.has_function_privilege(x.rolname, p.oid, 'EXECUTE')
      and p.proname in ('submit_approval', 'revise_approval', 'approve_candidate', 'reject_candidate', 'list_approvals', 'get_approval',
                        'list_notifications', 'mark_notification_read', 'approval_generation_active', 'approval_workspace_live', 'approval_credential_generation', 'notify', 'sync_reservation_notifications',
-                       'approval_owned', 'approval_check_input', 'lock_own_candidate', 'approval_row');
+                       'approval_owned', 'approval_check_input', 'lock_own_candidate', 'approval_row', 'reservation_changed_notify');
   if v_other <> 0 then raise exception 'G3_APPROVALS_POSTCONDITION: another role reaches a new function'; end if;
   if exists (select 1 from pg_catalog.pg_class c where c.oid in ('postona_x_resv.approval_candidates'::pg_catalog.regclass,
                'postona_x_resv.notifications'::pg_catalog.regclass, 'postona_x_resv.push_outbox'::pg_catalog.regclass)

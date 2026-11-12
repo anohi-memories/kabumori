@@ -5,6 +5,13 @@
 set timezone = 'UTC';
 delete from g48.results;
 create function g48.ap(p int, p_sql text) returns text language sql as $$ select g48.as_role('postona_resv_api', p, p_sql) $$;
+-- G3-02 #20: SYNTHETIC reservation changes that test the list-time path switch 018's change trigger off around themselves (when it exists)
+create function g48.notify_trigger(p_on boolean) returns void language plpgsql as $$
+begin
+  if exists (select 1 from pg_trigger where tgname = 'reservations_changed_notify') then
+    execute format('alter table postona_x_resv.reservations %s trigger reservations_changed_notify', case when p_on then 'enable' else 'disable' end);
+  end if;
+end $$;
 create function g48.ap_submit(p int, p_name text, p_hours int, p_body text default null, p_client uuid default null) returns text language plpgsql as $$
 declare v text;
 begin
@@ -175,7 +182,9 @@ select g48.check_('AP17 one reservation', '1', g48.resv_count(4843));
 create function g48.note_rows(p int) returns text language sql stable as $$
   select (select count(*) from postona_x_resv.notifications where user_id = g48.u(p))::text || '/' || (select count(*) from postona_x_resv.push_outbox where user_id = g48.u(p))::text $$;
 begin;
+select g48.notify_trigger(false);
 update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.notify_trigger(true);
 select g48.note_rows(4843) as before18 \gset
 delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843);
 select g48.ap_notes(4843) as l1, g48.ap_notes(4843) as l2 \gset
@@ -184,7 +193,9 @@ rollback;
 select g48.check_('AP18 former owner: list answers nothing', '-|-', :'l1' || '|' || :'l2');
 select g48.check_('AP18 former owner: 0 writes', :'before18', :'after18');
 begin;
+select g48.notify_trigger(false);
 update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.notify_trigger(true);
 select g48.note_rows(4843) as before18b \gset
 select g48.ap_notes(4843) as m1 \gset
 select g48.ap_notes(4843) as m2 \gset
@@ -208,7 +219,9 @@ select g48.note_rows(4843) as a20 \gset
 rollback;
 select g48.check_('AP20 notify for a former owner', :'b20', :'a20');
 begin;
+select g48.notify_trigger(false);
 update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.notify_trigger(true);
 insert into public.brand_memberships (brand_id, user_id, role) values (g48.ws(4842), g48.u(4843), 'owner');
 select private.postona_personal_workspace_eligibility(g48.u(4843)) as elig20, g48.note_rows(4843) as b20b \gset
 select g48.ap_notes(4843) as n20 \gset
@@ -216,6 +229,69 @@ select g48.note_rows(4843) as a20b \gset
 rollback;
 select g48.check_('AP20 G5 eligibility not own', 'not own', case when :'elig20' = 'own' then 'own' else 'not own' end);
 select g48.check_('AP20 no derived event', :'b20b', :'a20b');
+
+-- AP21 (G3-02 #20, G2 #11) marking read is a write: refused after a service end (SYNTHETIC end), read_at unchanged; reading goes on;
+-- after the restart it works again (all rolled back)
+select n.id as nid21 from postona_x_resv.notifications n where n.user_id = g48.u(4843) and n.read_at is null order by n.created_at limit 1 \gset
+begin;
+select g48.cg_end(4843);
+select g48.ap(4843, format('select kind from postona_x_resv.mark_notification_read(%L::uuid)', :'nid21')) as m21,
+       g48.ap(4843, 'select count(*)::text from postona_x_resv.list_notifications(100)') as l21,
+       g48.ap(4843, format('select count(*)::text from postona_x_resv.list_approvals(%L)', g48.xacct(4843))) as a21 \gset
+select coalesce(read_at::text, 'unread') as r21 from postona_x_resv.notifications where id = :'nid21' \gset
+select g48.cg_restart(4843) as restart21 \gset
+select g48.nobody();
+select g48.ap(4843, format('select case when read_at is null then ''unread'' else ''read'' end from postona_x_resv.mark_notification_read(%L::uuid)', :'nid21')) as m21b \gset
+rollback;
+select g48.check_('AP21 markRead after the end', 'ERR:POSTONA_RESV_SERVICE_NOT_ACTIVE', :'m21');
+select g48.check_('AP21 read_at unchanged', 'unread', :'r21');
+select g48.check_('AP21 notifications still read', 'ok', case when :'l21' ~ '^[0-9]+$' and :'l21'::int > 0 then 'ok' else :'l21' end);
+select g48.check_('AP21 candidates still read', 'ok', case when :'a21' ~ '^[0-9]+$' then 'ok' else :'a21' end);
+select g48.check_('AP21 restarted', 'active|read', :'restart21' || '|' || :'m21b');
+-- AP22 (G3-02 #20) the change trigger: an approved candidate's reservation change enqueues reservation_changed + outbox in the change's
+-- own transaction (no list); 'claimed' is not an event; a later list adds nothing (rolled back)
+begin;
+select g48.note_rows(4843) as b22 \gset
+update postona_x_resv.reservations set status = 'claimed', lease_token = gen_random_uuid(), lease_expires_at = now() + interval '5 minutes', claimed_by = 'g3-ap22'
+ where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.note_rows(4843) as c22 \gset
+update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3_AP22_TEST', lease_token = null, lease_expires_at = null, revision = revision + 1
+ where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.note_rows(4843) as f22, (select count(*)::text from postona_x_resv.notifications where candidate_id = g48.id('g2') and kind = 'reservation_changed' and state = 'failed') as ev22 \gset
+select g48.ap_notes(4843);
+select g48.note_rows(4843) as l22 \gset
+rollback;
+select g48.check_('AP22 claimed: no event', :'b22', :'c22');
+select g48.check_('AP22 failed: +1 / +1 at once', (split_part(:'b22', '/', 1)::int + 1)::text || '/' || (split_part(:'b22', '/', 2)::int + 1)::text, :'f22');
+select g48.check_('AP22 one failed event', '1', :'ev22');
+select g48.check_('AP22 a later list adds nothing', :'f22', :'l22');
+-- AP23 the change never fails on its notification: a former owner's reservation change commits and writes nothing (rolled back)
+begin;
+delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843);
+select g48.note_rows(4843) as b23 \gset
+update postona_x_resv.reservations set status = 'cancelled', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.note_rows(4843) as a23, (select status from postona_x_resv.reservations where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'))) as s23 \gset
+rollback;
+select g48.check_('AP23 the change committed', 'cancelled', :'s23');
+select g48.check_('AP23 nothing written for a former owner', :'b23', :'a23');
+
+-- AP24 (G3-02 #20) a notification that cannot be written never fails the reservation change (notify() missing, SYNTHETIC, rolled back)
+begin;
+alter function postona_x_resv.notify(uuid, text, text, text, uuid, uuid, integer, text, timestamptz) rename to notify_g3ap24;
+select g48.try('update postona_x_resv.reservations set status = ''cancelled'', revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id(''g2'')) returning status') as u24 \gset
+rollback;
+select g48.check_('AP24 the change commits without its notification', 'cancelled', :'u24');
+-- AP25 markRead while the workspace is no longer the person's own personal one (they own a second workspace, SYNTHETIC): refused,
+-- read_at unchanged (rolled back)
+select n.id as nid25 from postona_x_resv.notifications n where n.user_id = g48.u(4843) and n.read_at is null order by n.created_at limit 1 \gset
+begin;
+insert into public.brand_memberships (brand_id, user_id, role) values (g48.ws(4842), g48.u(4843), 'owner');
+select g48.ap(4843, format('select kind from postona_x_resv.mark_notification_read(%L::uuid)', :'nid25')) as m25 \gset
+select coalesce(read_at::text, 'unread') as r25 from postona_x_resv.notifications where id = :'nid25' \gset
+rollback;
+select g48.check_('AP25 refused', 'refused', case when :'m25' ~ '^ERR:POSTONA_RESV_' then 'refused' else :'m25' end);
+select g48.check_('AP25 read_at unchanged', 'unread', :'r25');
+\echo AP25_ANSWER :m25
 
 select n, case_id, case when expected = actual then 'ok' else 'FAIL expected ' || coalesce(expected, '<null>') || ' got ' || coalesce(actual, '<null>') end from g48.results order by n;
 do $$ begin

@@ -80,11 +80,11 @@ There is no post text, token or account handle in a notification.
 | `approval_requested` | submit, and each revise (`subjectRevision`) | in that transaction |
 | `approval_approved` | approve | in that transaction |
 | `approval_rejected` | reject | in that transaction |
-| `reservation_changed` | the approved candidate's reservation was rescheduled, sent (`published` / `failed` / `uncertain`), cancelled or expired | on the next `notifications` call, from the reservation's confirmed state |
+| `reservation_changed` | the approved candidate's reservation was rescheduled, sent (`published` / `failed` / `uncertain`), cancelled or expired (a send in progress, `claimed`, is not an event) | in the transaction that changed the reservation (the worker's finish, the claim's close, the person's reschedule / cancel; G3-02 #20); a change that could not be enqueued then is written by the next `notifications` call |
 
 - **No duplicates**: there is one row per event, so retries and races do not create a second one.
-- **Nothing lost**: a reservation change that no one has listed yet is written by the next list. Only the latest state is guaranteed, so two reschedules between lists can show as one.
-- **Mark read**: `markRead` is idempotent; the first read time stays.
+- **Nothing lost**: a reservation change is enqueued in its own transaction (G3-02 #20). If that is skipped, because the workspace was not the person's own personal one at that moment or a lock / error occurred, the next list writes it. The change itself never fails because of its notification.
+- **Mark read**: `markRead` is idempotent; the first read time stays. Since G3-02 #20 (G2 #11) it is a write that needs the X service: after a service end it answers 403 `POSTONA_RESV_SERVICE_NOT_ACTIVE` and `readAt` stays as it was. A service end committing at the same moment is waited for and then refuses (G5's writer gate). Reading (`notifications`, `list`, `get`) stays allowed.
 - **Whose rows**: only the caller's notifications are returned, and only for a workspace the caller still owns. Nothing is written for a former owner: no notification, no outbox row (G3-02 #17). An ownership loss that is committing at the same time either commits first (then nothing is written) or waits for the write to commit (G3-02 #18 row locks).
   - A deleted workspace or X account takes its candidates and notifications with it. This is a foreign-key cascade, checked in the catalog only.
   - A person who no longer owns the workspace sees nothing and can change nothing.
@@ -92,7 +92,7 @@ There is no post text, token or account handle in a notification.
 ## 5a. Decisions on G2 #9's P3 findings (G3-02 #19)
 
 - **After a service end, `list` / `get` / `notifications` still answer 200** with the person's own rows. This is the contract and stays.
-  - It follows G5's lifecycle contract (#589 6579654668): the same person may keep reading their own items and cancelling. Writes that can lead to a post stop (`submit` / `revise` / `approve`: 403 `SERVICE_NOT_ACTIVE`); `reject` and `markRead` stay allowed.
+  - It follows G5's lifecycle contract (#589 6579654668): the same person may keep reading their own items and cancelling. Writes that can lead to a post stop (`submit` / `revise` / `approve`: 403 `SERVICE_NOT_ACTIVE`); `reject` stays allowed. `markRead` was allowed here until G3-02 #20; since G2 #11 it is refused as well (403 `SERVICE_NOT_ACTIVE`, `readAt` unchanged), because it is a write.
   - Measured: PG17 AP12, local L35.
   - Nothing of another person is ever returned. A former owner sees nothing (#17 / #18). G1 shows the answer as it is and adds the "start the service" way out from the 403.
 - **Each submit and each revise writes one `approval_requested`**, keyed by `subjectRevision`. This is per revision by design, not a duplicate: a retry of the same request writes nothing more (measured: L38, three concurrent submits give 1 row).
@@ -110,7 +110,7 @@ A push worker needs its own review and approval. When it is built it must:
 - carry ids and kind only, never the post text;
 - record its own delivery state outside this table, or in a later reviewed column.
 
-Note: `reservation_changed` is written when the person lists notifications. Pushing it promptly therefore needs a scheduled reconcile, which is also a later step.
+Note: since G3-02 #20 `reservation_changed` is enqueued (with its outbox row) in the worker's own transaction, so a push worker can pick it up without the person listing. The next list remains the fallback.
 
 ## 7. Screen flow for G1
 
@@ -119,7 +119,7 @@ Note: `reservation_changed` is written when the person lists notifications. Push
    - On 409 / 422, re-read with `get`; never retry with a new revision on your own.
 3. After approval, the reservation is a normal reservation (`reservationId`). Use the reservation API's `get` / `list`, including
    `connectionGeneration`.
-4. Notification list: `notifications`, then `markRead` on open. Badge = rows with `readAt == null`.
+4. Notification list: `notifications`, then `markRead` on open. Badge = rows with `readAt == null`. After a service end, `markRead` answers 403 `SERVICE_NOT_ACTIVE`: keep the row unread, show the "start the service" way out, and do not retry.
 5. Push: not until the separate push step exists. The app must not infer a push from these rows.
 
 ## 8. Rollback
