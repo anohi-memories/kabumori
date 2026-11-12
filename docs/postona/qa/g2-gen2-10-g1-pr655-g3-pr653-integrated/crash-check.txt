@@ -1,0 +1,4 @@
+checked_at: 2026-11-12 14:27 JST
+SocialOperations crash reports in ~/Library/Logs/DiagnosticReports: 0
+app still running on G2-INT10-20261112: 1
+red-screen / ErrorBoundary lines in Metro log after the 13:39 JST attach: 0
