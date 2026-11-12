@@ -6,7 +6,7 @@ import { ActionButton, Card, EmptyState, Pill, Screen, SectionTitle, styles } fr
 import type { Candidate } from '@/features/approvals/approval-client';
 import { ACTION_TEXT, APPROVAL_BLOCK_TEXT, readFailedText, shortHash, STATE_LABEL, stateTone } from '@/features/approvals/approval-view';
 import { useApprovals } from '@/features/approvals/use-approvals';
-import { formatJst } from '@/features/reservations/reservation-view';
+import { DATE_TIME_HINT, DATE_TIME_INPUT_PROPS, formatJst } from '@/features/reservations/reservation-view';
 
 const inputStyle = { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: 10, color: colors.ink, backgroundColor: colors.surface } as const;
 
@@ -63,7 +63,8 @@ export default function ApprovalsScreen() {
             {edit ? (
               <>
                 <TextInput accessibilityLabel="修正する本文" value={edit.body} onChangeText={(body) => setEditing({ ...edit, body })} style={[inputStyle, { minHeight: 80 }]} multiline maxLength={560} editable={!busy} />
-                <TextInput accessibilityLabel="修正する日時" value={edit.time} onChangeText={(time) => setEditing({ ...edit, time })} style={inputStyle} editable={!busy} />
+                <TextInput accessibilityLabel="修正する日時" value={edit.time} onChangeText={(time) => setEditing({ ...edit, time })} style={inputStyle} editable={!busy} {...DATE_TIME_INPUT_PROPS} />
+                <Text style={styles.muted}>{DATE_TIME_HINT}</Text>
                 <ActionButton label="修正を保存" disabled={busy} onPress={() => void view.revise(c, edit.body, edit.time).then((ok) => { if (ok) setEditing(null); })} />
                 <ActionButton label="修正をやめる" disabled={busy} onPress={() => setEditing(null)} />
               </>
@@ -90,7 +91,8 @@ export default function ApprovalsScreen() {
           <Text style={{ color: colors.ink, fontWeight: '800' }}>新しい投稿候補</Text>
           <TextInput accessibilityLabel="投稿候補の本文" value={draft} onChangeText={setDraft} style={[inputStyle, { minHeight: 80 }]} multiline maxLength={560} editable={!busy} />
           <Text style={styles.muted}>投稿する日時（日本時間、例: 2026-11-20 09:30）</Text>
-          <TextInput accessibilityLabel="投稿候補の日時" value={draftTime} onChangeText={setDraftTime} style={inputStyle} editable={!busy} />
+          <TextInput accessibilityLabel="投稿候補の日時" value={draftTime} onChangeText={setDraftTime} style={inputStyle} editable={!busy} {...DATE_TIME_INPUT_PROPS} />
+          <Text style={styles.muted}>{DATE_TIME_HINT}</Text>
           <ActionButton label={view.busy === 'submit' ? '送っています…' : '承認に回す'} disabled={busy || !draft.trim()} onPress={() => void view.submit(draft, draftTime).then((ok) => { if (ok) { setDraft(''); setDraftTime(''); } })} />
         </Card>
         {view.list.state === 'loading' ? <Card><Text style={styles.muted}>投稿候補を読み込んでいます…</Text></Card> : null}

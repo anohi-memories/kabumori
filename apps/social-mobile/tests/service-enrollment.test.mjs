@@ -130,7 +130,7 @@ function depsEqual(a, b) {
   return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 }
 
-async function gateHarness(server) {
+async function gateHarness(server, options = {}) {
   const slots = [];
   let cursor = 0;
   let pending = [];
@@ -169,6 +169,9 @@ async function gateHarness(server) {
     '@/data/repository-selection': { selectDataSource: () => ({ kind: 'supabase' }) },
     '@/domain/service-enrollment': enrollmentModule,
     '@/features/reservations/x-reconnect-signal': xSignal,
+    // G1 TASK 46: the approval UI gate (off unless a test says otherwise) and the read-only history, as an element only.
+    '@/features/approvals/approval-gate': { get POSTONA_APPROVAL_UI_ENABLED() { return options.approvalUi === true; } },
+    '@/features/approvals/ended-history': { EndedHistory: 'EndedHistory' },
     '@/lib/supabase': { getSupabaseConfig: () => ({ ok: true, config: { url: 'https://fixture.supabase.co', publishableKey: 'sb_publishable_fixture' } }) },
     '@/providers/auth-provider': { useAuth: () => ({ session }) },
     '@/app/account-deletion': { __esModule: true, default: 'AccountDeletionScreen' },
@@ -212,6 +215,8 @@ async function gateHarness(server) {
     isApp: () => tree === CHILDREN || find(tree, (n) => n === CHILDREN) !== null || tree?.props?.children === CHILDREN,
     button: (label) => find(tree, (n) => n.type === 'ActionButton' && n.props.label === label),
     hasSignOut: () => find(tree, (n) => n.type === 'SignOutButton') !== null,
+    history: () => find(tree, (n) => n.type === 'EndedHistory'),
+    back: () => find(tree, (n) => n.type === 'Pressable' && JSON.stringify(n.props.children ?? '').includes('戻る')),
     unmount() { for (const slot of slots) if (slot && typeof slot.cleanup === 'function') slot.cleanup(); },
     /** After unmount(): the next render mounts a fresh gate (the module's shared gate survives, as in the app). */
     clear() { slots.length = 0; tree = null; },
@@ -602,4 +607,57 @@ test('routing: auth, then service enrollment, then data and onboarding; mock pre
   assert.match(gate, /<SignOutButton \/>/u);
   assert.match(gate, /<AccountDeletionScreen \/>/u);
   assert.match(gate, /useEffect\(\(\) => \(\) => enrollment\.reset\(\), \[\]\)/u, 'leaving the signed-in tree cancels and forgets');
+});
+
+// ---- G1 TASK 46 (G2 #10): an ended service may still read its history, and nothing else -------------------------------------------
+const HISTORY = 'これまでの承認とお知らせを見る（閲覧のみ）';
+
+test('T46 ended + approval UI off (the shipped constant): no way into the history; the restart screen as before', async () => {
+  const server = fakeServer(() => ENDED(3));
+  const h = await gateHarness(server);
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    assert.ok(h.button('利用登録する'));
+    assert.equal(h.button(HISTORY), null);
+    assert.equal(h.history(), null);
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T46 ended + approval UI on: the history opens read-only for this person; back returns; another person never inherits it', async () => {
+  const server = fakeServer(() => ENDED(3));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    h.button(HISTORY).props.onPress();
+    h.render();
+    assert.equal(h.history()?.props.userId, 'user-A');
+    assert.equal(h.button('利用登録する'), null, 'the history view has no write of its own');
+    assert.equal(h.isApp(), false);
+    h.back().props.onPress();
+    h.render();
+    assert.equal(h.history(), null);
+    h.button(HISTORY).props.onPress();
+    h.render();
+    h.setSession(sessionOf('B'));
+    await h.settle();
+    assert.equal(h.history(), null, 'B does not see A\'s history open');
+    assert.ok(h.button('利用登録する'));
+    h.setSession(sessionOf('A', 2));
+    await h.settle();
+    assert.equal(h.history(), null, 'a new login of A starts closed');
+    assert.equal(server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service').length, 0, 'reading the history restarts nothing');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T46 active service + approval UI on: the app opens, no history entry exists', async () => {
+  const server = fakeServer(() => ({ body: ACTIVE }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    assert.ok(h.isApp());
+    assert.equal(h.history(), null);
+  } finally { h.unmount(); h.restore(); }
 });

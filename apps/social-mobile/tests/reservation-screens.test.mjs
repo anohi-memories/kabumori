@@ -1193,3 +1193,38 @@ test('T39 S-4 the reservations screen: the label from the server\'s read (after 
   assert.ok(!has(tree, '再開前に保存した予約は'), 'every row answered');
   reconnectSignal.forgetXReconnectedAfterRestart('user-A');
 });
+
+// ---- G1 TASK 46 (G2 #10): the date input a Japanese keyboard types ----------------------------------------------------------------
+test('T46 time input: full-width digits, 「ー」 / dashes, 「：」 and the ideographic space read as the same time; every old refusal stays', () => {
+  const ok = '2026-11-01T09:30:00+09:00';
+  for (const text of ['２０２６－１１－０１　０９：３０', '2026ー11ー01 09:30', '2026−11−01 09:30', '2026‐11‐01 09:30', '2026–11–01 09:30', ' 2026-11-01  09:30 ', '２０２６-１１-０１ ０９:３０']) {
+    assert.deepEqual(view.parseJstInput(text, NOW), { ok: true, iso: ok }, text);
+  }
+  for (const text of ['2026-11-01T09:30', '2026/11/01 09:30', '２０２６／１１／０１ ０９：３０', '', '　', '2026-11-1 9:30', '２０２６-１１-１ ９:３０', '2026-11-01 09:30:00', '2026年11月01日 09時30分',
+    '2026-11-01 09:30 +09:00', '2026-11-01 0930', '2026~11~01 09:30', '2026_11_01 09:30']) {
+    assert.equal(view.parseJstInput(text, NOW).ok, false, text);
+  }
+  assert.match(view.parseJstInput('２０２６－０２－３０　０９：００', NOW).message, /ありません/u);
+  assert.match(view.parseJstInput('２０２６－１１－０１　２４：００', NOW).message, /ありません/u);
+  assert.match(view.parseJstInput('２０２６－１０－３１　０８：５９', NOW).message, /これから/u, 'JST: 08:59 JST is 23:59 UTC the day before NOW');
+  assert.equal(view.parseJstInput('２０２６－１０－３１　０９：０１', NOW).ok, true);
+  assert.equal(view.normalizeJstInput('２０２６ー１１ー０１　０９：３０'), '2026-11-01 09:30');
+  assert.deepEqual(view.DATE_TIME_INPUT_PROPS, { keyboardType: 'numbers-and-punctuation', autoCorrect: false, autoCapitalize: 'none', spellCheck: false });
+});
+
+test('T46 reservations screen: the same keyboard props and hint on 新しい日時 / Threadsの日時; a full-width new time moves the row to the same instant', async () => {
+  const store = scriptedPorts(); store.answer('x.list', { ok: true, value: [row('t46', { revision: 3 })] });
+  const h = await mount({ store }); await h.render();
+  let tree = await open(h, '予約 2026-11-02 09:30');
+  const f = field(tree, '新しい日時');
+  assert.deepEqual([f.keyboardType, f.autoCorrect, f.autoCapitalize, f.spellCheck], ['numbers-and-punctuation', false, 'none', false]);
+  assert.ok(has(tree, view.DATE_TIME_HINT));
+  f.onChangeText('２０２６－１１－０５　１０：００');
+  store.answer('x.reschedule', { ok: true, value: row('t46', { revision: 4, scheduledAt: '2026-11-05T01:00:00.000Z' }) });
+  store.answer('x.list', { ok: true, value: [row('t46', { revision: 4, scheduledAt: '2026-11-05T01:00:00.000Z' })] });
+  tree = await press(h, '時刻を変更');
+  const sent = store.calls.find((c) => c[0] === 'x.reschedule');
+  assert.ok(JSON.stringify(sent).includes('2026-11-05T10:00:00+09:00'), JSON.stringify(sent));
+  const source = await readFile(new URL('../src/app/reservations/index.tsx', import.meta.url), 'utf8');
+  for (const label of ['新しい日時', 'Threadsの日時']) assert.match(source, new RegExp(`accessibilityLabel="${label}"[^\\n]*\\{\\.\\.\\.DATE_TIME_INPUT_PROPS\\}`, 'u'), label);
+});

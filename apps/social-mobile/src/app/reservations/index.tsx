@@ -13,6 +13,8 @@ import {
   formatJst,
   GATE_OFF_TEXT,
   isSendNowRow,
+  DATE_TIME_HINT,
+  DATE_TIME_INPUT_PROPS,
   parseJstInput,
   REREAD_TEXT,
   THREADS_MEMORY_NOTE,
@@ -356,7 +358,8 @@ export default function ReservationsScreen() {
                       {view.canReschedule && timeEditBase?.id === row.reservationId && !timeEditInterrupted ? (
                         <>
                           <Text style={styles.muted}>新しい日時（日本時間、例: 2026-11-01 09:30）</Text>
-                          <TextInput accessibilityLabel="新しい日時" value={timeText} onChangeText={setTimeText} style={inputStyle} editable={!disabled} />
+                          <TextInput accessibilityLabel="新しい日時" value={timeText} onChangeText={setTimeText} style={inputStyle} editable={!disabled} {...DATE_TIME_INPUT_PROPS} />
+                          <Text style={styles.muted}>{DATE_TIME_HINT}</Text>
                           <ActionButton label="時刻を変更" disabled={disabled} onPress={() => reschedule(row)} />
                         </>
                       ) : null}
@@ -378,7 +381,8 @@ export default function ReservationsScreen() {
               <Text style={styles.muted}>{THREADS_MEMORY_NOTE}</Text>
               <TextInput accessibilityLabel="Threadsの本文" value={threadsText} onChangeText={setThreadsText} style={[inputStyle, { minHeight: 84, textAlignVertical: 'top' }]} multiline maxLength={500} editable={!disabled} />
               <Text style={styles.muted}>日時（日本時間、例: 2026-11-01 09:30）</Text>
-              <TextInput accessibilityLabel="Threadsの日時" value={threadsTime} onChangeText={setThreadsTime} style={inputStyle} editable={!disabled} />
+              <TextInput accessibilityLabel="Threadsの日時" value={threadsTime} onChangeText={setThreadsTime} style={inputStyle} editable={!disabled} {...DATE_TIME_INPUT_PROPS} />
+              <Text style={styles.muted}>{DATE_TIME_HINT}</Text>
               <ActionButton label={busy ? '送信中…' : 'Threadsに予約する'} disabled={disabled} onPress={() => void createThreads()} />
             </Card>
             {mineRequests.map((request) => {

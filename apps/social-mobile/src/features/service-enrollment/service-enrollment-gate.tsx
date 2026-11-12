@@ -18,6 +18,8 @@ import {
   type EnrollmentContext,
   type EnrollmentOutcome,
 } from '@/domain/service-enrollment';
+import { POSTONA_APPROVAL_UI_ENABLED } from '@/features/approvals/approval-gate';
+import { EndedHistory } from '@/features/approvals/ended-history';
 import { markXServiceRestarted } from '@/features/reservations/x-reconnect-signal';
 import { getSupabaseConfig } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
@@ -41,6 +43,9 @@ type GateView =
   | (Owner & { request: number; kind: 'loading' })
   | (Owner & { request: number; kind: 'error' })
   | (Owner & { request: number; kind: 'outcome'; outcome: EnrollmentOutcome; noticeAcknowledged: boolean });
+
+/** The one way into the ended service's history: it reads, it never writes. */
+export const ENDED_HISTORY_ACTION = 'これまでの承認とお知らせを見る（閲覧のみ）';
 
 const isOwner = (owner: Owner, userId: string | null, loginId: string | null) => owner.userId === userId && owner.loginId === loginId;
 
@@ -67,6 +72,8 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   const explicitInFlight = useRef(false);
   // The deletion view is opened for one user only; another user never inherits it.
   const [deletionOpenFor, setDeletionOpenFor] = useState<string | null>(null);
+  // G1 TASK 46: the read-only history of an ended service, opened for one person and login only.
+  const [historyOpenFor, setHistoryOpenFor] = useState<string | null>(null);
 
   // Leaving the signed-in tree (sign-out, recovery) cancels pending work and forgets the outcome.
   useEffect(() => () => enrollment.reset(), []);
@@ -153,6 +160,21 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
     );
   }
 
+  const historyKey = userId && loginId ? `${userId}\n${loginId}` : null;
+  const ended = current.kind === 'outcome' && current.outcome.kind === 'reenroll_required';
+  if (POSTONA_APPROVAL_UI_ENABLED && ended && historyKey !== null && historyOpenFor === historyKey) {
+    return (
+      <Screen>
+        <ScrollView contentContainerStyle={{ gap: 16 }}>
+          <Pressable accessibilityRole="button" onPress={() => setHistoryOpenFor(null)} style={{ paddingBottom: 0 }}>
+            <Text style={{ color: colors.primary, fontWeight: '700' }}>‹ 戻る</Text>
+          </Pressable>
+          <EndedHistory userId={userId} />
+        </ScrollView>
+      </Screen>
+    );
+  }
+
   let body;
   if (current.kind === 'loading') {
     body = (
@@ -187,6 +209,9 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
       <Card>
         <SectionTitle detail={REENROLL_COPY.description}>{REENROLL_COPY.title}</SectionTitle>
         <ActionButton label={REENROLL_COPY.action} onPress={reenroll} />
+        {POSTONA_APPROVAL_UI_ENABLED && historyKey !== null
+          ? <ActionButton label={ENDED_HISTORY_ACTION} onPress={() => setHistoryOpenFor(historyKey)} />
+          : null}
       </Card>
     );
   } else {

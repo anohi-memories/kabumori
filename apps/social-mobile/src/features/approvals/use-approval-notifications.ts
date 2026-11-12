@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApprovalNotification } from './approval-client';
-import { actionOf, ACTION_TEXT, type ApprovalAction, type ApprovalBlock, MARK_READ_FAILED_TEXT, unreadCount } from './approval-view';
+import { actionOf, ACTION_TEXT, type ApprovalAction, type ApprovalBlock, groupedUnreadCount, groupNotifications, MARK_READ_FAILED_TEXT, type NotificationGroup } from './approval-view';
 import { useApprovalEnv } from './use-approval-env';
 
 export type NotificationList = { state: 'loading' } | { state: 'ready'; items: ApprovalNotification[] } | { state: 'error'; action: ApprovalAction };
@@ -8,7 +8,7 @@ type Box = { scope: string; list: NotificationList; notice: string | null };
 
 export type NotificationsView =
   | { kind: 'blocked'; block: ApprovalBlock }
-  | { kind: 'open'; list: NotificationList; unread: number; notice: string | null; open: (n: ApprovalNotification) => void; reload: () => void };
+  | { kind: 'open'; list: NotificationList; groups: NotificationGroup[]; unread: number; notice: string | null; open: (n: ApprovalNotification) => void; reload: () => void };
 
 /**
  * The person's own notifications (G3 contract §5), newest first, read again on every return to the screen. Opening one marks it read
@@ -49,8 +49,13 @@ export function useApprovalNotifications(): NotificationsView {
   const shown = box && box.scope === mine ? box : null;
   const list = shown?.list ?? { state: 'loading' };
 
+  const groups = list.state === 'ready' ? groupNotifications(list.items) : [];
+  // Opening a line marks it read, and (G3 §5a) the older unread requests of the same candidate too: one call each, each shown only on success.
   const open = (n: ApprovalNotification) => {
-    if (n.readAt !== null) return;
+    const group = groups.find((g) => g.row.notificationId === n.notificationId);
+    for (const row of [n, ...(group?.older ?? [])]) if (row.readAt === null) markOne(row);
+  };
+  const markOne = (n: ApprovalNotification) => {
     void client.markRead(n.notificationId).then((answer) => {
       if (live.current !== mine) return;
       if (answer.ok) {
@@ -67,5 +72,5 @@ export function useApprovalNotifications(): NotificationsView {
     });
   };
 
-  return { kind: 'open', list, unread: list.state === 'ready' ? unreadCount(list.items) : 0, notice: shown?.notice ?? null, open, reload: () => setReads((value) => value + 1) };
+  return { kind: 'open', list, groups, unread: groupedUnreadCount(groups), notice: shown?.notice ?? null, open, reload: () => setReads((value) => value + 1) };
 }
