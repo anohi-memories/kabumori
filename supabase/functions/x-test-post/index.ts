@@ -4234,6 +4234,7 @@ Deno.serve(async (req) => {
           fingerprintPersisted: result.fingerprintPersisted,
           topicEventKey: result.topicEventKey,
           topicSettlement: result.topicSettlement,
+          ...(result.voiceRewriteDecision ? { voiceRewriteDecision: result.voiceRewriteDecision } : {}),
           refreshExecuted: xAuth.refreshExecuted,
         }, 201);
       } catch (error) {

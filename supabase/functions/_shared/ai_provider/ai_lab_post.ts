@@ -23,6 +23,28 @@ const TEXT_SCHEMA: JsonSchema = {
 const GENERATE_ROLE = "ai_salaryman_lab.brand_post.generate";
 const REWRITE_ROLE = "ai_salaryman_lab.brand_post.rewrite_voice";
 
+const VOICE_REWRITE_SCHEMA = {
+  name: "ai_lab_voice_rewrite",
+  schema: {
+    type: "object",
+    properties: {
+      decision: { type: "string", enum: ["edited", "keep", "review"] },
+      text: { type: "string" },
+      edits: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { id: { type: "integer" }, option: { type: "integer" } },
+          required: ["id", "option"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["decision", "text", "edits"],
+    additionalProperties: false,
+  } satisfies JsonSchema,
+};
+
 /** One factory per dispatch: the same cap covers every business content retry. */
 export function createAiLabTextProvider(
   deps: Pick<ExecuteDeps, "readEnv" | "fetch">,
@@ -141,8 +163,9 @@ export function createAiLabClaudeStages(
         instructions,
         input,
         maxOutputTokens: 3072,
+        outputSchema: VOICE_REWRITE_SCHEMA,
       }, "rewrite");
-      return result.text;
+      return JSON.parse(result.text) as unknown;
     },
   };
 }

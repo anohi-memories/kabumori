@@ -8,6 +8,7 @@ import {
   fakeEnv,
   hangUntilAborted,
   jsonResponse,
+  type RecordedCall,
   recordingFetch,
   type Responder,
 } from "./test_support.ts";
@@ -16,10 +17,7 @@ import { createAiLabScheduledPostGenerator } from "../brand/ai_lab_engagement.ts
 import { dispatchAiLabScheduledBrandPost } from "../brand/ai_lab_scheduled_brand_post.ts";
 import { generateBrandPost } from "../brand/brand_post_generator.ts";
 import { fingerprintText } from "../brand/cross_brand_dedupe.ts";
-import {
-  aiLabVoiceRewriteRequest,
-  isAllowedAiLabVoiceRewrite,
-} from "../brand/ai_lab_voice_rewrite.ts";
+import { prepareAiLabVoiceRewrite } from "../brand/ai_lab_voice_rewrite.ts";
 
 const ORIGINAL =
   "通知の表示を2台で比較しています。\nhttps://example.test/notes\n#個人開発";
@@ -28,6 +26,42 @@ const EDITED =
 const options = ["通知", "予定", "履歴"];
 const providerResponse = (payload: unknown) =>
   jsonResponse(200, anthropicBody(payload));
+
+type Candidate = { id: number; at: number; from: string; options: string[] };
+type Selection = readonly [from: string, replacement: string];
+const defaultSelection = [["しています。", "してます。"]] as const;
+
+function rewriteInput(call: RecordedCall) {
+  const { messages } = call.body as { messages: { content: string }[] };
+  return JSON.parse(messages[0].content) as {
+    original: string;
+    mode: string;
+    candidates: Candidate[];
+  };
+}
+
+function editedReply(
+  call: RecordedCall,
+  text: string,
+  selections: readonly Selection[] = defaultSelection,
+) {
+  const { candidates } = rewriteInput(call);
+  const edits = selections.map(([from, replacement]) => {
+    const candidate = candidates.find((value) =>
+      value.from === from &&
+      value.options.includes(replacement)
+    );
+    assert.ok(candidate, `missing edit ${JSON.stringify([from, replacement])}`);
+    return { id: candidate.id, option: candidate.options.indexOf(replacement) };
+  }).sort((a, b) => a.id - b.id);
+  return { decision: "edited", text, edits };
+}
+
+function normalResponse(call: RecordedCall, index: number) {
+  return providerResponse(
+    index ? editedReply(call, EDITED) : { text: ORIGINAL },
+  );
+}
 
 test("scheduled entry binds both stages in the AI Lab branch and keeps the native 24-hour transport", async () => {
   const source = await readFile(
@@ -60,24 +94,45 @@ test("scheduled entry binds both stages in the AI Lab branch and keeps the nativ
   assert.equal(source.match(/createAiLabClaudeStages\(/gu)?.length, 1);
 });
 
-test("the editor keeps quotation, links, labels, line breaks and question intent exact", () => {
-  const quote = "「通知を\n確認しています。\n」と書きました。";
+test("the editor keeps multiline quotations, URLs and question intent intact", () => {
+  const original =
+    "「通知を\n確認しています。\n」と書きました。\nhttps://example.test/通知を確認しています。\nどれを選びますか？";
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: original,
+  });
+  const { candidates } = JSON.parse(prepared.request.input) as {
+    candidates: Candidate[];
+  };
+  assert.equal(candidates.some(({ from }) => from === "しています。"), false);
   assert.equal(
-    isAllowedAiLabVoiceRewrite(quote, quote.replace("しています", "してます")),
+    candidates.some(({ from }) => from === "どれを選びますか？"),
+    true,
+  );
+  assert.throws(() =>
+    prepared.validate({
+      decision: "keep",
+      text: original.replace("か？", "。"),
+      edits: [],
+    }), /VOICE_REWRITE_REJECTED/);
+});
+
+test("ambiguous clause endings and malformed quotation boundaries stay untouched", () => {
+  const draft = { brandId: "ai_salaryman_lab", postType: "brand_post" };
+  const request = (text: string) =>
+    (JSON.parse(prepareAiLabVoiceRewrite({ ...draft, text }).request.input) as {
+      candidates: Candidate[];
+    }).candidates;
+  assert.equal(
+    request("連絡しましたが、よければ見てもらえますか？").some(({ from }) =>
+      from === "しましたが、"
+    ),
     false,
   );
-  const link = "https://example.test/通知を確認しています。";
-  assert.equal(
-    isAllowedAiLabVoiceRewrite(link, link.replace("しています", "してます")),
-    false,
-  );
-  assert.equal(
-    isAllowedAiLabVoiceRewrite("どれを選びますか？", "どれを選びます。"),
-    false,
-  );
-  assert.equal(
-    isAllowedAiLabVoiceRewrite(ORIGINAL, EDITED.replace("\n#", "\n\n#")),
-    false,
+  assert.deepEqual(
+    request("結論から言うと、確認を行いました。表示は同じでした」"),
+    [],
   );
 });
 
@@ -236,13 +291,21 @@ for (
   ] as const
 ) {
   test(`Claude stages produce the checked ${mode} payload and fingerprint`, async () => {
+    const selection = {
+      regular: defaultSelection[0],
+      experience: ["ことがありますか？", "ことありますか？"],
+      opinion: ["どう思いますか？", "どう思います？"],
+      choices: ["どれを選びますか？", "どれを選びます？"],
+    }[mode] as Selection;
     const pollOptions = mode === "choices" ? options : undefined;
     const f = fixture(
-      (_call, index) =>
+      (call, index) =>
         providerResponse(
-          index === 0 && pollOptions
+          index
+            ? editedReply(call, edited, [selection])
+            : pollOptions
             ? { text: original, poll_options: pollOptions }
-            : { text: index === 0 ? original : edited },
+            : { text: original },
         ),
       { rotation },
     );
@@ -260,6 +323,7 @@ for (
     assert.deepEqual(f.completedFingerprints, [await fingerprintText(edited)]);
     assert.equal(result.pollCreated, mode === "choices" ? true : undefined);
     assert.equal(result.characterCount, Array.from(edited).length);
+    assert.equal(result.voiceRewriteDecision, "edited");
     const calls = f.recorder.calls.map(({ url, headers, body }) => {
       assert.equal(url, "https://api.anthropic.com/v1/messages");
       assert.equal(headers.get("x-api-key"), FAKE_ANTHROPIC_KEY);
@@ -269,19 +333,143 @@ for (
       "claude-opus-5-5",
       "claude-opus-5-5",
     ]);
-    assert.deepEqual(JSON.parse(calls[1].messages[0].content), {
-      original,
-      mode,
-      lineAlternatives: edited.split("\n").map((line, i) =>
-        line === original.split("\n")[i] ? [] : [line]
-      ),
-    });
+    const input = rewriteInput(f.recorder.calls[1]);
+    assert.equal(input.original, original);
+    assert.equal(input.mode, mode);
+    assert.equal(Object.hasOwn(input, "poll_options"), false);
     assert.deepEqual(f.env.reads, [
       "AI_LAB_CLAUDE_TWO_STAGE",
       "AI_LAB_TEXT_API_KEY",
       "AI_LAB_TEXT_API_KEY",
     ]);
   });
+}
+
+const detail =
+  "通知欄では更新した順に項目が並び、予定一覧では日付の順に並びます。両方を横に置いて見ると、見出しの位置の違いが分かりました。予定の日時は詳細画面を開いて確認しました。確認の途中で設定や並び順は変更していません。比較した画面の記録はリンク先にまとめました。";
+const longDraft =
+  "結論から言うと、私自身は、2026年11月12日にPOSTONAの通知画面を2台で確認しましたが、片方では予定の見出しが残りました。画面の表示は「確認中」です。" +
+  detail +
+  "日付と通知を一緒に見るほうが予定を追いやすいです。日付と通知を一緒に見るほうが予定を追いやすいです。以上が今回の話です。\n#個人開発 @sample_dev https://example.test/notes";
+const longEdited =
+  "私は、2026年11月12日にPOSTONAの通知画面を2台で確認しました。\nただ、片方では予定の見出しが残りました。画面の表示は「確認中」です。" +
+  detail +
+  "日付と通知を一緒に見るほうが予定を追いやすいです。\n#個人開発 @sample_dev https://example.test/notes";
+
+const structuralExamples: readonly [
+  mode: string,
+  rotation: number,
+  original: string,
+  edited: string,
+  edits: readonly Selection[],
+][] = [
+  ["regular", 0, longDraft, longEdited, [
+    ["結論から言うと、", ""],
+    ["私自身は、", "私は、"],
+    ["しましたが、", "しました。\nただ、"],
+    ["日付と通知を一緒に見るほうが予定を追いやすいです。", ""],
+    ["以上が今回の話です。", ""],
+  ]],
+  [
+    "regular",
+    0,
+    "私自身は、通知の順番を確認しました。以上が今回の話です。",
+    "私は、通知の順番を確認しました。",
+    [["私自身は、", "私は、"], ["以上が今回の話です。", ""]],
+  ],
+  [
+    "experience",
+    2,
+    "私自身の体験としては、朝は通知から確認します。通知を見落としたことがありますか？",
+    "私の場合は、朝は通知から確認します。\n通知を見落としたことありますか？",
+    [["私自身の体験としては、", "私の場合は、"], ["", "\n"], [
+      "ことがありますか？",
+      "ことありますか？",
+    ]],
+  ],
+  [
+    "experience",
+    2,
+    "簡単に言うと、朝は予定を確認しましたが、一方で夜は通知を先に見ました。似たことがありますか？",
+    "朝は予定を確認しました。\n一方で夜は通知を先に見ました。似たことありますか？",
+    [["簡単に言うと、", ""], ["しましたが、", "しました。\n"], [
+      "ことがありますか？",
+      "ことありますか？",
+    ]],
+  ],
+  [
+    "opinion",
+    5,
+    "私自身は、通知時刻の表示を確認しました。予定にも時刻を出す案、どう思いますか？",
+    "私は、通知時刻の表示を確認しました。予定にも時刻を出す案、どう思います？",
+    [["私自身は、", "私は、"], ["どう思いますか？", "どう思います？"]],
+  ],
+  [
+    "opinion",
+    5,
+    "まとめると、通知一覧を見ながら、確認を行いました。先に日付を出す案、どう思いますか？",
+    "通知一覧を見ながら、確認しました。\n先に日付を出す案、どう思います？",
+    [["まとめると、", ""], ["確認を行いました", "確認しました"], [
+      "",
+      "\n",
+    ], ["どう思いますか？", "どう思います？"]],
+  ],
+  [
+    "choices",
+    8,
+    "結論から言うと、朝に一つだけ画面を開くなら、どれを選びますか？",
+    "朝に一つだけ画面を開くなら、どれを選びます？",
+    [["結論から言うと、", ""], ["どれを選びますか？", "どれを選びます？"]],
+  ],
+  [
+    "choices",
+    8,
+    "簡単に言うと、朝は通知を確認しましたが、一方で夜は履歴を見ました。朝に開くなら、どれを選びますか？",
+    "朝は通知を確認しました。\n一方で夜は履歴を見ました。朝に開くなら、どれを選びます？",
+    [["簡単に言うと、", ""], ["しましたが、", "しました。\n"], [
+      "どれを選びますか？",
+      "どれを選びます？",
+    ]],
+  ],
+];
+
+for (
+  const [number, [mode, rotation, original, edited, selections]]
+    of structuralExamples.entries()
+) {
+  test(
+    "synthetic " + mode + " rewrite " + (number + 1) +
+      " improves structure before sending only the final text",
+    async () => {
+      const pollOptions = mode === "choices" ? options : undefined;
+      const f = fixture((call, index) =>
+        providerResponse(
+          index
+            ? editedReply(call, edited, selections)
+            : pollOptions
+            ? { text: original, poll_options: pollOptions }
+            : { text: original },
+        ), { rotation });
+      const result = await dispatchAiLabScheduledBrandPost(f.args);
+      assert.deepEqual(f.events, [
+        "claim",
+        "Claude:0",
+        "Claude:1",
+        "start X",
+        "X",
+        "settle",
+        "complete",
+      ]);
+      assert.equal(result.voiceRewriteDecision, "edited");
+      assert.deepEqual(f.payloads, [{ text: edited, pollOptions }]);
+      assert.deepEqual(f.completedFingerprints, [
+        await fingerprintText(edited),
+      ]);
+      assert.equal(result.characterCount, Array.from(edited).length);
+      assert.ok(edited.length < original.length);
+      if (number === 0) assert.ok(original.length > 280);
+    },
+  );
 }
 
 test("flag OFF uses the existing OpenAI path and reads no Anthropic credential", async () => {
@@ -302,8 +490,15 @@ test("flag OFF uses the existing OpenAI path and reads no Anthropic credential",
 });
 
 test("successful review of an already natural draft may leave every line intact", async () => {
-  const f = fixture(() => providerResponse({ text: ORIGINAL }));
-  await dispatchAiLabScheduledBrandPost(f.args);
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "keep", text: ORIGINAL, edits: [] }
+        : { text: ORIGINAL },
+    )
+  );
+  const result = await dispatchAiLabScheduledBrandPost(f.args);
+  assert.equal(result.voiceRewriteDecision, "keep");
   assert.equal(f.recorder.calls.length, 2);
   assert.equal(f.payloads[0].text, ORIGINAL);
 });
@@ -324,9 +519,7 @@ test("original content and fingerprint guards run before rewrite", async () => {
     "release:PRE_X_CONTENT_REJECTED",
   ]);
   for (const [text, calls] of [[ORIGINAL, 1], [EDITED, 2]] as const) {
-    const f = fixture((_call, index) =>
-      providerResponse({ text: index ? EDITED : ORIGINAL })
-    );
+    const f = fixture(normalResponse);
     const normalizedTextSha256 = await fingerprintText(text);
     f.args.loadRecentFingerprints = () =>
       Promise.resolve([{
@@ -348,32 +541,42 @@ for (
   const [name, response, reason] of [
     [
       "changed fact",
-      () => providerResponse({ text: EDITED.replace("2台", "3台") }),
+      (call) =>
+        providerResponse(editedReply(call, EDITED.replace("2台", "3台"))),
       /VOICE_REWRITE_REJECTED/,
     ],
-    ["invented achievement", () =>
-      providerResponse({
-        text: EDITED + "\n今日は100人に使ってもらえました。",
-      }), /VOICE_REWRITE_REJECTED/],
-    ["removed URL", () =>
-      providerResponse({
-        text: EDITED.replace("https://example.test/notes\n", ""),
-      }), /VOICE_REWRITE_REJECTED/],
+    [
+      "invented achievement",
+      (call) =>
+        providerResponse(
+          editedReply(call, EDITED + "\n今日は100人に使ってもらえました。"),
+        ),
+      /VOICE_REWRITE_REJECTED/,
+    ],
+    [
+      "removed URL",
+      (call) =>
+        providerResponse(
+          editedReply(call, EDITED.replace("https://example.test/notes\n", "")),
+        ),
+      /VOICE_REWRITE_REJECTED/,
+    ],
     [
       "removed tag",
-      () => providerResponse({ text: EDITED.replace("#個人開発", "") }),
+      (call) =>
+        providerResponse(editedReply(call, EDITED.replace("#個人開発", ""))),
       /VOICE_REWRITE_REJECTED/,
     ],
     [
       "length violation",
-      () => providerResponse({ text: "あ".repeat(121) }),
+      (call) => providerResponse(editedReply(call, "あ".repeat(121))),
       /VOICE_REWRITE_REJECTED/,
     ],
     [
       "changed poll options",
-      () =>
+      (call) =>
         providerResponse({
-          text: EDITED,
+          ...editedReply(call, EDITED),
           poll_options: ["別の選択肢", "履歴"],
         }),
       /AI_LAB_OPUS_GENERATION_FAILED/,
@@ -418,14 +621,12 @@ for (
 }
 
 test("third original attempt still leaves exactly one rewrite; additional calls are blocked", async () => {
-  const f = fixture((_call, index) =>
-    providerResponse({
-      text: index < 2
-        ? "個人開発は、通知が多いです。"
-        : index === 2
-        ? ORIGINAL
-        : EDITED,
-    })
+  const f = fixture((call, index) =>
+    providerResponse(
+      index === 3
+        ? editedReply(call, EDITED)
+        : { text: index < 2 ? "個人開発は、通知が多いです。" : ORIGINAL },
+    )
   );
   await dispatchAiLabScheduledBrandPost(f.args);
   assert.equal(f.recorder.calls.length, 4);
@@ -443,17 +644,136 @@ test("third original attempt still leaves exactly one rewrite; additional calls 
   assert.equal(f.recorder.calls.length, 4);
 });
 
-test("rewrite stage has its own one-call limit even with remaining shared capacity", async () => {
-  const f = fixture((_call, index) =>
-    providerResponse({ text: index ? EDITED : ORIGINAL })
+for (
+  const [label, mutate] of [
+    ["date", (text: string) => text.replace("11月12日", "11月13日")],
+    ["named product", (text: string) => text.replace("POSTONA", "かぶモリ")],
+    ["quotation", (text: string) => text.replace("「確認中」", "確認済み")],
+    ["mention", (text: string) => text.replace(" @sample_dev", "")],
+    [
+      "negation",
+      (text: string) =>
+        text.replace("見出しが残りました", "見出しは残りませんでした"),
+    ],
+    [
+      "unrelated topic",
+      (_text: string) => "今日は株式の取引について解説します。",
+    ],
+  ] as const
+) {
+  test(
+    "rewrite refuses an unauthorized change to " + label +
+      " with otherwise valid edit IDs",
+    async () => {
+      const f = fixture((call, index) =>
+        providerResponse(
+          index
+            ? editedReply(call, mutate(longEdited), structuralExamples[0][4])
+            : { text: longDraft },
+        )
+      );
+      await assert.rejects(
+        dispatchAiLabScheduledBrandPost(f.args),
+        /VOICE_REWRITE_REJECTED/,
+      );
+      assert.deepEqual(f.events, [
+        "claim",
+        "Claude:0",
+        "Claude:1",
+        "release:PRE_X_CONTENT_REJECTED",
+      ]);
+      assert.deepEqual(f.payloads, []);
+    },
   );
+}
+
+test("manual review holds the post and never falls through to the original", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "review", text: ORIGINAL, edits: [] }
+        : { text: ORIGINAL },
+    )
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  assert.deepEqual(f.events, [
+    "claim",
+    "Claude:0",
+    "Claude:1",
+    "release:PRE_X_CONTENT_REJECTED",
+  ]);
+  assert.deepEqual(f.payloads, []);
+});
+
+test("duplicate or out-of-order edit IDs cannot be applied or counted as keep", () => {
+  const { request, validate } = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: longDraft,
+  });
+  const candidates =
+    (JSON.parse(request.input) as { candidates: Candidate[] }).candidates;
+  const first = { id: candidates[0].id, option: 0 };
+  const second = { id: candidates[1].id, option: 0 };
+  for (
+    const edits of [[first, first], [second, first], [{ id: 999, option: 0 }]]
+  ) {
+    assert.throws(
+      () => validate({ decision: "edited", text: longEdited, edits }),
+      /VOICE_REWRITE_REJECTED/,
+    );
+  }
+  assert.throws(
+    () => validate({ decision: "keep", text: longDraft, edits: [first] }),
+    /VOICE_REWRITE_REJECTED/,
+  );
+});
+
+test("a mechanically allowed reflow still goes through the final engagement line guard", async () => {
+  const original =
+    "画面を見ました。通知を読みました。履歴を開きました。予定も見ました。どれを選びますか？";
+  const text = original.replaceAll("。", "。\n\n");
+  const f = fixture((call, index) => {
+    if (!index) {
+      return providerResponse({ text: original, poll_options: options });
+    }
+    const { candidates } = rewriteInput(call);
+    const edits = candidates.filter(({ from }) => from === "").map((
+      { id, options },
+    ) => ({
+      id,
+      option: options.indexOf("\n\n"),
+    }));
+    assert.equal(edits.length, 4);
+    return providerResponse({ decision: "edited", text, edits });
+  }, { rotation: 8 });
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /AI_LAB_ENGAGEMENT_INVALID/,
+  );
+  assert.deepEqual(f.events, [
+    "claim",
+    "Claude:0",
+    "Claude:1",
+    "release:PRE_X_FAILED",
+  ]);
+  assert.deepEqual(f.payloads, []);
+});
+
+test("rewrite stage has its own one-call limit even with remaining shared capacity", async () => {
+  const f = fixture(normalResponse);
   await dispatchAiLabScheduledBrandPost(f.args);
   await assert.rejects(
-    f.rewriteVoice!(aiLabVoiceRewriteRequest({
-      brandId: "ai_salaryman_lab",
-      postType: "brand_post",
-      text: ORIGINAL,
-    })),
+    f.rewriteVoice!(
+      prepareAiLabVoiceRewrite({
+        brandId: "ai_salaryman_lab",
+        postType: "brand_post",
+        text: ORIGINAL,
+      }).request,
+    ),
     /BUDGET_DENIED/,
   );
   assert.equal(f.recorder.calls.length, 2);
@@ -490,7 +810,7 @@ test("other brand, missing dedicated key and oversized estimated spend never sen
 
 test("ambiguous X write keeps the claim and does not replay either Claude stage or X", async () => {
   const f = fixture(
-    (_call, index) => providerResponse({ text: index ? EDITED : ORIGINAL }),
+    normalResponse,
     {
       publishError: new TypeError("fixture X disconnect"),
     },
