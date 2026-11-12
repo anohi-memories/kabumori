@@ -313,6 +313,7 @@ async function cardHarness(props) {
     '@/features/threads-connect/threads-connect-starter': { createThreadsConnectStarter: () => { throw new Error('unused'); } },
   };
   stubs['@/features/threads-connect/use-threads-connect'] = await load('src/features/threads-connect/use-threads-connect.ts', stubs);
+  stubs['@/features/threads-publish/threads-recovery-copy'] = await load('src/features/threads-publish/threads-recovery-copy.ts', stubs);
   const card = await load('src/features/threads-connect/threads-connect-card.tsx', stubs);
   const render = () => { cursor = 0; effects = []; const tree = card.ThreadsConnectCard(props); effects.forEach((e) => e()); return tree; };
   return { render, props };
@@ -368,4 +369,44 @@ test('card, flag ON: failures show safe copy', async () => {
   find(h.render(), 'ActionButton')[0].onPress();
   await tick();
   assert.ok(texts(h.render()).includes(domain.CONNECT_FAILURE_COPY.EXCHANGE_OUTCOME_UNCERTAIN));
+});
+
+// ---- G1 TASK 48 (G4 contract §1.3): the reconnect entry while a post of the account is still open ------------------------------
+const recoveryCopy = await import('../src/features/threads-publish/threads-recovery-copy.ts');
+
+test('T48 card with an open post: says only the SAME Threads account can settle it; a refused reconnect (generic COMPLETE_OUTCOME_UNKNOWN) gets the hedged copy and re-reads', async () => {
+  let reloads = 0;
+  const h = await cardHarness({ threadsAccount: { connectionStatus: 'needs_attention' }, accounts: [], reload: () => { reloads += 1; }, preview: false, releaseEnabled: true, openPost: true,
+    starter: { start: async () => ({ kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true }) } });
+  let tree = h.render();
+  assert.ok(texts(tree).includes(recoveryCopy.RECONNECT_SAME_ACCOUNT_NOTE));
+  find(tree, 'ActionButton')[0].onPress();
+  await tick();
+  tree = h.render();
+  assert.ok(texts(tree).includes(recoveryCopy.RECONNECT_WHILE_OPEN_COPY));
+  assert.ok(!texts(tree).includes(domain.CONNECT_FAILURE_COPY.COMPLETE_OUTCOME_UNKNOWN));
+  assert.equal(reloads, 1, 'the accounts are read again, as for any outcome that needs reconciliation');
+  assert.doesNotMatch(recoveryCopy.RECONNECT_WHILE_OPEN_COPY, /しました|投稿されました|完了/u, 'it claims no outcome');
+});
+
+test('T48 card without an open post: the same refusal keeps the generic copy; other failures are unchanged; flag OFF shows no note', async () => {
+  const h = await cardHarness({ threadsAccount: { connectionStatus: 'needs_attention' }, accounts: [], reload: () => {}, preview: false, releaseEnabled: true,
+    starter: { start: async () => ({ kind: 'failed', code: 'COMPLETE_OUTCOME_UNKNOWN', reconcile: true }) } });
+  assert.ok(!texts(h.render()).includes(recoveryCopy.RECONNECT_SAME_ACCOUNT_NOTE));
+  find(h.render(), 'ActionButton')[0].onPress();
+  await tick();
+  assert.ok(texts(h.render()).includes(domain.CONNECT_FAILURE_COPY.COMPLETE_OUTCOME_UNKNOWN));
+  const other = await cardHarness({ threadsAccount: { connectionStatus: 'needs_attention' }, accounts: [], reload: () => {}, preview: false, releaseEnabled: true, openPost: true,
+    starter: { start: async () => ({ kind: 'failed', code: 'EXCHANGE_OUTCOME_UNCERTAIN', reconcile: true }) } });
+  find(other.render(), 'ActionButton')[0].onPress();
+  await tick();
+  assert.ok(texts(other.render()).includes(domain.CONNECT_FAILURE_COPY.EXCHANGE_OUTCOME_UNCERTAIN));
+  let starts = 0;
+  const off = await cardHarness({ threadsAccount: { connectionStatus: 'needs_attention' }, accounts: [], reload: () => {}, preview: false, openPost: true,
+    starter: { start: async () => { starts += 1; return { kind: 'canceled' }; } } });
+  const tree = off.render();
+  assert.ok(!texts(tree).includes(recoveryCopy.RECONNECT_SAME_ACCOUNT_NOTE), 'flag OFF: nothing to start, no note');
+  find(tree, 'ActionButton')[0].onPress();
+  await tick();
+  assert.equal(starts, 0);
 });

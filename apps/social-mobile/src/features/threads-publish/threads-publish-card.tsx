@@ -15,6 +15,8 @@ import {
   type ThreadsAttemptView,
 } from '@/domain/threads-manual-publish';
 import type { SocialAccount } from '@/domain/types';
+import { ThreadsConnectCard } from '@/features/threads-connect/threads-connect-card';
+import { needsReconnect, UNCERTAIN_EXPIRED_COPY } from '@/features/threads-publish/threads-recovery-copy';
 import { useThreadsManualPublish } from '@/features/threads-publish/use-threads-manual-publish';
 
 const inputStyle = { borderColor: colors.border, borderWidth: 1, borderRadius: 10, padding: 10, color: colors.ink, minHeight: 120, textAlignVertical: 'top' as const };
@@ -24,8 +26,18 @@ const inputStyle = { borderColor: colors.border, borderWidth: 1, borderRadius: 1
  * text and its Threads length, an explicit confirmation, and then only what the server reports: a post
  * is shown as done only once it was read back from Threads (id + permalink). Behind the release flag.
  */
-export function ThreadsPublishCard({ account, preview, releaseEnabled }: { account: SocialAccount; preview: boolean; releaseEnabled?: boolean }) {
-  const { context, server, answer, message, busy, pin, publish, followUp, setPermission } = useThreadsManualPublish(account, preview, { releaseEnabled });
+export function ThreadsPublishCard({ account, preview, releaseEnabled, accounts, reload, refreshKey, connectReleaseEnabled }: {
+  account: SocialAccount;
+  preview: boolean;
+  releaseEnabled?: boolean;
+  /** G1 TASK 48: the screen's accounts and reload, for the reconnect entry G4's contract asks for; without them none is offered. */
+  accounts?: readonly SocialAccount[];
+  reload?: () => void;
+  /** Changes when the screen read the account data again: the card reads its state again. */
+  refreshKey?: number;
+  connectReleaseEnabled?: boolean;
+}) {
+  const { context, server, answer, message, busy, pin, publish, followUp, setPermission } = useThreadsManualPublish(account, preview, { releaseEnabled, refreshKey });
   const [text, setText] = useState('');
   const [pinned, setPinned] = useState<PinnedThreadsPublish | null>(null);
 
@@ -39,6 +51,13 @@ export function ThreadsPublishCard({ account, preview, releaseEnabled }: { accou
   const attempt: ThreadsAttemptView | null = loaded?.open ?? answer ?? loaded?.last ?? null;
   const shown = attempt ? attemptDisplay(attempt) : null;
   const note = MODE_COPY[context.mode];
+  // G1 TASK 48 (G4 contract §1.3): a stored credential that can no longer be used is left only by the person's own reconnect. The
+  // account row may still say connected, so the screen's own connect card is not shown: the entry is offered here, for this
+  // account, while a post of it may still be open.
+  const openPost = loaded?.open != null || attempt?.status === 'uncertain';
+  const expiredCheck = message?.action === 'reconcile' && message.code === 'CREDENTIALS_EXPIRED';
+  const offerReconnect = needsReconnect(message?.code) && accounts !== undefined && reload !== undefined
+    && account.connectionStatus === 'connected' && context.mode !== 'release_disabled' && context.mode !== 'preview';
 
   const requestConfirm = () => {
     if (busy) return;
@@ -52,6 +71,7 @@ export function ThreadsPublishCard({ account, preview, releaseEnabled }: { accou
   };
 
   return (
+    <>
     <Card>
       <Text style={{ color: colors.ink, fontWeight: '800' }}>Threadsに投稿</Text>
       <Text style={styles.muted}>投稿先: {account.profile.displayName}（{account.profile.handle}）</Text>
@@ -102,7 +122,19 @@ export function ThreadsPublishCard({ account, preview, releaseEnabled }: { accou
         <ActionButton label="このアカウントへの投稿の許可を取り消す" onPress={() => void setPermission(false)} disabled={busy} />
       ) : null}
 
-      {message ? <Text accessibilityLiveRegion="polite" style={{ color: message.tone === 'success' ? colors.success : message.tone === 'danger' ? colors.danger : colors.muted }}>{message.text}</Text> : null}
+      {message ? <Text accessibilityLiveRegion="polite" style={{ color: message.tone === 'success' ? colors.success : message.tone === 'danger' ? colors.danger : colors.muted }}>{expiredCheck ? UNCERTAIN_EXPIRED_COPY : message.text}</Text> : null}
     </Card>
+    {offerReconnect && accounts && reload ? (
+      <ThreadsConnectCard
+        key={`threads-reconnect-${account.id}`}
+        threadsAccount={{ connectionStatus: 'needs_attention' }}
+        accounts={accounts}
+        reload={reload}
+        preview={preview}
+        releaseEnabled={connectReleaseEnabled}
+        openPost={openPost}
+      />
+    ) : null}
+    </>
   );
 }

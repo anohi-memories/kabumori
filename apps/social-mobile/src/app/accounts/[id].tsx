@@ -15,7 +15,7 @@ import { useDataStatus } from '@/providers/data-provider';
 export default function AccountDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { accounts } = useActiveAccount();
-  const { status, reload } = useDataStatus();
+  const { status, reload, settled } = useDataStatus();
   const { session } = useAuth();
   const { view: workspace } = usePersonalWorkspace();
   useXReconnectSignal();
@@ -32,7 +32,7 @@ export default function AccountDetailScreen() {
         {pill.label === X_CONNECTION_UNVERIFIED_LABEL ? <Text style={styles.muted}>{X_CONNECTION_UNVERIFIED_TEXT}</Text> : null}
       </Card>
       <PublishSettingCard key={account.id} account={account} preview={status === 'mock_preview'} reload={reload} />
-      {account.platform === 'threads' ? <ThreadsPublishCard key={`threads-${account.id}`} account={account} preview={status === 'mock_preview'} /> : null}
+      {account.platform === 'threads' ? <ThreadsPublishCard key={`threads-${account.id}`} account={account} preview={status === 'mock_preview'} accounts={accounts} reload={reload} refreshKey={settled} /> : null}
       {account.platform === 'threads' && account.connectionStatus !== 'connected' ? <ThreadsConnectCard key={`threads-connect-${account.id}`} threadsAccount={account} accounts={accounts} reload={reload} preview={status === 'mock_preview'} /> : null}
       <Card>
         <Text style={{ color: colors.ink, fontWeight: '800' }}>声の設定（プレビュー）</Text>
