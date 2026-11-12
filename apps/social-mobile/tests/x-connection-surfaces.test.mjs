@@ -20,7 +20,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 test.beforeEach(() => { signal.clearAllXReconnectRequired(); signal.clearXServiceRestarted('surface-user'); });
 
 async function mount(path, { selected = account(), status = 'ready' } = {}) {
-  const slots = []; let cursor = 0; const effects = []; const world = { account: selected, status, authWrites: 0 };
+  const slots = []; let cursor = 0; const effects = []; const world = { account: selected, status, authWrites: 0, settled: 7, reload() {} };
   const slot = (make) => { const i = cursor++; if (!(i in slots)) slots[i] = make(); return i; };
   const react = {
     useState: (value) => { const i = slot(() => value); return [slots[i], (next) => { slots[i] = typeof next === 'function' ? next(slots[i]) : next; }]; },
@@ -42,7 +42,7 @@ async function mount(path, { selected = account(), status = 'ready' } = {}) {
     '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: 'u_me' } }) },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.account ? [world.account] : [], activeAccount: world.account, selectAccount() {} }) },
-    '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reload() {} }) },
+    '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reload: world.reload, settled: world.settled }) },
     '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'surface-user' } }, readiness: () => ({ usableNow: true }), email: { reset: false }, accountDeletion: 'not_available', linkProvider() { world.authWrites++; throw new Error('no auth write'); }, requestPasswordReset() { world.authWrites++; throw new Error('no auth write'); } }) },
     '@/domain/account-security': accountSecurity, '@/domain/auth-flows': authFlows, '@/domain/auth-release-readiness': authRelease, '@/domain/legal-links': legal,
     '@/lib/legal-config': { LEGAL_LINKS: { privacy: {}, terms: {}, support: {} } },
@@ -113,4 +113,16 @@ test('H5-14 mutation accounts_unverified_line: the list explains what is not ver
   const shown = text(await h.render());
   assert.match(shown, /現在の接続は未確認/u);
   assert.match(shown, /その操作時にサーバーが判断/u);
+});
+
+test('T48 the Threads publish card gets the screen\'s accounts, reload and the settled read (its reconnect entry and re-read after a reconnect)', async () => {
+  const h = await mount('../src/app/accounts/[id].tsx', { selected: account({ id: 'th-one', platform: 'threads' }) });
+  const tree = await h.render();
+  let card = null;
+  const visit = (n) => { if (Array.isArray(n)) return n.forEach(visit); if (!n || typeof n !== 'object') return; if (n.type === 'ThreadsPublishCard') card = n.props; visit(n.props?.children); };
+  visit(tree);
+  assert.ok(card, 'the card is mounted');
+  assert.equal(card.reload, h.world.reload);
+  assert.equal(card.refreshKey, 7);
+  assert.deepEqual(card.accounts.map((a) => a.id), ['th-one']);
 });

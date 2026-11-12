@@ -23,8 +23,20 @@ import type { SocialAccount } from '@/domain/types';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/auth-provider';
 
-/** Messages carry the account they are about, so they are never shown on another account's card. */
-export type ThreadsPublishMessage = { accountId: string; tone: 'success' | 'danger' | 'neutral'; text: string };
+/**
+ * Messages carry the account and the person they are about, so they are never shown on another account's card or to another person
+ * (G1 TASK 48). A refusal also carries its code and the action it answered, so the card can offer the way out G4's contract names.
+ */
+export type ThreadsPublishMessage = {
+  accountId: string;
+  userId: string | null;
+  tone: 'success' | 'danger' | 'neutral';
+  text: string;
+  code?: string;
+  action?: 'publish' | 'resume' | 'reconcile' | 'permission';
+  /** The screen's account-data read the message belongs to (`refreshKey` when it was written). */
+  read?: number;
+};
 
 /**
  * The Threads "post now" card's state and actions. The server (and the database behind it) decides
@@ -35,22 +47,24 @@ export type ThreadsPublishMessage = { accountId: string; tone: 'success' | 'dang
 export function useThreadsManualPublish(
   account: Pick<SocialAccount, 'id' | 'platform' | 'connectionStatus'>,
   preview: boolean,
-  options: { releaseEnabled?: boolean } = {},
+  // G1 TASK 48: `refreshKey` changes when the screen read the account data again (a reconnect, a reload): the state is read again.
+  options: { releaseEnabled?: boolean; refreshKey?: number } = {},
 ) {
   const releaseEnabled = options.releaseEnabled ?? THREADS_MANUAL_PUBLISH_UI_ENABLED;
   const { session } = useAuth();
   const userId = session?.user?.id ?? null;
   const token = session?.access_token ?? null;
-  const [server, setServer] = useState<{ accountId: string; state: ThreadsServerState }>({ accountId: account.id, state: { kind: 'loading' } });
-  const serverState: ThreadsServerState = server.accountId === account.id ? server.state : { kind: 'loading' };
+  const [server, setServer] = useState<{ accountId: string; userId: string | null; state: ThreadsServerState }>({ accountId: account.id, userId, state: { kind: 'loading' } });
+  const serverState: ThreadsServerState = server.accountId === account.id && server.userId === userId ? server.state : { kind: 'loading' };
   const mode = threadsCardMode(account, { releaseEnabled, preview, server: serverState });
   const context: ThreadsCardContext = { accountId: account.id, mode, userId };
-  const latest = useRef({ context, token });
+  const refreshKey = options.refreshKey ?? 0;
+  const latest = useRef({ context, token, refreshKey });
   useLayoutEffect(() => {
-    latest.current = { context, token };
+    latest.current = { context, token, refreshKey };
   });
   const [message, setMessage] = useState<ThreadsPublishMessage | null>(null);
-  const [answer, setAnswer] = useState<ThreadsAttemptView | null>(null);
+  const [answer, setAnswer] = useState<{ userId: string | null; attempt: ThreadsAttemptView } | null>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
 
@@ -71,31 +85,34 @@ export function useThreadsManualPublish(
 
   const loadState = useCallback(async (accountId: string) => {
     const bearer = latest.current.token;
+    const reader = latest.current.context.userId;
     if (!bearer) return;
     const { ok, payload } = await call(buildStateRequest(accountId), bearer);
-    if (latest.current.context.accountId !== accountId) return;
-    setServer({ accountId, state: ok ? parseAccountState(payload, accountId) : { kind: 'unavailable' } });
+    if (latest.current.context.accountId !== accountId || latest.current.context.userId !== reader) return;
+    setServer({ accountId, userId: reader, state: ok ? parseAccountState(payload, accountId) : { kind: 'unavailable' } });
   }, [call]);
 
   const shouldLoad = releaseEnabled && !preview && account.platform === 'threads' && account.connectionStatus === 'connected' && Boolean(token);
   useEffect(() => {
     if (shouldLoad) void loadState(account.id);
-  }, [shouldLoad, account.id, userId, loadState]);
+  }, [shouldLoad, account.id, userId, loadState, refreshKey]);
 
   /** Runs one request at a time, for the account and user it was started for. */
-  const run = useCallback(async (accountId: string, body: Record<string, unknown>, onAnswer: (payload: unknown, ok: boolean) => void) => {
+  const run = useCallback(async (accountId: string, body: Record<string, unknown>, onAnswer: (payload: unknown, ok: boolean, by: string | null) => void) => {
     if (inFlight.current) return;
     const bearer = latest.current.token;
+    const by = latest.current.context.userId;
     if (!bearer) {
-      setMessage({ accountId, tone: 'danger', text: threadsRefusal({ error: 'AUTH_REQUIRED' }).message });
+      setMessage({ read: latest.current.refreshKey, accountId, userId: by, tone: 'danger', text: threadsRefusal({ error: 'AUTH_REQUIRED' }).message, code: 'AUTH_REQUIRED' });
       return;
     }
     inFlight.current = true;
     setBusy(true);
     try {
       const { ok, payload } = await call(body, bearer);
-      if (latest.current.context.accountId !== accountId) return;
-      onAnswer(payload, ok);
+      // An answer for another account, or for a person who is no longer the one signed in, is dropped (G1 TASK 48).
+      if (latest.current.context.accountId !== accountId || latest.current.context.userId !== by) return;
+      onAnswer(payload, ok, by);
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -111,29 +128,31 @@ export function useThreadsManualPublish(
     // The screen moved on since the person confirmed: nothing is sent.
     if (!pinnedStillValid(pinned, latest.current.context)) return false;
     let accepted = false;
-    await run(pinned.accountId, buildPublishRequest(pinned), (payload, ok) => {
+    await run(pinned.accountId, buildPublishRequest(pinned), (payload, ok, by) => {
       const attempt = ok ? parseAttemptResponse(payload, pinned.accountId) : null;
       if (attempt) {
         accepted = true;
-        setAnswer(attempt);
+        setAnswer({ userId: by, attempt });
         setMessage(null);
         return;
       }
-      setMessage({ accountId: pinned.accountId, tone: 'danger', text: threadsRefusal(payload).message });
+      const refusal = threadsRefusal(payload);
+      setMessage({ read: latest.current.refreshKey, accountId: pinned.accountId, userId: by, tone: 'danger', text: refusal.message, code: refusal.code, action: 'publish' });
     });
     return accepted;
   }, [run]);
 
   const followUp = useCallback(async (action: 'resume' | 'reconcile', attempt: ThreadsAttemptView) => {
     if (attempt.accountId !== latest.current.context.accountId) return;
-    await run(attempt.accountId, buildAttemptRequest(action, attempt.id), (payload, ok) => {
+    await run(attempt.accountId, buildAttemptRequest(action, attempt.id), (payload, ok, by) => {
       const next = ok ? parseAttemptResponse(payload, attempt.accountId) : null;
       if (next && next.id === attempt.id) {
-        setAnswer(next);
+        setAnswer({ userId: by, attempt: next });
         setMessage(null);
         return;
       }
-      setMessage({ accountId: attempt.accountId, tone: 'danger', text: threadsRefusal(payload).message });
+      const refusal = threadsRefusal(payload);
+      setMessage({ read: latest.current.refreshKey, accountId: attempt.accountId, userId: by, tone: 'danger', text: refusal.message, code: refusal.code, action });
     });
   }, [run]);
 
@@ -143,15 +162,17 @@ export function useThreadsManualPublish(
     if (!state || state.kind !== 'loaded' || state.permitted === desired) return;
     if (desired ? current.mode !== 'consent_required' : current.mode !== 'ready') return;
     const accountId = current.accountId;
-    await run(accountId, buildPermissionRequest(accountId, desired, state.permitted), (payload, ok) => {
+    await run(accountId, buildPermissionRequest(accountId, desired, state.permitted), (payload, ok, by) => {
       const confirmed = ok ? parsePermissionResponse(payload, accountId, desired) : null;
-      setMessage(confirmed === null
-        ? { accountId, tone: 'danger', text: threadsRefusal(payload).message }
-        : { accountId, tone: 'success', text: desired ? 'このThreadsアカウントへの投稿を許可しました。' : '投稿の許可を取り消しました。' });
+      const refusal = confirmed === null ? threadsRefusal(payload) : null;
+      setMessage(refusal
+        ? { read: latest.current.refreshKey, accountId, userId: by, tone: 'danger', text: refusal.message, code: refusal.code, action: 'permission' }
+        : { read: latest.current.refreshKey, accountId, userId: by, tone: 'success', text: desired ? 'このThreadsアカウントへの投稿を許可しました。' : '投稿の許可を取り消しました。' });
     });
   }, [run, server]);
 
-  const shownAnswer = answer && answer.accountId === account.id ? answer : null;
-  const shownMessage = message && message.accountId === account.id ? message : null;
+  const shownAnswer = answer && answer.attempt.accountId === account.id && answer.userId === userId ? answer.attempt : null;
+  // A new read of the account data (a reconnect, a reload) replaces what the last answer said: the state read now is what is shown.
+  const shownMessage = message && message.accountId === account.id && message.userId === userId && (message.read ?? 0) === refreshKey ? message : null;
   return { context, server: serverState, answer: shownAnswer, message: shownMessage, busy, pin, publish, followUp, setPermission };
 }

@@ -9,8 +9,9 @@ import {
 } from '@/domain/threads-connect';
 import type { SocialAccount } from '@/domain/types';
 import { useThreadsConnect, type ThreadsConnectUiState } from '@/features/threads-connect/use-threads-connect';
+import { RECONNECT_SAME_ACCOUNT_NOTE, RECONNECT_WHILE_OPEN_COPY } from '@/features/threads-publish/threads-recovery-copy';
 
-function stateMessage(state: ThreadsConnectUiState, verified: boolean): string | null {
+function stateMessage(state: ThreadsConnectUiState, verified: boolean, openPost: boolean): string | null {
   switch (state.kind) {
     case 'idle':
       return null;
@@ -21,6 +22,8 @@ function stateMessage(state: ThreadsConnectUiState, verified: boolean): string |
     case 'done':
       if (state.result.kind === 'canceled') return '接続をキャンセルしました。';
       if (state.result.kind === 'expired') return '時間が経ちすぎたため、接続を中止しました。もう一度お試しください。';
+      // G1 TASK 48 (G4 §1.3): a reconnect refused while this account has an open post; H5's code is generic, so the copy hedges.
+      if (openPost && state.result.kind === 'failed' && state.result.code === 'COMPLETE_OUTCOME_UNKNOWN') return RECONNECT_WHILE_OPEN_COPY;
       return connectFailureCopy(state.result.code);
   }
 }
@@ -30,21 +33,24 @@ function stateMessage(state: ThreadsConnectUiState, verified: boolean): string |
  * disabled button and nothing runs. With the flag on, the real flow (use-threads-connect) runs and the card
  * reports exactly what happened; "connected" only after the reloaded account data confirms it.
  */
-export function ThreadsConnectCard({ threadsAccount, accounts, reload, preview, releaseEnabled = THREADS_CONNECT_UI_ENABLED, starter }: {
+export function ThreadsConnectCard({ threadsAccount, accounts, reload, preview, releaseEnabled = THREADS_CONNECT_UI_ENABLED, starter, openPost = false }: {
   threadsAccount: Pick<SocialAccount, 'connectionStatus'> | null;
   accounts: readonly Pick<SocialAccount, 'id' | 'platform' | 'connectionStatus'>[];
   reload: () => void;
   preview: boolean;
   releaseEnabled?: boolean;
   starter?: ThreadsConnectStarter;
+  /** G1 TASK 48: a post of this account is still open (uncertain / in progress); the reconnect must be the same Threads account. */
+  openPost?: boolean;
 }) {
   const view = threadsConnectView(threadsAccount, { releaseEnabled, preview });
   const { state, verified, connect, busy } = useThreadsConnect({ accounts, reload, releaseEnabled: releaseEnabled && view.canStart, starter });
-  const message = stateMessage(state, verified);
+  const message = stateMessage(state, verified, openPost);
   return (
     <Card>
       <Text style={{ color: colors.ink, fontWeight: '800' }}>{view.title}</Text>
       <Text style={styles.muted}>{view.note}</Text>
+      {openPost && view.canStart ? <Text style={{ color: colors.ink }}>{RECONNECT_SAME_ACCOUNT_NOTE}</Text> : null}
       {view.buttonLabel ? <ActionButton label={busy ? '接続しています…' : view.buttonLabel} onPress={() => void connect()} disabled={!view.canStart || busy} /> : null}
       {message ? <Text accessibilityLiveRegion="polite" style={styles.muted}>{message}</Text> : null}
     </Card>

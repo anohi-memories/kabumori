@@ -138,14 +138,15 @@ test('copy: consent says manual only and revocable; confirmation says it cannot 
 
 // ---------------------------------------------------------------- hook + card (real source, transpiled)
 
-async function cardHarness({ acct = account(), preview = false, releaseEnabled = true, serverState = { permitted: true, open_attempt: null, last_attempt: null }, onPublish = async () => ({ data: { success: true, attempt: attempt() }, error: null }) } = {}) {
+async function cardHarness({ acct = account(), preview = false, releaseEnabled = true, serverState = { permitted: true, open_attempt: null, last_attempt: null }, onPublish = async () => ({ data: { success: true, attempt: attempt() }, error: null }), onAction = null, stableCallbacks = false } = {}) {
   const slots = []; let cursor = 0; let effects = []; const deps = [];
   const react = {
     useLayoutEffect: (effect) => { effects.push(effect); },
     useEffect: (effect, d) => { const i = cursor++; const prev = deps[i]; if (!prev || d.some((v, k) => v !== prev[k])) { deps[i] = d; effects.push(effect); } },
     useState: (initial) => { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], (v) => { slots[i] = typeof v === 'function' ? v(slots[i]) : v; }]; },
     useRef: (initial) => { const i = cursor++; if (!(i in slots)) slots[i] = { current: initial }; return slots[i]; },
-    useCallback: (cb) => { const i = cursor++; slots[i] = cb; return cb; },
+    // G1 TASK 48: `stableCallbacks` keeps a callback while its dependencies are the same, as React does (default: a new one each render).
+    useCallback: (cb, d) => { const i = cursor++; if (stableCallbacks && slots[i]?.deps && d.every((v, k) => v === slots[i].deps[k])) return slots[i].cb; slots[i] = stableCallbacks ? { cb, deps: d } : cb; return cb; },
   };
   const jsx = (type, props) => ({ type: typeof type === 'function' ? type.name : type, fn: type, props });
   const calls = [];
@@ -155,6 +156,8 @@ async function cardHarness({ acct = account(), preview = false, releaseEnabled =
     if (options.body.action === 'account_state') return { data: { success: true, account: { id: acct.id, manual_publish_permitted: state.permitted, open_attempt: state.open_attempt, last_attempt: state.last_attempt } }, error: null };
     if (options.body.action === 'set_permission') { state.permitted = options.body.desired_enabled; return { data: { success: true, status: 'updated', account: { id: acct.id, manual_publish_permitted: state.permitted } }, error: null }; }
     if (options.body.action === 'publish') return onPublish(options.body);
+    // G1 TASK 48: resume / reconcile answers a test scripts (otherwise the old empty answer).
+    if (onAction) { const scripted = await onAction(options.body, state); if (scripted) return scripted; }
     return { data: null, error: null };
   };
   const auth = { session: { access_token: 'user-jwt-fixture', user: { id: 'user-1' } } };
@@ -167,6 +170,8 @@ async function cardHarness({ acct = account(), preview = false, releaseEnabled =
     '@/lib/supabase': { supabase: { functions: { invoke } } },
     '@/providers/auth-provider': { useAuth: () => ({ session: auth.session }) },
     'expo-crypto': { randomUUID: () => KEY },
+    // G1 TASK 48: the reconnect entry is the connect card (its own tests drive it), as an element here.
+    '@/features/threads-connect/threads-connect-card': { ThreadsConnectCard: 'ThreadsConnectCard' },
   };
   const load = async (path) => {
     const module = { exports: {} };
@@ -175,6 +180,7 @@ async function cardHarness({ acct = account(), preview = false, releaseEnabled =
     return module.exports;
   };
   stubs['@/features/threads-publish/use-threads-manual-publish'] = await load('src/features/threads-publish/use-threads-manual-publish.ts');
+  stubs['@/features/threads-publish/threads-recovery-copy'] = await load('src/features/threads-publish/threads-recovery-copy.ts');
   const card = await load('src/features/threads-publish/threads-publish-card.tsx');
   const props = { account: acct, preview, releaseEnabled };
   const render = () => { cursor = 0; effects = []; const tree = card.ThreadsPublishCard(props); const run = effects; effects = []; run.forEach((e) => e()); return tree; };
@@ -304,4 +310,182 @@ test('an open uncertain attempt blocks the composer and offers only a read-only 
   const reconcile = h.calls.find((c) => c.body.action === 'reconcile');
   assert.deepEqual({ ...reconcile.body }, { action: 'reconcile', attempt_id: ATTEMPT_ID });
   assert.equal(h.calls.filter((c) => c.body.action === 'publish').length, 0);
+});
+
+// ---- G1 TASK 48: G4's contract on the real card (docs/postona/threads-connect-publish-contract-for-g1-g3-20261113.md) ------------
+const recovery = await import('../src/features/threads-publish/threads-recovery-copy.ts');
+const refused = (code, status = 409) => ({ data: null, error: { context: new Response(JSON.stringify({ error: code }), { status, headers: { 'content-type': 'application/json' } }) } });
+const elements = (tree, type) => { const out = []; walk(tree, (n) => { if (n.type === type) out.push(n.props); }); return out; };
+const sends = (h, action) => h.calls.filter((c) => c.body.action === action).length;
+async function shown(h) { h.render(); await h.settle(); return h.render(); }
+
+test('T48 uncertain + 確認する refused 409 CREDENTIALS_EXPIRED: the requested copy, a reconnect entry for THIS account (same Threads account), no new post, nothing resent', async () => {
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const h = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? refused('CREDENTIALS_EXPIRED') : null) });
+  const reloads = [];
+  Object.assign(h.props, { accounts: [account()], reload: () => reloads.push(1), refreshKey: 0 });
+  let tree = await shown(h);
+  assert.equal(elements(tree, 'ThreadsConnectCard').length, 0, 'no reconnect entry before the refusal');
+  button(tree, '確認する').onPress();
+  await h.settle();
+  tree = h.render();
+  assert.ok(texts(tree).includes(recovery.UNCERTAIN_EXPIRED_COPY), texts(tree).join(' / '));
+  const [entry] = elements(tree, 'ThreadsConnectCard');
+  assert.ok(entry, 'the reconnect entry is offered on this card');
+  assert.deepEqual([entry.threadsAccount.connectionStatus, entry.openPost, entry.accounts.length], ['needs_attention', true, 1]);
+  assert.equal(input(tree), null, 'still no new post while the outcome is unknown');
+  assert.equal(sends(h, 'publish'), 0, 'nothing resent');
+  assert.equal(sends(h, 'reconcile'), 1);
+  assert.ok(!texts(tree).some((t) => t.includes('投稿しました')), 'never shown as posted');
+});
+
+test('T48 after the reconnect the screen reads the accounts again (refreshKey): the card reads its state again, the old refusal and entry go, the settled post shows without a link', async () => {
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const h = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? refused('CREDENTIALS_EXPIRED') : null) });
+  Object.assign(h.props, { accounts: [account()], reload: () => {}, refreshKey: 3 });
+  let tree = await shown(h);
+  button(tree, '確認する').onPress();
+  await h.settle();
+  assert.equal(elements(h.render(), 'ThreadsConnectCard').length, 1);
+  // G4's reconnect recovery settled the post from the container: published, but which post is not provable (no id, no link)
+  Object.assign(h.state, { open_attempt: null, last_attempt: attempt({ status: 'published_unidentified', provider_post_id: null, permalink: PERMALINK, error_code: 'PUBLISHED_POST_NOT_FOUND' }) });
+  const reads = sends(h, 'account_state');
+  h.props.refreshKey = 4;
+  tree = await shown(h);
+  assert.ok(sends(h, 'account_state') > reads, 'read again (this harness re-runs callbacks\' effects on each render, so only "again" is asserted)');
+  assert.equal(elements(tree, 'ThreadsConnectCard').length, 0, 'the entry goes with the old refusal');
+  assert.ok(!texts(tree).includes(recovery.UNCERTAIN_EXPIRED_COPY));
+  assert.ok(texts(tree).includes('Threadsへの投稿は確認できました'));
+  assert.ok(!texts(tree).includes('Threadsで投稿を見る'), 'published_unidentified never gets a link, even if one were sent');
+  assert.ok(input(tree), 'a new post may begin');
+  assert.equal(sends(h, 'publish'), 0);
+});
+
+test('T48 a publish refused CREDENTIALS_EXPIRED (no open post): the refusal copy and the reconnect entry without the open-post note; the text is kept', async () => {
+  const h = await cardHarness({ onPublish: async () => refused('CREDENTIALS_EXPIRED') });
+  Object.assign(h.props, { accounts: [account()], reload: () => {} });
+  let tree = await shown(h);
+  input(tree).onChangeText('期限切れの前の投稿');
+  tree = h.render();
+  button(tree, '投稿内容を確認する').onPress();
+  tree = h.render();
+  button(tree, '投稿する').onPress();
+  await h.settle();
+  tree = h.render();
+  assert.ok(texts(tree).includes(domain.threadsRefusal({ error: 'CREDENTIALS_EXPIRED' }).message));
+  const [entry] = elements(tree, 'ThreadsConnectCard');
+  assert.equal(entry?.openPost, false);
+  assert.equal(input(tree)?.value, '期限切れの前の投稿');
+  assert.equal(sends(h, 'publish'), 1, 'one send, not repeated');
+});
+
+test('T48 no entry where it does not belong: a screen without accounts/reload, flag OFF, preview, other refusals', async () => {
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const bare = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? refused('CREDENTIALS_EXPIRED') : null) });
+  let tree = await shown(bare);
+  button(tree, '確認する').onPress();
+  await bare.settle();
+  tree = bare.render();
+  assert.ok(texts(tree).includes(recovery.UNCERTAIN_EXPIRED_COPY));
+  assert.equal(elements(tree, 'ThreadsConnectCard').length, 0, 'no accounts / reload given: no entry');
+  const busy = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? refused('PUBLISH_IN_PROGRESS') : null) });
+  Object.assign(busy.props, { accounts: [account()], reload: () => {} });
+  tree = await shown(busy);
+  button(tree, '確認する').onPress();
+  await busy.settle();
+  assert.equal(elements(busy.render(), 'ThreadsConnectCard').length, 0, 'a refusal another way out is not a reconnect');
+  for (const options of [{ releaseEnabled: false }, { preview: true }]) {
+    const h = await cardHarness(options);
+    Object.assign(h.props, { accounts: [account()], reload: () => {} });
+    tree = await shown(h);
+    assert.equal(elements(tree, 'ThreadsConnectCard').length, 0, JSON.stringify(options));
+    assert.equal(h.calls.length, 0, `${JSON.stringify(options)}: no request`);
+  }
+});
+
+test('T48 person A -> B on the same account: A\'s answer, refusal and state are never shown to B; B\'s state is read with B\'s token', async () => {
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const h = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? refused('CREDENTIALS_EXPIRED') : null) });
+  Object.assign(h.props, { accounts: [account()], reload: () => {} });
+  let tree = await shown(h);
+  button(tree, '確認する').onPress();
+  await h.settle();
+  assert.ok(texts(h.render()).includes(recovery.UNCERTAIN_EXPIRED_COPY));
+  h.auth.session = { access_token: 'user-2-jwt-fixture', user: { id: 'user-2' } };
+  Object.assign(h.state, { open_attempt: null, last_attempt: null });
+  const frames = [h.render()];
+  await h.settle();
+  frames.push(h.render());
+  for (const f of frames) {
+    assert.ok(!texts(f).includes(recovery.UNCERTAIN_EXPIRED_COPY), 'A\'s refusal is not B\'s');
+    assert.equal(elements(f, 'ThreadsConnectCard').length, 0);
+    assert.ok(!texts(f).includes('投稿されたか確認できていません'), 'A\'s open post is not shown to B');
+  }
+  assert.equal(h.calls.at(-1).auth, 'Bearer user-2-jwt-fixture');
+});
+
+test('T48 a lost answer to a publish: the next state read shows the open attempt; no new post, repeated taps of 確認する send one request at a time', async () => {
+  let held = null;
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const h = await cardHarness({
+    onPublish: async () => { h.state.open_attempt = open; return { data: null, error: new TypeError('Network request failed') }; },
+    onAction: (body) => (body.action === 'reconcile' ? new Promise((resolve) => { held = resolve; }) : null),
+  });
+  let tree = await shown(h);
+  input(tree).onChangeText('答えの消えた投稿');
+  tree = h.render();
+  button(tree, '投稿内容を確認する').onPress();
+  button(h.render(), '投稿する').onPress();
+  await h.settle();
+  tree = h.render();
+  assert.equal(input(tree), null, 'the open attempt blocks the composer');
+  assert.equal(sends(h, 'publish'), 1);
+  const check = button(tree, '確認する');
+  check.onPress(); check.onPress(); check.onPress();
+  await h.settle();
+  assert.equal(sends(h, 'reconcile'), 1, 'one at a time');
+  held({ data: { success: true, attempt: open }, error: null });
+  await h.settle();
+  assert.equal(sends(h, 'publish'), 1, 'never resent');
+});
+
+test('T48 with React\'s stable callbacks: the state is read once per refreshKey change, not on every render', async () => {
+  const h = await cardHarness({ stableCallbacks: true });
+  Object.assign(h.props, { accounts: [account()], reload: () => {}, refreshKey: 1 });
+  await shown(h);
+  const reads = sends(h, 'account_state');
+  await shown(h);
+  assert.equal(sends(h, 'account_state'), reads, 'no new read without a new account-data read');
+  h.props.refreshKey = 2;
+  await shown(h);
+  assert.equal(sends(h, 'account_state'), reads + 1, 'one read for the new account-data read');
+});
+
+test('T48 A\'s posted answer is not shown to B; an answer to A that arrives after B signed in is dropped', async () => {
+  const h = await cardHarness({ serverState: { permitted: true, open_attempt: null, last_attempt: null } });
+  let tree = await shown(h);
+  input(tree).onChangeText('Aの投稿');
+  button(h.render(), '投稿内容を確認する').onPress();
+  button(h.render(), '投稿する').onPress();
+  await h.settle();
+  assert.ok(texts(h.render()).includes('Threadsに投稿しました'), 'A sees A\'s answer');
+  h.auth.session = { access_token: 'user-2-jwt-fixture', user: { id: 'user-2' } };
+  await h.settle();
+  assert.ok(!texts(h.render()).includes('Threadsに投稿しました'), 'B does not');
+
+  let held = null;
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const late = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? new Promise((resolve) => { held = resolve; }) : null) });
+  Object.assign(late.props, { accounts: [account()], reload: () => {} });
+  tree = await shown(late);
+  button(tree, '確認する').onPress();
+  await late.settle();
+  late.auth.session = { access_token: 'user-2-jwt-fixture', user: { id: 'user-2' } };
+  Object.assign(late.state, { open_attempt: null });
+  late.render();
+  held(refused('CREDENTIALS_EXPIRED'));
+  await late.settle();
+  tree = late.render();
+  assert.ok(!texts(tree).includes(recovery.UNCERTAIN_EXPIRED_COPY), 'A\'s late refusal is not shown to B');
+  assert.equal(elements(tree, 'ThreadsConnectCard').length, 0);
 });
