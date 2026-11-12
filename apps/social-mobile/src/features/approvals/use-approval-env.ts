@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { useRefocusCount } from '@/features/reservations/use-refocus-count';
+import { type LifecycleCheck, useServiceLifecycle } from '@/features/service-enrollment/service-lifecycle';
 import { getSupabaseConfig, supabase } from '@/lib/supabase';
 import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
@@ -17,7 +18,11 @@ export type ApprovalEnv = {
   refocus: number;
   notificationBlock: ApprovalBlock | null;
   notificationScope: string | null;
+  /** G1 TASK 47: asks the service gate, now, whether this person's service still runs. Only 'active' lets a write be sent. */
+  confirmActive: () => Promise<LifecycleCheck>;
 };
+
+const NOT_CONFIRMED = async (): Promise<LifecycleCheck> => 'unknown';
 
 /**
  * Whether the person may use the approval screens, and for whom: the signed-in user, their own personal workspace, and the selected X
@@ -29,6 +34,7 @@ export function useApprovalEnv(): ApprovalEnv {
   const { view: workspace } = usePersonalWorkspace();
   const { activeAccount } = useActiveAccount();
   const refocus = useRefocusCount();
+  const lifecycle = useServiceLifecycle();
   const config = getSupabaseConfig();
   const url = config.ok ? config.config.url : null;
   const key = config.ok ? config.config.publishableKey : null;
@@ -63,5 +69,7 @@ export function useApprovalEnv(): ApprovalEnv {
   if (block === null && !account) block = 'no_x_account';
   if (block === null && workspace.kind === 'ready' && account && account.brandId !== workspace.workspaceId) block = 'other_workspace';
   const scope = block === null && workspace.kind === 'ready' && account ? `${userId}\n${workspace.workspaceId}\n${account.id}` : null;
-  return { block, scope, client: notificationScope ? client : null, accountId: scope ? account?.id ?? null : null, refocus, notificationBlock, notificationScope };
+  // The gate's answer is for the person it shows; a screen of anyone else is never confirmed by it.
+  const confirmActive = notificationScope && lifecycle.userId === userId ? lifecycle.confirmActive : NOT_CONFIRMED;
+  return { block, scope, client: notificationScope ? client : null, accountId: scope ? account?.id ?? null : null, refocus, notificationBlock, notificationScope, confirmActive };
 }

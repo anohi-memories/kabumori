@@ -32,6 +32,8 @@ export const settle = async () => { for (let i = 0; i < 10; i++) await new Promi
 /**
  * `world` is read on every render: session ({ token, userId } or null), workspace view, account, status, gate, endpoint, params.
  * `fetch` (in world) is what the client sends through.
+ * G1 TASK 47: `lifecycle` is the service gate's answer to a fresh check ('active' unless a test says otherwise, or a function returning a
+ * promise of it); `lifecycleUser` the person the gate shows (the session's by default); `checks` counts the checks asked.
  */
 export async function mountApprovals(initial) {
   const slots = []; let cursor = 0; const effects = [];
@@ -41,13 +43,17 @@ export async function mountApprovals(initial) {
     useMemo: (fn, deps) => { const i = cursor++; const prev = slots[i]; if (!prev || deps.some((d, j) => !Object.is(d, prev.deps[j]))) slots[i] = { deps, value: fn() }; return slots[i].value; },
     useEffect: (fn, deps) => { const i = cursor++; const prev = slots[i]; if (!prev || deps.some((d, j) => !Object.is(d, prev.deps[j]))) { prev?.cleanup?.(); slots[i] = { deps }; effects.push([i, fn]); } },
   };
-  const world = { gate: true, status: 'ready', refocus: 0, ids: 0, pushes: [], params: {}, endpoint: { functionName: 'postona-x-approvals', allowLoopbackHttpForTests: false }, config: { ok: true, config: { url: 'https://proj.example.test', publishableKey: 'sb_publishable_testkey01' } }, ...initial };
+  const world = { gate: true, status: 'ready', refocus: 0, ids: 0, pushes: [], params: {}, lifecycle: 'active', checks: 0, endpoint: { functionName: 'postona-x-approvals', allowLoopbackHttpForTests: false }, config: { ok: true, config: { url: 'https://proj.example.test', publishableKey: 'sb_publishable_testkey01' } }, ...initial };
   globalThis.fetch = (...a) => world.fetch(...a);
   const supabase = { auth: { getSession: async () => ({ data: { session: world.session ? { access_token: world.session.token, user: { id: world.session.userId } } : null }, error: null }) } };
   const env = load(ENV_JS, {
     react,
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: world.workspace, retry() {} }) },
     '@/features/reservations/use-refocus-count': { useRefocusCount: () => world.refocus },
+    '@/features/service-enrollment/service-lifecycle': { useServiceLifecycle: () => ({
+      userId: 'lifecycleUser' in world ? world.lifecycleUser : world.session?.userId ?? null,
+      confirmActive: () => { world.checks += 1; return typeof world.lifecycle === 'function' ? world.lifecycle() : Promise.resolve(world.lifecycle); },
+    }) },
     '@/lib/supabase': { supabase, getSupabaseConfig: () => world.config },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.account ? [world.account] : [], activeAccount: world.account, selectAccount() {} }) },
     '@/providers/auth-provider': { useAuth: () => ({ session: world.session ? { access_token: world.session.token, user: { id: world.session.userId } } : null }) },

@@ -70,6 +70,8 @@ function g3() {
     const queued = s.inject[action]?.shift();
     if (queued instanceof Error) throw queued;
     if (queued) return out(queued.status, queued.body);
+    // G1 TASK 47: an ended service, as G3 answers it today (contract §5a): writes refused, reads (and markRead) still 200.
+    if (who && s.ended && ['submit', 'revise', 'approve', 'reject'].includes(action)) return out(403, { ok: false, code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE' });
     const answer = who ? actions[action](who, payload) : out(401, { ok: false, code: 'AUTH_REQUIRED' });
     if (s.after[action]?.shift()) throw new TypeError('Network request failed');   // the server did it; the answer is lost
     return answer;
@@ -612,4 +614,171 @@ test('T46 date fields: digits-and-punctuation keyboard, no autocorrect / capital
   tree = await h.press('修正する');
   const e = field(tree, '修正する日時');
   assert.deepEqual([e.keyboardType, e.autoCorrect, e.autoCapitalize, e.spellCheck], ['numbers-and-punctuation', false, 'none', false]);
+});
+
+// ---- G1 TASK 47 (G2 #11 P3): a notification screen left open while the service ends ------------------------------------------------
+// The stand-in answers as G3 does today: after the end, writes are 403 SERVICE_NOT_ACTIVE but notifications / get / markRead still 200.
+// `world.lifecycle` is the service gate's answer to the fresh check (service-enrollment-gate.tsx; its own tests are T47 there).
+const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+const markReads = (srv) => srv.requests.filter((r) => r.action === 'markRead');
+async function twoUnread(srv) {
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '退会前の候補X');
+  await submitOne(h, '退会前の候補Y');
+  const tree = await h.show('notifications');
+  assert.ok(has(tree, '未読 2件'));
+  return { h, tree };
+}
+
+test('T47 G2 #11 P3: the service ends while the notification screen is open; opening a line sends no markRead, the screen turns read-only, the server row stays unread', async () => {
+  const srv = g3();
+  const { h, tree } = await twoUnread(srv);
+  srv.ended = true;
+  h.world.lifecycle = 'ended';   // the gate's fresh check: start RPC answered reenroll_required
+  const checks = h.world.checks;
+  pressables(tree, 'お知らせ ')[0].onPress();
+  let after = await h.render();
+  assert.equal(markReads(srv).length, 0, 'no markRead was sent');
+  assert.equal(h.world.checks, checks + 1, 'the tap asked the gate first');
+  assert.ok(srv.notes.every((n) => n.readAt === null), 'the server read nothing');
+  assert.ok(has(after, view.NOTIFICATIONS_ENDED_TEXT));
+  assert.ok(has(after, '未読 2件'), 'the list stays readable as it was');
+  const rows = pressables(after, 'お知らせ ');
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((r) => r.disabled === true && r.accessibilityState?.disabled === true), 'the lines are read-only');
+  const pushes = h.world.pushes.length;
+  rows[1].onPress();
+  after = await h.render();
+  assert.equal(markReads(srv).length, 0, 'a second tap sends nothing either');
+  assert.equal(h.world.pushes.length, pushes, 'and opens nothing');
+  h.world.refocus += 1;   // back to the screen: the list is read again, still read-only
+  after = await h.render();
+  assert.ok(has(after, view.NOTIFICATIONS_ENDED_TEXT));
+  assert.equal(markReads(srv).length, 0);
+});
+
+test('T47 an end seen on return to the screen or on a reload (before any tap): read-only at once; reads only', async () => {
+  for (const how of ['refocus', 'reload']) {
+    const srv = g3();
+    const { h } = await twoUnread(srv);
+    srv.ended = true;
+    h.world.lifecycle = 'ended';
+    const sent = srv.requests.length;
+    let tree;
+    if (how === 'refocus') { h.world.refocus += 1; tree = await h.render(); } else tree = await h.press('最新の状態を読み込む');
+    assert.ok(has(tree, view.NOTIFICATIONS_ENDED_TEXT), how);
+    assert.ok(pressables(tree, 'お知らせ ').every((r) => r.disabled === true), how);
+    pressables(tree, 'お知らせ ')[0].onPress();
+    await h.render();
+    assert.deepEqual([...new Set(srv.requests.slice(sent).map((r) => r.action))], ['notifications'], `${how}: only the list read`);
+  }
+});
+
+test('T47 no answer from the check (offline, expired token, another login meanwhile) is not a yes: no markRead, says so; a later confirmed check marks each row once', async () => {
+  const srv = g3();
+  const { h, tree } = await twoUnread(srv);
+  h.world.lifecycle = 'unknown';
+  pressables(tree, 'お知らせ ')[0].onPress();
+  let after = await h.render();
+  assert.equal(markReads(srv).length, 0);
+  assert.ok(has(after, view.LIFECYCLE_UNKNOWN_TEXT));
+  assert.ok(has(after, '未読 2件'), 'nothing is shown as read');
+  h.world.lifecycle = 'active';
+  pressables(after, 'お知らせ ')[0].onPress();
+  after = await h.render();
+  assert.equal(markReads(srv).length, 1, 'confirmed: the one row is sent once');
+  assert.ok(has(after, '未読 1件'));
+});
+
+test('T47 taps while the check is out send each row once; a check answered after A -> B sends nothing for anyone', async () => {
+  const srv = g3();
+  const { h, tree } = await twoUnread(srv);
+  const gate = deferred();
+  h.world.lifecycle = () => gate.promise;
+  const line = pressables(tree, 'お知らせ ')[0];
+  line.onPress();
+  line.onPress();
+  line.onPress();
+  await h.render();
+  assert.equal(markReads(srv).length, 0, 'nothing before the gate answers');
+  gate.resolve('active');
+  await h.render();
+  assert.equal(markReads(srv).length, 1, 'three taps, one row, one call');
+
+  const late = deferred();
+  h.world.lifecycle = () => late.promise;
+  const asked = h.world.checks;
+  for (const r of pressables(h.once(), 'お知らせ ')) r.onPress();   // the read line asks nothing; the unread one asks once
+  await h.render();
+  assert.equal(h.world.checks, asked + 1, 'the unread line\'s check is out');
+  assert.equal(markReads(srv).length, 1);
+  h.world.session = B;
+  await h.render();
+  late.resolve('active');
+  await h.render();
+  assert.equal(markReads(srv).length, 1, 'A\'s confirmed check, answered after the switch, sends nothing');
+});
+
+test('T47 the gate shows another person than the screen: never confirmed, nothing asked, nothing sent', async () => {
+  const srv = g3();
+  const { h } = await twoUnread(srv);
+  h.world.lifecycleUser = 'person-b';
+  const tree = await h.render();
+  const checks = h.world.checks;
+  pressables(tree, 'お知らせ ')[0].onPress();
+  const after = await h.render();
+  assert.equal(h.world.checks, checks, 'A\'s screen does not use B\'s gate');
+  assert.equal(markReads(srv).length, 0);
+  assert.ok(has(after, view.LIFECYCLE_UNKNOWN_TEXT));
+});
+
+test('T47 a write refused 403 SERVICE_NOT_ACTIVE on the approval screen asks the gate (which closes the app when it ended); nothing is sent again', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  srv.ended = true;
+  const checks = h.world.checks;
+  const tree = await submitOne(h, '退会後の候補');
+  assert.equal(srv.count('submit'), 1);
+  assert.ok(has(tree, view.ACTION_TEXT.forbidden));
+  assert.equal(h.world.checks, checks + 1, 'the refusal asked the gate');
+  assert.equal(srv.candidates.size, 0);
+});
+
+test('T47 a later G3 guard that refuses markRead 403 SERVICE_NOT_ACTIVE: the list closes, the gate is asked; an ended answer leaves it read-only', async () => {
+  const srv = g3();
+  const { h, tree } = await twoUnread(srv);
+  srv.inject.markRead = [{ status: 403, body: { ok: false, code: 'POSTONA_RESV_SERVICE_NOT_ACTIVE' } }];
+  let calls = 0;
+  h.world.lifecycle = () => Promise.resolve(++calls === 1 ? 'active' : 'ended');   // active just before, ended by the time the server looked
+  pressables(tree, 'お知らせ ')[0].onPress();
+  let after = await h.render();
+  assert.equal(markReads(srv).length, 1);
+  assert.equal(calls, 2, 'the refusal asked again');
+  assert.ok(has(after, view.NOTIFICATIONS_ENDED_TEXT) || has(after, view.ACTION_TEXT.forbidden));
+  h.world.refocus += 1;
+  after = await h.render();
+  assert.ok(pressables(after, 'お知らせ ').every((r) => r.disabled === true), 'read-only after the re-read');
+  assert.equal(markReads(srv).length, 1);
+});
+
+test('T47 flag OFF (the shipped constant): the notification screen asks nothing and sends nothing', async () => {
+  const srv = g3();
+  const h = await mount({ srv, gate: false, screen: 'notifications' });
+  const tree = await h.render();
+  assert.ok(has(tree, view.POSTONA_APPROVAL_UI_GATE_TEXT));
+  assert.equal(h.world.checks, 0);
+  assert.equal(srv.requests.length, 0);
+});
+
+test('T47 source: markRead is sent only from the confirmed path; the gate check is the reviewed start RPC (never the restart); no Push / outbox', async () => {
+  const hook = await readFile(new URL('../src/features/approvals/use-approval-notifications.ts', import.meta.url), 'utf8');
+  assert.equal([...hook.matchAll(/client\.markRead\(/gu)].length, 1);
+  assert.match(hook, /confirmActive\(\)\.then\(\(check\) => \{\n\s+if \(live\.current !== mine \|\| check !== 'active'\)/u);
+  const gate = await readFile(new URL('../src/features/service-enrollment/service-enrollment-gate.tsx', import.meta.url), 'utf8');
+  assert.match(gate, /Promise\.resolve\(\)\.then\(\(\) => startX\(\{ userId, accessToken \}, controller\.signal\)\)/u);
+  const check = gate.slice(gate.indexOf('const confirmActive = useCallback'), gate.indexOf('const lifecycle = useMemo'));
+  assert.doesNotMatch(check, /reactivate|explicit\(/u, 'a check never restarts the service');
+  for (const text of [hook, gate]) assert.doesNotMatch(text, /expo-notifications|push_outbox|sendPush/u);
 });
