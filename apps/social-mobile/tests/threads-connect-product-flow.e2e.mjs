@@ -16,6 +16,7 @@
 // while that send is leased, so no old attempt posts after a reconnect committed (H1 #41's order, a race).
 // G4-02 #15 (scenario 34): an unknown outcome under an EXPIRED credential is settled by the same Threads user's reconnect,
 // which reads the container first (GET only, through the connect Edge's own network) and records only final evidence.
+// G4-02 #17 (scenario 35): the whole product journey in one run, with a concurrent session during the reconnect recovery.
 // G4-02 #16 (scenario 34 (p)(u)(f)(r)(x), 24 / 28 / 30 / 31 / 33): PUBLISHED settles `published_unidentified` -- no post id is
 // ever guessed from a listing (reconcile included) -- and the recovery writes only under this connect's claimed state, in the
 // completion's own transaction.
@@ -1839,5 +1840,124 @@ test('34. an unknown outcome under an EXPIRED credential: the same Threads user\
   assert.deepEqual([results.xReconnect, results.x, results.xMoved], ['verifying', UNIDENTIFIED, true], '(x) the next reconnect settles and binds');
   assert.deepEqual(Object.keys(results).filter((k) => k.endsWith('LeftOpen')), [], 'every case settled by itself');
   assert.equal(results.connectGraphWrites, 0, 'the connect side never wrote to Threads');
+  assert.deepEqual(denied, [], 'no request left this process');
+});
+
+// ---- G4-02 #17: the whole product journey in one run (local integration) ------------------------------------------------------
+// One person, one Threads account, through the app's real hooks and screens, the real connect Edge (G4 composition -> H5 runtime
+// -> G4 owner bridge), the real publish Edge over HTTP, the attested SQL of every candidate in this world, and the fake Threads
+// API (GET + POST, every write counted): connect -> consent -> post (final) -> post whose answer is lost (unknown) -> reconcile
+// (a post exists, unidentified) -> post again -> unknown + the credential expires -> the reconnect reads first and rebinds
+// while ANOTHER session of the same person holds the account (a reconcile release, H1 #45's NOT_RUN case) -> post again ->
+// disconnect -> connect from scratch -> consent again -> post. Every step checks what the screen shows and what was sent.
+test('35. the whole journey: connect, consent, post, unknown outcome, reconcile, expiry, reconnect recovery (with a concurrent session), disconnect, connect again; nothing sent twice', { timeout: 240000 }, async () => {
+  const account = () => threadsAccount(F)?.id ?? null;
+  const results = {};
+  const display = (answer) => { const d = publishDomain.attemptDisplay(answer); return `${d.tone}|${d.allowsNewPost === true}|${d.canCheck === true}`; };
+  const p0 = writes(PUID_F, 'publish');
+  const c0 = writes(PUID_F, 'container');
+  const g0 = graphWritesFromConnect.length;
+  try {
+    // 1. connect (OAuth start -> Threads -> callback) through the accounts screen; the account shows as connected
+    results.connect = await reconnectResult();
+    results.connected = appAccount(F)?.connectionStatus;
+    // 2. consent, then a post that goes through: published (the provider's own answer, read back), the card is ready again
+    let { card, view } = await readyCard();
+    results.consentedMode = view.context.mode;
+    await view.publish(view.pin('統合導線の最初の投稿'));
+    let shown = await card.settle();
+    results.first = `${shown.answer.status}|${shown.answer.providerPostId !== null}|${shown.context.mode}|${display(shown.answer)}`;
+    // 3. the publish answer is lost: unknown, the card blocks the next post and offers a check, nothing is resent on resume
+    threadsApi.plan[PUID_F] = { publish: 'lost' };
+    ({ card, view } = await readyCard());
+    await view.publish(view.pin('統合導線の結果不明の投稿'));
+    shown = await card.settle();
+    threadsApi.plan[PUID_F] = {};
+    results.unknown = `${shown.answer.status}|${shown.context.mode}|${display(shown.answer)}`;
+    await shown.followUp('resume', shown.answer);
+    shown = await card.settle();
+    // 4. reconcile (read-only): a post exists, unidentified (no id, no link); the card allows a new post
+    await shown.followUp('reconcile', shown.answer);
+    shown = await card.settle();
+    results.reconciled = `${shown.answer.status}|${shown.answer.permalink ?? '-'}|${shown.context.mode}|${display(shown.answer)}`;
+    // 5. post again
+    ({ card, view } = await readyCard());
+    await view.publish(view.pin('統合導線の二回目の投稿'));
+    shown = await card.settle();
+    results.second = `${shown.answer.status}|${shown.context.mode}`;
+    // 6. unknown again, then the credential expires (SYNTHETIC): reconcile cannot read
+    threadsApi.plan[PUID_F] = { publish: 'lost' };
+    ({ card, view } = await readyCard());
+    await view.publish(view.pin('統合導線の失効前の投稿'));
+    shown = await card.settle();
+    threadsApi.plan[PUID_F] = {};
+    const lost = shown.answer.id;
+    expireCredential(account());
+    results.expiredReconcile = await reconcileCall(lost);
+    // 7. the reconnect recovery while ANOTHER session of F holds the account: a reconcile release kept open 2 s (it takes the
+    //    account FOR SHARE and is refused for the expired credential). Same lock order (account, then attempt): no deadlock --
+    //    the reconnect waits for the account and completes; the attempt is settled from the container, once
+    const gen0 = generationOf(account());
+    const child = spawn('psql', ['-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-h', PG.host, '-p', PG.port, '-U', PG.user, '-d', PG.db, '-f', '-'],
+      { stdio: ['pipe', 'pipe', 'pipe'] });
+    let held = '';
+    child.stdout.on('data', (chunk) => { held += chunk; });
+    child.stderr.on('data', (chunk) => { held += chunk; });
+    child.stdin.end(releaseAsServerSql(lost, 'reconcile', 2));
+    const holding = new Promise((resolve) => child.on('close', resolve));
+    let waiting = false;
+    for (let i = 0; i < 400 && !waiting; i += 1) {
+      waiting = owner(`select count(*) from pg_stat_activity where wait_event = 'PgSleep' and strpos(query, 'g4mg_y') > 0`) !== '0';
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    results.otherSessionHeld = waiting;
+    const t0 = Date.now();
+    results.recovery = await reconnectResult();
+    results.recoveryWaitedMs = Date.now() - t0;
+    await holding;
+    results.otherSessionRelease = held.split('\n').filter((line) => /^[a-z]+:/u.test(line)).join(',');
+    results.recovered = statusError(lost);
+    results.recoveryMoved = generationOf(account()) !== gen0;
+    results.lastSqlError = (await stats()).lastSqlError ?? '-';
+    results.connectedAfter = appAccount(F)?.connectionStatus;
+    // 8. post again under the new connection
+    ({ card, view } = await readyCard());
+    results.afterRecoveryMode = view.context.mode;
+    await view.publish(view.pin('統合導線の復旧後の投稿'));
+    shown = await card.settle();
+    results.third = `${shown.answer.status}|${boundGeneration(shown.answer.id) === generationOf(account())}`;
+    // 9. disconnect (nothing open): the account is removed, a new post is refused
+    results.disconnect = await disconnectResult();
+    results.afterDisconnect = account() ?? 'none';
+    // 10. connect from scratch: a NEW row, no old permission, consent again, post once
+    results.reconnectFresh = await reconnectResult();
+    ({ card, view } = await (async () => { const c = await publishScreen({ session: SESSION_F, account: appAccount(F) }); return { card: c, view: await c.settle() }; })());
+    results.freshMode = view.context.mode;
+    await view.setPermission(true);
+    view = await card.settle();
+    await view.publish(view.pin('統合導線の接続し直し後の投稿'));
+    shown = await card.settle();
+    results.fourth = shown.answer.status;
+  } finally {
+    results.publishes = writes(PUID_F, 'publish') - p0;
+    results.containers = writes(PUID_F, 'container') - c0;
+    results.connectGraphWrites = graphWritesFromConnect.length - g0;
+    console.log(`measured 35: ${JSON.stringify(results)}`);
+  }
+  assert.deepEqual([results.connect, results.connected, results.consentedMode], ['verifying', 'connected', 'ready'], '1-2 connected, consented');
+  assert.equal(results.first, 'published|true|ready|success|true|false', '2 a final post, read back');
+  assert.equal(results.unknown, 'uncertain|busy|warning|false|true', '3 unknown: blocked, a check offered');
+  assert.equal(results.reconciled, 'published_unidentified|-|ready|warning|true|false', '4 reconciled: a post exists, unidentified, a new post allowed');
+  assert.equal(results.second, 'published|ready', '5 post again');
+  assert.equal(results.expiredReconcile, '409:CREDENTIALS_EXPIRED', '6 an expired credential cannot reconcile');
+  assert.deepEqual([results.otherSessionHeld, results.otherSessionRelease, results.recovery, results.recovered, results.recoveryMoved, results.connectedAfter],
+    [true, 'refused:CREDENTIALS_EXPIRED', 'verifying', 'published_unidentified|PUBLISHED_POST_NOT_FOUND', true, 'connected'], '7 the reconnect recovery next to another session');
+  assert.ok(!/deadlock/iu.test(results.lastSqlError), `7 no deadlock (${results.lastSqlError})`);
+  assert.deepEqual([results.afterRecoveryMode, results.third], ['ready', 'published|true'], '8 post again under the new connection');
+  assert.ok(results.disconnect.includes('disconnected'), `9 disconnected (${results.disconnect})`);
+  assert.equal(results.afterDisconnect, 'none');
+  assert.deepEqual([results.reconnectFresh, results.freshMode, results.fourth], ['verifying', 'consent_required', 'published'], '10 a fresh connection asks again, then posts');
+  // exactly the posts the person made: 6 publish requests (2 of them lost answers), never a second one for the same attempt
+  assert.deepEqual([results.publishes, results.containers, results.connectGraphWrites], [6, 6, 0], 'one publish per attempt; the connect side never wrote');
   assert.deepEqual(denied, [], 'no request left this process');
 });
