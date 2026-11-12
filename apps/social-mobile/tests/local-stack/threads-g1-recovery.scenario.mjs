@@ -5,8 +5,12 @@
 // card is built on: the publish hook's answer to "確認する" under an expired credential (the code and the action the card turns into
 // the requested copy and the reconnect entry), the same Threads account's reconnect, then a new read of the card's state.
 test('36. G1 TASK 48: unknown outcome -> credential expired -> 確認する gives the card CREDENTIALS_EXPIRED for reconcile -> the same Threads account reconnects -> a new read shows the settled post; nothing is sent twice', { timeout: 180000 }, async (t) => {
-  // G4's runner re-runs this file against its recovery mutants (expecting only 34 to fail); this scenario depends on that recovery.
-  if (owner(`select count(*) from pg_proc where prosrc like '%-- MUTANT%'`) !== '0') { t.skip('a G4 recovery mutant is installed'); return; }
+  // G4's runner re-runs this file on worlds without a candidate (fail-before) and with mutants, each with an exact list of failing
+  // scenarios; this scenario needs the whole stack (manual-publish 001's verdict check, #16's 002), so it runs only on that world.
+  const full = owner(`select (select count(*) from pg_proc where prosrc like '%-- MUTANT%') = 0
+      and exists (select 1 from pg_proc where proname = 'threads_manual_publish_authorize' and prosrc like '%threads_publish_credential_verdict%')
+      and exists (select 1 from pg_proc where prosrc like '%p_to_status = ''published_unidentified'' and p_error_code = ''PUBLISHED_POST_NOT_FOUND''%')`);
+  if (full !== 't') { t.skip('not the full G4 world (a fail-before world or a mutant)'); return; }
   const account = () => threadsAccount(F)?.id ?? null;
   const results = {};
   const p0 = writes(PUID_F, 'publish');
