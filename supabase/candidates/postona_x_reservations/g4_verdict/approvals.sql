@@ -248,23 +248,35 @@ select g48.check_('AP21 read_at unchanged', 'unread', :'r21');
 select g48.check_('AP21 notifications still read', 'ok', case when :'l21' ~ '^[0-9]+$' and :'l21'::int > 0 then 'ok' else :'l21' end);
 select g48.check_('AP21 candidates still read', 'ok', case when :'a21' ~ '^[0-9]+$' then 'ok' else :'a21' end);
 select g48.check_('AP21 restarted', 'active|read', :'restart21' || '|' || :'m21b');
--- AP22 (G3-02 #20) the change trigger: an approved candidate's reservation change enqueues reservation_changed + outbox in the change's
--- own transaction (no list); 'claimed' is not an event; a later list adds nothing (rolled back)
+-- AP22 (G3-02 #20 / #21) the change trigger only RECORDS the event (reservation_events) in the change's own transaction; the list turns it
+-- into one notification + outbox row and deletes the record; 'claimed' is not an event; a later list adds nothing (rolled back)
+create function g48.events43() returns text language plpgsql stable as $$
+declare v text;
+begin
+  if pg_catalog.to_regclass('postona_x_resv.reservation_events') is null then return 'none'; end if;   -- an 018 before G3-02 #21
+  execute 'select count(*)::text from postona_x_resv.reservation_events where user_id = $1' into v using g48.u(4843);
+  return v;
+end $$;
 begin;
-select g48.note_rows(4843) as b22 \gset
+select g48.ap_notes(4843);
+select g48.note_rows(4843) as b22, g48.events43() as e22 \gset
 update postona_x_resv.reservations set status = 'claimed', lease_token = gen_random_uuid(), lease_expires_at = now() + interval '5 minutes', claimed_by = 'g3-ap22'
  where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
-select g48.note_rows(4843) as c22 \gset
+select g48.note_rows(4843) as c22, g48.events43() as ce22 \gset
 update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3_AP22_TEST', lease_token = null, lease_expires_at = null, revision = revision + 1
  where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
-select g48.note_rows(4843) as f22, (select count(*)::text from postona_x_resv.notifications where candidate_id = g48.id('g2') and kind = 'reservation_changed' and state = 'failed') as ev22 \gset
+select g48.note_rows(4843) as f22, g48.events43() as fe22 \gset
 select g48.ap_notes(4843);
-select g48.note_rows(4843) as l22 \gset
+select g48.note_rows(4843) as l22, g48.events43() as le22,
+       (select count(*)::text from postona_x_resv.notifications where candidate_id = g48.id('g2') and kind = 'reservation_changed' and state = 'failed') as ev22 \gset
+select g48.ap_notes(4843);
+select g48.note_rows(4843) as l22b \gset
 rollback;
-select g48.check_('AP22 claimed: no event', :'b22', :'c22');
-select g48.check_('AP22 failed: +1 / +1 at once', (split_part(:'b22', '/', 1)::int + 1)::text || '/' || (split_part(:'b22', '/', 2)::int + 1)::text, :'f22');
+select g48.check_('AP22 claimed: no event, nothing recorded', :'b22' || '|' || :'e22', :'c22' || '|' || :'ce22');
+select g48.check_('AP22 failed: recorded, no notification yet', :'b22' || '|' || coalesce((nullif(regexp_replace(:'e22', '[^0-9]', '', 'g'), '')::int + 1)::text, 'no event table'), :'f22' || '|' || :'fe22');
+select g48.check_('AP22 the list: +1 / +1, the record gone', (split_part(:'b22', '/', 1)::int + 1)::text || '/' || (split_part(:'b22', '/', 2)::int + 1)::text || '|' || :'e22', :'l22' || '|' || :'le22');
 select g48.check_('AP22 one failed event', '1', :'ev22');
-select g48.check_('AP22 a later list adds nothing', :'f22', :'l22');
+select g48.check_('AP22 a later list adds nothing', :'l22', :'l22b');
 -- AP23 the change never fails on its notification: a former owner's reservation change commits and writes nothing (rolled back)
 begin;
 delete from public.brand_memberships where user_id = g48.u(4843) and brand_id = g48.ws(4843);
@@ -292,6 +304,30 @@ rollback;
 select g48.check_('AP25 refused', 'refused', case when :'m25' ~ '^ERR:POSTONA_RESV_' then 'refused' else :'m25' end);
 select g48.check_('AP25 read_at unchanged', 'unread', :'r25');
 \echo AP25_ANSWER :m25
+
+-- AP26 (G3-02 #21, H1 #46 P3) version 2 and version 3 each become one notification, even when version 2 was recorded while notifications
+-- could not be written (the workspace briefly not the person's own personal one, SYNTHETIC; rolled back)
+begin;
+select g48.ap_notes(4843);   -- nothing pending before the test
+select g48.note_rows(4843) as b26 \gset
+insert into public.brand_memberships (brand_id, user_id, role) values (g48.ws(4842), g48.u(4843), 'owner');
+update postona_x_resv.reservations set revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+select g48.ap_notes(4843);
+select g48.note_rows(4843) as m26, g48.events43() as me26 \gset
+update postona_x_resv.reservations set revision = revision + 1 where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'));
+delete from public.brand_memberships where brand_id = g48.ws(4842) and user_id = g48.u(4843);
+select g48.ap_notes(4843);
+select g48.ap_notes(4843);
+select g48.note_rows(4843) as a26, g48.events43() as ae26,
+       (select coalesce(string_agg(subject_revision::text, ',' order by subject_revision), 'none') from postona_x_resv.notifications
+         where candidate_id = g48.id('g2') and kind = 'reservation_changed' and subject_revision >= (select revision - 1 from postona_x_resv.reservations
+           where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'))))
+       as revs26, (select (revision - 1)::text || ',' || revision::text from postona_x_resv.reservations
+         where id = (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2'))) as want26 \gset
+rollback;
+select g48.check_('AP26 not personal: recorded, nothing written', :'b26' || '|1', :'m26' || '|' || :'me26');
+select g48.check_('AP26 personal again: both versions once', :'want26', :'revs26');
+select g48.check_('AP26 +2 / +2 and nothing left recorded', (split_part(:'b26', '/', 1)::int + 2)::text || '/' || (split_part(:'b26', '/', 2)::int + 2)::text || '|0', :'a26' || '|' || :'ae26');
 
 select n, case_id, case when expected = actual then 'ok' else 'FAIL expected ' || coalesce(expected, '<null>') || ' got ' || coalesce(actual, '<null>') end from g48.results order by n;
 do $$ begin

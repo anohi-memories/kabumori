@@ -314,10 +314,11 @@ expect_refused "VA3 018 with a widened grant" "G3_APPROVALS_POSTCONDITION" own -
 own -f "$x018" >/dev/null || fail "VA4 018 apply"
 c_018="$(catalog)"
 expect_refused "VA4 018 re-apply" G3_APPROVALS_ALREADY_APPLIED own -f "$x018"
-out="$(own -A -t -f "$here/g4_verdict/approvals.sql" 2>&1)" || { printf '%s\n' "$out" | grep -E 'FAIL|ERROR' | head -20 >&2; fail "VA behaviour"; }
-printf '%s\n' "$out" | grep -qx G3_APPROVALS_BEHAVIOR_PASS || fail "VA: no PASS line"
+# G3V_BEFORE=1 (before-proofs only): record the behaviour's failures and go on to the later races instead of stopping here
+out="$(own -A -t -f "$here/g4_verdict/approvals.sql" 2>&1)" || { printf '%s\n' "$out" | grep -E 'FAIL|ERROR' | head -20 >&2; [ -n "${G3V_BEFORE:-}" ] || fail "VA behaviour"; }
+printf '%s\n' "$out" | grep -qx G3_APPROVALS_BEHAVIOR_PASS || [ -n "${G3V_BEFORE:-}" ] || fail "VA: no PASS line"
 va_n="$(printf '%s\n' "$out" | grep -c '|ok$' || true)"
-[ "$(catalog)" = "$c_018" ] || fail "VA behaviour changed the catalog"
+[ "$(catalog)" = "$c_018" ] || [ -n "${G3V_BEFORE:-}" ] || fail "VA behaviour changed the catalog"
 # --- VR18 (G3-02 #18, H1 #38 P2): an ownership loss vs a notification write, in two real sessions (person 4843 of approvals.sql) -------
 now_s() { python3 -I -c 'import time; print(f"{time.time():.3f}")'; }
 rows43() { val -c "select (select count(*) from postona_x_resv.notifications where user_id = g48.u(4843))::text || '/' || (select count(*) from postona_x_resv.push_outbox where user_id = g48.u(4843))::text"; }
@@ -350,7 +351,8 @@ wait "$dp" || fail "VR18-L the loss failed"
 [ "$(rows43)" = "$r0" ] || fail "VR18-L wrote $r0 -> $(rows43) after the loss committed"
 python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18-L the list did not wait for the loss"
 restore43
-# B: the owner again, two lists at once: the event once
+# B: the owner again, two lists at once: the event once (G3-02 #21: L's event is kept recorded, so drain it first)
+listing43 >/dev/null
 moved43; r0="$(rows43)"
 listing43 >/dev/null & p1=$!; listing43 >/dev/null & p2=$!
 wait "$p1" && wait "$p2" || fail "VR18-B a list failed"
@@ -434,10 +436,42 @@ own -c "select g48.nobody()" >/dev/null
 [ "$(mark20)" = "reservation_changed" ] || [ "$(val -c "select coalesce(read_at::text, 'unread') from postona_x_resv.notifications where id = '$nid20'")" != unread ] || fail "VM20 markRead after the restart"
 [ "$(val -c "select coalesce(read_at::text, 'unread') from postona_x_resv.notifications where id = '$nid20'")" != unread ] || fail "VM20 not read after the restart"
 echo "OK VM20: markRead during a committing service end waited for it and refused (SERVICE_NOT_ACTIVE, read_at unchanged); after the restart it marks read"
-counts="$(sval -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text")"
+# --- VR21 (G3-02 #21, H1 #46 P2): the worker's result vs a G5 holder of the person's account row (real sessions) -----------------------
+# A G5 lifecycle step holds the account FOR UPDATE for 20 s; the worker's finish (statement_timeout 15 s, as the worker sets it) must
+# commit its result at once, never wait for the holder, never time out, never be rolled back; the notification comes after, once.
+own -c "select g48.nobody()" >/dev/null
+[ "$(val -c "select g48.xconnect(4843, 'ap21', '48430') is not null")" = t ] || fail "VR21 reconnect"
+own -c "select g48.nobody()" >/dev/null
+sub21="$(val -c "select g48.ap_submit(4843, 'w21', 720)")"
+[[ "$sub21" =~ ^[0-9a-f-]{36}$ ]] || fail "VR21 submit: $sub21"
+[ "$(val -c "select g48.ap_approve(4843, 'w21')")" = "approved/2" ] || fail "VR21 approve"
+rid21="$(val -c "select reservation_id from postona_x_resv.approval_candidates where id = g48.id('w21')")"
+own -c "update postona_x_resv.reservations set scheduled_at = now() - interval '1 minute', consent_scheduled_at = now() - interval '1 minute', expires_at = now() + interval '6 hours' where id = '$rid21'" >/dev/null   # SYNTHETIC clock
+claim21="$(val -c "select g48.xclaim()")"
+case "$claim21" in *"$rid21"*) ;; *) fail "VR21 not claimed: $claim21" ;; esac
+lease21="$(val -c "select lease_token from postona_x_resv.reservations where id = '$rid21'")"
+r21="$(rows43)"
+own -c "begin" -c "select 1 from public.common_accounts where user_id = g48.u(4843) for update" -c "select pg_sleep(20)" -c "commit" >/dev/null & hp=$!   # the G5 holder
+sleep 1
+t0="$(now_s)"
+fin21="$(val -c "set statement_timeout = '15s'" -c "select postona_x_resv.finish('$rid21', '$lease21', 'published', '9000000021', null)" 2>&1)" || true
+t1="$(now_s)"
+state21="$(val -c "select status || '/' || coalesce(provider_post_id, '-') from postona_x_resv.reservations where id = '$rid21'")"
+wait "$hp" || fail "VR21 the holder failed"
+[ "$state21" = "published/9000000021" ] || fail "VR21 the worker's result was not committed under the G5 holder (state $state21; finish: $fin21; $(python3 -I -c "print(round($t1 - $t0, 1))") s): the H1 #46 P2"
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 < 5 else 1)" || fail "VR21 the finish waited for the holder"
+ev21="$(val -c "select count(*) from postona_x_resv.reservation_events where reservation_id = '$rid21' and status = 'published'")"
+[ "$ev21" = 1 ] || fail "VR21 the event was not recorded with the result ($ev21)"
+[ "$(rows43)" = "$r21" ] || fail "VR21 a notification was written inside the worker's transaction"
+listing43 >/dev/null
+[ "$(rows43)" = "$(python3 -I -c "a, b = '$r21'.split('/'); print(f'{int(a) + 1}/{int(b) + 1}')")" ] || fail "VR21 the list did not turn the event into one notification"
+listing43 >/dev/null
+[ "$(val -c "select count(*) from postona_x_resv.notifications where reservation_id = '$rid21' and state = 'published'")/$(val -c "select count(*) from postona_x_resv.reservation_events where reservation_id = '$rid21'")" = "1/0" ] || fail "VR21 not exactly once"
+echo "OK VR21: under a 20 s G5 holder of the account row the worker's finish committed its published result in $(python3 -I -c "print(round($t1 - $t0, 2))") s (statement_timeout 15 s), recording the event; the list then wrote one notification, a second list nothing"
+counts="$(sval -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text || ':' || (select count(*) from postona_x_resv.reservation_events)::text")"
 expect_err "VA5 018 rollback as a superuser" G3_APPROVALS_ROLLBACK_OWNER sval -c "set postona_resv_approval_rollback.discard = '$counts'" -f "$x018rb"
 expect_err "VA6 018 rollback, counts not stated" G3_APPROVALS_ROLLBACK_ROWS own -f "$x018rb"
-expect_err "VA6b 018 rollback, wrong counts" G3_APPROVALS_ROLLBACK_ROWS own -c "set postona_resv_approval_rollback.discard = '0:0'" -f "$x018rb"
+expect_err "VA6b 018 rollback, wrong counts" G3_APPROVALS_ROLLBACK_ROWS own -c "set postona_resv_approval_rollback.discard = '0:0:0'" -f "$x018rb"
 [ "$(catalog)" = "$c_018" ] || fail "VA5-VA6: a refusal changed the catalog"
 resv_before="$(sval -c "select count(*) from postona_x_resv.reservations where draft_id like 'appr:%'")"
 own -c "set postona_resv_approval_rollback.discard = '$counts'" -f "$x018rb" >/dev/null || fail "VA7 018 rollback"

@@ -80,10 +80,10 @@ There is no post text, token or account handle in a notification.
 | `approval_requested` | submit, and each revise (`subjectRevision`) | in that transaction |
 | `approval_approved` | approve | in that transaction |
 | `approval_rejected` | reject | in that transaction |
-| `reservation_changed` | the approved candidate's reservation was rescheduled, sent (`published` / `failed` / `uncertain`), cancelled or expired (a send in progress, `claimed`, is not an event) | in the transaction that changed the reservation (the worker's finish, the claim's close, the person's reschedule / cancel; G3-02 #20); a change that could not be enqueued then is written by the next `notifications` call |
+| `reservation_changed` | the approved candidate's reservation was rescheduled, sent (`published` / `failed` / `uncertain`), cancelled or expired (a send in progress, `claimed`, is not an event) | G3-02 #21: the change's own transaction (the worker's finish, the claim's close, the person's reschedule / cancel) records the event per revision; the person's next `notifications` call turns each recorded revision into one notification + outbox row |
 
 - **No duplicates**: there is one row per event, so retries and races do not create a second one.
-- **Nothing lost**: a reservation change is enqueued in its own transaction (G3-02 #20). If that is skipped, because the workspace was not the person's own personal one at that moment or a lock / error occurred, the next list writes it. The change itself never fails because of its notification.
+- **Nothing lost**: every revision of a reservation change is recorded in the change's own transaction (G3-02 #21), with no G5 lock, so the worker's result is never held up or rolled back by a notification. The next list turns each recorded revision into exactly one notification, and an event that cannot be written yet stays recorded for the next list. So version 2 and version 3 both appear, even when one was recorded while notifications could not be written.
 - **Mark read**: `markRead` is idempotent; the first read time stays. Since G3-02 #20 (G2 #11) it is a write that needs the X service: after a service end it answers 403 `POSTONA_RESV_SERVICE_NOT_ACTIVE` and `readAt` stays as it was. A service end committing at the same moment is waited for and then refuses (G5's writer gate). Reading (`notifications`, `list`, `get`) stays allowed.
 - **Whose rows**: only the caller's notifications are returned, and only for a workspace the caller still owns. Nothing is written for a former owner: no notification, no outbox row (G3-02 #17). An ownership loss that is committing at the same time either commits first (then nothing is written) or waits for the write to commit (G3-02 #18 row locks).
   - A deleted workspace or X account takes its candidates and notifications with it. This is a foreign-key cascade, checked in the catalog only.
@@ -110,7 +110,7 @@ A push worker needs its own review and approval. When it is built it must:
 - carry ids and kind only, never the post text;
 - record its own delivery state outside this table, or in a later reviewed column.
 
-Note: since G3-02 #20 `reservation_changed` is enqueued (with its outbox row) in the worker's own transaction, so a push worker can pick it up without the person listing. The next list remains the fallback.
+Note: since G3-02 #21 the worker only records `reservation_changed` events (`postona_x_resv.reservation_events`, ids / states / times only); they become notifications + outbox rows when the person lists. A later push worker would drain the same records through its own reviewed entry, re-authorizing each one. G3-02 #20's same-transaction notification was withdrawn because it made the worker's result wait for G5 locks (H1 #46 P2).
 
 ## 7. Screen flow for G1
 

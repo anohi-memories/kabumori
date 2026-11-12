@@ -1201,6 +1201,9 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
     const plus = (r: string, k: number) => r.split("/").map((x) => String(Number(x) + k)).join("/");
     const eventOf = (rid: string, state: string) => owner("select count(*) from postona_x_resv.notifications where reservation_id = :'i' and kind = 'reservation_changed' and state = :'s'", { i: rid, s: state });
+    // G3-02 #21: the change records its event (reservation_events) in its own transaction; the list turns it into the notification
+    const recorded = (rid: string, state: string) => owner("select count(*) from postona_x_resv.reservation_events where reservation_id = :'i' and status = :'s'", { i: rid, s: state });
+    const list = async () => assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
     const approved = async (name: string, days: number) => {
       const c = cands(await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: `G3-02 #20 ${name}`, scheduledAt: at(days) }))[0];
       const a = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
@@ -1216,11 +1219,13 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const calls = await xCalls();
     const run = await deliver();
     assert.deepStrictEqual([run.report?.sends, run.report?.published, await xCalls()], [1, 1, calls + 1], JSON.stringify(run));
-    assert.deepStrictEqual([await eventOf(p1, "published"), await eventOf(p1, "claimed"), await noteRows()], ["1", "0", plus(r0, 1)], "enqueued by the worker's transaction; 'claimed' is no event");
+    assert.deepStrictEqual([await recorded(p1, "published"), await recorded(p1, "claimed"), await noteRows()], ["1", "0", r0], "recorded by the worker's transaction; 'claimed' is no event; no notification inside it");
     const again = await deliver();
-    assert.deepStrictEqual([again.report?.claimed ?? 0, await xCalls(), await noteRows()], [0, calls + 1, plus(r0, 1)], "nothing re-sent, nothing re-enqueued");
-    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
-    assert.deepStrictEqual(await noteRows(), plus(r0, 1), "a list adds nothing (one event key)");
+    assert.deepStrictEqual([again.report?.claimed ?? 0, await xCalls(), await recorded(p1, "published")], [0, calls + 1, "1"], "nothing re-sent, nothing recorded twice");
+    await list();
+    assert.deepStrictEqual([await eventOf(p1, "published"), await recorded(p1, "published"), await noteRows()], ["1", "0", plus(r0, 1)], "the list: one notification + outbox, the record gone");
+    await list();
+    assert.deepStrictEqual(await noteRows(), plus(r0, 1), "a second list adds nothing");
     // an unknown X answer: uncertain, enqueued once, never re-sent
     const u1 = await approved("u1", 59);
     await makeDue(u1);
@@ -1229,9 +1234,11 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await xMode("unknown");
     const unsure = await deliver();
     await xMode("ok");
-    assert.deepStrictEqual([unsure.report?.uncertain, await eventOf(u1, "uncertain"), await noteRows()], [1, "1", plus(r1, 1)], JSON.stringify(unsure));
+    assert.deepStrictEqual([unsure.report?.uncertain, await recorded(u1, "uncertain")], [1, "1"], JSON.stringify(unsure));
     const after = await deliver();
-    assert.deepStrictEqual([after.report?.claimed ?? 0, await noteRows()], [0, plus(r1, 1)]);
+    assert.deepStrictEqual([after.report?.claimed ?? 0, await recorded(u1, "uncertain")], [0, "1"]);
+    await list();
+    assert.deepStrictEqual([await eventOf(u1, "uncertain"), await noteRows()], ["1", plus(r1, 1)]);
     // the service ends (SYNTHETIC end): a due approved reservation is not claimed and nothing is enqueued; markRead is 403 and writes nothing
     const e1 = await approved("e1", 57);
     await makeDue(e1);
@@ -1257,6 +1264,46 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const r3 = await noteRows();
     const closing = await deliver();
     assert.deepStrictEqual([closing.report?.sends ?? 0, await xCalls(), await outcome(e1)], [0, calls + 2, "failed/SERVICE_GENERATION_CHANGED/-"], JSON.stringify(closing));
-    assert.deepStrictEqual([await eventOf(e1, "failed"), await noteRows()], ["1", plus(r3, 1)], "the close is enqueued by the worker's transaction");
+    assert.deepStrictEqual([await recorded(e1, "failed"), await noteRows()], ["1", r3], "the close is recorded by the worker's transaction");
+    await list();
+    assert.deepStrictEqual([await eventOf(e1, "failed"), await noteRows()], ["1", plus(r3, 1)]);
+  });
+
+  await t.step("L40 G3-02 #21 (H1 #46 P2): a G5 holder of the person's account row (20 s) never holds up the worker: the send's result commits at once, the event is recorded, the list turns it into one notification after the holder", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    const c = cands(await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #21 holder", scheduledAt: at(56) }))[0];
+    const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+    assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+    const rid = cands(ok)[0].reservationId as string;
+    await makeDue(rid);
+    await snapshot(d.account!, await generationOf(d.account!));
+    const r0 = await noteRows();
+    const calls = await xCalls();
+    // the fake X answers after 4 s (a test-only barrier on its call record), so the G5 holder arrives after the claim and the pre-send check,
+    // while the send is in flight: exactly the window where the result's finish used to wait for the account row (H1 #46)
+    await owner("create function g3ls_test.x_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(4); return new; end $$; create trigger g3ls_x_barrier before insert on g3ls_test.x_calls for each row execute function g3ls_test.x_barrier();", {});
+    const t0 = Date.now();
+    const running = deliver();
+    await sleep(2000);
+    const holder = owner("begin; select 1 from public.common_accounts where user_id = :'u' for update; select pg_sleep(20); commit;", { u: d.userId });   // a G5 lifecycle step
+    const run = await running;
+    const ms = Date.now() - t0;
+    await owner("drop trigger g3ls_x_barrier on g3ls_test.x_calls; drop function g3ls_test.x_barrier();", {});
+    const state = await owner("select status || '/' || coalesce(provider_post_id, '-') from postona_x_resv.reservations where id = :'i'", { i: rid });
+    console.log(`G3LS_L40 worker run ${ms} ms, ${JSON.stringify(run.report)}, row ${state}`);
+    assert.deepStrictEqual([run.status, run.report?.sends, run.report?.published, await xCalls()], [200, 1, 1, calls + 1], JSON.stringify(run));
+    assert.match(state, /^published\/9[0-9]{9}$/u, "the send's result committed while G5 held the account row");
+    assert.ok(ms < 12000, `the worker waited for the holder (${ms} ms; the fake X itself takes 4 s)`);
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservation_events where reservation_id = :'i' and status = 'published'", { i: rid }), "1");
+    await holder;
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    assert.deepStrictEqual(await noteRows(), r0.split("/").map((x) => String(Number(x) + 1)).join("/"), "one notification + outbox after the holder");
+    const twice = await deliver();
+    assert.deepStrictEqual([twice.report?.claimed ?? 0, await xCalls()], [0, calls + 1], "never sent twice");
   });
 });

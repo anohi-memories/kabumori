@@ -329,10 +329,10 @@ AC=(G3RO_ACK_CONSUMERS="$consumers" G3RO_ACK_THREADS_CONSUMERS="$tconsumers")
 o="$(ro install "${AC[@]}" 2>&1)" || fail "RC install (17): $o"
 expect_ro "RC1 018 installed, a 16-step manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x018 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no018.tsv" "${AC[@]}"
 own -c "alter table postona_x_resv.push_outbox rename to push_outbox_g3rc" >/dev/null
-expect_ro "RC2 018 partly present" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 12 of 13 objects" rollback "${AC[@]}"
+expect_ro "RC2 018 partly present" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 13 of 14 objects" rollback "${AC[@]}"
 own -c "alter table postona_x_resv.push_outbox_g3rc rename to push_outbox" >/dev/null
 own -c "alter function postona_x_resv.list_notifications(integer) rename to list_notifications_g3rc" >/dev/null
-expect_ro "RC2b an 018 function missing" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 12 of 13 objects" rollback "${AC[@]}"
+expect_ro "RC2b an 018 function missing" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 13 of 14 objects" rollback "${AC[@]}"
 own -c "alter function postona_x_resv.list_notifications_g3rc(integer) rename to list_notifications" >/dev/null
 grep -v -E '^(install|rollback)\tx017\t' "$here/MANIFEST.tsv" > "$work/m_no017.tsv"
 expect_ro "RC3 017 installed, not in the manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x017 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no017.tsv" "${AC[@]}"
@@ -355,7 +355,7 @@ echo "OK RA: re-install = the first install"
 # --- RT (G3-02 #4): Threads 007's rollback file itself (no rollout.sh) refuses an external dependent instead of CASCADE-dropping it ------
 for step in x018 x017 x015 x014 t013 t009 t011; do
   rel="$(awk -F '\t' -v s="$step" '$1 == "rollback" && $2 == s { print $3 }' "$here/MANIFEST.tsv")"
-  own -c "set postona_resv_rollback.discard_rows = '0:0:0'" -c "set postona_resv_approval_rollback.discard = '0:0'" -f "$here/../$rel" >/dev/null || fail "RT rollback $step"
+  own -c "set postona_resv_rollback.discard_rows = '0:0:0'" -c "set postona_resv_approval_rollback.discard = '0:0:0'" -f "$here/../$rel" >/dev/null || fail "RT rollback $step"
 done
 t007="$here/../$(awk -F '\t' '$1 == "rollback" && $2 == "t007" { print $3 }' "$here/MANIFEST.tsv")"
 own -c "create view public.g3rt_threads_v as select id from postona_threads_resv.reservations" >/dev/null
