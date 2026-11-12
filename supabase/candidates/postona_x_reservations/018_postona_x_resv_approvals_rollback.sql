@@ -1,7 +1,7 @@
 -- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16 / #17; #20: the trigger too): removes 018. NOT applied anywhere. Run FIRST, before 017's and every other rollback.
 -- Drops 018's functions, types and tables. Reservations that approvals created stay as ordinary reservations (unchanged). Candidates and
--- notifications are discarded only when the operator states their counts: set postona_resv_approval_rollback.discard = '<candidates>:<notifications>'
--- (both 0 when the tables are empty). Any other value refuses, nothing changed.
+-- notifications are discarded only when the operator states their counts: set postona_resv_approval_rollback.discard = '<candidates>:<notifications>:<pending events>'
+-- (all 0 when the tables are empty; G3-02 #21: the third figure is the pending reservation events). Any other value refuses, nothing changed.
 -- Refuses (nothing changed) when: 018 is not applied; the caller is a superuser or does not own the schema and the tables; the stated
 -- counts are not the current ones; something outside 018 depends on its objects (no CASCADE).
 
@@ -23,15 +23,17 @@ begin
                 and c.relowner is distinct from v_owner) then
     raise exception 'G3_APPROVALS_ROLLBACK_OWNER';
   end if;
-  lock table postona_x_resv.approval_candidates, postona_x_resv.notifications, postona_x_resv.push_outbox in access exclusive mode;
-  v_counts := (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text;
+  lock table postona_x_resv.approval_candidates, postona_x_resv.notifications, postona_x_resv.push_outbox, postona_x_resv.reservation_events in access exclusive mode;
+  v_counts := (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text
+              || ':' || (select count(*) from postona_x_resv.reservation_events)::text;
   if pg_catalog.current_setting('postona_resv_approval_rollback.discard', true) is distinct from v_counts then
     raise exception 'G3_APPROVALS_ROLLBACK_ROWS: state the counts %', v_counts;
   end if;
 end $$;
 
-drop trigger reservations_changed_notify on postona_x_resv.reservations;
-drop function postona_x_resv.reservation_changed_notify();
+drop trigger reservations_record_event on postona_x_resv.reservations;
+drop function postona_x_resv.record_reservation_event();
+drop function postona_x_resv.drain_reservation_events(uuid, integer);
 drop function postona_x_resv.submit_approval(text, uuid, text, timestamptz);
 drop function postona_x_resv.revise_approval(uuid, integer, text, timestamptz);
 drop function postona_x_resv.approve_candidate(uuid, integer, text);
@@ -51,6 +53,7 @@ drop function postona_x_resv.approval_workspace_live(uuid, text);
 drop function postona_x_resv.approval_credential_generation(text);
 drop type postona_x_resv.approval_view;
 drop type postona_x_resv.notification_view;
+drop table postona_x_resv.reservation_events;
 drop table postona_x_resv.push_outbox;
 drop table postona_x_resv.notifications;
 drop table postona_x_resv.approval_candidates;

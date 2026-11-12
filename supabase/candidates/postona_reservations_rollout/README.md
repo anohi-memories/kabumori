@@ -266,6 +266,11 @@ What it showed, for the operator:
   - With it, a second member joining, owning another workspace, or a role change waits for a notification write. While the workspace is not personal, the list writes nothing.
   - L38 runs submit (3 concurrent replays) → approve with a lost answer → read back → retry → one reservation → the worker sends once; the gated real entry answers 503 with 0 writes.
   - The G2 #9 P3 decisions are in the G1 contract doc, section 5a. No SQL / Edge change.
+- **G3-02 #21 (H1 #46)**:
+  - **P2**: the change trigger (\`reservations_record_event\`) no longer calls \`notify()\`. It records the event per revision in \`reservation_events\`, a G3 table whose FK points only at the reservation row the change already holds, so the worker's result never waits for G5 locks. Measured: a 20 s account holder against a 15 s statement timeout, and the finish commits in 0.05 s.
+  - **P3**: \`drain_reservation_events\` (the list's call) turns each recorded revision into one notification and deletes the record. A revision that cannot be written yet stays recorded.
+  - The rollback discard now has three figures (\`G3RO_APPROVAL_DISCARD_ROWS='<candidates>:<notifications>:<pending events>'\`), and the 018 coherence check counts 14 objects.
+  - Proof: PG17 VR21, AP22 and AP26; local L39 and L40. \`G3V_BEFORE=1\` runs the later races even when the behaviour fails (before-proofs only).
 - **G3-02 #20 (G2 #11)**:
   - `mark_notification_read` now needs the X service (the G5 writer gate first): 403 `SERVICE_NOT_ACTIVE` after a service end, with `read_at` unchanged.
   - A new trigger `reservations_changed_notify` (not a definer, granted to nobody) enqueues `reservation_changed` and its outbox row in the transaction that changed the reservation (the worker's finish, the claim's close, a reschedule / cancel). `claimed` is not an event; any notification error is skipped, never failing the change, and the next list writes it.
