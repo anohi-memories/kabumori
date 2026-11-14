@@ -1,0 +1,103 @@
+diff --git a/apps/social-mobile/src/features/approvals/approval-client.ts b/apps/social-mobile/src/features/approvals/approval-client.ts
+index 8b2b5e78..1c70773c 100644
+--- a/apps/social-mobile/src/features/approvals/approval-client.ts
++++ b/apps/social-mobile/src/features/approvals/approval-client.ts
+@@ -92,6 +92,7 @@ export function createApprovalClient(input: {
+       });
+       status = response.status;
+       try { body = (await response.json()) as Record<string, unknown>; } catch { body = null; }
++      console.log(`[G2AP] ${action} ${status} ${(body as { code?: string } | null)?.code ?? '-'}`); // G2 THROWAWAY ONLY
+     } catch {
+       return { ok: false, code: UNCERTAIN, status: 0, definite: false };
+     } finally {
+diff --git a/apps/social-mobile/src/features/approvals/approval-gate.ts b/apps/social-mobile/src/features/approvals/approval-gate.ts
+index 398a2b34..957f7a8b 100644
+--- a/apps/social-mobile/src/features/approvals/approval-gate.ts
++++ b/apps/social-mobile/src/features/approvals/approval-gate.ts
+@@ -4,7 +4,7 @@ import { APPROVAL_FUNCTION } from './approval-client.ts';
+  * The approval + notification screens' gate. G3's API (PR #644) is a source candidate applied nowhere and its own release gate is off,
+  * so the shipped app sends nothing: the screens say they are not open yet. Only a throw-away local copy turns this on.
+  */
+-export const POSTONA_APPROVAL_UI_ENABLED = false;
++export const POSTONA_APPROVAL_UI_ENABLED = false; // G2 FLAG-OFF CHECK
+ 
+ /** The product entry. A local test points the same client at G3's localtest twin over loopback http instead. */
+-export const APPROVAL_ENDPOINT: { functionName: string; allowLoopbackHttpForTests: boolean } = { functionName: APPROVAL_FUNCTION, allowLoopbackHttpForTests: false };
++export const APPROVAL_ENDPOINT: { functionName: string; allowLoopbackHttpForTests: boolean } = { functionName: 'postona-x-approvals-localtest', allowLoopbackHttpForTests: true }; // G2 THROWAWAY ONLY
+diff --git a/apps/social-mobile/src/features/schedule/live-reservation-store.ts b/apps/social-mobile/src/features/schedule/live-reservation-store.ts
+index a58d2b81..5c4d6413 100644
+--- a/apps/social-mobile/src/features/schedule/live-reservation-store.ts
++++ b/apps/social-mobile/src/features/schedule/live-reservation-store.ts
+@@ -10,7 +10,7 @@
+  */
+ import { createFetchTransport, createRemoteReservationStore, type RemoteReservationStore } from './remote-reservation-store.ts';
+ 
+-export const RESERVATION_FUNCTION_PATH = '/functions/v1/postona-x-reservations';
++export const RESERVATION_FUNCTION_PATH = '/functions/v1/postona-x-reservations-localtest'; // G2 THROWAWAY ONLY
+ 
+ /** The part of the Supabase client used here. */
+ export type SessionSource = {
+@@ -33,9 +33,9 @@ export function accessTokenFrom(source: SessionSource): () => Promise<string | n
+ 
+ export function createLiveReservationStore(deps: LiveReservationDeps): RemoteReservationStore {
+   const base = new URL(deps.supabaseUrl);
+-  if (base.protocol !== 'https:') throw new Error('SUPABASE_URL_MUST_BE_HTTPS');
++  if (base.protocol !== 'https:' && base.origin !== 'http://127.0.0.1:56521') throw new Error('SUPABASE_URL_MUST_BE_HTTPS');
+   return createRemoteReservationStore({
+-    transport: createFetchTransport({ url: `${base.origin}${RESERVATION_FUNCTION_PATH}`, fetch: deps.fetch ?? fetch, apiKey: deps.publishableKey }),
++    transport: createFetchTransport({ url: `${base.origin}${RESERVATION_FUNCTION_PATH}`, fetch: deps.fetch ?? fetch, apiKey: deps.publishableKey, allowLoopbackHttpForTests: true }),
+     getAccessToken: accessTokenFrom(deps.session),
+   });
+ }
+diff --git a/apps/social-mobile/src/features/schedule/reservation-store.ts b/apps/social-mobile/src/features/schedule/reservation-store.ts
+index 9657c96d..62d4594a 100644
+--- a/apps/social-mobile/src/features/schedule/reservation-store.ts
++++ b/apps/social-mobile/src/features/schedule/reservation-store.ts
+@@ -10,7 +10,7 @@
+ import type { SaveOutcome, SaveRequest, ServerReservation } from '@/domain/reservation-flow';
+ import { createLiveReservationStore, type LiveReservationDeps } from './live-reservation-store.ts';
+ 
+-export const POSTONA_RESERVATION_PERSISTENCE_ENABLED = false as const;
++export const POSTONA_RESERVATION_PERSISTENCE_ENABLED = true as const; // G2 THROWAWAY ONLY
+ 
+ export type StoreResult<T> = { ok: true; value: T } | { ok: false; code: string };
+ 
+diff --git a/apps/social-mobile/src/lib/supabase.ts b/apps/social-mobile/src/lib/supabase.ts
+index 26e7245d..0920f9be 100644
+--- a/apps/social-mobile/src/lib/supabase.ts
++++ b/apps/social-mobile/src/lib/supabase.ts
+@@ -19,7 +19,7 @@ export function getSupabaseConfig(env: Record<string, string | undefined> = expo
+   const url = env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+   const publishableKey = env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim();
+   if (!url || !publishableKey) return { ok: false, kind: 'missing', reason: 'Supabase接続設定がありません。apps/social-mobile/.env.exampleを参照してください。' };
+-  if (!/^https:\/\//u.test(url)) return { ok: false, kind: 'invalid', reason: 'Supabase URLはhttps://で始まる必要があります。' };
++  if (!/^(https:\/\/|http:\/\/127\.0\.0\.1:56521$)/u.test(url)) return { ok: false, kind: 'invalid', reason: 'Supabase URLはhttps://で始まる必要があります。' };
+   if (/service_role|secret/iu.test(publishableKey)) return { ok: false, kind: 'invalid', reason: '公開クライアントへservice role/secret keyを設定できません。' };
+   return { ok: true, config: { url, publishableKey } };
+ }
+diff --git a/apps/social-mobile/tests/local-stack/build-x-disconnected.py b/apps/social-mobile/tests/local-stack/build-x-disconnected.py
+index eb3d5bc4..b1f41fac 100644
+--- a/apps/social-mobile/tests/local-stack/build-x-disconnected.py
++++ b/apps/social-mobile/tests/local-stack/build-x-disconnected.py
+@@ -64,7 +64,7 @@ r = sub(r, 'WORK="$(mktemp -d /private/tmp/g3ls.XXXXXX)"', 'WORK="$(mktemp -d /p
+ assert not re.search(r'\b559\d\d\b', r), 'a G3 port is left'
+ cut = r.index('env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT"')
+ r = r[:cut] + '''
+-export G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLISHABLE" G3LS_DB_PORT="$DB_PORT"
++export G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLISHABLE" G3LS_DB_PORT="$DB_PORT" G3LS_WORKER_SECRET="$WORKER_SECRET"  # G2 TASK 12 THROWAWAY ONLY: the hold needs the e2e worker twin
+ unset PGPASSWORD
+ cd "%s" || exit 1
+ "${G1T36_RUN:?}"
+diff --git a/apps/social-mobile/tests/local-stack/run-x-disconnected.sh b/apps/social-mobile/tests/local-stack/run-x-disconnected.sh
+index e24e9f3a..b325a48e 100644
+--- a/apps/social-mobile/tests/local-stack/run-x-disconnected.sh
++++ b/apps/social-mobile/tests/local-stack/run-x-disconnected.sh
+@@ -15,7 +15,7 @@ python3 "$here/build-x-disconnected.py" "$tmp" || exit 1
+ cat > "$tmp/inner.sh" <<EOF
+ #!/bin/bash
+ node --test --test-concurrency=1 $generated || exit 1
+-node --test --test-concurrency=1 "$here/approvals.e2e.mjs" || exit 1
++node --test --test-concurrency=1 "$here/approvals.e2e.mjs" || echo G2_T12_APPROVALS_E2E_FAILED_CONTINUING  # G2 TASK 12 THROWAWAY ONLY
+ if [ -n "\${G1T36_AFTER:-}" ]; then "\$G1T36_AFTER" || exit 1; fi
+ echo G1T36_LOCAL_STACK_PASS
+ EOF

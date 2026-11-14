@@ -1,0 +1,56 @@
+## H-dup: same clientRequestId x3 (2 parallel), approve x3 (2 parallel)
+submit#1 200 ok candidates=1 
+submit#2 200 ok candidates=1 
+submit#3 200 ok candidates=1 
+approve#1 200 ok candidates=1 
+approve#2 200 ok candidates=1 
+approve#3 200 ok candidates=1 
+cand | G2T12-C1 | approved | 2 | t
+resv | 1
+notes | 2:0
+outbox | 2
+## H-mr-active: direct markRead while active
+A markRead outside 200 ok  notifications=1
+read_at null -> set
+A notifications 200 ok  notifications=2
+A get 200 ok candidates=1 
+## H-mr-ended: service end, then direct markRead / notifications / get
+ended
+UPDATE 1
+A markRead outside 403 POSTONA_RESV_SERVICE_NOT_ACTIVE  
+read_at null -> null
+A notifications 200 ok  notifications=2
+A get 200 ok candidates=1 
+## H-submit-ended
+A submit 403 POSTONA_RESV_SERVICE_NOT_ACTIVE  
+## H-restart
+restart active
+A markRead outside 200 ok  notifications=1
+read_at null -> set
+A notifications 200 ok  notifications=2
+A get 200 ok candidates=1 
+## H-race: end held 3 s in its own tx while markRead arrives
+no unread note
+active
+restart active
+cand | G2T12-C1 | approved | 2 | t
+resv | 1
+notes | 2:2
+outbox | 2
+## H-race (retry with a fresh unread note)
+A submit 403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED  
+no unread note
+active
+restart active
+## after restart: same note
+no unread note
+## after the SQL restart, submit said X_ACCOUNT_NOT_VERIFIED -> reconnect X (G4 SQL, fake tokens), then submit
+xreconnect ok
+A submit 200 ok candidates=1 
+## H-race
+A markRead during end (2577 ms) 403 POSTONA_RESV_SERVICE_NOT_ACTIVE  
+read_at unchanged(null)
+ended
+restart active
+A markRead outside 200 ok  notifications=1
+read_at null -> set

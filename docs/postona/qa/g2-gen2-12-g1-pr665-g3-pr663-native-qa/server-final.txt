@@ -1,0 +1,32 @@
+== a
+cand | G2T12-A1 (other session) | pending_approval | 3 | f
+cand | G2T12-A2xx | pending_approval | 1 | f
+cand | G2T12-A3-worker | approved | 2 | t
+cand | G2T12-A4own | pending_approval | 1 | f
+resv | 1
+notes | 8:3
+outbox | 8
+active
+== b
+cand | 2T12ーB1Gg | pending_approval | 1 | f
+resv | 0
+notes | 1:0
+outbox | 1
+active
+== c
+cand | G2T12-C1 | approved | 2 | t
+cand | G2T12-C2 | pending_approval | 1 | f
+cand | G2T12-W1 | pending_approval | 1 | f
+cand | G2T12-W1 | approved | 2 | t
+cand | G2T12-W2 | approved | 2 | t
+cand | G2T12-W3 | approved | 2 | t
+resv | 4
+notes | 13:3
+outbox | 13
+active
+== outbox duplicate per notification
+0
+== candidates sharing a reservation
+0
+== fake X calls total
+3
