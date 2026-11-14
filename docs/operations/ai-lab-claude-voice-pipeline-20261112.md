@@ -31,3 +31,15 @@ Claudeは `decision`、`text`、編集IDと選択番号の配列 `edits` を返�
 `ai_lab_voice_pipeline_test.ts` の `preview:` テストは、ネットワーク・キー・X送信を使わず、保存済みの合成原案（326字）と通常・交流質問・体験型・投票の代表例について、原案と編集後の全文を同時に出力する。出力は「合成サンプル・ローカル決定的編集」と明記され、実Claudeの出力ではない。実行: `cd supabase/functions && deno test --no-config --no-check --allow-read --allow-env --allow-net=none _shared/ai_provider/ai_lab_voice_pipeline_test.ts`。
 
 最終稿の検査に、教科書調の導入（「結論から言うと」「大切なのは」等）と「以上が今回の話です。」型の締めの残存を追加した。候補で取り除かれなかった場合は、読点超過・「私、」・「。笑」と同様に `AI_LAB_VOICE_STYLE_REJECTED` で送信前に止まる。実Claudeの第2段は、ユーザーが対象・回数・上限を直接承認するまで呼ばない（今回は未実施）。
+
+### 回帰の実行方法（第30TASK差戻しで確認）
+
+- **Deno 広域**:
+  - コマンド: `cd supabase/functions && deno test --no-config --no-check --cached-only --deny-net --deny-write --allow-read --allow-env --allow-run=node _shared/ai_provider/ _shared/brand/`
+  - `--allow-run=node` が必須。`brand/ai_lab_event_dedupe_test.ts` の「(1)(2)(3) H1 CI」は、GitHub Actions の日記検証スクリプトを `node` の子プロセスで動かす。この許可が無いと、Deno の `node:child_process` が「Command failed: node --experimental-strip-types --input-type=module」とだけ返して 1 件が落ちる（コードの不具合ではない）。
+  - 許可する子プロセスは `node` だけで、通信は遮断したまま。
+  - `--no-check`: 型検査は変更ファイルを `deno check --no-config <file>` で個別に行う。`brand/brand_post_generator_test.ts` に既存の型エラーがあり、広域の型検査はそこで止まるため。
+- **Node**:
+  - コマンド: `cd supabase/functions/_shared && node --experimental-strip-types --test brand/ai_lab_engagement_test.ts brand/ai_lab_event_dedupe_test.ts brand/ai_lab_topic_dedup_test.ts`
+  - 変更モジュールに届く `node:test` の試験のうち、Node でそのまま動くのはこの 3 本。
+  - 残りの `ai_lab_voice_pipeline_test.ts`・`ai_lab_post_test.ts`（`npm:` の読み込み）と、`isolation_test.ts`・`ai_lab_scheduled_brand_post_test.ts`・`social_ai_model_policy_test.ts`（`Deno` の API）は Node では読み込めない。Deno 側で確認する。
