@@ -2,6 +2,10 @@
 -- (EXECUTE on the three RPCs taken from authenticated) and every active device revoked 'stopped' with its token erased, so the delivery side
 -- answers no target for anyone. Keeps the table and the functions (the install, run again, starts it again; devices register again).
 -- Idempotent. Run as the lifecycle owner with ON_ERROR_STOP.
+-- G5-02 task 10 (H4 #331 task 24 P2-1): the FIRST write turns the fence private.postona_push_control off. That UPDATE waits for every
+-- registration holding the fence (FOR SHARE, until its COMMIT); the erase below runs after it in a new snapshot, so it sees and erases what
+-- they committed, and a registration that reaches the fence later sees it off and refuses. The delivery side answers no target while it is
+-- off. Restart: run 001_push_devices.sql again (it turns the fence on and grants EXECUTE again).
 
 begin;
 set local lock_timeout = '5s';
@@ -12,7 +16,7 @@ begin
   if (select r.rolsuper from pg_catalog.pg_roles r where r.rolname = current_user) then
     raise exception 'PUSH_SUPERUSER: run it as the lifecycle owner, not a superuser';
   end if;
-  if pg_catalog.to_regclass('private.postona_push_devices') is null
+  if pg_catalog.to_regclass('private.postona_push_devices') is null or pg_catalog.to_regclass('private.postona_push_control') is null
      or (select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_push_devices'))
           <> (select r.oid from pg_catalog.pg_roles r where r.rolname = current_user) then
     raise exception 'PUSH_NOT_INSTALLED: private.postona_push_devices is absent or not owned by %', current_user;
@@ -20,10 +24,13 @@ begin
 end;
 $pre$;
 
+-- the fence first (waits for in-flight registrations)
+update private.postona_push_control c set enabled = false where c.id;
+
 do $revoke$
 declare v_fn text;
 begin
-  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,integer)', 'public.postona_push_device_unregister(uuid)', 'public.postona_push_device_list()'] loop
+  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer)', 'public.postona_push_device_unregister(uuid)', 'public.postona_push_device_list()'] loop
     if pg_catalog.to_regprocedure(v_fn) is not null then
       execute pg_catalog.format('revoke all on function %s from public, anon, authenticated, service_role', pg_catalog.to_regprocedure(v_fn));
     end if;
@@ -40,6 +47,9 @@ do $post$
 begin
   if exists (select 1 from private.postona_push_devices d where d.status = 'active' or d.push_token is not null or d.token_sha256 is not null) then
     raise exception 'PUSH_STOP_POSTCONDITION_TOKENS';
+  end if;
+  if exists (select 1 from private.postona_push_control c where c.enabled) then
+    raise exception 'PUSH_STOP_POSTCONDITION_FENCE';
   end if;
   if exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public' and p.proname like 'postona\_push\_%'

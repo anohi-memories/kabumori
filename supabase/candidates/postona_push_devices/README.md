@@ -1,11 +1,16 @@
-# POSTONA push devices (G5 source candidate, G5-02 task 9)
+# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10)
+
+Task 10 fixes H4 #331 task 24's three P2 on PR #667:
+- P2-1: one stop fence, `private.postona_push_control`, shared by the stop and every registration;
+- P2-2: no automatic re-send in `client.ts`;
+- P2-3: a device secret per installation, and another person's live registration is never taken over by a matching id.
 
 **Not applied anywhere. Production NO_GO.** New SECURITY DEFINER RPCs over a new owner-only table holding push tokens (secrets): an independent H review, the owner's approval and a read-only check of the managed project come first. Nothing here sends a push or talks to APNs / FCM / Expo.
 
 | file | what |
 | --- | --- |
 | `001_push_devices.sql` | As the lifecycle owner (never a superuser): `private.postona_push_devices` (owner-only, row security on, no policy), three RPCs for `authenticated` (register / unregister / list; the only definers), and the owner-only worker side (delivery targets, provider-receipt invalidation, purge). Refuses on a world it is not for, changing nothing; a re-run changes nothing. |
-| `001_push_devices_stop.sql` | No new registration (EXECUTE taken away), every active device revoked `stopped` with its token erased: the worker side answers no target. Keeps the table; the install starts it again. |
+| `001_push_devices_stop.sql` | The fence off first (it waits for in-flight registrations), no new registration (EXECUTE taken away), every active device revoked `stopped` with its token erased: the worker side answers `PUSH_DEVICES_STOPPED`. Keeps the tables; the install starts it again. |
 | `001_push_devices_rollback.sql` | Drops everything. Refuses while a device is active (stop first) or while another function names the worker side. |
 | `client.ts` | The app's contract (G1): `syncPushDevice` / `registerPushDevice` / `unregisterPushDevice` / `listPushDevices`, and the app lifecycle in its header. |
 

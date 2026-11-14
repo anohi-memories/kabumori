@@ -1,5 +1,5 @@
 -- G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9). NOT applied anywhere. The ROLLBACK of 001_push_devices.sql: drops the three
--- RPCs, the owner-only functions and private.postona_push_devices. Refuses (nothing changed) while a device is active (run
+-- RPCs, the owner-only functions, private.postona_push_devices and the stop fence private.postona_push_control. Refuses (nothing changed) while a device is active (run
 -- 001_push_devices_stop.sql first: it erases every token) or while a function that is not ours names one of ours (e.g. a G3 delivery
 -- function calling the targets: roll that back first). Idempotent. Run as the lifecycle owner with ON_ERROR_STOP.
 
@@ -19,7 +19,10 @@ begin
     if (select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_push_devices')) <> v_owner then
       raise exception 'PUSH_TAKEN: private.postona_push_devices is not owned by % (left alone)', current_user;
     end if;
-    -- the table lock first: no registration lands between this check and the drop
+    -- the table locks first: no registration lands between this check and the drop
+    if pg_catalog.to_regclass('private.postona_push_control') is not null then
+      lock table private.postona_push_control in access exclusive mode;
+    end if;
     lock table private.postona_push_devices in access exclusive mode;
     if exists (select 1 from private.postona_push_devices d where d.status = 'active') then
       raise exception 'PUSH_ACTIVE_DEVICES: run 001_push_devices_stop.sql first (it erases every token)';
@@ -40,7 +43,7 @@ begin
 end;
 $pre$;
 
-drop function if exists public.postona_push_device_register(uuid, text, text, integer);
+drop function if exists public.postona_push_device_register(uuid, text, text, text, integer);
 drop function if exists public.postona_push_device_unregister(uuid);
 drop function if exists public.postona_push_device_list();
 drop function if exists private.postona_push_delivery_targets(uuid, text);
@@ -58,10 +61,11 @@ begin
 end;
 $drop$;
 drop table if exists private.postona_push_devices;
+drop table if exists private.postona_push_control;
 
 do $post$
 begin
-  if pg_catalog.to_regclass('private.postona_push_devices') is not null
+  if pg_catalog.to_regclass('private.postona_push_devices') is not null or pg_catalog.to_regclass('private.postona_push_control') is not null
      or exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
                  where n.nspname in ('public', 'private') and p.proname like 'postona\_push\_%') then
     raise exception 'PUSH_ROLLBACK_POSTCONDITION';

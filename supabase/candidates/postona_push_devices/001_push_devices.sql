@@ -2,6 +2,18 @@
 -- owner-only table that holds push tokens (secrets) -- an independent H review, the owner's approval and a read-only check of the managed
 -- project come first. No push is sent by anything here; nothing calls APNs / FCM / Expo.
 --
+-- G5-02 task 10 (H4 #331 task 24, three P2 on PR #667):
+--   P2-1  a stop and an in-flight registration share ONE fence: private.postona_push_control (one row, `enabled`). Register takes it
+--         FOR SHARE (after T13, before any device row) and refuses while it is off; the stop sets it off (FOR UPDATE: it waits for every
+--         registration holding it, then erases what they committed); the delivery side and the list answer PUSH_DEVICES_STOPPED while it is
+--         off. Account deletion keeps its own fence, T13's account lock: once the account is 'deleting', register refuses.
+--   P2-2  (client.ts) no automatic re-send on STALE_REGISTRATION.
+--   P2-3  another person's registration is never taken over by a matching identifier alone: an installation row answers only to that
+--         installation's device secret (random, kept in the phone's secure storage, only its SHA-256 stored), and a token held by another
+--         person's LIVE registration (active, its session live) is refused (DEVICE_IN_USE). Only a registration whose session has ended
+--         gives its token up to another person; the person's own other installation always does (a reinstall).
+--   Every register waits at most 5 s for a lock (lock_timeout on the function): PUSH_BUSY, nothing changed.
+--
 -- POSTONA push devices: the phones a person's POSTONA notifications may be delivered to, bound to the person, their personal workspace, the
 -- auth session that registered them and the service generation, so that sign-out, service end / restart, account lock / deletion and
 -- owner loss stop delivery without anyone having to remember to delete a row.
@@ -9,7 +21,7 @@
 --           installation (installation_id, chosen by the app). The token is a SECRET: never answered to the app, never in an error, a
 --           log or a notice; a revoked row keeps no token and no token hash.
 --   API     three SECURITY DEFINER RPCs, EXECUTE for authenticated only (the only definers this adds):
---             postona_push_device_register(installation_id, platform, push_token, expected_version)   -> registered | unchanged | refusal
+--             postona_push_device_register(installation_id, device_secret, platform, push_token, expected_version) -> registered | unchanged | refusal
 --             postona_push_device_unregister(installation_id)                                         -> unregistered | not_registered
 --             postona_push_device_list()                                                              -> the person's devices, without tokens
 --   worker  owner-only, SECURITY INVOKER (no grant to any API role; a G3 delivery function owned by the same owner calls them):
@@ -28,9 +40,10 @@
 --   3. the auth session the row was registered under still exists for that user and has not expired (sign-out deletes it: stopped even when
 --      the app's unregister never reached the server).
 -- Replays and races (register): compare-and-set on registration_version (the caller's own row moves only from the version it last saw; a new
--- row or another person's only from none); the same registration again is 'unchanged'; one token is active on at most ONE row (another
--- row holding it, the person's or anyone's, is revoked 'taken_over'); one installation is one row (another person registering it takes it
--- over); transaction advisory locks on the token and on the installation serialize same-token / same-installation registrations, the
+-- row or another person's only from none); the same registration again is 'unchanged'; one token is active on at most ONE row (the
+-- person's own other installation holding it, or anyone's registration whose session has ended, is revoked 'taken_over'; another person's
+-- live one refuses: DEVICE_IN_USE); one installation is one row, and it moves to another person only with its device secret (the same phone
+-- signed in to another account); transaction advisory locks on the token and on the installation serialize same-token / same-installation registrations, the
 -- person's own registrations already serialize on T13's account lock; rows are locked in installation_id order. At most 10 deliverable
 -- devices per person (DEVICE_LIMIT).
 --
@@ -103,8 +116,14 @@ begin
      and ((select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_push_devices')) <> v_owner
           or (select pg_catalog.string_agg(a.attname::text, ',' order by a.attname) from pg_catalog.pg_attribute a
                where a.attrelid = pg_catalog.to_regclass('private.postona_push_devices') and a.attnum > 0 and not a.attisdropped)
-             is distinct from 'created_at,installation_id,lifecycle_version,platform,push_token,registration_version,revoked_at,revoked_reason,session_id,status,token_sha256,updated_at,user_id,workspace_id') then
-    raise exception 'PUSH_TAKEN: private.postona_push_devices exists and is not this candidate''s';
+             is distinct from 'created_at,device_secret_sha256,installation_id,lifecycle_version,platform,push_token,registration_version,revoked_at,revoked_reason,session_id,status,token_sha256,updated_at,user_id,workspace_id') then
+    raise exception 'PUSH_TAKEN: private.postona_push_devices exists and is not this candidate''s (an earlier candidate is installed: stop and roll it back first)';
+  end if;
+  if pg_catalog.to_regclass('private.postona_push_control') is not null
+     and ((select c.relowner from pg_catalog.pg_class c where c.oid = pg_catalog.to_regclass('private.postona_push_control')) <> v_owner
+          or (select pg_catalog.string_agg(a.attname::text, ',' order by a.attname) from pg_catalog.pg_attribute a
+               where a.attrelid = pg_catalog.to_regclass('private.postona_push_control') and a.attnum > 0 and not a.attisdropped) is distinct from 'enabled,id') then
+    raise exception 'PUSH_TAKEN: private.postona_push_control exists and is not this candidate''s';
   end if;
   select pg_catalog.string_agg(p.oid::pg_catalog.regprocedure::text, ', ') into v_txt from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
    where n.nspname in ('public', 'private') and p.proname like 'postona\_push\_%' and p.proowner <> v_owner;
@@ -117,6 +136,7 @@ $pre$;
 -- ---- the devices (owner-only; row security on with no policy: only the definer RPCs and the owner's worker functions read or write it) ----
 create table if not exists private.postona_push_devices (
   installation_id uuid primary key,              -- chosen by the app, once per installation (kept in its secure storage)
+  device_secret_sha256 bytea not null check (pg_catalog.octet_length(device_secret_sha256) = 32),  -- (G5-02 #10 P2-3) the phone's secret, hashed
   user_id uuid not null,
   workspace_id text not null check (workspace_id ~ '^u_[0-9a-f]{24}$'),
   session_id uuid not null,                      -- the auth session that registered it (JWT session_id)
@@ -139,6 +159,16 @@ create unique index if not exists postona_push_devices_active_token on private.p
 create index if not exists postona_push_devices_user on private.postona_push_devices (user_id, status);
 alter table private.postona_push_devices enable row level security;
 revoke all on table private.postona_push_devices from public, anon, authenticated, service_role;
+
+-- (G5-02 #10 P2-1) the stop fence: one row. Register holds it FOR SHARE until COMMIT; the stop updates it (FOR UPDATE)
+create table if not exists private.postona_push_control (
+  id boolean primary key default true check (id),
+  enabled boolean not null
+);
+alter table private.postona_push_control enable row level security;
+revoke all on table private.postona_push_control from public, anon, authenticated, service_role;
+-- the install (re)starts registration and delivery; 001_push_devices_stop.sql stops both
+insert into private.postona_push_control (id, enabled) values (true, true) on conflict (id) do update set enabled = true;
 
 -- ---- internal helpers (SECURITY INVOKER, owner-only: they run as the owner only inside the definer RPCs / the owner's own calls) ----------
 -- the JWT's session_id, read from the claim source auth.uid() reads first (as S2-2 / T13): the per-claim settings when a per-claim sub is set
@@ -215,16 +245,20 @@ returns jsonb language sql immutable set search_path = '' as $$
 $$;
 
 -- ---- the person's API (SECURITY DEFINER, EXECUTE for authenticated only) ---------------------------------------------------------------
-create or replace function public.postona_push_device_register(p_installation_id uuid, p_platform text, p_push_token text, p_expected_version integer default null)
-returns jsonb language plpgsql volatile security definer set search_path = '' set row_security = off as $$
+create or replace function public.postona_push_device_register(p_installation_id uuid, p_device_secret text, p_platform text, p_push_token text, p_expected_version integer default null)
+returns jsonb language plpgsql volatile security definer set search_path = '' set row_security = off set lock_timeout = '5s' as $$
 declare
   v_gate text;
+  v_enabled boolean;
   v_user uuid;
   v_session uuid;
   v_ws text;
   v_lv bigint;
   v_hash bytea;
+  v_secret bytea;
   v_holder uuid;
+  v_holder_user uuid;
+  v_holder_live boolean;
   v_others integer;
   r private.postona_push_devices;
 begin
@@ -232,8 +266,9 @@ begin
   if v_gate is not null then
     return pg_catalog.jsonb_build_object('status', v_gate);
   end if;
-  -- never echoes the token (nor says which part is wrong)
-  if p_installation_id is null or p_platform is null or p_platform not in ('ios', 'android') or p_push_token is null
+  -- never echoes the token or the secret (nor says which part is wrong)
+  if p_installation_id is null or p_device_secret is null or p_device_secret !~ '^[A-Za-z0-9_-]{43,128}$'
+     or p_platform is null or p_platform not in ('ios', 'android') or p_push_token is null
      or p_push_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{16,64}\]$' or p_expected_version < 1 then
     return pg_catalog.jsonb_build_object('status', 'INVALID_INPUT');
   end if;
@@ -242,6 +277,13 @@ begin
   if v_user is null or v_session is null then
     return pg_catalog.jsonb_build_object('status', 'AUTH_REQUIRED');
   end if;
+  -- (G5-02 #10 P2-1) the stop fence, held FOR SHARE until COMMIT: a stop (FOR UPDATE) waits for this registration and then erases it, or
+  -- this registration waits for the stop and sees it off. Taken after T13's account lock and before any device row (the stop takes no
+  -- account lock, and takes device rows only after the fence).
+  select c.enabled into v_enabled from private.postona_push_control c where c.id for share;
+  if v_enabled is not true then
+    return pg_catalog.jsonb_build_object('status', 'PUSH_DEVICES_STOPPED');
+  end if;
   v_ws := 'u_' || pg_catalog.substr(pg_catalog.md5(v_user::text), 1, 24);
   -- the generation, read under T13's account lock (a service end / restart waits for this registration, or this sees its new version)
   select a.lifecycle_version into v_lv from public.common_accounts a where a.user_id = v_user;
@@ -249,15 +291,29 @@ begin
     return pg_catalog.jsonb_build_object('status', 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND');
   end if;
   v_hash := pg_catalog.sha256(pg_catalog.convert_to(p_push_token, 'UTF8'));
+  v_secret := pg_catalog.sha256(pg_catalog.convert_to(p_device_secret, 'UTF8'));
   -- one registration of this token at a time (anyone's), then one of this installation at a time
   perform pg_catalog.pg_advisory_xact_lock(private.postona_push_lock_key('token', pg_catalog.encode(v_hash, 'hex')));
   perform pg_catalog.pg_advisory_xact_lock(private.postona_push_lock_key('installation', p_installation_id::text));
-  -- another active row holding this token (it cannot change hands while the token lock is held); both rows locked in installation_id order
+  -- another active row holding this token (it cannot gain the token while the token lock is held); both rows locked in installation_id order
   select d.installation_id into v_holder from private.postona_push_devices d
    where d.token_sha256 = v_hash and d.status = 'active' and d.installation_id <> p_installation_id;
   perform 1 from private.postona_push_devices d where d.installation_id in (p_installation_id, v_holder) order by d.installation_id for update;
   select * into r from private.postona_push_devices d where d.installation_id = p_installation_id;
+  -- the holder again, after its lock: its owner may have unregistered it or moved it to another token meanwhile
+  if v_holder is not null then
+    select d.user_id, private.postona_push_session_live(d.session_id, d.user_id) into v_holder_user, v_holder_live
+      from private.postona_push_devices d where d.installation_id = v_holder and d.status = 'active' and d.token_sha256 = v_hash;
+    if v_holder_user is null then
+      v_holder := null;
+    end if;
+  end if;
 
+  -- (P2-3) an installation row is the phone: it answers only to that phone's device secret, whoever's it is now (the same phone signed in
+  -- to another account presents the same secret; a leaked installation id alone does not)
+  if r.installation_id is not null and r.device_secret_sha256 is distinct from v_secret then
+    return pg_catalog.jsonb_build_object('status', 'DEVICE_IN_USE');
+  end if;
   -- the same registration again (a retry whose answer was lost): nothing changes
   if r.installation_id is not null and r.user_id = v_user and r.status = 'active' and r.token_sha256 = v_hash and r.session_id = v_session
      and r.lifecycle_version = v_lv and r.platform = p_platform and r.workspace_id = v_ws then
@@ -271,6 +327,11 @@ begin
   elsif p_expected_version is not null then
     return pg_catalog.jsonb_build_object('status', 'STALE_REGISTRATION', 'registration_version', null);
   end if;
+  -- (P2-3) a token that another person's LIVE registration holds (active, its session live) is refused: a leaked token moves nothing.
+  -- The person's own other installation (a reinstall), or a registration whose session has ended (signed out / expired), gives it up.
+  if v_holder is not null and v_holder_user is distinct from v_user and v_holder_live then
+    return pg_catalog.jsonb_build_object('status', 'DEVICE_IN_USE');
+  end if;
   -- at most 10 deliverable devices (the person's registrations serialize on T13's account lock)
   select pg_catalog.count(*) into v_others from private.postona_push_devices d
    where d.user_id = v_user and d.status = 'active' and d.installation_id <> p_installation_id and d.lifecycle_version = v_lv
@@ -278,7 +339,7 @@ begin
   if v_others >= 10 then
     return pg_catalog.jsonb_build_object('status', 'DEVICE_LIMIT');
   end if;
-  -- one active row per token: the earlier holder (the person's own old installation, or anyone's) stops
+  -- one active row per token: the earlier holder stops
   if v_holder is not null then
     update private.postona_push_devices d
        set status = 'revoked', revoked_reason = 'taken_over', revoked_at = pg_catalog.clock_timestamp(), push_token = null, token_sha256 = null,
@@ -286,9 +347,9 @@ begin
      where d.installation_id = v_holder and d.status = 'active' and d.token_sha256 = v_hash;
   end if;
   if r.installation_id is null then
-    insert into private.postona_push_devices (installation_id, user_id, workspace_id, session_id, lifecycle_version, platform, push_token, token_sha256,
-                                              registration_version, status)
-    values (p_installation_id, v_user, v_ws, v_session, v_lv, p_platform, p_push_token, v_hash, 1, 'active')
+    insert into private.postona_push_devices (installation_id, device_secret_sha256, user_id, workspace_id, session_id, lifecycle_version, platform,
+                                              push_token, token_sha256, registration_version, status)
+    values (p_installation_id, v_secret, v_user, v_ws, v_session, v_lv, p_platform, p_push_token, v_hash, 1, 'active')
     returning * into r;
   else
     update private.postona_push_devices d
@@ -299,6 +360,9 @@ begin
     returning * into r;
   end if;
   return pg_catalog.jsonb_build_object('status', 'registered', 'device', private.postona_push_device_json(r, v_session, true));
+exception when lock_not_available then
+  -- a lock held longer than 5 s (a stop, a lifecycle change, another registration): nothing of this call is kept
+  return pg_catalog.jsonb_build_object('status', 'PUSH_BUSY');
 end $$;
 
 -- the person stops this installation's notifications (sign-out, "notifications off", account deletion): a live session is enough -- no
@@ -354,7 +418,8 @@ begin
   v_session := private.postona_push_claims_session();
   v_ws := 'u_' || pg_catalog.substr(pg_catalog.md5(v_user::text), 1, 24);
   select a.lifecycle_version into v_lv from public.common_accounts a where a.user_id = v_user;
-  v_verdict := case when v_lv is null then 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND'
+  v_verdict := case when (select c.enabled from private.postona_push_control c where c.id) is not true then 'PUSH_DEVICES_STOPPED'
+                    when v_lv is null then 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND'
                     else coalesce(private.postona_personal_worker_verdict(v_user, v_ws, 'x_autopost', v_lv), 'PUSH_VERDICT_UNKNOWN') end;
   return pg_catalog.jsonb_build_object('status', 'ok', 'delivery', v_verdict, 'devices', coalesce((
     select pg_catalog.jsonb_agg(private.postona_push_device_json(d, v_session,
@@ -374,6 +439,10 @@ declare
 begin
   if p_user_id is null or p_brand_id is null then
     return pg_catalog.jsonb_build_object('verdict', 'PUSH_INPUT_REQUIRED', 'targets', '[]'::jsonb);
+  end if;
+  -- (G5-02 #10 P2-1) stopped: no target for anyone
+  if (select c.enabled from private.postona_push_control c where c.id) is not true then
+    return pg_catalog.jsonb_build_object('verdict', 'PUSH_DEVICES_STOPPED', 'targets', '[]'::jsonb);
   end if;
   select a.lifecycle_version into v_lv from public.common_accounts a where a.user_id = p_user_id;
   v_verdict := case when v_lv is null then 'ACCOUNT_LIFECYCLE_ACCOUNT_NOT_FOUND'
@@ -439,9 +508,9 @@ end $$;
 revoke all on function private.postona_push_claims_session(), private.postona_push_writer_gate(), private.postona_push_session_live(uuid, uuid),
   private.postona_push_lock_key(text, text), private.postona_push_device_json(private.postona_push_devices, uuid, boolean),
   private.postona_push_delivery_targets(uuid, text), private.postona_push_device_invalidate(uuid, integer), private.postona_push_devices_purge(),
-  public.postona_push_device_register(uuid, text, text, integer), public.postona_push_device_unregister(uuid), public.postona_push_device_list()
+  public.postona_push_device_register(uuid, text, text, text, integer), public.postona_push_device_unregister(uuid), public.postona_push_device_list()
   from public, anon, authenticated, service_role;
-grant execute on function public.postona_push_device_register(uuid, text, text, integer), public.postona_push_device_unregister(uuid),
+grant execute on function public.postona_push_device_register(uuid, text, text, text, integer), public.postona_push_device_unregister(uuid),
   public.postona_push_device_list() to authenticated;
 
 do $post$
@@ -456,6 +525,17 @@ begin
         from pg_catalog.pg_class c where c.oid = 'private.postona_push_devices'::pg_catalog.regclass) is not true
      or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'private.postona_push_devices'::pg_catalog.regclass) then
     raise exception 'PUSH_POSTCONDITION_TABLE';
+  end if;
+  if (select c.relowner = v_owner and c.relrowsecurity and c.relkind = 'r'
+             and coalesce(pg_catalog.array_to_string(c.relacl::text[], ','), '') in ('', pg_catalog.format('%s=arwdDxtm/%s', v_me, v_me), pg_catalog.format('%s=arwdDxt/%s', v_me, v_me))
+        from pg_catalog.pg_class c where c.oid = 'private.postona_push_control'::pg_catalog.regclass) is not true
+     or exists (select 1 from pg_catalog.pg_policy p where p.polrelid = 'private.postona_push_control'::pg_catalog.regclass)
+     or (select pg_catalog.count(*) || ':' || pg_catalog.bool_and(c.enabled) from private.postona_push_control c) <> '1:true' then
+    raise exception 'PUSH_POSTCONDITION_CONTROL';
+  end if;
+  if not exists (select 1 from pg_catalog.pg_proc p where p.oid = 'public.postona_push_device_register(uuid,text,text,text,integer)'::pg_catalog.regprocedure
+                    and 'lock_timeout=5s' = any (p.proconfig)) then
+    raise exception 'PUSH_POSTCONDITION_LOCK_TIMEOUT';
   end if;
   -- every function of ours: owned here, empty search path; exactly the three public RPCs are definers with EXECUTE for authenticated
   select pg_catalog.string_agg(p.oid::pg_catalog.regprocedure::text, ', ') into v_txt from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
