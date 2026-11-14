@@ -782,3 +782,46 @@ test('T47 source: markRead is sent only from the confirmed path; the gate check 
   assert.doesNotMatch(check, /reactivate|explicit\(/u, 'a check never restarts the service');
   for (const text of [hook, gate]) assert.doesNotMatch(text, /expo-notifications|push_outbox|sendPush/u);
 });
+
+// ---- G1 TASK 50 (G2 #12): the T46 intermittent failure's root cause, and the T47 / runner contract with G3 #663 ----------------------
+test('T50 root cause of the T46 flake (1 !== 3 under load): the badge drops when the newest row is answered while the two older rows are still out; every row is sent, each answers once', async () => {
+  const srv = g3();
+  const h = await mount({ srv });
+  await h.render();
+  await submitOne(h, '候補X');
+  await h.open('投稿候補 ');
+  await reviseOnce(h, '候補X 改1');
+  await reviseOnce(h, '候補X 改2');
+  await submitOne(h, '候補Y');
+  const x = [...srv.candidates.keys()][0];
+  let tree = await h.show('notifications');
+  // the older two answer late (a loaded machine): hold them
+  const held = [];
+  const base = srv.fetch;
+  let marks = 0;
+  h.world.fetch = async (url, init) => {   // the client reads the world's fetch on every call
+    const { action } = JSON.parse(init.body);
+    if (action === 'markRead' && ++marks > 1) await new Promise((resolve) => held.push(resolve));
+    return base(url, init);
+  };
+  pressables(tree, 'お知らせ ')[1].onPress();   // X
+  tree = await h.render();
+  assert.ok(has(tree, '未読 1件'), 'the badge already dropped: the newest row of X is answered');
+  assert.equal(srv.count('markRead'), 1, 'answers counted so far: 1 (what the e2e\'s sent() saw), though 3 calls are out');
+  assert.equal(held.length, 2, 'the two older rows are in flight');
+  assert.equal(srv.notes.filter((n) => n.candidateId === x && n.readAt === null).length, 2, 'and still unread on the server');
+  held.forEach((release) => release());
+  tree = await h.render();
+  assert.equal(srv.count('markRead'), 3, 'one call per row of X, each answered once');
+  assert.ok(srv.notes.filter((n) => n.candidateId === x).every((n) => n.readAt !== null));
+  assert.ok(has(tree, '未読 1件'), 'only Y is unread');
+});
+
+test('T50 e2e contract: T47 expects G3 #663\'s 403 after the end (200 only for a tree without it, G1T50_G3_663=0), the runner sets the switch, T46 waits for the three answers', async () => {
+  const e2e = await readFile(new URL('./local-stack/approvals.e2e.mjs', import.meta.url), 'utf8');
+  assert.match(e2e, /\[direct\.status, direct\.body\?\.code\], \[403, 'POSTONA_RESV_SERVICE_NOT_ACTIVE'\]/u, 'the guarded expectation is 403 SERVICE_NOT_ACTIVE');
+  assert.match(e2e, /const guarded = process\.env\.G1T50_G3_663 !== '0';/u);
+  assert.match(e2e, /await untilWire\(\(\) => sent\('markRead'\) - before >= 3/u, 'T46 waits for all three answers');
+  const runner = await readFile(new URL('./local-stack/run-x-disconnected.sh', import.meta.url), 'utf8');
+  assert.match(runner, /^export G1T50_G3_663="\$\{G1T50_G3_663:-1\}"$/mu);
+});

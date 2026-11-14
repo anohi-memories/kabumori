@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { SignOutButton } from '@/components/sign-out-button';
@@ -49,6 +50,9 @@ type GateView =
 
 /** The one way into the ended service's history: it reads, it never writes. */
 export const ENDED_HISTORY_ACTION = 'これまでの承認とお知らせを見る（閲覧のみ）';
+/** G1 TASK 50 (G2 #12 P3): the read-only history always shows its own ways out, at the top and the bottom, under the status bar. */
+export const ENDED_HISTORY_BACK = '‹ 戻る';
+export const ENDED_HISTORY_BACK_BOTTOM = '戻る';
 
 const isOwner = (owner: Owner, userId: string | null, loginId: string | null) => owner.userId === userId && owner.loginId === loginId;
 
@@ -66,6 +70,8 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   // The login of this session; null when the token cannot be identified (never enrolled, never ready).
   const loginId = userId && accessToken ? loginSessionIdOf(userId, accessToken) : null;
   const selection = useMemo(() => selectDataSource(), []);
+  // The gate's own screens sit outside the navigation stack: nothing above them keeps them clear of the status bar / Dynamic Island.
+  const insets = useSafeAreaInsets();
   const [view, setView] = useState<GateView>({ userId: null, loginId: null, request: 0, kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   // Every automatic run and every click is one request; only the latest may change the view.
@@ -125,6 +131,7 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
     if (view.kind !== 'outcome' || !isOwner(view, userId, loginId) || view.outcome.kind !== 'reenroll_required') return;
     const lifecycleVersion = view.outcome.lifecycleVersion;
     const clicked: Owner = { userId, loginId };
+    setHistoryOpenFor(null);   // a restart leaves the history: a later end shows the restart screen first, not the old history
     const mine = ++request.current;
     explicitInFlight.current = true;
     setView({ ...clicked, request: mine, kind: 'loading' });
@@ -194,14 +201,21 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
   const historyKey = userId && loginId ? `${userId}\n${loginId}` : null;
   const ended = current.kind === 'outcome' && current.outcome.kind === 'reenroll_required';
   if (POSTONA_APPROVAL_UI_ENABLED && ended && historyKey !== null && historyOpenFor === historyKey) {
+    // Reading never writes. The exits: back (top and bottom), the person's own restart (the same explicit click as on the previous
+    // screen, for this person and login), and sign-out -- so a person who opened the history is never stuck in it.
     return (
       <Screen>
-        <ScrollView contentContainerStyle={{ gap: 16 }}>
-          <Pressable accessibilityRole="button" onPress={() => setHistoryOpenFor(null)} style={{ paddingBottom: 0 }}>
-            <Text style={{ color: colors.primary, fontWeight: '700' }}>‹ 戻る</Text>
-          </Pressable>
-          <EndedHistory userId={userId} />
-        </ScrollView>
+        <View style={{ flex: 1, paddingTop: insets.top }}>
+          <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: Math.max(insets.bottom, 16) + 16 }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="閲覧をやめて前の画面に戻る" hitSlop={12} onPress={() => setHistoryOpenFor(null)} style={{ paddingVertical: 8 }}>
+              <Text style={{ color: colors.primary, fontWeight: '700' }}>{ENDED_HISTORY_BACK}</Text>
+            </Pressable>
+            <EndedHistory userId={userId} />
+            <ActionButton label={ENDED_HISTORY_BACK_BOTTOM} onPress={() => setHistoryOpenFor(null)} />
+            <ActionButton label={REENROLL_COPY.action} onPress={reenroll} />
+            <SignOutButton />
+          </ScrollView>
+        </View>
       </Screen>
     );
   }
@@ -257,7 +271,7 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ gap: 16 }}>
+      <ScrollView contentContainerStyle={{ gap: 16, paddingTop: insets.top, paddingBottom: Math.max(insets.bottom, 16) + 16 }}>
         <View style={{ gap: 6 }}>
           <Text style={typography.caption}>ご利用の準備</Text>
           <Text style={typography.title}>X自動投稿</Text>

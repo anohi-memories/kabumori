@@ -41,7 +41,8 @@ const mountFor = (p, extra = {}) => mountApprovals({
   fetch: recorded, endpoint: { functionName: FN, allowLoopbackHttpForTests: true }, config: { ok: true, config: { url: stack.API, publishableKey: stack.PUBLISHABLE } },
   uuid: () => crypto.randomUUID(), wait: () => new Promise((resolve) => setTimeout(resolve, 60)), ...extra,
 });
-async function until(h, predicate, label, ms = 20000) {
+// G1 TASK 50 (G2 #12 observation): under a load of 300+ the 20 s that was enough before ran out; the wait is for a state, not a speed.
+async function until(h, predicate, label, ms = 90000) {
   const end = Date.now() + ms;
   let tree = await h.render(3);
   while (!predicate(tree)) {
@@ -174,6 +175,13 @@ test('two notification reads at once write one reservation_changed; with G5\'s o
 });
 
 // ---- G1 TASK 45: what G2 #9 could not run on the Simulator, on the real runtime -------------------------------------------------------
+async function untilWire(predicate, label, ms = 90000) {
+  const end = Date.now() + ms;
+  while (!predicate()) {
+    assert.ok(Date.now() < end, `timed out: ${label}; wire: ${wire.slice(-8).join(' | ')}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
 const sent = (action) => wire.filter((w) => w.startsWith(`${action} `) && !w.endsWith('(not sent)') && !w.endsWith('answer lost')).length;
 let R;
 test('T45 reconfirm: another session revises the shown candidate -> 「承認」 gets 409 STALE -> the screen reads back the new text and version; the next 承認 uses them', opts, async () => {
@@ -303,6 +311,9 @@ test('T46 grouping on the real runtime: revised twice + another candidate = 2 li
   const before = sent('markRead');
   pressables(tree, 'お知らせ ')[1].onPress();
   tree = await until(h, (t) => has(t, '未読 1件'), 'X read');
+  // G1 TASK 50 (G2 #12 observation, 1 !== 3 under load): the badge drops when the NEWEST row of the line is answered; the two older
+  // rows are sent in the same instant but may answer later, and `sent()` counts answers. Wait for all three, then assert.
+  await untilWire(() => sent('markRead') - before >= 3, 'the three answers of X');
   assert.equal(sent('markRead') - before, 3, 'one call per row of X');
   const left = await unreadOf(G);
   assert.ok(left.length === 1 && left[0].candidateId !== x, `only Y is unread: ${JSON.stringify(left)}`);
@@ -425,12 +436,20 @@ test('T47 G2 #11 P3 on the real runtime: service ended with the notification scr
   const sentActions = [...new Set(wire.slice(at).map((w) => w.split(' ')[0]))];
   assert.deepEqual(sentActions, ['notifications'], `only reads: ${wire.slice(at).join(' | ')}`);
 
-  // The residual G3 boundary, measured with the person's own token outside the app (not something the app does): still 200.
+  // The G3 boundary, measured with the person's own token outside the app (not something the app does). G3 #663 (task 20) refuses a
+  // markRead after the end: 403 SERVICE_NOT_ACTIVE, read_at unchanged. A tree without #663 still answers 200 (G1T50_G3_663=0, set by
+  // the runner for such a tree -- the same pattern as G1T39_G3_629): then the guard is G3's to add and the app's check is the only one.
   const noteId = await q("select id from postona_x_resv.notifications where user_id = :'u'", { u: P.userId });
   const direct = await raw('markRead', { notificationId: noteId }, P.token);
-  console.log(`G1T47 measured: after the end the app sent markRead 0 (read_at stayed null); a direct markRead with the same JWT answered ${direct.status} ${direct.body?.code ?? 'ok'} (G3 server-side guard absent)`);
-  assert.equal(direct.status, 200, 'G3 still accepts it: the server guard is G3\'s to add');
-  await q("update postona_x_resv.notifications set read_at = null where id = :'n'", { n: noteId });
+  const guarded = process.env.G1T50_G3_663 !== '0';
+  console.log(`G1T47 measured: after the end the app sent markRead 0 (read_at stayed null); a direct markRead with the same JWT answered ${direct.status} ${direct.body?.code ?? 'ok'} (G3 #663 server guard ${guarded ? 'expected' : 'absent in this tree'})`);
+  if (guarded) {
+    assert.deepEqual([direct.status, direct.body?.code], [403, 'POSTONA_RESV_SERVICE_NOT_ACTIVE'], 'G3 #663: markRead after the end is refused');
+    assert.equal(await readAtOf(P), 'false', 'and the server row stays unread');
+  } else {
+    assert.equal(direct.status, 200, 'this tree has no G3 #663 guard: the server still accepts it');
+    await q("update postona_x_resv.notifications set read_at = null where id = :'n'", { n: noteId });
+  }
 
   // The person's own restart (the gate's reactivate RPC at the version the check reported), then a fresh screen: the read goes once.
   const restarted = await stack.rpc('reactivate_x_autopost_service', P.token, { p_expected_lifecycle_version: asked.version });
