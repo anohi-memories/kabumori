@@ -1158,3 +1158,189 @@ test("ambiguous X write keeps the claim and does not replay either Claude stage 
   assert.equal(f.payloads.length, 1);
   assert.deepEqual(f.completedFingerprints, []);
 });
+
+// ---- Non-posting, non-billing preview (no fetch, no key, no X) ----
+type PreviewCase = {
+  label: string;
+  mode: "regular" | "opinion" | "experience" | "choices";
+  original: string;
+  selections: readonly Selection[];
+};
+
+const SYNTHETIC_NOTICE =
+  "【合成サンプル】保存済みの合成原案とローカル決定的編集です。実Claudeの出力ではありません。";
+
+function localPreview(c: PreviewCase) {
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: c.original,
+    engagementMode: c.mode === "regular" ? undefined : c.mode,
+  });
+  const { candidates } = JSON.parse(prepared.request.input) as {
+    candidates: Candidate[];
+  };
+  const edits = c.selections.map(([from, to]) => {
+    const found = candidates.find((v) =>
+      v.from === from && v.options.includes(to)
+    );
+    assert.ok(found, `missing edit ${JSON.stringify([from, to])}`);
+    return { id: found.id, option: found.options.indexOf(to) };
+  }).sort((a, b) => a.id - b.id);
+  const sorted = [...c.selections];
+  let text = c.original;
+  for (const [from, to] of sorted) text = text.replace(from, to);
+  const accepted = prepared.validate({ decision: "edited", text, edits });
+  return {
+    edited: accepted.text,
+    sideBySide: [
+      SYNTHETIC_NOTICE,
+      `■ ${c.label}`,
+      `--- 原案（${c.original.length}字）---`,
+      c.original,
+      `--- 編集後（${accepted.text.length}字）---`,
+      accepted.text,
+    ].join("\n"),
+  };
+}
+
+const syntheticDraft326 = [
+  "開発メモの見出しって、書いた直後は長いほうが親切に見える。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいに。",
+  "でも後から探すときに目で拾えるのは、たぶん最初の数文字くらい。一覧にずらっと並ぶと、長い見出しほど似たような文に見えて、結局ひとつずつ開くことになりがちだと思う。",
+  "「ログイン：ボタン無反応」くらいまで削ると、画面名や機能名が頭に揃うので、流し見でも引っかかりやすい。詳しい経緯は本文に書けばいい。",
+  "ただ短くしすぎて「修正」「バグ対応」だけになると、それはそれで何の話かわからない。どこの、何が、くらいは残す。そのあたりの線引きは、後から自分が検索しそうな言葉を入れておくかどうかで決まる気がする。",
+  "#個人開発",
+].join("\n\n");
+
+const previewCases: readonly PreviewCase[] = [
+  {
+    label: "通常投稿（保存済み合成326字）",
+    mode: "regular",
+    original: syntheticDraft326,
+    selections: [
+      ["見えて、結局", "見える。で、結局"],
+      ["揃うので、", "揃う。だから"],
+      ["詳しい経緯は本文に", "細かい話は本文に"],
+      ["どこの、何が、", "場所と内容"],
+      ["そのあたりの線引きは、", "その目安は"],
+      [
+        "言葉を入れておくかどうかで決まる気がする。",
+        "言葉が入ってるかどうかだと思う。",
+      ],
+    ],
+  },
+  {
+    label: "交流質問（引用・数値・URL・タグを保持）",
+    mode: "experience",
+    original:
+      "私、設定の説明がわからないんです。ちなみに、2台で「通知」を見比べたことがありますか？\nhttps://example.test/notes\n#個人開発",
+    selections: [["私、", ""], ["ことがありますか？", "ことありますか？"]],
+  },
+  {
+    label: "体験型（「。笑」の修復）",
+    mode: "experience",
+    original: "まぁエラーはしょっちゅう出るけど。笑 同じ経験ありますか？",
+    selections: [["。笑", "😂"]],
+  },
+  {
+    label: "投票（選択肢は編集に渡さない）",
+    mode: "choices",
+    original: "通知の見た目、確認を行いました。どれを選びますか？",
+    selections: [["確認を行いました", "確認しました"], [
+      "どれを選びますか？",
+      "どれを選びますか？".replace("か？", "？"),
+    ]],
+  },
+];
+
+for (const c of previewCases) {
+  test(`preview: ${c.label} compares side by side with protected content kept`, () => {
+    const { edited, sideBySide } = localPreview(c);
+    console.log(`\n${sideBySide}\n`);
+    assert.notEqual(edited, c.original);
+    assert.match(sideBySide, /実Claudeの出力ではありません/u);
+    for (
+      const kept of c.original.match(/https?:\/\/\S+|#\S+|「[^」]*」|\d+/gu) ??
+        []
+    ) {
+      assert.ok(edited.includes(kept), `lost ${kept}`);
+    }
+    if (c.original.includes("？")) assert.ok(/[？?]/u.test(edited));
+  });
+}
+
+test("preview: the poll case never carries poll options into the editor input", () => {
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: previewCases[3].original,
+    engagementMode: "choices",
+  });
+  const input = JSON.parse(prepared.request.input) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(input).sort(), [
+    "candidates",
+    "mode",
+    "original",
+  ]);
+});
+
+const holdCases: readonly [label: string, text: string, pattern: RegExp][] = [
+  [
+    "textbook opener left in",
+    "結論から言うと、通知は2台で見比べると分かりやすいです。",
+    /STYLE_REJECTED/,
+  ],
+  [
+    "lesson-style wrap-up left in",
+    "通知を2台で見比べました。以上が今回の話です。",
+    /STYLE_REJECTED/,
+  ],
+  [
+    "extra first-person subject comma",
+    "私、先に確認しました。",
+    /STYLE_REJECTED/,
+  ],
+  [
+    "two commas in one sentence",
+    "通知は、予定は、どちらも見ました。",
+    /STYLE_REJECTED/,
+  ],
+  ["。笑 left in", "確認したけど。笑", /STYLE_REJECTED/],
+];
+
+for (const [label, text, pattern] of holdCases) {
+  test(`preview hold: ${label} cannot pass as keep`, () => {
+    const prepared = prepareAiLabVoiceRewrite({
+      brandId: "ai_salaryman_lab",
+      postType: "brand_post",
+      text,
+    });
+    assert.throws(
+      () => prepared.validate({ decision: "keep", text, edits: [] }),
+      pattern,
+    );
+  });
+}
+
+test("preview hold: reflow-only and emoji-only edits require review", () => {
+  const text = "通知を確認しました。予定も確認しました。";
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text,
+  });
+  const { candidates } = JSON.parse(prepared.request.input) as {
+    candidates: Candidate[];
+  };
+  const reflow = candidates.find((v) => v.options.includes("\n"));
+  assert.ok(reflow);
+  assert.throws(
+    () =>
+      prepared.validate({
+        decision: "edited",
+        text: text.replace("。予定", "。\n予定"),
+        edits: [{ id: reflow.id, option: reflow.options.indexOf("\n") }],
+      }),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+});

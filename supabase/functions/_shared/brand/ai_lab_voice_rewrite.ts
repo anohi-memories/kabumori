@@ -53,6 +53,10 @@ const LAUGH_END =
 const ALTERNATE_SUBJECT =
   /(?<![^。！？!?、\s])(?:僕|ぼく|俺|おれ)(?:(?:たち|達|ら)?[はがものをに]|[ \t　]*、)/u;
 
+// Textbook openers and wrap-up lines survive only when no candidate removed them.
+const TEXTBOOK_FRAME =
+  /(?<![^。！？!?\n])(?:結論から言うと|簡単に言うと|まとめると|ここで大切なのは|大切なのは)|(?:以上が今回の話です|ここまでが今回の話です)。/u;
+
 export const AI_LAB_VOICE_STYLE_REJECTED = "AI_LAB_VOICE_STYLE_REJECTED";
 
 function protectedSpans(text: string): Span[] | null {
@@ -242,6 +246,7 @@ function assertFinalVoiceStyle(text: string) {
   const body = visible.join("");
   if (
     STOP_BEFORE_LAUGH.test(body) ||
+    TEXTBOOK_FRAME.test(body) ||
     body.search(SUBJECT_COMMA) >= 0 ||
     ALTERNATE_SUBJECT.test(body)
   ) throw reject();
