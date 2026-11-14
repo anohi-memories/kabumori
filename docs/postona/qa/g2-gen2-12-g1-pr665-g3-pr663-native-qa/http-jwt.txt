@@ -1,0 +1,3 @@
+logout 204
+signed-out token list 401 AUTH_REQUIRED  
+bad signature list 401 UNAUTHORIZED_ASYMMETRIC_JWT  

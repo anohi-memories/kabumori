@@ -1,0 +1,78 @@
+## W1 published: C1 due, fake snapshot, worker once
+file:///private/tmp/claude-501/-Users-yuya-Developer-kabumori/e98c2921-c101-4ee6-b59b-243231954603/scratchpad/g2-12-seed.mjs:101
+  const body = { candidateId: c.candidateId, expectedRevision: c.revision, contentSha256: c.contentSha256 };
+                                ^
+
+TypeError: Cannot read properties of undefined (reading 'candidateId')
+    at file:///private/tmp/claude-501/-Users-yuya-Developer-kabumori/e98c2921-c101-4ee6-b59b-243231954603/scratchpad/g2-12-seed.mjs:101:33
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+
+Node.js v24.19.0
+submit#3 403 POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED  
+snapshot 31748f6e3e403deae488c1a64c7c0a36f80716c0ff44661c69e7ce48b144eb2d
+due 
+before: ERROR:  column "subject_status" does not exist
+LINE 1: ...x / kinds ' || string_agg(kind || ':' || coalesce(subject_st...
+                                                             ^
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 0
+after (no list call in between): ERROR:  column "subject_status" does not exist
+LINE 1: ...x / kinds ' || string_agg(kind || ':' || coalesce(subject_st...
+                                                             ^
+G2T12-C1 | planned | - | 12-09 10:00
+## W1 again
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 0
+after: ERROR:  column "subject_status" does not exist
+LINE 1: ...x / kinds ' || string_agg(kind || ':' || coalesce(subject_st...
+                                                             ^
+## (retry) reconnect C's X after the race restart, then W1
+xreconnect ok
+approve#3 409 POSTONA_RESV_SLOT_CONFLICT  
+snapshot dde953266989a81f2b1974ae14bdeef75f27ae9b767bbfcdbc6bf432e118b902
+due 
+before: 4 notes / 4 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 0
+after (no list call in between): 4 notes / 4 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval
+G2T12-C1 | planned | - | 12-09 10:00
+## W1 again
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 0
+after: 4 notes / 4 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval
+## W1 (distinct slot 12-11)
+approve#2 200 ok candidates=1 
+approve#3 200 ok candidates=1 
+snapshot dde953266989a81f2b1974ae14bdeef75f27ae9b767bbfcdbc6bf432e118b902
+due planned
+before: 6 notes / 6 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved
+deliver 200 - claimed=1 sends=1 published=1 failedBeforeSend=0 uncertain=0 xcalls 1
+after (no list call in between): 7 notes / 7 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved,reservation_changed:published
+G2T12-C1 | planned | - | 12-09 10:00
+G2T12-W1 | published | PUBLISHED | 11-13 06:45
+## W1 again
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 1
+after: 7 notes / 7 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved,reservation_changed:published
+## W2 unknown X answer: uncertain once, never re-sent
+approve#3 200 ok candidates=1 
+due planned
+xmode unknown
+deliver 200 - claimed=1 sends=1 published=0 failedBeforeSend=0 uncertain=1 xcalls 2
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 2
+xmode ok
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 2
+after: 10 notes / 10 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved,reservation_changed:published,approval_requested:pending_approval,approval_approved:approved,reservation_changed:uncertain
+## W3 service ended with a due approved row: not claimed, nothing enqueued
+approve#3 200 ok candidates=1 
+due planned
+before: 12 notes / 12 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved,reservation_changed:published,approval_requested:pending_approval,approval_approved:approved,reservation_changed:uncertain,approval_requested:pending_approval,approval_approved:approved
+ended
+UPDATE 1
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 2
+after: 12 notes / 12 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved,reservation_changed:published,approval_requested:pending_approval,approval_approved:approved,reservation_changed:uncertain,approval_requested:pending_approval,approval_approved:approved
+## W4 restart + reconnect: the earlier generation's due row is closed with 0 sends, and that close is enqueued
+restart active
+xreconnect ok
+snapshot 76d2d45ba7b7c2c45566fbd6550e3df38749a79b8913beff204d48b80529f994
+deliver 200 - claimed=0 sends=0 published=0 failedBeforeSend=0 uncertain=0 xcalls 2
+after: 13 notes / 13 outbox / approval_requested:pending_approval,approval_approved:approved,approval_requested:pending_approval,approval_requested:pending_approval,approval_requested:pending_approval,approval_approved:approved,reservation_changed:published,approval_requested:pending_approval,approval_approved:approved,reservation_changed:uncertain,approval_requested:pending_approval,approval_approved:approved,reservation_changed:failed
+G2T12-C1 | planned | - | 12-09 10:00
+G2T12-W1 | published | PUBLISHED | 11-13 06:45
+G2T12-W2 | uncertain | X_TRANSPORT_UNKNOWN | 11-13 06:45
+G2T12-W3 | failed | SERVICE_GENERATION_CHANGED | 11-13 06:45

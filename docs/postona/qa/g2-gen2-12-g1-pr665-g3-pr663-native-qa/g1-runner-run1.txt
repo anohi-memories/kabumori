@@ -1,0 +1,17 @@
+ℹ pass 15
+ℹ fail 0
+ℹ skipped 1
+G1T44_APPROVALS_LOCAL_STACK_PASS
+G1T45_APPROVALS_LOCAL_STACK_PASS
+✖ T46 grouping on the real runtime: revised twice + another candidate = 2 lines / 未読 2件; opening one marks its 3 rows read, one call each; no outbox change (3211.8945ms)
+G1T46_APPROVALS_LOCAL_STACK_PASS
+✖ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2143.3825ms)
+ℹ pass 11
+ℹ fail 2
+ℹ skipped 0
+✖ T46 grouping on the real runtime: revised twice + another candidate = 2 lines / 未読 2件; opening one marks its 3 rows read, one call each; no outbox change (3211.8945ms)
+  AssertionError [ERR_ASSERTION]: one call per row of X
+  1 !== 3
+✖ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2143.3825ms)
+  AssertionError [ERR_ASSERTION]: G3 still accepts it: the server guard is G3's to add
+  403 !== 200

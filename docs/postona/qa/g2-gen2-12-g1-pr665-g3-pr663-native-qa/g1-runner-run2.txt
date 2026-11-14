@@ -1,0 +1,15 @@
+ℹ pass 15
+ℹ fail 0
+ℹ skipped 1
+G1T44_APPROVALS_LOCAL_STACK_PASS
+G1T45_APPROVALS_LOCAL_STACK_PASS
+G1T46_APPROVALS_LOCAL_STACK_PASS
+✖ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2066.1925ms)
+ℹ pass 12
+ℹ fail 1
+ℹ skipped 0
+✖ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2066.1925ms)
+  AssertionError [ERR_ASSERTION]: G3 still accepts it: the server guard is G3's to add
+  403 !== 200
+G2_T12_APPROVALS_E2E_FAILED_CONTINUING
+G1T36_LOCAL_STACK_PASS
