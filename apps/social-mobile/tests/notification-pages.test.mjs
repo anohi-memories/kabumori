@@ -419,3 +419,83 @@ test('T51 source: the paging reads only (notificationPage, never a write), keeps
   const screen = strip(await readFile(new URL('../src/app/notifications/index.tsx', import.meta.url), 'utf8'));
   assert.match(screen, /view\.more\.load/u);
 });
+
+// ---- the survivors of the first mutation run -------------------------------------------------------------------------------------------
+test('T51 notifications: the first "more" held, the screen reads again from the top (the new first page asks for the same cursor): the held answer is the earlier read\'s and adds nothing', async () => {
+  const srv = pagedG3(279);
+  const h = await mount(srv);
+  let tree = await h.render();
+  const release = [];
+  srv.holds.push = (fn) => { release.push(fn); return release.length; };
+  srv.holds.length = 1;
+  button(tree, MORE).onPress();
+  await h.render(2);
+  assert.equal(release.length, 1);
+  h.world.refocus += 1;
+  tree = await h.render();
+  assert.equal(lines(tree).length, 50);
+  assert.equal(srv.pageCalls().filter(([, b]) => b === 230).length, 1, 'the held request asked for cursor 230, the new first page waits for the same one');
+  release.forEach((fn) => fn());
+  tree = await h.render();
+  assert.equal(lines(tree).length, 50, 'the earlier read\'s answer is not added to the new walk');
+  srv.holds.length = 0;   // stop holding
+  button(tree, MORE).onPress();
+  tree = await h.render();
+  assert.equal(lines(tree).length, 150, 'the new walk reads its own next page');
+});
+
+test('T51 history: two quick presses ask for one page; the first "more" held and then a reload: the held answer adds nothing', async () => {
+  const srv = pagedG3(279);
+  const h = await history(srv);
+  const more = () => h.buttons(h.once()).find((x) => x.label === MORE);
+  const press = more();
+  press.onPress(); press.onPress(); press.onPress();
+  await h.render(8);
+  assert.equal(srv.pageCalls().filter(([, b]) => b !== null).length, 1, 'one request for the cursor');
+  const release = [];
+  const real = h.world.fetch;
+  let hold = true;
+  h.world.fetch = async (url, init) => { const { payload } = JSON.parse(init.body); if (hold && payload?.before === 130) await new Promise((resolve) => release.push(resolve)); return real(url, init); };
+  more().onPress();
+  await h.render(3);
+  assert.equal(release.length, 1, 'the next page (cursor 130) is on its way');
+  hold = false;
+  h.buttons(h.once()).find((x) => x.label === '最新の状態を読み込む').onPress();
+  await h.render(8);
+  const count = () => texts(h.once()).filter((t) => t === view.NOTIFICATION_KIND_TEXT.approval_approved).length;
+  assert.equal(count(), 50, 'read again from the first page');
+  release.forEach((fn) => fn());
+  await h.render(8);
+  assert.equal(count(), 50, 'the held answer (cursor 130 of the earlier walk) adds nothing');
+});
+
+test('T51 order: rows made in the same instant are ordered by their cursor, so a candidate\'s newest request is the one with the highest cursor', () => {
+  const same = '2026-11-01T00:00:00.000Z';
+  const rows = [row(7, { kind: 'approval_requested', candidateId: 'c', subjectRevision: 1, createdAt: same }), row(9, { kind: 'approval_requested', candidateId: 'c', subjectRevision: 1, createdAt: same }), row(8, { kind: 'approval_requested', candidateId: 'c', subjectRevision: 1, createdAt: same })];
+  const groups = view.groupNotifications(rows);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].row.cursor, 9);
+  assert.equal(JSON.stringify(groups[0].older.map((r) => r.cursor)), '[8,7]');
+  const plain = view.groupNotifications(rows.map((r) => ({ ...r, cursor: undefined, subjectRevision: r.cursor })));
+  assert.equal(plain[0].row.subjectRevision, 9, 'without cursors it falls back to the time and the revision, as before');
+});
+
+test('T51 gateway 401: an expired / broken token refused by the gateway\'s own 401 (no G3 code) is a sign-in, on the first page and on a later page; a 5xx stays a lost answer', async () => {
+  const kong = () => new Response(JSON.stringify({ code: 401, message: 'Invalid JWT' }), { status: 401, headers: { 'content-type': 'application/json' } });
+  const api = client.createApprovalClient({ supabaseUrl: 'https://proj.example.test', publishableKey: 'sb_publishable_testkey01', accessToken: async () => 'jwt-a', fetch: async () => kong() });
+  const r = await api.notificationPage({ limit: 50 });
+  assert.equal(JSON.stringify([r.ok, r.code, r.status, r.definite]), JSON.stringify([false, client.AUTH_REQUIRED, 401, true]));
+  const five = client.createApprovalClient({ supabaseUrl: 'https://proj.example.test', publishableKey: 'sb_publishable_testkey01', accessToken: async () => 'jwt-a', fetch: async () => new Response('bad gateway', { status: 502 }) });
+  const r5 = await five.notificationPage({ limit: 50 });
+  assert.equal(JSON.stringify([r5.ok, r5.code, r5.definite]), JSON.stringify([false, client.UNCERTAIN, false]));
+
+  const srv = pagedG3(279);
+  const h = await mount(srv);
+  let tree = await h.render();
+  const real = h.world.fetch;
+  h.world.fetch = async (url, init) => (JSON.parse(init.body).payload?.before !== undefined ? kong() : real(url, init));
+  button(tree, MORE).onPress();
+  tree = await h.render();
+  assert.ok(has(tree, view.ACTION_TEXT.sign_in), 'the person is told to sign in again');
+  assert.equal(button(tree, MORE), undefined, 'no retry for an expired session');
+});

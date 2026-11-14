@@ -110,6 +110,9 @@ export function createApprovalClient(input: {
       return value === null ? { ok: false, code: UNCERTAIN, status, definite: false } : { ok: true, value };
     }
     const code = body && body.ok === false && typeof body.code === 'string' ? body.code : UNCERTAIN;
+    // G1 TASK 51 (found on the real runtime): the gateway in front of G3 (Kong, verify_jwt) refuses an expired / broken token with its own
+    // 401 body, which carries none of G3's codes. A 401 is the session's token not being accepted: sign in again, not "unknown".
+    if (status === 401 && code === UNCERTAIN) return { ok: false, code: AUTH_REQUIRED, status, definite: true };
     return { ok: false, code, status, definite: status >= 400 && status < 500 && code !== UNCERTAIN };
   }
   const one = (body: Record<string, unknown>) => (Array.isArray(body.candidates) && body.candidates.length === 1 && isCandidate(body.candidates[0]) ? body.candidates[0] : null);
