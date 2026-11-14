@@ -1,5 +1,16 @@
 # Kabumori Project Rules
 
+## 2026-11-14 AutoDev 自動実行（ユーザー確定指令）
+
+Claude 担当（owner:claude）の実装タスクを、ユーザーが毎回「G1」等を送らなくても自動で実行する仕組み **AutoDev** を導入する。Mac ローカルの launchd 常駐が、有効枠の固定 Issue を監視し、`status: ready` かつ `owner: claude` のタスクを拾って headless Claude CLI で実装→テスト→push→PR 作成まで行い、完了をネイティブ通知（箱）で知らせる。本節は「ユーザーが `G{n}` を送って着手」という従来トリガーを、Claude 担当タスクに限り自動化するもので、既存の安全ゲート・レビュー運用を緩めない。
+
+- **対象**：AutoDev で有効化した枠（現状 G1〜G9）。**G10 は別の phase2 パイプラインが稼働中のため AutoDev の対象外**。owner が `claude` 以外（chatgpt/codex 等）のタスクは自動実行しない。
+- **ちゃ（各担当総合指令）の登録**：従来どおり詳細なタスクを固定 Issue 本文に書く。`owner: claude`・`status: ready`・`task_id`・`slot`・`completion_code` を明記すれば AutoDev が拾う。**マージ／デプロイまで任せる場合のみ**、本文に `merge_authorized: PR#<番号>`（必要なら `deploy_authorized: …`）を書く。**この明示許可が無い限り、AutoDev はマージ・デプロイ・main への push・SNS 実投稿・本番 DB/Auth/Edge 変更を一切行わない**（PR 作成までで止め、Report でちゃに可否を問う）。
+- **重い統合タスクは人へ自動振り分け**：iOS Simulator／ローカルスタック（PG17・GoTrue・R2・podman 等）／`apps/mobile` 等の実行環境を要するタスクは、AutoDev が実装を試みず、「くろちゃん（対話の Claude Code）が実装する」旨を通知する。これらは従来どおり担当者＋くろちゃんの対話で進める。
+- **完了と受入**：AutoDev は完了箱で「`K{n}` をちゃに送って」と案内する。ユーザーはその Report／PR をちゃへ転送し、ちゃがレビュー→受入（K 判定）→次タスクを登録する。前 PR をマージしてよいと判断したら、次タスクに `merge_authorized: PR#<番号>` を入れてマージ＋新作業を一括指示する。
+- **安全**：何も自動ではマージされない（PR とレビューが関所）。キルスイッチあり（運用停止フラグ）。既存の本番・安全ゲート、50 件世代管理、他枠の保護、安全拒否時 STOP の各節はそのまま優先する。自動実行であっても未実施を成功扱いにせず、確認済みと未確認を分けて Report する。
+
+
 ## 2026-10-28 POSTONA完成優先・レビュー最小化（ユーザー確定指令）
 
 全15枠の実運用ゲートは [Issue #299 コメント6464422660](https://github.com/anohi-memories/kabumori/issues/299#issuecomment-6464422660) とする。この節は旧い「変更のたびに自動でHレビュー」「小修正後に機械的に再レビュー」運用より優先。ただしproduction変更や安全ゲートを緩めるものではない。
