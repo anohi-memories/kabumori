@@ -1337,4 +1337,73 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await noteRows(), r0.split("/").map((x) => String(Number(x) + 8)).join("/"), "8 / 8 after the holder, once");
     assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservation_events where reservation_id = :'i'", { i: rid }), "0");
   });
+
+  await t.step("L42 G3-02 #23: HTTP paging end to end (JWT -> Kong -> Edge -> PG): 230+ notifications reached once each through nextCursor in strict order; the 100 boundary; no before = the first page; another person sees none of them; additions during paging change nothing; bad cursors / tokens refused", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    type Row = { notificationId: string; cursor: number; readAt: string | null };
+    const page = async (before?: number, token = d.token) => {
+      const a = await ap("notifications", before === undefined ? { limit: 100 } : { limit: 100, before }, token);
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body).slice(0, 200));
+      return { rows: (a.body.notifications ?? []) as Row[], next: a.body.nextCursor as number | null };
+    };
+    const walk = async (token = d.token, start?: { rows: Row[]; next: number | null }) => {
+      const pages: Row[][] = [];
+      let p = start ?? await page(undefined, token);
+      pages.push(p.rows);
+      while (p.next !== null && pages.length < 20) { p = await page(p.next, token); pages.push(p.rows); }
+      return pages;
+    };
+    await page();   // drain anything pending first
+    await owner("insert into postona_x_resv.notifications (user_id, brand_id, event_key, kind, subject_revision, state, created_at) select :'u', (select brand_id from public.brand_memberships where user_id = :'u' and role = 'owner'), 'approval_requested:' || gen_random_uuid() || ':r1', 'approval_requested', 1, 'pending_approval', timestamptz '2026-11-14 00:00:00+00' from generate_series(1, 230)", { u: d.userId });   // SYNTHETIC, one instant
+    const want = (await owner("select string_agg(id::text, ',' order by seq desc) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })).split(",");
+    const pages = await walk();
+    const got = pages.flat();
+    assert.deepStrictEqual(got.map((r) => r.notificationId), want, "every notification once, newest first");
+    assert.ok(got.every((r, i) => i === 0 || r.cursor < got[i - 1].cursor), "strictly descending cursors");
+    assert.deepStrictEqual(new Set(got.map((r) => r.notificationId)).size, got.length, "no duplicate");
+    assert.ok(pages.length >= 3 && pages.slice(0, -1).every((p) => p.length === 100) && pages.at(-1)!.length <= 100, `pages ${pages.map((p) => p.length)}`);
+    console.log(`G3LS_L42 ${got.length} notifications in ${pages.length} pages (${pages.map((p) => p.length).join("/")})`);
+    // without before: the first page, as before #23
+    const first = await page();
+    assert.deepStrictEqual(first.rows.map((r) => r.notificationId), pages[0].map((r) => r.notificationId));
+    const compat = await ap("notifications", {});
+    assert.deepStrictEqual([compat.status, ((compat.body.notifications ?? []) as Row[]).length], [200, 50], "no limit, no before: 50 newest");
+    // another person: A's cursors show none of A's rows
+    const mine = new Set(want);
+    for (const c of [undefined, pages[0].at(-1)!.cursor, pages[1].at(-1)!.cursor]) {
+      const other = await page(c, b.token);
+      assert.ok(other.rows.every((r) => !mine.has(r.notificationId)), "B sees none of A's");
+    }
+    // additions during paging: 5 new rows after the first page change nothing of the rest
+    const start = await page();
+    await owner("insert into postona_x_resv.notifications (user_id, brand_id, event_key, kind, subject_revision, state) select :'u', (select brand_id from public.brand_memberships where user_id = :'u' and role = 'owner'), 'approval_requested:' || gen_random_uuid() || ':r1', 'approval_requested', 1, 'pending_approval' from generate_series(1, 5)", { u: d.userId });   // SYNTHETIC
+    const during = (await walk(d.token, start)).flat();
+    assert.deepStrictEqual(during.map((r) => r.notificationId), want, "the walk started before the additions reaches exactly the same rows");
+    // markRead in the middle: the same page read again is the same rows, that one now read
+    const target = pages[1][7];
+    assert.strictEqual((await ap("markRead", { notificationId: target.notificationId })).status, 200);
+    const again = await page(pages[0].at(-1)!.cursor);
+    assert.deepStrictEqual(again.rows.map((r) => r.notificationId), pages[1].map((r) => r.notificationId));
+    assert.ok(typeof again.rows[7].readAt === "string");
+    // bad cursors, no token, expired token
+    for (const before of [0, -1, 1.5, "10", Number.MAX_SAFE_INTEGER + 2]) {
+      assert.deepStrictEqual(code(await ap("notifications", { limit: 100, before })), "400 REQUEST_INVALID", String(before));
+    }
+    const bare = await fetch(`${API}/functions/v1/${AP}`, { method: "POST", headers: { apikey: PUBLISHABLE, "content-type": "application/json" }, body: JSON.stringify({ action: "notifications", payload: { limit: 100, before: 10 } }) });
+    await bare.body?.cancel();
+    assert.strictEqual(bare.status, 401);
+    const enc = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+    const now = Math.floor(Date.now() / 1000);
+    const unsigned = `${enc({ alg: "HS256", typ: "JWT" })}.${enc({ ...claimsOf(d.token), iat: now - 7200, exp: now - 3600 })}`;
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(JWT_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const expired = `${unsigned}.${b64url(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(unsigned))))}`;
+    assert.strictEqual((await ap("notifications", { limit: 100, before: 10 }, expired)).status, 401);
+    // a former owner (SYNTHETIC ownership loss): every page is empty, no cursor to follow
+    await owner("create table public.g3ls23_bm as select * from public.brand_memberships where user_id = :'u' and role = 'owner'; delete from public.brand_memberships where user_id = :'u' and role = 'owner';", { u: d.userId });
+    const gone = await page(pages[0].at(-1)!.cursor);
+    assert.deepStrictEqual([gone.rows.length, gone.next], [0, null]);
+    await owner("insert into public.brand_memberships select * from public.g3ls23_bm; drop table public.g3ls23_bm;", {});
+    assert.deepStrictEqual((await page()).rows.length, 100, "the owner again");
+  });
 });
