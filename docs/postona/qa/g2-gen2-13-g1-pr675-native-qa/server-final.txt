@@ -1,0 +1,15 @@
+== a
+cand | G2T13-A1 (other session) | pending_approval | 3 | f
+cand | G2T13-A2xx | pending_approval | 1 | f
+resv | 0
+notes | 4:3
+outbox | 4
+ended
+== b
+cand | G2T13-B1own | pending_approval | 1 | f
+resv | 0
+notes | 1:0
+outbox | 1
+active
+== outbox dup
+0

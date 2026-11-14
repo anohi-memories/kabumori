@@ -1,0 +1,19 @@
+## markRead while ended (A, direct)
+A markRead outside 403 POSTONA_RESV_SERVICE_NOT_ACTIVE  
+read_at null -> null
+A notifications 200 ok  notifications=4
+A get 200 ok candidates=1 
+## B vs A
+A list own account 200 ok candidates=2 
+B list of A account 200 ok candidates=0 
+B get A candidate 404 POSTONA_RESV_NOT_FOUND  
+B approve A candidate 404 POSTONA_RESV_NOT_FOUND  
+B reject A candidate 404 POSTONA_RESV_NOT_FOUND  
+B revise A candidate 404 POSTONA_RESV_NOT_FOUND  
+B notifications 200 ok  notifications=1
+no token notifications 401 AUTH_REQUIRED  
+bad jwt list 401 UNAUTHORIZED_INVALID_JWT_FORMAT  
+## signed-out / bad signature
+logout 204
+signed-out token list 401 AUTH_REQUIRED  
+bad signature list 401 UNAUTHORIZED_ASYMMETRIC_JWT  
