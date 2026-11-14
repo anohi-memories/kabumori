@@ -36,13 +36,13 @@ submit ──> pending_approval ──approve──> approved (reservationId set
 | `reject` | `candidateId`, `expectedRevision` | `candidates: [one]` (`rejected`) |
 | `list` | `socialAccountId` | `candidates: [...]` (own, newest first, at most 200) |
 | `get` | `candidateId` | `candidates: [one]` |
-| `notifications` | `limit?` (1–100, default 50) | `notifications: [...]` (own, newest first; first page only through the Edge today, see 5b) |
+| `notifications` | `limit?` (1–100, default 50), `before?` (a `cursor` from an earlier page; G3-02 #23) | `notifications: [...]` (own, newest first, each with `cursor`) and `nextCursor` (the `before` of the next page, or `null` on the last page) |
 | `markRead` | `notificationId` | `notifications: [one]` |
 
 **Candidate**: `candidateId`, `socialAccountId`, `body`, `contentSha256`, `scheduledAt`, `state`
 (`pending_approval|approved|rejected`), `revision`, `reservationId|null`, `decidedAt|null`, `createdAt`.
 
-**Notification**: `notificationId`, `kind`, `candidateId|null`, `reservationId|null`, `subjectRevision`, `state`, `scheduledAt|null`,
+**Notification**: `notificationId`, `kind`, `candidateId|null`, `reservationId|null`, `subjectRevision`, `state`, `scheduledAt|null`,, `cursor` (G3-02 #23).
 `createdAt`, `readAt|null`.
 
 There is no post text, token or account handle in a notification.
@@ -106,7 +106,13 @@ There is no post text, token or account handle in a notification.
   - `postona_x_resv.list_notifications(limit, before)` returns the rows older than `before`. Call it with the last row's `cursor` until a page comes back shorter than `limit`; every notification of the person is reached exactly once (measured: 230 rows created in the same instant, all reached in 3 pages).
   - Another person's rows never appear, whatever cursor is passed.
   - The first page (no cursor) is what the Edge's `notifications` action returns today.
-- **Not yet wired in the Edge**: the HTTP API cannot page yet. It needs `before` in the `notifications` payload and `cursor` in the DTO (`supabase/functions/_shared/postona_approvals/api.ts`, `postgres_db.ts`, `api_test.ts`). Those files are outside G3-02 #22's paths, so G1 can show only the newest 100 for now.
+- **Over HTTP (G3-02 #23)**:
+  - Each row has `cursor`, and the answer has `nextCursor`. Send `{ "action": "notifications", "payload": { "limit": 100, "before": <nextCursor> } }` until `nextCursor` is `null`.
+  - Without `before` you get the first page, exactly as before.
+  - `before` must be a positive integer from an earlier answer: 0, negatives, fractions, strings and null give 400 `REQUEST_INVALID`.
+  - Rows added while you page appear only on a new first page; the walk you started neither repeats nor skips anything. A former owner gets empty pages and `nextCursor: null`.
+  - Measured on the local stack: 270+ notifications in 3 pages, each exactly once.
+  - G1 should keep the cursor in memory only and start again from the first page when the screen opens.
 - **Retention**: notifications are kept until the workspace (or the person's account) is deleted (cascade) or 018 is rolled back. There is no time-based expiry. Pending reservation events are kept only until they become notifications.
 - **Time bound**: the list's drain stops at the first held lock (250 ms) and after 2 s in all. What is left stays recorded for the next list. Measured: 8 pending events under a 20 s account holder → the list answered in about 0.3 s; after the holder one list wrote all 8, once each.
 - **Deletion and re-registration**: pending events and notifications go with the reservation / workspace (FK cascade, catalog checked). A person who registers again is a new user id with a new workspace, so nothing pending carries over. G5's real deletion saga over these tables is NOT_RUN.

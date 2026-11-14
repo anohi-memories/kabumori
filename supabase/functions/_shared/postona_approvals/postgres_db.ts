@@ -20,7 +20,7 @@ const CALLS: Record<ApprovalDbFunction, { sql: string; arity: number }> = {
   reject_candidate: { sql: "postona_x_resv.reject_candidate($1::uuid, $2::integer)", arity: 2 },
   list_approvals: { sql: "postona_x_resv.list_approvals($1::text)", arity: 1 },
   get_approval: { sql: "postona_x_resv.get_approval($1::uuid)", arity: 1 },
-  list_notifications: { sql: "postona_x_resv.list_notifications($1::integer)", arity: 1 },
+  list_notifications: { sql: "postona_x_resv.list_notifications($1::integer, $2::bigint)", arity: 2 },
   mark_notification_read: { sql: "postona_x_resv.mark_notification_read($1::uuid)", arity: 1 },
 };
 

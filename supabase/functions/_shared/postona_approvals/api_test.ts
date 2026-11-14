@@ -19,7 +19,7 @@ const candidate = (over: Record<string, unknown> = {}) => ({
 });
 const note = (over: Record<string, unknown> = {}) => ({
   notification_id: NID, kind: "approval_requested", candidate_id: CID, reservation_id: null, subject_revision: 1, state: "pending_approval",
-  scheduled_at: "2026-11-20T00:30:00+00:00", created_at: "2026-11-05T00:00:00+00:00", read_at: null, user_id: USER, brand_id: "u_x", ...over,
+  scheduled_at: "2026-11-20T00:30:00+00:00", created_at: "2026-11-05T00:00:00+00:00", read_at: null, cursor: 41, user_id: USER, brand_id: "u_x", ...over,
 });
 function recordingDb(rows: Record<string, unknown>[] | (() => never) = [candidate()], code?: string) {
   const calls: { fn: ApprovalDbFunction; args: readonly unknown[]; subject: unknown }[] = [];
@@ -57,7 +57,8 @@ test("each action calls exactly one SQL 018 function as the verified subject, wi
     assert.equal(res.status, 200, fn);
     assert.deepEqual(calls, [{ fn, args, subject: { userId: USER, sessionId: SESSION, isAnonymous: false } }]);
   }
-  for (const [body, fn, args] of [[{ action: "notifications", payload: {} }, "list_notifications", [50]], [{ action: "notifications", payload: { limit: 7 } }, "list_notifications", [7]],
+  for (const [body, fn, args] of [[{ action: "notifications", payload: {} }, "list_notifications", [50, null]], [{ action: "notifications", payload: { limit: 7 } }, "list_notifications", [7, null]],
+                                  [{ action: "notifications", payload: { limit: 7, before: 42 } }, "list_notifications", [7, 42]],
                                   [{ action: "markRead", payload: { notificationId: NID } }, "mark_notification_read", [NID]]] as const) {
     const { db, calls } = recordingDb([note()]);
     const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req(body));
@@ -76,8 +77,8 @@ test("only the listed fields leave: candidate and notification DTOs; a malformed
   const n = await createApprovalApi({ enabled: true, auth: verifier, db: recordingDb([note()]).db })(req({ action: "notifications", payload: {} }));
   assert.deepEqual(n.body, { ok: true, notifications: [{
     notificationId: NID, kind: "approval_requested", candidateId: CID, reservationId: null, subjectRevision: 1, state: "pending_approval",
-    scheduledAt: "2026-11-20T00:30:00.000Z", createdAt: "2026-11-05T00:00:00.000Z", readAt: null,
-  }] });
+    scheduledAt: "2026-11-20T00:30:00.000Z", createdAt: "2026-11-05T00:00:00.000Z", readAt: null, cursor: 41,
+  }], nextCursor: null });
   for (const bad of [candidate({ state: "draft" }), candidate({ candidate_id: "x" })]) {
     assert.deepEqual((await createApprovalApi({ enabled: true, auth: verifier, db: recordingDb([bad]).db })(req({ action: "get", payload: { candidateId: CID } }))).body, { ok: false, code: "INTERNAL" });
   }
@@ -96,12 +97,43 @@ test("strict shapes: unknown actions, extra keys, bad ids / revisions / hashes /
     { action: "submit", payload: { socialAccountId: "x_a", clientRequestId: CID, body: "x", scheduledAt: "tomorrow" } },
     { action: "notifications", payload: { limit: 101 } },
     { action: "markRead", payload: { notificationId: NID, all: true } },
+    { action: "notifications", payload: { before: 0 } },
+    { action: "notifications", payload: { before: -3 } },
+    { action: "notifications", payload: { before: 1.5 } },
+    { action: "notifications", payload: { before: "41" } },
+    { action: "notifications", payload: { before: Number.MAX_SAFE_INTEGER + 2 } },
+    { action: "notifications", payload: { before: null } },
   ];
   for (const body of bad) {
     const { db, calls } = recordingDb();
     assert.deepEqual((await createApprovalApi({ enabled: true, auth: verifier, db })(req(body))).body, { ok: false, code: "REQUEST_INVALID" }, JSON.stringify(body));
     assert.equal(calls.length, 0);
   }
+});
+
+test("G3-02 #23 paging: cursor on every row, nextCursor = the last cursor of a full page (null otherwise), markRead keeps its shape; a page that is not strictly below before / newest first / within limit is INTERNAL", async () => {
+  const page = (cursors: number[]) => cursors.map((c, i) => note({ notification_id: `21111111-2222-4333-8444-${String(i).padStart(12, "0")}`, cursor: c }));
+  const list = async (rows: Record<string, unknown>[], payload: Record<string, unknown>) =>
+    (await createApprovalApi({ enabled: true, auth: verifier, db: recordingDb(rows).db })(req({ action: "notifications", payload }))).body as Record<string, unknown>;
+  const full = await list(page([90, 80, 70]), { limit: 3 });
+  assert.deepEqual([(full.notifications as { cursor: number }[]).map((n) => n.cursor), full.nextCursor], [[90, 80, 70], 70]);
+  const next = await list(page([60, 50]), { limit: 3, before: 70 });
+  assert.deepEqual([(next.notifications as { cursor: number }[]).map((n) => n.cursor), next.nextCursor], [[60, 50], null]);
+  assert.deepEqual((await list([], { limit: 3, before: 50 })).nextCursor, null, "an empty page ends it");
+  for (const [rows, payload] of [
+    [page([90, 95]), { limit: 3 }],              // not newest first
+    [page([90, 90]), { limit: 3 }],              // a repeated cursor
+    [page([70, 60]), { limit: 3, before: 70 }],  // not strictly below before
+    [page([90, 80, 70, 60]), { limit: 3 }],      // more than limit
+    [[note({ cursor: 0 })], { limit: 3 }],       // not a cursor
+    [[note({ cursor: "41" })], { limit: 3 }],
+  ] as [Record<string, unknown>[], Record<string, unknown>][]) {
+    assert.deepEqual(await list(rows, payload), { ok: false, code: "INTERNAL" }, JSON.stringify(payload));
+  }
+  const marked = (await createApprovalApi({ enabled: true, auth: verifier, db: recordingDb([note({ read_at: "2026-11-05T01:00:00+00:00" })]).db })(
+    req({ action: "markRead", payload: { notificationId: NID } }))).body as Record<string, unknown>;
+  assert.ok(!("nextCursor" in marked), "markRead has no page");
+  assert.deepEqual((marked.notifications as { cursor: number }[])[0].cursor, 41);
 });
 
 test("401 before the database: no token, an unverified token, an anonymous or session-less token", async () => {

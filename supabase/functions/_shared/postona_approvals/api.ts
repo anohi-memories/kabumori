@@ -51,12 +51,18 @@ export type NotificationDto = {
   scheduledAt: string | null;
   createdAt: string;
   readAt: string | null;
+  /** G3-02 #23: the row's place in the person's stable order (SQL 018 `seq`); pass the last one as `before` for the next, older page. */
+  cursor: number;
 };
 
 export type ApprovalRequest = { method: string; authorization: string | null; body: string };
 export type ApprovalResponse = {
   status: number;
-  body: { ok: true; candidates: CandidateDto[] } | { ok: true; notifications: NotificationDto[] } | { ok: false; code: string };
+  body:
+    | { ok: true; candidates: CandidateDto[] }
+    /** `nextCursor` (the `notifications` action only): the `before` of the next page, or null when this page is the last one. */
+    | { ok: true; notifications: NotificationDto[]; nextCursor?: number | null }
+    | { ok: false; code: string };
 };
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -100,7 +106,7 @@ const isUuid = (value: unknown): value is string => typeof value === "string" &&
 const isBody = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 2000;
 const onlyKeys = (value: Record<string, unknown>, allowed: readonly string[]) => Object.keys(value).every((key) => allowed.includes(key));
 
-type Call = { fn: ApprovalDbFunction; args: unknown[]; result: "candidates" | "notifications" };
+type Call = { fn: ApprovalDbFunction; args: unknown[]; result: "candidates" | "notifications"; page?: number };
 
 /** Strict request shape -> one database call. Returns null when anything is off. */
 function toCall(input: unknown): Call | null {
@@ -129,9 +135,13 @@ function toCall(input: unknown): Call | null {
     case "get":
       if (!onlyKeys(p, ["candidateId"]) || !isUuid(p.candidateId)) return null;
       return { fn: "get_approval", args: [p.candidateId], result: "candidates" };
-    case "notifications":
-      if (!onlyKeys(p, ["limit"]) || (p.limit !== undefined && !isInt(p.limit, 1, 100))) return null;
-      return { fn: "list_notifications", args: [p.limit ?? 50], result: "notifications" };
+    case "notifications": {
+      // G3-02 #23: `before` = a cursor from an earlier page (a positive safe integer); without it, the first page as before
+      if (!onlyKeys(p, ["limit", "before"]) || (p.limit !== undefined && !isInt(p.limit, 1, 100))) return null;
+      if (p.before !== undefined && !isInt(p.before, 1, Number.MAX_SAFE_INTEGER)) return null;
+      const limit = (p.limit ?? 50) as number;
+      return { fn: "list_notifications", args: [limit, p.before ?? null], result: "notifications", page: limit };
+    }
     case "markRead":
       if (!onlyKeys(p, ["notificationId"]) || !isUuid(p.notificationId)) return null;
       return { fn: "mark_notification_read", args: [p.notificationId], result: "notifications" };
@@ -164,6 +174,7 @@ function toCandidate(row: Record<string, unknown>): CandidateDto | null {
 
 function toNotification(row: Record<string, unknown>): NotificationDto | null {
   if (!isUuid(row.notification_id) || !(KINDS as readonly unknown[]).includes(row.kind) || !Number.isInteger(row.subject_revision) || typeof row.state !== "string") return null;
+  if (!isInt(row.cursor, 1, Number.MAX_SAFE_INTEGER)) return null;
   return {
     notificationId: row.notification_id,
     kind: row.kind as NotificationDto["kind"],
@@ -174,6 +185,7 @@ function toNotification(row: Record<string, unknown>): NotificationDto | null {
     scheduledAt: isoOrNull(row.scheduled_at),
     createdAt: iso(row.created_at),
     readAt: isoOrNull(row.read_at),
+    cursor: row.cursor as number,
   };
 }
 
@@ -224,6 +236,15 @@ export function createApprovalApi(deps: { enabled: boolean; auth?: AuthVerifier;
     }
     const rows = result.rows.map(toNotification);
     if (rows.some((row) => row === null)) return fail(500, "INTERNAL");
-    return { status: 200, body: { ok: true, notifications: rows as NotificationDto[] } };
+    const notifications = rows as NotificationDto[];
+    if (call.page === undefined) return { status: 200, body: { ok: true, notifications } };
+    // a page must come back newest first, strictly below `before`, at most `limit` rows; anything else is not a page we can continue from
+    const before = call.args[1] as number | null;
+    if (notifications.length > call.page
+        || notifications.some((n, i) => (before !== null && n.cursor >= before) || (i > 0 && n.cursor >= notifications[i - 1].cursor))) {
+      return fail(500, "INTERNAL");
+    }
+    const nextCursor = notifications.length === call.page ? notifications[notifications.length - 1].cursor : null;
+    return { status: 200, body: { ok: true, notifications, nextCursor } };
   };
 }
