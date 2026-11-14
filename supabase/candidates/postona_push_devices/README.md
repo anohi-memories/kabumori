@@ -1,4 +1,8 @@
-# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10)
+# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11)
+
+Task 11 fixes H4 #331 task 25's two P2 on PR #672:
+- P2-1: token claims (`private.postona_push_token_claims`, hashes only). A token another person registered last moves only on the same installation with its device secret; an ended session frees nothing.
+- P2-2: "off" before the first registration leaves an "off" row (unregister with the device secret), and the client completes "off" after any answer.
 
 Task 10 fixes H4 #331 task 24's three P2 on PR #667:
 - P2-1: one stop fence, `private.postona_push_control`, shared by the stop and every registration;
