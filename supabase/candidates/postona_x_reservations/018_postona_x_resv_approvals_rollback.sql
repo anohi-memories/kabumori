@@ -40,7 +40,7 @@ drop function postona_x_resv.approve_candidate(uuid, integer, text);
 drop function postona_x_resv.reject_candidate(uuid, integer);
 drop function postona_x_resv.list_approvals(text);
 drop function postona_x_resv.get_approval(uuid);
-drop function postona_x_resv.list_notifications(integer);
+drop function postona_x_resv.list_notifications(integer, bigint);
 drop function postona_x_resv.mark_notification_read(uuid);
 drop function postona_x_resv.approval_row(uuid);
 drop function postona_x_resv.lock_own_candidate(uuid, uuid);

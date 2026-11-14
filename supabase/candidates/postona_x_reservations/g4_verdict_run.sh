@@ -341,15 +341,18 @@ r1="$(rows43)"
 [ "$waited" = waited ] || fail "VR18-W the loss committed during the notification write (rows $r0 -> $r1, the H1 #38 race)"
 [ "$r1" = "$(python3 -I -c "a, b = '$r0'.split('/'); print(f'{int(a) + 1}/{int(b) + 1}')")" ] || fail "VR18-W expected the event written while still the owner: $r0 -> $r1"
 restore43
-# L: the loss is in flight first (uncommitted, held 3 s); the list waits for it and then writes nothing
+# L: the loss is in flight first (uncommitted, held 3 s). G3-02 #22: the list no longer waits for it -- its drain gives up after 250 ms
+# (H1 #47 P3) and writes nothing; it reads what is committed at that moment (the person still owns the workspace until the loss commits).
+# Once the loss has committed, the list shows nothing and writes nothing; the event stays recorded.
 moved43; r0="$(rows43)"
 own -c "begin" -c "$(lose43)" -c "select pg_sleep(3)" -c "commit" >/dev/null & dp=$!
 sleep 1
 t0="$(now_s)"; answer="$(listing43)"; t1="$(now_s)"
+[ "$(rows43)" = "$r0" ] || fail "VR18-L the list wrote $r0 -> $(rows43) while the loss was in flight"
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 < 1.5 else 1)" || { m="VR18-L the list waited for the loss ($(python3 -I -c "print(round($t1 - $t0, 2))") s; the drain is bounded since #22)"; [ -n "${G3V_BEFORE:-}" ] && echo "BEFORE_FAIL $m" || fail "$m"; }
 wait "$dp" || fail "VR18-L the loss failed"
-[ "$answer" = "-" ] || fail "VR18-L a former owner's list answered $answer"
+[ "$(listing43)" = "-" ] || fail "VR18-L a former owner's list answered something after the loss committed"
 [ "$(rows43)" = "$r0" ] || fail "VR18-L wrote $r0 -> $(rows43) after the loss committed"
-python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18-L the list did not wait for the loss"
 restore43
 # B: the owner again, two lists at once: the event once (G3-02 #21: L's event is kept recorded, so drain it first)
 listing43 >/dev/null
@@ -378,7 +381,7 @@ unbarrier
 python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 >= 1.5 else 1)" || fail "VR18-S the restart did not wait for the write"
 own -c "drop table g48.bm43" >/dev/null
 [ "$(catalog)" = "$c_018" ] || fail "VR18 left something in the catalog"
-echo "OK VR18: the loss during a write waits for it (W, +1 while the owner); a loss in flight first makes the list wait and write 0 (L); two owner lists write once (B); a workspace profile change waits for a write (P); G5's restart waits for a write (S)"
+echo "OK VR18: the loss during a write waits for it (W, +1 while the owner); a loss in flight first: the list writes 0 without waiting, and nothing after the loss commits (L); two owner lists write once (B); a workspace profile change waits for a write (P); G5's restart waits for a write (S)"
 # --- VG5 (G3-02 #19): G5 PR #645's ownership-lock trigger (pinned, read only, applied in this throw-away world only) against notify() --
 g5head=a4d6c0eb56441abaf00717128720e5bf6209a329; g5dir=supabase/candidates/postona_workspace_ownership_lock
 git -C "$repo" cat-file -e "${g5head}^{commit}" 2>/dev/null || { echo "RUN_NOT_AVAILABLE: G5 head $g5head missing; git fetch origin $g5head" >&2; exit 3; }
@@ -468,6 +471,27 @@ listing43 >/dev/null
 listing43 >/dev/null
 [ "$(val -c "select count(*) from postona_x_resv.notifications where reservation_id = '$rid21' and state = 'published'")/$(val -c "select count(*) from postona_x_resv.reservation_events where reservation_id = '$rid21'")" = "1/0" ] || fail "VR21 not exactly once"
 echo "OK VR21: under a 20 s G5 holder of the account row the worker's finish committed its published result in $(python3 -I -c "print(round($t1 - $t0, 2))") s (statement_timeout 15 s), recording the event; the list then wrote one notification, a second list nothing"
+# --- VR22 (G3-02 #22, H1 #47 P3): 8 pending events while a G5 step holds the account row 20 s; the list (statement_timeout 15 s, as the Edge)
+# must answer at once, keep the events recorded, and turn them into notifications after the holder (real sessions; SYNTHETIC records)
+listing43 >/dev/null
+own -c "insert into postona_x_resv.reservation_events (reservation_id, revision, status, user_id, brand_id, candidate_id, scheduled_at)
+        select '$rid21', 2000 + g, 'planned', g48.u(4843), g48.ws(4843), g48.id('w21'), now() from generate_series(1, 8) g" >/dev/null
+r22="$(rows43)"
+own -c "begin" -c "select 1 from public.common_accounts where user_id = g48.u(4843) for update" -c "select pg_sleep(20)" -c "commit" >/dev/null & hp=$!
+sleep 1
+t0="$(now_s)"
+l22="$(val -c "set statement_timeout = '15s'" -c "select g48.ap(4843, 'select count(*)::text from postona_x_resv.list_notifications(100)')" 2>&1)" || true
+t1="$(now_s)"
+left22="$(val -c "select count(*) from postona_x_resv.reservation_events where reservation_id = '$rid21' and revision > 2000")"
+wait "$hp" || fail "VR22 the holder failed"
+[[ "$l22" =~ ^[0-9]+$ ]] || fail "VR22 the list failed under the holder ($l22; $(python3 -I -c "print(round($t1 - $t0, 1))") s): the H1 #47 P3"
+python3 -I -c "import sys; sys.exit(0 if $t1 - $t0 < 1.5 else 1)" || fail "VR22 the list took $(python3 -I -c "print(round($t1 - $t0, 1))") s under the holder"
+[ "$left22" = 8 ] || fail "VR22 the held events were not all kept ($left22)"
+[ "$(rows43)" = "$r22" ] || fail "VR22 something was written under the holder"
+listing43 >/dev/null
+[ "$(rows43)" = "$(python3 -I -c "a, b = '$r22'.split('/'); print(f'{int(a) + 8}/{int(b) + 8}')")" ] || fail "VR22 after the holder: $r22 -> $(rows43)"
+[ "$(val -c "select count(*) from postona_x_resv.reservation_events where reservation_id = '$rid21' and revision > 2000")" = 0 ] || fail "VR22 events left"
+echo "OK VR22: 8 pending events under a 20 s account holder: the list answered in $(python3 -I -c "print(round($t1 - $t0, 2))") s (statement_timeout 15 s) and kept all 8; after the holder one list wrote 8 / 8"
 counts="$(sval -c "select (select count(*) from postona_x_resv.approval_candidates)::text || ':' || (select count(*) from postona_x_resv.notifications)::text || ':' || (select count(*) from postona_x_resv.reservation_events)::text")"
 expect_err "VA5 018 rollback as a superuser" G3_APPROVALS_ROLLBACK_OWNER sval -c "set postona_resv_approval_rollback.discard = '$counts'" -f "$x018rb"
 expect_err "VA6 018 rollback, counts not stated" G3_APPROVALS_ROLLBACK_ROWS own -f "$x018rb"

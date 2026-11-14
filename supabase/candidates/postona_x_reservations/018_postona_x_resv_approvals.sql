@@ -1,7 +1,9 @@
 -- G3 SOURCE CANDIDATE (2026-11-05, Issue #589 G3-02 #16; G3-02 #17: H1 #37 P2-1 / P2-2 fixed; G3-02 #18: H1 #38 P2 race fixed; G3-02 #19:
 -- the derived sync skips states already written; G3-02 #20: markRead needs the service; G3-02 #21: H1 #46 P2 / P3 -- a reservation change
 -- only RECORDS its event in a G3 table (no G5 lock, so the worker's result is never held up or rolled back by a notification), and every
--- recorded revision becomes one notification later): post approval + the person's notification events. NOT applied anywhere.
+-- recorded revision becomes one notification later; G3-02 #22: H1 #47 P3 -- every notification reachable through a stable cursor, and the
+-- list's drain bounded in time so a held lock never makes the list itself fail): post approval + the person's notification events. NOT
+-- applied anywhere.
 -- Applied last, after 001-006, 008, 010, 012, 014, 015 and 017; rolled back FIRST with 018_..._rollback.sql.
 --
 -- A post candidate is NOT a reservation. The person submits it (pending_approval), may revise it, then approves or rejects it. Only an
@@ -119,9 +121,12 @@ create table postona_x_resv.notifications (
   scheduled_at timestamptz,
   created_at timestamptz not null default now(),
   read_at timestamptz,
-  unique (user_id, event_key)
+  -- G3-02 #22: the stable order and the cursor (unique, increasing; never reused)
+  seq bigint generated always as identity,
+  unique (user_id, event_key),
+  unique (seq)
 );
-create index notifications_user_created on postona_x_resv.notifications (user_id, created_at desc, id);
+create index notifications_user_seq on postona_x_resv.notifications (user_id, seq desc);
 
 /** The outbox a later, separately reviewed push worker reads. Nothing in this candidate reads, claims or sends it. */
 create table postona_x_resv.push_outbox (
@@ -158,7 +163,7 @@ create type postona_x_resv.approval_view as (
 );
 create type postona_x_resv.notification_view as (
   notification_id uuid, kind text, candidate_id uuid, reservation_id uuid, subject_revision integer, state text,
-  scheduled_at timestamptz, created_at timestamptz, read_at timestamptz
+  scheduled_at timestamptz, created_at timestamptz, read_at timestamptz, cursor bigint
 );
 revoke all on type postona_x_resv.approval_view, postona_x_resv.notification_view from public;
 
@@ -219,17 +224,21 @@ end $$;
 /**
  * G3-02 #21: turns the person's recorded reservation events into reservation_changed notifications, oldest first, each once (the event key
  * per revision, so version 2 and version 3 each become one notification even when one was recorded while notifications could not be
- * written). An event becomes a notification only while the workspace is the person's own personal one (notify()'s rules and locks); a
- * notification lock that does not come within 2 s, or any error, leaves that event recorded for the next drain. An event whose
- * notification now exists is deleted, so the table holds only pending events. Internal: not a definer, granted to nobody.
+ * written). An event becomes a notification only while the workspace is the person's own personal one (notify()'s rules and locks). An
+ * event whose notification now exists is deleted, so the table holds only pending events. Internal: not a definer, granted to nobody.
+ * G3-02 #22 (H1 #47 P3): bounded. notify()'s locks get 250 ms each; the first lock that does not come stops the whole drain (every event
+ * of the person needs the same account row), and the drain also stops after 2 s in all. What is left stays recorded for the next drain,
+ * so a held lock costs the list at most about 2.5 s, never its 15 s statement timeout. The caller's lock_timeout is restored afterwards.
  */
 create function postona_x_resv.drain_reservation_events(p_user_id uuid, p_limit integer) returns integer
 language plpgsql volatile set search_path = '' as $$
--- G3_APPROVALS (G3-02 #21)
-declare v record; v_key text; v_done integer := 0;
+-- G3_APPROVALS (G3-02 #21 / #22)
+declare v record; v_key text; v_done integer := 0; v_start timestamptz := pg_catalog.clock_timestamp();
+        v_saved text := pg_catalog.current_setting('lock_timeout');
 begin
-  perform pg_catalog.set_config('lock_timeout', '2s', true);
+  perform pg_catalog.set_config('lock_timeout', '250ms', true);
   for v in select e.* from postona_x_resv.reservation_events e where e.user_id = p_user_id order by e.id limit p_limit loop
+    exit when pg_catalog.clock_timestamp() - v_start > interval '2 seconds';
     v_key := 'reservation:' || v.reservation_id || ':r' || v.revision || ':' || v.status;
     begin
       perform postona_x_resv.notify(v.user_id, v.brand_id, v_key, 'reservation_changed', v.candidate_id, v.reservation_id, v.revision,
@@ -238,10 +247,14 @@ begin
         delete from postona_x_resv.reservation_events e where e.id = v.id;
         v_done := v_done + 1;
       end if;
-    exception when others then
-      null;   -- kept: the next drain tries again (a statement timeout still ends the whole call, as before; nothing is lost)
+    exception
+      when lock_not_available then
+        exit;   -- the person's rows are held (a G5 lifecycle step): stop; everything left stays recorded for the next drain
+      when others then
+        null;   -- kept: the next drain tries again
     end;
   end loop;
+  perform pg_catalog.set_config('lock_timeout', v_saved, true);
   return v_done;
 end $$;
 
@@ -436,18 +449,23 @@ begin
   return query select * from postona_x_resv.approval_row(v.id);
 end $$;
 
-/** The caller's notifications (newest first, at most p_limit, 1-100), after writing any reservation_changed still missing. */
-create function postona_x_resv.list_notifications(p_limit integer) returns setof postona_x_resv.notification_view
+/**
+ * The caller's notifications, newest first, at most p_limit (1-100), after writing any pending reservation_changed (bounded, see the drain).
+ * G3-02 #22 (H1 #47 P3): a stable order (seq, unique and increasing) and a cursor: each row carries `cursor`; pass the last row's cursor as
+ * p_before to get the next (older) page, until a page comes back shorter than p_limit. Every notification of the person is reachable. The
+ * Edge's call without p_before gets the first page, as before. Another person's rows never appear, whatever cursor is passed.
+ */
+create function postona_x_resv.list_notifications(p_limit integer, p_before bigint default null) returns setof postona_x_resv.notification_view
 language plpgsql volatile security definer set search_path = '' as $$
--- G3_APPROVALS (G3-02 #16)
+-- G3_APPROVALS (G3-02 #16 / #22)
 declare v_user uuid := postona_x_resv.caller();
 begin
-  if p_limit is null or p_limit < 1 or p_limit > 100 then raise exception 'POSTONA_RESV_REQUEST_INVALID' using errcode = 'P0001'; end if;
+  if p_limit is null or p_limit < 1 or p_limit > 100 or p_before < 1 then raise exception 'POSTONA_RESV_REQUEST_INVALID' using errcode = 'P0001'; end if;
   perform postona_x_resv.sync_reservation_notifications(v_user);
-  return query select n.id, n.kind, n.candidate_id, n.reservation_id, n.subject_revision, n.state, n.scheduled_at, n.created_at, n.read_at
+  return query select n.id, n.kind, n.candidate_id, n.reservation_id, n.subject_revision, n.state, n.scheduled_at, n.created_at, n.read_at, n.seq
                from postona_x_resv.notifications n
-               where n.user_id = v_user and postona_x_resv.approval_owned(v_user, n.brand_id)
-               order by n.created_at desc, n.id
+               where n.user_id = v_user and postona_x_resv.approval_owned(v_user, n.brand_id) and (p_before is null or n.seq < p_before)
+               order by n.seq desc
                limit p_limit;
 end $$;
 
@@ -467,7 +485,7 @@ begin
     raise exception 'POSTONA_RESV_NOT_FOUND' using errcode = 'P0001';
   end if;
   update postona_x_resv.notifications n set read_at = coalesce(n.read_at, pg_catalog.now()) where n.id = v.id;
-  return query select n.id, n.kind, n.candidate_id, n.reservation_id, n.subject_revision, n.state, n.scheduled_at, n.created_at, n.read_at
+  return query select n.id, n.kind, n.candidate_id, n.reservation_id, n.subject_revision, n.state, n.scheduled_at, n.created_at, n.read_at, n.seq
                from postona_x_resv.notifications n where n.id = v.id;
 end $$;
 
@@ -514,7 +532,7 @@ revoke all on function
   postona_x_resv.reject_candidate(uuid, integer),
   postona_x_resv.list_approvals(text),
   postona_x_resv.get_approval(uuid),
-  postona_x_resv.list_notifications(integer),
+  postona_x_resv.list_notifications(integer, bigint),
   postona_x_resv.mark_notification_read(uuid)
 from public;
 grant execute on function
@@ -524,7 +542,7 @@ grant execute on function
   postona_x_resv.reject_candidate(uuid, integer),
   postona_x_resv.list_approvals(text),
   postona_x_resv.get_approval(uuid),
-  postona_x_resv.list_notifications(integer),
+  postona_x_resv.list_notifications(integer, bigint),
   postona_x_resv.mark_notification_read(uuid)
 to postona_resv_api;
 
@@ -537,7 +555,7 @@ begin
      and p.proname in ('submit_approval', 'revise_approval', 'approve_candidate', 'reject_candidate', 'list_approvals', 'get_approval',
                        'list_notifications', 'mark_notification_read', 'approval_generation_active', 'approval_workspace_live', 'approval_credential_generation', 'notify', 'sync_reservation_notifications',
                        'approval_owned', 'approval_check_input', 'lock_own_candidate', 'approval_row', 'record_reservation_event', 'drain_reservation_events');
-  if v_api is distinct from 'postona_x_resv.approve_candidate(uuid,integer,text),postona_x_resv.get_approval(uuid),postona_x_resv.list_approvals(text),postona_x_resv.list_notifications(integer),postona_x_resv.mark_notification_read(uuid),postona_x_resv.reject_candidate(uuid,integer),postona_x_resv.revise_approval(uuid,integer,text,timestamp with time zone),postona_x_resv.submit_approval(text,uuid,text,timestamp with time zone)' then
+  if v_api is distinct from 'postona_x_resv.approve_candidate(uuid,integer,text),postona_x_resv.get_approval(uuid),postona_x_resv.list_approvals(text),postona_x_resv.list_notifications(integer,bigint),postona_x_resv.mark_notification_read(uuid),postona_x_resv.reject_candidate(uuid,integer),postona_x_resv.revise_approval(uuid,integer,text,timestamp with time zone),postona_x_resv.submit_approval(text,uuid,text,timestamp with time zone)' then
     raise exception 'G3_APPROVALS_POSTCONDITION: the API role reaches %', v_api;
   end if;
   select count(*) into v_other

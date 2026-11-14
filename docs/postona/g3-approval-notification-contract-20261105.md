@@ -36,7 +36,7 @@ submit ──> pending_approval ──approve──> approved (reservationId set
 | `reject` | `candidateId`, `expectedRevision` | `candidates: [one]` (`rejected`) |
 | `list` | `socialAccountId` | `candidates: [...]` (own, newest first, at most 200) |
 | `get` | `candidateId` | `candidates: [one]` |
-| `notifications` | `limit?` (1–100, default 50) | `notifications: [...]` (own, newest first) |
+| `notifications` | `limit?` (1–100, default 50) | `notifications: [...]` (own, newest first; first page only through the Edge today, see 5b) |
 | `markRead` | `notificationId` | `notifications: [one]` |
 
 **Candidate**: `candidateId`, `socialAccountId`, `body`, `contentSha256`, `scheduledAt`, `state`
@@ -99,6 +99,17 @@ There is no post text, token or account handle in a notification.
   - Rows are immutable history, kept for push and audit.
   - G1 should group by `candidateId` and show only the newest `approval_requested` per candidate as unread. When the person opens it, G1 may mark the older ones of the same candidate read with `markRead`, one call each.
   - The server does not merge or hide them, so a push that already went out for revision 1 is never contradicted.
+
+## 5b. History, paging and the list's time bound (G3-02 #22, H1 #47 P3)
+
+- **Order and cursor (SQL)**: notifications have a stable order (`seq`, unique and increasing) and each row carries `cursor`.
+  - `postona_x_resv.list_notifications(limit, before)` returns the rows older than `before`. Call it with the last row's `cursor` until a page comes back shorter than `limit`; every notification of the person is reached exactly once (measured: 230 rows created in the same instant, all reached in 3 pages).
+  - Another person's rows never appear, whatever cursor is passed.
+  - The first page (no cursor) is what the Edge's `notifications` action returns today.
+- **Not yet wired in the Edge**: the HTTP API cannot page yet. It needs `before` in the `notifications` payload and `cursor` in the DTO (`supabase/functions/_shared/postona_approvals/api.ts`, `postgres_db.ts`, `api_test.ts`). Those files are outside G3-02 #22's paths, so G1 can show only the newest 100 for now.
+- **Retention**: notifications are kept until the workspace (or the person's account) is deleted (cascade) or 018 is rolled back. There is no time-based expiry. Pending reservation events are kept only until they become notifications.
+- **Time bound**: the list's drain stops at the first held lock (250 ms) and after 2 s in all. What is left stays recorded for the next list. Measured: 8 pending events under a 20 s account holder → the list answered in about 0.3 s; after the holder one list wrote all 8, once each.
+- **Deletion and re-registration**: pending events and notifications go with the reservation / workspace (FK cascade, catalog checked). A person who registers again is a new user id with a new workspace, so nothing pending carries over. G5's real deletion saga over these tables is NOT_RUN.
 
 ## 6. Push (for a later, separately reviewed step)
 

@@ -1093,18 +1093,21 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.ok(waited >= 1500, `the loss committed during the write (waited ${waited} ms; rows ${r0} -> ${await noteRows()}): the H1 #38 race`);
     assert.deepStrictEqual(await noteRows(), plus1(r0), "written while still the owner, then the loss");
     await restore();
-    // L: the loss is in flight first (uncommitted for 3 s); the list waits for it and writes nothing
+    // L: the loss is in flight first (uncommitted for 3 s). G3-02 #22: the list's drain gives up after 250 ms instead of waiting (H1 #47 P3),
+    // writes nothing, and keeps the event recorded; once the loss has committed the list shows nothing and writes nothing
     await moved();
     const r1 = await noteRows();
     const losing = owner(`begin; ${lose} select pg_sleep(3); commit;`, { u: d.userId });
     await sleep(1000);
     const t1 = Date.now();
-    const lost = await ap("notifications", { limit: 100 });
-    const listWaited = Date.now() - t1;
+    const during = await ap("notifications", { limit: 100 });
+    const listMs = Date.now() - t1;
+    assert.deepStrictEqual([during.status, await noteRows()], [200, r1], "nothing written while the loss is in flight");
+    assert.ok(listMs < 1500, `the list waited for the loss (${listMs} ms)`);
     await losing;
+    const lost = await ap("notifications", { limit: 100 });
     assert.deepStrictEqual([lost.status, ((lost.body.notifications ?? []) as unknown[]).length], [200, 0]);
     assert.deepStrictEqual(await noteRows(), r1, "0 notification / outbox writes after the loss committed");
-    assert.ok(listWaited >= 1500, `the list did not wait for the loss (${listWaited} ms)`);
     await restore();
     await owner("drop table public.g3ls18_bm", {});
     // the owner again: the pending event is written once
@@ -1305,5 +1308,33 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     assert.deepStrictEqual(await noteRows(), r0.split("/").map((x) => String(Number(x) + 1)).join("/"), "one notification + outbox after the holder");
     const twice = await deliver();
     assert.deepStrictEqual([twice.report?.claimed ?? 0, await xCalls()], [0, calls + 1], "never sent twice");
+  });
+
+  await t.step("L41 G3-02 #22 (H1 #47 P3): 8 pending events while a G5 step holds the person's account row 20 s: the list over HTTP answers at once (the Edge's 15 s timeout untouched), keeps them, and writes them once after the holder", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const c = cands(await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #22 held", scheduledAt: at(55) }))[0];
+    const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+    assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
+    const rid = cands(ok)[0].reservationId as string;
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    await owner("insert into postona_x_resv.reservation_events (reservation_id, revision, status, user_id, brand_id, candidate_id, scheduled_at) select :'i', 3000 + g, 'planned', :'u', (select brand_id from postona_x_resv.approval_candidates where id = :'c'), :'c', now() from generate_series(1, 8) g", { i: rid, u: d.userId, c: c.candidateId as string });   // SYNTHETIC records
+    const r0 = await noteRows();
+    const holder = owner("begin; select 1 from public.common_accounts where user_id = :'u' for update; select pg_sleep(20); commit;", { u: d.userId });   // a G5 lifecycle step
+    await sleep(1000);
+    const t0 = Date.now();
+    const held = await ap("notifications", { limit: 100 });
+    const ms = Date.now() - t0;
+    console.log(`G3LS_L41 list under the holder: ${held.status} in ${ms} ms`);
+    assert.deepStrictEqual([held.status, await noteRows()], [200, r0], JSON.stringify(held.body).slice(0, 200));
+    assert.ok(ms < 5000, `the list took ${ms} ms under the holder`);
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservation_events where reservation_id = :'i' and revision > 3000", { i: rid }), "8", "all kept");
+    await holder;
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    assert.deepStrictEqual(await noteRows(), r0.split("/").map((x) => String(Number(x) + 8)).join("/"), "8 / 8 after the holder, once");
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservation_events where reservation_id = :'i'", { i: rid }), "0");
   });
 });

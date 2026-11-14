@@ -329,6 +329,55 @@ select g48.check_('AP26 not personal: recorded, nothing written', :'b26' || '|1'
 select g48.check_('AP26 personal again: both versions once', :'want26', :'revs26');
 select g48.check_('AP26 +2 / +2 and nothing left recorded', (split_part(:'b26', '/', 1)::int + 2)::text || '/' || (split_part(:'b26', '/', 2)::int + 2)::text || '|0', :'a26' || '|' || :'ae26');
 
+-- AP27 (G3-02 #22, H1 #47 P3) every notification reachable: 230 of them created in the same instant (SYNTHETIC), paged with the cursor,
+-- each exactly once, in one strict order; another person's pages never show them, whatever cursor (rolled back)
+create function g48.page_all(p int, p_size int) returns text language plpgsql as $$
+declare v_before bigint; v_page text; v_all text := ''; v_n int := 0; v_pages int := 0;
+begin
+  loop
+    v_page := g48.ap(p, format('select coalesce(string_agg(cursor::text, '','' order by cursor desc), '''') from postona_x_resv.list_notifications(%s, %s)',
+                               p_size, coalesce(v_before::text, 'null')));
+    if v_page like 'ERR%' then return v_page; end if;
+    exit when v_page = '';
+    v_pages := v_pages + 1;
+    v_all := v_all || case when v_all = '' then '' else ',' end || v_page;
+    v_before := (string_to_array(v_page, ','))[array_length(string_to_array(v_page, ','), 1)]::bigint;
+    exit when array_length(string_to_array(v_page, ','), 1) < p_size or v_pages > 100;
+  end loop;
+  return v_all;
+end $$;
+begin;
+select g48.ap_notes(4843);
+insert into postona_x_resv.notifications (user_id, brand_id, event_key, kind, candidate_id, reservation_id, subject_revision, state, scheduled_at, created_at)
+select g48.u(4843), g48.ws(4843), 'approval_requested:' || gen_random_uuid() || ':r1', 'approval_requested', null, null, 1, 'pending_approval', null, timestamptz '2026-11-14 00:00:00+00'
+  from generate_series(1, 230);
+select g48.page_all(4843, 100) as all27, (select count(*)::text from postona_x_resv.notifications where user_id = g48.u(4843)) as total27,
+       (select string_agg(seq::text, ',' order by seq desc) from postona_x_resv.notifications where user_id = g48.u(4843)) as want27,
+       (select max(seq)::text from postona_x_resv.notifications) as top27 \gset
+select g48.ap(4842, format('select coalesce(string_agg(notification_id::text, '',''), '''') from postona_x_resv.list_notifications(100, %s)', :'top27'::bigint + 1)) as bids27 \gset
+select count(*)::text as b27 from postona_x_resv.notifications where user_id = g48.u(4843) and id::text = any (string_to_array(:'bids27', ',')) \gset
+select g48.ap(4843, 'select count(*)::text from postona_x_resv.list_notifications(100, 0)') as bad27 \gset
+rollback;
+select g48.check_('AP27 every notification once, newest first', :'want27', :'all27');
+select g48.check_('AP27 count', :'total27', (select cardinality(string_to_array(:'all27', ','))::text));
+select g48.check_('AP27 another person, any cursor: none of them', '0', :'b27');
+select g48.check_('AP27 a bad cursor', 'ERR:POSTONA_RESV_REQUEST_INVALID', :'bad27');
+-- AP28 (G3-02 #22) 230 pending events (SYNTHETIC records): one list turns at most 200 (or what 2 s allows), the next the rest; each once
+begin;
+select g48.ap_notes(4843);
+select g48.note_rows(4843) as b28 \gset
+insert into postona_x_resv.reservation_events (reservation_id, revision, status, user_id, brand_id, candidate_id, scheduled_at)
+select (select reservation_id from postona_x_resv.approval_candidates where id = g48.id('g2')), 1000 + g, 'planned', g48.u(4843), g48.ws(4843), g48.id('g2'), now()
+  from generate_series(1, 230) g;
+select g48.ap_notes(4843);
+select g48.events43() as e28a \gset
+select g48.ap_notes(4843);
+select g48.ap_notes(4843);
+select g48.events43() as e28b, g48.note_rows(4843) as a28 \gset
+rollback;
+select g48.check_('AP28 the first list leaves some recorded', 'left', case when :'e28a'::int between 1 and 230 then 'left' else :'e28a' end);
+select g48.check_('AP28 then none left, +230 / +230', '0|' || (split_part(:'b28', '/', 1)::int + 230)::text || '/' || (split_part(:'b28', '/', 2)::int + 230)::text, :'e28b' || '|' || :'a28');
+
 select n, case_id, case when expected = actual then 'ok' else 'FAIL expected ' || coalesce(expected, '<null>') || ' got ' || coalesce(actual, '<null>') end from g48.results order by n;
 do $$ begin
   if exists (select 1 from g48.results where expected is distinct from actual) then raise exception 'G3_APPROVALS_BEHAVIOR_FAIL'; end if;
