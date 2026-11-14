@@ -1344,3 +1344,119 @@ test("preview hold: reflow-only and emoji-only edits require review", () => {
     /VOICE_REWRITE_REVIEW_REQUIRED/,
   );
 });
+
+// ---- Free rewrite (decision "rewritten"): wording may change, facts may not ----
+// Synthetic, hand-written texts. Not real Claude output.
+const SYNTHETIC_FREE_REWRITE_326 = [
+  "開発メモの見出し、書いた直後は長いほうが親切に見えるんですよね。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいな。",
+  "でも後で探すとき目に入るのは最初の数文字だけ。長い見出しが一覧に並ぶと、どれも同じに見えて結局ぜんぶ開くことになる。",
+  "「ログイン：ボタン無反応」くらいまで削ると画面名が頭に来るので、流し見でも引っかかる。細かい話は本文に書けばいい。",
+  "ただ「修正」「バグ対応」だけだと何の話かわからない。どこで何が起きたかは残す。後で自分が検索しそうな言葉が入っていれば十分かな。",
+  "#個人開発",
+].join("\n\n");
+const QUESTION_DRAFT =
+  "設定の説明がわからないんです。ちなみに、2台で「通知」を見比べたことがありますか？\nhttps://example.test/notes\n#個人開発";
+const QUESTION_FREE_REWRITE =
+  "設定の説明、よくわからないんですよね。2台で「通知」を見比べたことあります？\nhttps://example.test/notes\n#個人開発";
+
+function freeRewrite(original: string, text: string, edits: unknown[] = []) {
+  return prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: original,
+  }).validate({ decision: "rewritten", text, edits });
+}
+
+test("free rewrite: changed wording passes when every protected string stays in order", () => {
+  for (
+    const [original, text] of [
+      [syntheticDraft326, SYNTHETIC_FREE_REWRITE_326],
+      [QUESTION_DRAFT, QUESTION_FREE_REWRITE],
+    ]
+  ) {
+    assert.deepEqual(freeRewrite(original, text), { text, decision: "edited" });
+  }
+});
+
+test("free rewrite: the editor is told it may rewrite but must not add facts", () => {
+  const { instructions } = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: QUESTION_DRAFT,
+  }).request;
+  assert.match(instructions, /decisionをrewritten、editsを空配列/u);
+  assert.match(instructions, /同じ文字列を同じ順ですべて残し、新しく足しません/u);
+  assert.match(instructions, /原文にない時期・人物・体験・実績・近況・「私」・方言を足しません/u);
+});
+
+const R = QUESTION_FREE_REWRITE;
+const S = SYNTHETIC_FREE_REWRITE_326;
+const freeRewriteRejects: readonly [string, string, string, RegExp][] = [
+  ["changed number", QUESTION_DRAFT, R.replace("2台", "3台"), /VOICE_REWRITE_REJECTED/],
+  ["removed URL", QUESTION_DRAFT, R.replace("https://example.test/notes\n", ""), /VOICE_REWRITE_REJECTED/],
+  ["changed quote", QUESTION_DRAFT, R.replace("「通知」", "「通知設定」"), /VOICE_REWRITE_REJECTED/],
+  ["removed tag", QUESTION_DRAFT, R.replace("\n#個人開発", ""), /VOICE_REWRITE_REJECTED/],
+  ["reordered protected strings", syntheticDraft326, S.replace("「修正」「バグ対応」", "「バグ対応」「修正」"), /VOICE_REWRITE_REJECTED/],
+  ["dropped question", QUESTION_DRAFT, R.replace("あります？", "あります。"), /VOICE_REWRITE_REJECTED/],
+  ["added question", QUESTION_DRAFT, R.replace("ですよね。", "ですよね？"), /VOICE_REWRITE_REJECTED/],
+  ["added first person", QUESTION_DRAFT, R.replace("設定の説明、", "私も設定の説明"), /VOICE_REWRITE_REJECTED/],
+  ["added time", syntheticDraft326, S.replace("後で探すとき", "昨日探したとき"), /VOICE_REWRITE_REJECTED/],
+  ["added person", syntheticDraft326, S.replace("ただ「修正」", "上司に言われたけど「修正」"), /VOICE_REWRITE_REJECTED/],
+  ["too many new words", syntheticDraft326, S.replace("細かい話は本文に", "詳細手順は別資料の添付画像に"), /VOICE_REWRITE_REJECTED/],
+  ["two new emoji", syntheticDraft326, S.replace("十分かな。", "十分かな😂😊"), /VOICE_REWRITE_REJECTED/],
+  ["longer than the draft", syntheticDraft326, syntheticDraft326.replace("みたいに。", "みたいにね。"), /VOICE_REWRITE_REJECTED/],
+  ["cut to fragments", syntheticDraft326, "「ログイン画面でボタンを押しても反応しない件の原因と対応について」「ログイン：ボタン無反応」「修正」「バグ対応」\n\n#個人開発", /VOICE_REWRITE_REJECTED/],
+  ["two commas in one sentence", QUESTION_DRAFT, R.replace("よくわからない", "よく、わからない"), /AI_LAB_VOICE_STYLE_REJECTED/],
+  ["。笑", syntheticDraft326, S.replace("十分かな。", "十分かな。笑"), /AI_LAB_VOICE_STYLE_REJECTED/],
+  ["punctuation only", QUESTION_DRAFT, QUESTION_DRAFT.replace("ちなみに、", "ちなみに"), /VOICE_REWRITE_REVIEW_REQUIRED/],
+];
+for (const [label, original, text, pattern] of freeRewriteRejects) {
+  test(`free rewrite hold: ${label}`, () => {
+    assert.notEqual(text, original === QUESTION_DRAFT ? R : S);
+    assert.throws(() => freeRewrite(original, text), pattern);
+  });
+}
+
+test("free rewrite hold: a rewrite cannot also carry candidate edits", () => {
+  assert.throws(
+    () => freeRewrite(QUESTION_DRAFT, R, [{ id: 0, option: 0 }]),
+    /VOICE_REWRITE_REJECTED/,
+  );
+});
+
+test("free rewrite: the checked rewrite is the only X payload", async () => {
+  const rewritten =
+    "2台で通知の表示を比べてます。\nhttps://example.test/notes\n#個人開発";
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "rewritten", text: rewritten, edits: [] }
+        : { text: ORIGINAL },
+    )
+  );
+  const result = await dispatchAiLabScheduledBrandPost(f.args);
+  assert.deepEqual(f.payloads, [{ text: rewritten, pollOptions: undefined }]);
+  assert.equal(result.voiceRewriteDecision, "edited");
+  assert.equal(f.recorder.calls.length, 2);
+});
+
+test("free rewrite: a rewrite that changes a fact never reaches X", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? {
+          decision: "rewritten",
+          text: "3台で通知の表示を比べてます。\nhttps://example.test/notes\n#個人開発",
+          edits: [],
+        }
+        : { text: ORIGINAL },
+    )
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /VOICE_REWRITE_REJECTED/,
+  );
+  assert.deepEqual(f.payloads, []);
+  assert.equal(f.events.includes("start X"), false);
+  assert.equal(f.recorder.calls.length, 2);
+});
