@@ -35,7 +35,7 @@ const VOICE_REWRITE_SCHEMA = {
   schema: {
     type: "object",
     properties: {
-      decision: { type: "string", enum: ["edited", "keep", "review"] },
+      decision: { type: "string", enum: ["edited", "rewritten", "keep", "review"] },
       text: { type: "string" },
       edits: {
         type: "array",

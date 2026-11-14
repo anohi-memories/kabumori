@@ -16,11 +16,12 @@ const INSTRUCTIONS = [
   "一人称は必要なときだけ「私」。自然なら主語を省略し、元にない一人称を足したり「俺」「僕」に置き換えたりしません。「私、」「私は、」のような主語直後の読点を避けます。",
   "本文の読点「、」は一文に最大1個。読みやすければ0個。URL・引用・タグ・メンション・構造化データの中身は編集対象外です。",
   "「笑」の前には句点を置きません。「けど笑」「けど😂」のように自然につなぎます。絵文字は文脈に合う場合だけ少量使い、全ての文末に付ける必要はありません。",
-  "提示された編集候補を選んで組み合わせます。editsはidの昇順で、optionは候補配列の0始まり番号です。",
-  "候補のうち言葉や文のつながりが変わるものを優先します。長い説明は具体的な動詞を残して分け、回りくどい言い方を短くします。読点と改行だけを直した案では送信できません。",
-  "本文の体験・主張・話題・数値・引用・リンク・タグ・メンション・質問意図を維持し、本人の実績・近況・感想や方言を作らないでください。",
-  "編集したらdecisionをeditedとし、適用後の全文をtextに返してください。候補の適用で自然に改善できない場合はreviewを返します。",
-  "必要な改善を候補だけで安全に表現できなければreviewとし、textに原文、editsに空配列を返してください。根拠のない言い換えは採用しません。",
+  "提示された編集候補で足りる場合は候補を選んで組み合わせ、decisionをeditedとし、適用後の全文をtextに返します。editsはidの昇順で、optionは候補配列の0始まり番号です。",
+  "候補だけでは説明調や書き言葉が残る場合は、decisionをrewritten、editsを空配列にし、全文を声に出して言える話し言葉に書き直してかまいません。語順・文の切り方・言い回しは変えてよいですが、話の中身は原文の範囲に限ります。",
+  "rewrittenでも、URL・「」などの引用・#タグ・@メンション・数字・英字は原文と同じ文字列を同じ順ですべて残し、新しく足しません。質問の「？」の数を変えず、原文にない時期・人物・体験・実績・近況・「私」・方言を足しません。原文より長くしません。",
+  "長い説明は具体的な動詞を残して短い文に分け、回りくどい言い方を短くします。一般論のまとめや教訓の締めは削ってかまいません。読点と改行だけを直した案では送信できません。",
+  "本文の体験・主張・話題・数値・引用・リンク・タグ・メンション・質問意図を維持してください。",
+  "安全に自然な文へ改善できなければreviewとし、textに原文、editsに空配列を返してください。原文にない情報を足す言い換えはしません。",
 ].join("\n");
 
 const QUOTES = new Map([
@@ -255,6 +256,58 @@ function assertFinalVoiceStyle(text: string) {
   }
 }
 
+// Words that would add a time, a person or an episode the draft never mentioned.
+const NEW_FACT_MARKERS =
+  /昨日|今日|明日|先週|今週|来週|先月|今月|来月|去年|今年|さっき|この前|上司|同僚|部下|後輩|先輩|部長|課長|社長|家族|子ども|子供|友達|友人|息子|娘/gu;
+const CONTENT_RUN = /[\p{Script=Han}\p{Script=Katakana}ー]{2,}/gu;
+const MAX_NEW_CONTENT_RUNS = 3;
+
+function maskedBody(text: string, spans: readonly Span[]) {
+  const visible = text.split("");
+  for (const { start, end } of spans) visible.fill("￼", start, end);
+  return visible.join("");
+}
+
+/**
+ * A free rewrite may change wording and sentence structure, but it cannot be
+ * checked against candidates. Hold it unless every protected string survives
+ * in order and nothing that looks like a new fact appears.
+ */
+function assertFreeRewriteKeepsFacts(original: string, text: string) {
+  const reject = () => new BrandContextError("AI_LAB_VOICE_REWRITE_REJECTED");
+  if (!text.trim() || text === original) throw reject();
+  const before = protectedSpans(original);
+  const after = protectedSpans(text);
+  if (!before || !after) throw reject();
+  const pieces = (value: string, spans: Span[]) =>
+    JSON.stringify(
+      [...spans].sort((a, b) => a.start - b.start || a.end - b.end)
+        .map(({ start, end }) => value.slice(start, end)),
+    );
+  if (pieces(original, before) !== pieces(text, after)) throw reject();
+
+  const oldBody = maskedBody(original, before);
+  const newBody = maskedBody(text, after);
+  const count = (value: string, pattern: RegExp) =>
+    value.match(pattern)?.length ?? 0;
+  const length = (value: string) => [...value].length;
+  if (
+    count(newBody, /[？?]/gu) !== count(oldBody, /[？?]/gu) ||
+    count(newBody, /私/gu) > count(oldBody, /私/gu) ||
+    count(newBody, /\p{Extended_Pictographic}/gu) >
+      count(oldBody, /\p{Extended_Pictographic}/gu) + 1 ||
+    length(text) > length(original) ||
+    length(text) * 5 < length(original) * 2
+  ) throw reject();
+  for (const marker of newBody.match(NEW_FACT_MARKERS) ?? []) {
+    if (!oldBody.includes(marker)) throw reject();
+  }
+  const newRuns = new Set(
+    (newBody.match(CONTENT_RUN) ?? []).filter((run) => !oldBody.includes(run)),
+  );
+  if (newRuns.size > MAX_NEW_CONTENT_RUNS) throw reject();
+}
+
 export function prepareAiLabVoiceRewrite(draft: VoiceDraft) {
   const { text } = draft;
   const candidates = editCandidates(text);
@@ -314,6 +367,11 @@ function validateReply(
   }
   if (decision === "keep" && text === original && edits.length === 0) {
     return { text, decision };
+  }
+  if (decision === "rewritten" && edits.length === 0) {
+    assertFreeRewriteKeepsFacts(original, text);
+    // Reported as an edit: the dispatch records only edited/keep.
+    return { text, decision: "edited" };
   }
   if (
     decision !== "edited" || text === original || edits.length === 0 ||

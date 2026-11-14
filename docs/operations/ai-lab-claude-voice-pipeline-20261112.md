@@ -43,3 +43,23 @@ Claudeは `decision`、`text`、編集IDと選択番号の配列 `edits` を返�
   - コマンド: `cd supabase/functions/_shared && node --experimental-strip-types --test brand/ai_lab_engagement_test.ts brand/ai_lab_event_dedupe_test.ts brand/ai_lab_topic_dedup_test.ts`
   - 変更モジュールに届く `node:test` の試験のうち、Node でそのまま動くのはこの 3 本。
   - 残りの `ai_lab_voice_pipeline_test.ts`・`ai_lab_post_test.ts`（`npm:` の読み込み）と、`isolation_test.ts`・`ai_lab_scheduled_brand_post_test.ts`・`social_ai_model_policy_test.ts`（`Deno` の API）は Node では読み込めない。Deno 側で確認する。
+
+## 第2段の自由な書き直し（第31TASK）
+
+第30TASKまでの第2段は、前もって用意した言い換え候補から選ぶだけだった。候補は保存済みの合成原案に合わせたものが多く、新しい実原案では言葉や文の組み立てをほとんど変えられない。そこで第2段の返却に `decision: "rewritten"`（`edits` は空配列、`text` に書き直した全文）を追加した。候補を選ぶ従来の `edited` もそのまま使える。
+
+書き直しは候補と照合できないため、次の決まった検査をすべて通らなければ送信前に止める（`AI_LAB_VOICE_REWRITE_REJECTED`）。
+
+- URL・「」などの引用・#タグ・@メンション・数字・英字が、原文と同じ文字列で同じ順にすべて残っている。足しても消してもいけない。
+- 質問の「？」の数が原文と同じ。
+- 「私」が原文より増えていない。絵文字の増加は1個まで。
+- 原文より長くない。原文の4割より短くない。
+- 原文にない時期・人物の語（「昨日」「上司」「同僚」「家族」など）が入っていない。
+- 原文にない漢字・カタカナの語（2文字以上）は3個まで。
+- `rewritten` と編集IDの指定を混ぜていない。
+
+そのうえで、従来と同じ最終稿の検査（読点は一文に1個まで、「私、」、「。笑」、教科書調の導入と締め、言葉が変わらない編集の保留）と、文字数・交流形式・内容の多様性・ブランド間重複の検査をかける。`dispatch` の記録上は `edited` として扱う。
+
+これらの検査は「新しい事実を足していないか」を完全には判定できない。時期・人物の語と新しい語の数で、作り話の典型を止める補助の検査にとどまる。実際の書き直しが本人の話し方に見えるか、意味が変わっていないかは本人の確認が必要。
+
+非投稿の実行台（X のクライアントを持たない・Deno の通信許可を `api.anthropic.com` だけにする・原案1回と書き直し1回で打ち切る）で、偽の応答による予行演習を通した。実 Claude の呼び出しは、本人がこのチャットで回数と上限を直接承認した場合だけ行う。
