@@ -6,6 +6,8 @@
 -- registration holding the fence (FOR SHARE, until its COMMIT); the erase below runs after it in a new snapshot, so it sees and erases what
 -- they committed, and a registration that reaches the fence later sees it off and refuses. The delivery side answers no target while it is
 -- off. Restart: run 001_push_devices.sql again (it turns the fence on and grants EXECUTE again).
+-- G5-02 task 11: the token claims (private.postona_push_token_claims, hashes only) are kept: after a restart a token still moves to another
+-- person only on its own installation with its device secret.
 
 begin;
 set local lock_timeout = '5s';
@@ -30,7 +32,7 @@ update private.postona_push_control c set enabled = false where c.id;
 do $revoke$
 declare v_fn text;
 begin
-  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer)', 'public.postona_push_device_unregister(uuid)', 'public.postona_push_device_list()'] loop
+  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer)', 'public.postona_push_device_unregister(uuid,text)', 'public.postona_push_device_list()'] loop
     if pg_catalog.to_regprocedure(v_fn) is not null then
       execute pg_catalog.format('revoke all on function %s from public, anon, authenticated, service_role', pg_catalog.to_regprocedure(v_fn));
     end if;

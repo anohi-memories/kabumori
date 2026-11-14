@@ -1,4 +1,4 @@
-// G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9; task 10 fixes H4 #331 task 24 P2-2 / P2-3): the POSTONA push-device client
+// G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9; task 10 fixes H4 #331 task 24 P2-2 / P2-3; task 11 H4 #331 task 25 P2-1 / P2-2): the POSTONA push-device client
 // contract, dependency-free. G1 may copy this file into the app (or re-implement it to the same contract,
 // docs/common-account/g5-02-09-push-device-contract.md). It needs only `client.rpc(fn, args)` from supabase-js v2. The person is whoever
 // the client's session is: the app never sends a user id, a workspace id or a session id. The push token and the device secret are
@@ -14,12 +14,19 @@
 //   - STALE_REGISTRATION: never re-send the same request (G5-02 #10 P2-2). recoverStaleRegistration(client, readCurrent) is a NEW operation:
 //     it reads the server's row and the app's state again, does nothing when notifications are off now or the person removed this phone,
 //     and otherwise registers the CURRENT token from the server's version.
-//   - DEVICE_IN_USE: another account's live registration holds this phone's token, or the installation row belongs to another phone (G5-02
-//     #10 P2-3). Never retried automatically. For the token case, the other account must sign out on this phone first (its session then
-//     ends and the token can move); for the installation case, make a new installation id + device secret and sync once.
+//   - DEVICE_IN_USE: another account registered this phone's token last, or the installation row belongs to another phone (G5-02 #10 P2-3,
+//     #11 P2-1). Never retried automatically; no delivery to this phone for this person until it is resolved. A token moves to another
+//     account only on the SAME installation with its device secret (sign in to the other account in the same app installation). After a
+//     reinstall / lost secure storage (a new installation id + secret): the same person registers again normally; another person stays
+//     DEVICE_IN_USE until the account that holds the token is gone (a provider-side proof is not available yet). For the installation case,
+//     make a new installation id + device secret and sync once.
 //   - sign-out: unregisterPushDevice(...) BEFORE auth.signOut(); a failure must not block the sign-out (the server stops delivery to a
 //     device whose session is gone anyway). Clear the stored version for that person; keep the installation id and the device secret.
-//   - "notifications off": set the local flag off FIRST, then unregisterPushDevice(...); "on" again: set it on, then syncPushDevice(...).
+//   - "notifications off": set the local flag off FIRST, then unregisterPushDevice(client, installationId, deviceSecret) -- always WITH the
+//     device secret: before the first registration has landed it leaves an "off" row on the server, so a delayed first registration is
+//     refused (G5-02 #11 P2-2). "on" again: set it on, then syncPushDevice(...) with the version the off answered (or STALE -> recovery).
+//   - after any registration answer: syncPushDevice / recoverStaleRegistration read the state again and, if notifications are off NOW,
+//     complete the off (unregister with the secret) instead of reporting success: an old success never silently re-enables a phone.
 //   - account deletion: unregisterPushDevice(...) first, then the deletion.
 //   - PUSH_DEVICES_STOPPED / PUSH_BUSY: try again later (at the next app start), never in a loop.
 
@@ -91,7 +98,16 @@ export async function registerPushDevice(client: RpcClient, input: RegisterInput
 export async function syncPushDevice(client: RpcClient, readCurrent: () => Promise<CurrentDeviceState>): Promise<Registered | Skipped | PushFailure> {
   const s = await readCurrent();
   if (!s.notificationsEnabled) return { ok: true, status: 'disabled' };
-  return registerPushDevice(client, s);
+  return keepOffAfter(client, readCurrent, await registerPushDevice(client, s));
+}
+
+// (G5-02 #11 P2-2) a registration answered while (or after) the person turned notifications off: complete the off now, in this session
+async function keepOffAfter(client: RpcClient, readCurrent: () => Promise<CurrentDeviceState>, r: Registered | PushFailure): Promise<Registered | Skipped | PushFailure> {
+  if (!r.ok) return r;
+  const now = await readCurrent();
+  if (now.notificationsEnabled) return r;
+  const off = await unregisterPushDevice(client, now.installationId, now.deviceSecret);
+  return off.ok ? { ok: true, status: 'disabled' } : off;
 }
 
 // after STALE_REGISTRATION, as a NEW operation: the server's row first, then the app's state AGAIN (after the list). Nothing when
@@ -104,13 +120,15 @@ export async function recoverStaleRegistration(client: RpcClient, readCurrent: (
   if (!s.notificationsEnabled) return { ok: true, status: 'disabled' };
   const row = l.devices.find((d) => d.installation_id === s.installationId);
   if (row && row.status === 'revoked' && row.revoked_reason === 'unregistered') return { ok: true, status: 'removed' };
-  return registerPushDevice(client, { ...s, expectedVersion: row ? row.registration_version : null });
+  return keepOffAfter(client, readCurrent, await registerPushDevice(client, { ...s, expectedVersion: row ? row.registration_version : null }));
 }
 
-export async function unregisterPushDevice(client: RpcClient, installationId: string): Promise<{ ok: true; status: 'unregistered' | 'not_registered' } | PushFailure> {
-  const r = await client.rpc('postona_push_device_unregister', { p_installation_id: installationId });
+// with the device secret, "off" is kept on the server even before the first registration (G5-02 #11 P2-2); without it, only an existing row
+export async function unregisterPushDevice(client: RpcClient, installationId: string, deviceSecret?: string): Promise<{ ok: true; status: 'unregistered' | 'not_registered'; device?: PushDevice } | PushFailure> {
+  if (deviceSecret !== undefined && !DEVICE_SECRET_PATTERN.test(deviceSecret)) return { ok: false, class: 'invalid', status: 'INVALID_INPUT' };
+  const r = await client.rpc('postona_push_device_unregister', { p_installation_id: installationId, p_device_secret: deviceSecret ?? null });
   const a = r.data as Answer | null;
-  if (!r.error && (a?.status === 'unregistered' || a?.status === 'not_registered')) return { ok: true, status: a.status };
+  if (!r.error && (a?.status === 'unregistered' || a?.status === 'not_registered')) return { ok: true, status: a.status, ...(a.device ? { device: a.device } : {}) };
   return failure(a, r.error);
 }
 
