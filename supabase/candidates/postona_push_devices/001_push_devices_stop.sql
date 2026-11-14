@@ -32,7 +32,7 @@ update private.postona_push_control c set enabled = false where c.id;
 do $revoke$
 declare v_fn text;
 begin
-  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer)', 'public.postona_push_device_unregister(uuid,text)', 'public.postona_push_device_list()'] loop
+  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer,text)', 'public.postona_push_device_unregister(uuid,text)', 'public.postona_push_device_list()'] loop
     if pg_catalog.to_regprocedure(v_fn) is not null then
       execute pg_catalog.format('revoke all on function %s from public, anon, authenticated, service_role', pg_catalog.to_regprocedure(v_fn));
     end if;
@@ -41,9 +41,9 @@ end;
 $revoke$;
 
 update private.postona_push_devices d
-   set status = 'revoked', revoked_reason = 'stopped', revoked_at = pg_catalog.clock_timestamp(), push_token = null, token_sha256 = null,
+   set status = 'revoked', pending_expires_at = null, proof_sha256 = null, proof_expires_at = null, revoked_reason = 'stopped', revoked_at = pg_catalog.clock_timestamp(), push_token = null, token_sha256 = null,
        registration_version = d.registration_version + 1, updated_at = pg_catalog.clock_timestamp()
- where d.status = 'active';
+ where d.status in ('active', 'pending');
 
 do $post$
 begin
