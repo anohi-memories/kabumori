@@ -489,3 +489,36 @@ test('T48 A\'s posted answer is not shown to B; an answer to A that arrives afte
   assert.ok(!texts(tree).includes(recovery.UNCERTAIN_EXPIRED_COPY), 'A\'s late refusal is not shown to B');
   assert.equal(elements(tree, 'ThreadsConnectCard').length, 0);
 });
+
+// ---- G1 TASK 49 (found on the iOS Simulator): Expo's fetch gives a response-like context that is NOT `instanceof Response` -------
+const expoLike = (status, body) => ({ data: null, error: { context: { status, clone() { return { json: async () => body }; }, json: async () => body } } });
+
+test('T49 an Expo-style refusal (not instanceof Response) of 確認する is read: the requested copy and the reconnect entry, not the generic failure', async () => {
+  const open = attempt({ status: 'uncertain', provider_post_id: null, permalink: null, error_code: null });
+  const h = await cardHarness({ serverState: { permitted: true, open_attempt: open, last_attempt: null }, onAction: (body) => (body.action === 'reconcile' ? expoLike(409, { error: 'CREDENTIALS_EXPIRED' }) : null) });
+  Object.assign(h.props, { accounts: [account()], reload: () => {} });
+  let tree = await shown(h);
+  button(tree, '確認する').onPress();
+  await h.settle();
+  tree = h.render();
+  assert.ok(texts(tree).includes(recovery.UNCERTAIN_EXPIRED_COPY), texts(tree).join(' / '));
+  assert.ok(!texts(tree).includes(domain.threadsRefusal(null).message), 'not the generic failure');
+  assert.equal(elements(tree, 'ThreadsConnectCard').length, 1);
+});
+
+test('T49 an Expo-style refusal of a publish shows its own copy; a context that does not read as JSON stays the generic failure', async () => {
+  const h = await cardHarness({ onPublish: async () => expoLike(409, { error: 'PUBLISH_IN_PROGRESS' }) });
+  let tree = await shown(h);
+  input(tree).onChangeText('Expoの拒否');
+  button(h.render(), '投稿内容を確認する').onPress();
+  button(h.render(), '投稿する').onPress();
+  await h.settle();
+  assert.ok(texts(h.render()).includes(domain.threadsRefusal({ error: 'PUBLISH_IN_PROGRESS' }).message));
+  const g = await cardHarness({ onPublish: async () => ({ data: null, error: { context: { json: async () => { throw new SyntaxError('html'); } } } }) });
+  tree = await shown(g);
+  input(tree).onChangeText('壊れた答え');
+  button(g.render(), '投稿内容を確認する').onPress();
+  button(g.render(), '投稿する').onPress();
+  await g.settle();
+  assert.ok(texts(g.render()).includes(domain.threadsRefusal(null).message));
+});

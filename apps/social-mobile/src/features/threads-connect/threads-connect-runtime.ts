@@ -43,10 +43,12 @@ export function productionThreadsConnectDeps(session: () => { userId: string; to
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!error) return { ok: true, payload: data };
-      const response = (error as { context?: unknown }).context;
-      if (response instanceof Response) {
+      const response = (error as { context?: unknown }).context as { clone?: () => { json: () => Promise<unknown> }; json?: () => Promise<unknown> } | null | undefined;
+      // G1 TASK 49 (found on the iOS Simulator): Expo's fetch answers with a Response that is not `instanceof Response`, so every refusal
+      // read as the generic failure. Any context that reads as JSON is read; anything else stays the generic failure.
+      if (response && typeof response.json === 'function') {
         try {
-          return { ok: false, payload: await response.clone().json() };
+          return { ok: false, payload: typeof response.clone === 'function' ? await response.clone().json() : await response.json() };
         } catch {
           /* the generic failure below */
         }

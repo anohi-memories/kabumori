@@ -126,3 +126,15 @@ test('T48 the Threads publish card gets the screen\'s accounts, reload and the s
   assert.equal(card.refreshKey, 7);
   assert.deepEqual(card.accounts.map((a) => a.id), ['th-one']);
 });
+
+test('T49 the account detail scrolls and lets the keyboard go (found on the iOS Simulator: the post button was under the keyboard)', async () => {
+  const h = await mount('../src/app/accounts/[id].tsx', { selected: account({ id: 'th-one', platform: 'threads' }) });
+  const tree = await h.render();
+  let scroll = null;
+  const visit = (n) => { if (Array.isArray(n)) return n.forEach(visit); if (!n || typeof n !== 'object') return; if (!scroll && n.type === 'ScrollView') scroll = n.props; visit(n.props?.children); };
+  visit(tree);
+  assert.ok(scroll, 'a ScrollView holds the cards');
+  assert.deepEqual([scroll.keyboardShouldPersistTaps, scroll.keyboardDismissMode], ['handled', 'on-drag']);
+  const layout = await readFile(new URL('../src/app/_layout.tsx', import.meta.url), 'utf8');
+  assert.match(layout, /<Stack\.Screen name="accounts\/\[id\]" options=\{\{ headerShown: true, title: 'アカウント詳細' \}\} \/>/u, 'the detail has a header and a way back');
+});

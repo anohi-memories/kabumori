@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
 import { Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { PublishSettingCard } from '@/features/publish-setting/publish-setting-card';
@@ -22,8 +22,11 @@ export default function AccountDetailScreen() {
   const account = accounts.find((item) => item.id === id);
   if (!account) return <Screen><Card><Text style={{ color: colors.ink, fontWeight: '800' }}>アカウントが見つかりません</Text><Text style={styles.muted}>一覧からもう一度選択してください。</Text></Card></Screen>;
   const pill = connectionPill(account.connectionStatus, account.platform === 'x' && isXReconnectRequired(account.id), '要確認', isXServiceRestarted(session?.user?.id) && restartAppliesTo(account, workspace.kind === 'ready' ? workspace.workspaceId : null), status === 'mock_preview' ? 'preview' : account.platform);
+  // G1 TASK 49 (found on the iOS Simulator): the detail scrolls, and a drag or a tap outside the Threads text field closes the keyboard,
+  // so the post button below the field stays reachable while typing; the stack header (app/_layout.tsx) keeps it under the status bar.
   return (
     <Screen>
+      <ScrollView contentContainerStyle={{ gap: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       <SectionTitle detail={account.profile.handle}>アカウント詳細</SectionTitle>
       <Card>
         <Text style={{ color: colors.ink, fontSize: 20, fontWeight: '800' }}>{account.profile.displayName}</Text>
@@ -42,6 +45,7 @@ export default function AccountDetailScreen() {
           <Text style={styles.muted}>避ける表現: {account.profile.voice.avoid.join('、')}</Text>
         </View>
       </Card>
+      </ScrollView>
     </Screen>
   );
 }
