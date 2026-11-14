@@ -1,18 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ApprovalNotification } from './approval-client';
+import { UNCERTAIN } from './approval-client';
 import {
   actionOf, ACTION_TEXT, type ApprovalAction, type ApprovalBlock, groupedUnreadCount, groupNotifications, LIFECYCLE_UNKNOWN_TEXT, MARK_READ_FAILED_TEXT,
   type NotificationGroup, NOTIFICATIONS_ENDED_TEXT,
 } from './approval-view';
+import {
+  acceptPage, FIRST_PAGE_SIZE, moreOf, MORE_PAGE_SIZE, type NotificationsMore, startWalk, type StopReason,
+} from './notification-pages';
 import { useApprovalEnv } from './use-approval-env';
 
-export type NotificationList = { state: 'loading' } | { state: 'ready'; items: ApprovalNotification[] } | { state: 'error'; action: ApprovalAction };
-/** `ended`: the service gate said this person's service ended; the list stays readable and nothing is marked read any more. */
-type Box = { scope: string; list: NotificationList; notice: string | null; ended: boolean };
+/** `next`: the `before` of the next older page (null: none); `stopped`: why this walk makes no more requests (G1 TASK 51). */
+export type NotificationList =
+  | { state: 'loading' }
+  | { state: 'ready'; items: ApprovalNotification[]; next: number | null; pages: number; stopped: StopReason | null }
+  | { state: 'error'; action: ApprovalAction };
+/**
+ * `ended`: the service gate said this person's service ended; the list stays readable and nothing is marked read any more.
+ * `gen`: which first-page read the list belongs to; an answer for the older page of an earlier read never lands in a newer one.
+ */
+type Box = { scope: string; list: NotificationList; notice: string | null; ended: boolean; more: 'idle' | 'loading' | 'retry'; gen: number };
 
 export type NotificationsView =
   | { kind: 'blocked'; block: ApprovalBlock }
-  | { kind: 'open'; list: NotificationList; groups: NotificationGroup[]; unread: number; notice: string | null; readOnly: boolean; open: (n: ApprovalNotification) => void; reload: () => void };
+  | { kind: 'open'; list: NotificationList; groups: NotificationGroup[]; unread: number; notice: string | null; readOnly: boolean; more: NotificationsMore; open: (n: ApprovalNotification) => void; reload: () => void };
 
 /**
  * The person's own notifications (G3 contract §5), newest first, read again on every return to the screen. Opening one marks it read
@@ -30,15 +41,17 @@ export function useApprovalNotifications(): NotificationsView {
   const live = useRef<string | null>(null);
   // Rows of this scope whose read is being confirmed or sent: a second tap meanwhile sends nothing more.
   const sending = useRef<{ scope: string | null; ids: Set<string> }>({ scope: null, ids: new Set() });
+  // The page being asked for (scope, read, cursor): a second press before the answer asks for nothing more.
+  const paging = useRef<string | null>(null);
   const scope = env.notificationScope;
   const client = env.client;
   const confirmActive = env.confirmActive;
 
-  if (scope === null ? box !== null : box?.scope !== scope) setBox(scope === null ? null : { scope, list: { state: 'loading' }, notice: null, ended: false });
+  if (scope === null ? box !== null : box?.scope !== scope) setBox(scope === null ? null : { scope, list: { state: 'loading' }, notice: null, ended: false, more: 'idle', gen: 0 });
   const update = (mine: string, change: (current: Box) => Box) => setBox((current) => (current && current.scope === mine ? change(current) : current));
   // A read that failed shows no list and says only that it could not read (the card); an end of the person's access also says why.
   const refused = (mine: string, action: ApprovalAction) => setBox((current) => (current && current.scope === mine
-    ? { scope: mine, list: { state: 'error', action }, notice: action === 'sign_in' || action === 'forbidden' ? ACTION_TEXT[action] : null, ended: current.ended }
+    ? { scope: mine, list: { state: 'error', action }, notice: action === 'sign_in' || action === 'forbidden' ? ACTION_TEXT[action] : null, ended: current.ended, more: 'idle', gen: current.gen + 1 }
     : current));
   const endedFor = (mine: string) => update(mine, (current) => ({ ...current, ended: true, notice: NOTIFICATIONS_ENDED_TEXT }));
 
@@ -48,10 +61,18 @@ export function useApprovalNotifications(): NotificationsView {
     if (scope === null || !client) return;
     const mine = scope;
     let cancelled = false;
-    void client.notifications(50).then((answer) => {
+    void client.notificationPage({ limit: FIRST_PAGE_SIZE }).then((answer) => {
       if (cancelled || live.current !== mine) return;
-      // A list that answered: an older warning goes with it (G1 TASK 45, G2 #9 A18), but not the read-only state.
-      if (answer.ok) { update(mine, (current) => ({ ...current, list: { state: 'ready', items: answer.value }, notice: current.ended ? NOTIFICATIONS_ENDED_TEXT : null })); return; }
+      // A list that answered: an older warning goes with it (G1 TASK 45, G2 #9 A18), but not the read-only state. It starts a new walk
+      // of the history: the cursor is kept in memory only and every read of the first page begins again from the newest (G3 §5b).
+      if (answer.ok) {
+        const walk = startWalk(answer.value);
+        update(mine, (current) => ({
+          ...current, list: { state: 'ready', items: walk.rows, next: walk.next, pages: walk.pages, stopped: walk.stopped },
+          notice: current.ended ? NOTIFICATIONS_ENDED_TEXT : null, more: 'idle', gen: current.gen + 1,
+        }));
+        return;
+      }
       refused(mine, actionOf(answer.code, answer.definite));
     });
     void confirmActive().then((check) => {
@@ -94,7 +115,7 @@ export function useApprovalNotifications(): NotificationsView {
       if (live.current !== mine) return;
       if (answer.ok) {
         update(mine, (current) => (current.list.state === 'ready'
-          ? { ...current, list: { state: 'ready', items: current.list.items.map((item) => (item.notificationId === n.notificationId ? answer.value : item)) } }
+          ? { ...current, list: { ...current.list, items: current.list.items.map((item) => (item.notificationId === n.notificationId ? answer.value : item)) } }
           : current));
         return;
       }
@@ -112,5 +133,38 @@ export function useApprovalNotifications(): NotificationsView {
     });
   };
 
-  return { kind: 'open', list, groups, unread: groupedUnreadCount(groups), notice: shown?.notice ?? null, readOnly, open, reload: () => setReads((value) => value + 1) };
+  // The next older page, on the person's own press (a read: allowed in the read-only state too). One at a time, for the cursor the list
+  // holds now; the answer is used only if the list is still that walk (same first-page read, same cursor), so a late answer of an
+  // earlier read, a sign-out or another person's screen adds nothing. A page that is not the next older page stops the walk (fail-closed).
+  const loadMore = () => {
+    const cur = shown;
+    if (!cur || cur.list.state !== 'ready' || cur.more === 'loading' || cur.list.next === null || cur.list.stopped !== null) return;
+    const before = cur.list.next;
+    const generation = cur.gen;
+    const asked = `${mine}|${generation}|${before}`;
+    if (paging.current === asked) return;
+    paging.current = asked;
+    update(mine, (current) => ({ ...current, more: 'loading' }));
+    void client.notificationPage({ limit: MORE_PAGE_SIZE, before }).then((answer) => {
+      if (paging.current === asked) paging.current = null;
+      if (live.current !== mine) return;
+      setBox((current) => {
+        if (!current || current.scope !== mine || current.gen !== generation || current.list.state !== 'ready' || current.list.next !== before) return current;
+        if (!answer.ok) {
+          const action = actionOf(answer.code, answer.definite);
+          if (action === 'sign_in' || action === 'forbidden') return { ...current, list: { state: 'error', action }, notice: ACTION_TEXT[action], more: 'idle', gen: current.gen + 1 };
+          // A 200 that is not a page (UNCERTAIN with status 200) is an answer that cannot be trusted: the walk stops. A lost answer
+          // (network, 5xx, timeout) keeps the cursor: pressing again asks for the same page.
+          if (answer.code === UNCERTAIN && answer.status === 200) return { ...current, more: 'idle', list: { ...current.list, next: null, stopped: 'invalid_page' } };
+          return { ...current, more: 'retry' };
+        }
+        const walk = { rows: current.list.items, next: current.list.next, pages: current.list.pages, stopped: current.list.stopped };
+        const accepted = acceptPage(walk, before, answer.value);
+        return { ...current, more: 'idle', list: { state: 'ready', items: accepted.walk.rows, next: accepted.walk.next, pages: accepted.walk.pages, stopped: accepted.walk.stopped } };
+      });
+    });
+  };
+  const more: NotificationsMore = { ...moreOf(list.state === 'ready' ? list : null, shown?.more ?? 'idle'), load: loadMore };
+
+  return { kind: 'open', list, groups, unread: groupedUnreadCount(groups), notice: shown?.notice ?? null, readOnly, more, open, reload: () => setReads((value) => value + 1) };
 }

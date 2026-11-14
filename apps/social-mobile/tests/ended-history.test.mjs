@@ -125,7 +125,8 @@ test('T46 ended history: a refused or lost read says it could not read and shows
 test('T46 ended history: the source sends no write — the hook only calls notifications and get', async () => {
   const source = await readFile(new URL('../src/features/approvals/use-ended-history.ts', import.meta.url), 'utf8');
   const code = source.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/(^|[^:])\/\/.*$/gmu, '$1');
-  assert.deepEqual([...code.matchAll(/client\.(\w+)\(/gu)].map((m) => m[1]).sort(), ['get', 'notifications']);
+  // G1 TASK 51: the first page and the older pages are both `notificationPage`; `get` reads a candidate. Nothing else, ever.
+  assert.deepEqual([...new Set([...code.matchAll(/client!?\.(\w+)\(/gu)].map((m) => m[1]))].sort(), ['get', 'notificationPage']);
 });
 
 test('T46 ended history: A -> B while B\'s read is still on its way: no frame shows A\'s rows to B, B\'s own rows arrive, A\'s late answer never lands', async () => {

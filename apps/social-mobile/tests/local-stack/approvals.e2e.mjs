@@ -484,3 +484,94 @@ test('T47 on the real runtime: an expired / foreign JWT gives the check no answe
   tree = await until(other, (t) => has(t, 'お知らせはありません'), 'R empty');
   assert.ok(other.frames.every((f) => !has(f, 'G1第47')), 'R never sees P\'s rows');
 });
+
+// ---- G1 TASK 51 (G3-02 #22/#23, PR #677's Edge + PR #673's SQL 018): the history past the first page on the real runtime ---------------------
+// SYNTHETIC rows (labelled): approval_requested notifications written straight into G3's table with no candidate, so each is its own line
+// (the way G3's own L42 seeds them); the person and the stack are real. Needs a tree that carries #673/#677 (`before` / `cursor` / `nextCursor`).
+const seedNotes = (p, n, from = '2026-11-01 00:00+00') => q(`with i as (insert into postona_x_resv.notifications (user_id, brand_id, event_key, kind, subject_revision, state, created_at)
+  select :'u', (select brand_id from public.brand_memberships where user_id = :'u' and role = 'owner'), 'approval_requested:' || gen_random_uuid() || ':r1', 'approval_requested', 1, 'pending_approval', timestamptz :'t' + (g || ' minutes')::interval
+  from generate_series(1, :n) g returning 1) select count(*) from i`, { u: p.userId, t: from, n: String(n) });
+const MORE_LABEL = '\u3055\u3089\u306b\u8aad\u307f\u8fbc\u3080';
+const minuteTexts = (tree) => texts(tree).filter((t) => /^\d{4}-\d\d-\d\d \d\d:\d\d$/u.test(t));
+const notePages = () => wire.filter((w) => w.startsWith('notifications '));
+
+test('T51 paging on the real runtime: 279 synthetic notifications are read as 50 + 100 + 100 + 29 by the person\'s presses, each once, only reads; the first page is as before', opts, async () => {
+  const P = await stack.person('apt');
+  assert.equal(await seedNotes(P, 279), '279');
+  const h = await mountFor(P, { screen: 'notifications' });
+  let tree = await until(h, (t) => has(t, '\u672a\u8aad 50\u4ef6'), 'first page of 50');
+  assert.equal(pressables(tree, '\u304a\u77e5\u3089\u305b ').length, 50);
+  const at = wire.length;
+  const pressesToEnd = [];
+  for (const shown of [150, 250, 279]) {
+    const press = button(tree, MORE_LABEL);
+    assert.ok(press, `a more button before ${shown}`);
+    press.onPress();
+    tree = await until(h, (t) => pressables(t, '\u304a\u77e5\u3089\u305b ').length === shown, `${shown} lines`);
+    pressesToEnd.push(shown);
+  }
+  assert.equal(button(tree, MORE_LABEL), undefined, 'no more row at the end');
+  assert.ok(has(tree, 'これより古いお知らせはありません。'));
+  const minutes = minuteTexts(tree);
+  assert.equal(minutes.length, 279);
+  assert.equal(new Set(minutes).size, 279, 'each notification once');
+  assert.deepEqual([...new Set(wire.slice(at).map((w) => w.split(' ')[0]))], ['notifications'], `only reads: ${wire.slice(at).join(' | ')}`);
+  assert.equal(notePages().length >= 4, true);
+  assert.equal(await q("select count(*) from postona_x_resv.notifications where user_id = :'u' and read_at is not null", { u: P.userId }), '0', 'nothing was marked read');
+  console.log(`G1T51 measured (notifications): 279 synthetic rows, pages ${pressesToEnd.join(' -> ')} lines after 50, the wire after the first page: ${wire.slice(at).join(' | ')}`);
+});
+
+test('T51 paging on the real runtime: rows added meanwhile change nothing of the walk (a reload shows them); another person sees none of P\'s rows; a broken token ends the list, it is not retried', opts, async () => {
+  const P = await stack.person('apu');
+  const R = await stack.person('apv');
+  assert.equal(await seedNotes(P, 120), '120');
+  assert.equal(await seedNotes(R, 7), '7');
+  const h = await mountFor(P, { screen: 'notifications' });
+  let tree = await until(h, (t) => has(t, '\u672a\u8aad 50\u4ef6'), 'first page');
+  assert.equal(await seedNotes(P, 5, '2026-12-01 00:00+00'), '5');   // newer rows, added while the person pages
+  button(tree, MORE_LABEL).onPress();
+  tree = await until(h, (t) => pressables(t, '\u304a\u77e5\u3089\u305b ').length === 120 || pressables(t, '\u304a\u77e5\u3089\u305b ').length === 150, 'the walk ends');
+  assert.equal(pressables(tree, '\u304a\u77e5\u3089\u305b ').length, 120, 'the walk holds the 120 it started with: the 5 new rows are on a new first page');
+  assert.equal(new Set(minuteTexts(tree)).size, 120);
+  h.world.refocus += 1;
+  tree = await until(h, (t) => has(t, '\u672a\u8aad 50\u4ef6'), 'read again from the first page');
+  assert.ok(minuteTexts(tree).some((t) => t.startsWith('2026-12-01')), 'the new rows are at the top of the new first page');
+
+  const other = await mountFor(R, { screen: 'notifications' });
+  const rt = await until(other, (t) => pressables(t, '\u304a\u77e5\u3089\u305b ').length === 7, 'R\'s own 7 rows');
+  assert.equal(button(rt, MORE_LABEL), undefined, 'R has no second page');
+  assert.ok(minuteTexts(rt).every((t) => t.startsWith('2026-11-01')) && minuteTexts(rt).length === 7);
+
+  const g = await mountFor(P, { screen: 'notifications' });
+  const gt = await until(g, (t) => has(t, '\u672a\u8aad 50\u4ef6'), 'P again');
+  g.world.session = { token: `${P.token.slice(0, -4)}AAAA`, userId: P.userId };   // the session's token stops being good
+  const before = notePages().length;
+  button(gt, MORE_LABEL).onPress();
+  const dead = await until(g, (t) => has(t, view.ACTION_TEXT.sign_in), 'sign-in');
+  assert.equal(button(dead, MORE_LABEL), undefined, 'no retry button for an expired session');
+  assert.equal(notePages().length - before, 1, 'one request, refused 401');
+  console.log(`G1T51 measured (isolation): P's walk held 120 while 5 rows were added; R saw 7 of its own; a broken token: ${wire.at(-1)}`);
+});
+
+test('T51 paging on the real runtime: the read-only history of an ended service pages the same way (reads only: notifications + get), and the exits stay', opts, async () => {
+  const E = await stack.person('apw');
+  assert.equal(await seedNotes(E, 279), '279');
+  await stack.endService(E);
+  const base = { endpoint: { functionName: FN, allowLoopbackHttpForTests: true }, config: { ok: true, config: { url: stack.API, publishableKey: stack.PUBLISHABLE } }, fetch: recorded, wait: () => new Promise((resolve) => setTimeout(resolve, 60)) };
+  const at = wire.length;
+  const h = await mountEndedHistory({ ...base, userId: E.userId, session: { token: E.token, userId: E.userId } });
+  let tree = await h.render(4);
+  const waitFor = async (fn, label) => { for (let i = 0; i < 200 && !fn(tree); i++) { await new Promise((resolve) => setTimeout(resolve, 100)); tree = await h.render(2); } assert.ok(fn(tree), `${label}: ${texts(tree).slice(0, 6).join(' / ')}`); };
+  const count = (t) => texts(t).filter((x) => x === view.NOTIFICATION_KIND_TEXT.approval_requested).length;
+  await waitFor((t) => count(t) === 50, 'first page of 50');
+  for (const shown of [150, 250, 279]) {
+    h.buttons(tree).find((b) => b.label === MORE_LABEL).onPress();
+    await waitFor((t) => count(t) === shown, `${shown} rows`);
+  }
+  assert.equal(h.buttons(tree).find((b) => b.label === MORE_LABEL), undefined);
+  assert.ok(has(tree, 'これより古いお知らせはありません。'));
+  assert.deepEqual([...new Set(wire.slice(at).map((w) => w.split(' ')[0]))].sort(), ['notifications'], `only reads (this person has no candidate): ${wire.slice(at).join(' | ')}`);
+  assert.equal(await q("select count(*) from postona_x_resv.notifications where user_id = :'u' and read_at is not null", { u: E.userId }), '0');
+  console.log(`G1T51 measured (ended history): 279 rows in ${wire.slice(at).length} reads, no write`);
+  console.log('G1T51_PAGING_LOCAL_STACK_PASS');
+});

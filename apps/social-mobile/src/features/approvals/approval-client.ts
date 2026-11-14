@@ -26,7 +26,11 @@ export type ApprovalNotification = {
   scheduledAt: string | null;
   createdAt: string;
   readAt: string | null;
+  /** G3-02 #23 (PR #677): the row's place in the person's stable order; pass the last one of a page as `before` for the next, older page. */
+  cursor?: number;
 };
+/** One page of the person's notifications, newest first; `nextCursor` is the `before` of the next page, or null on the last one. */
+export type NotificationPage = { rows: ApprovalNotification[]; nextCursor: number | null };
 /** `definite`: the server's own refusal (4xx with a code). Otherwise the outcome is unknown and must be read back. */
 export type ApprovalAnswer<T> = { ok: true; value: T } | { ok: false; code: string; status: number; definite: boolean };
 
@@ -42,6 +46,8 @@ export type ApprovalClient = {
   get(candidateId: string): Promise<ApprovalAnswer<Candidate>>;
   list(socialAccountId: string): Promise<ApprovalAnswer<Candidate[]>>;
   notifications(limit?: number): Promise<ApprovalAnswer<ApprovalNotification[]>>;
+  /** G1 TASK 51: a page of the history with its cursor. `before` must be a cursor of an earlier page (never invented); nothing else is sent. */
+  notificationPage(input: { limit?: number; before?: number }): Promise<ApprovalAnswer<NotificationPage>>;
   markRead(notificationId: string): Promise<ApprovalAnswer<ApprovalNotification>>;
 };
 
@@ -56,8 +62,10 @@ function isCandidate(v: unknown): v is Candidate {
 function isNotification(v: unknown): v is ApprovalNotification {
   const n = v as Record<string, unknown> | null;
   return !!n && str(n.notificationId) && str(n.kind) && strOrNull(n.candidateId) && strOrNull(n.reservationId) && str(n.createdAt) && strOrNull(n.readAt)
-    && strOrNull(n.scheduledAt ?? null) && strOrNull(n.state ?? null);
+    && strOrNull(n.scheduledAt ?? null) && strOrNull(n.state ?? null) && (n.cursor === undefined || isCursor(n.cursor));
 }
+/** A cursor is a positive safe integer (G3 contract §5b); anything else is not a page we can continue from. */
+export const isCursor = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 1;
 
 /** Plain http only for a loopback URL with `allowLoopbackHttpForTests` (the local Supabase tests); the key must be the public one. */
 export function createApprovalClient(input: {
@@ -108,6 +116,14 @@ export function createApprovalClient(input: {
   const many = (body: Record<string, unknown>) => (Array.isArray(body.candidates) && body.candidates.every(isCandidate) ? (body.candidates as Candidate[]) : null);
   const notes = (body: Record<string, unknown>) => (Array.isArray(body.notifications) && body.notifications.every(isNotification) ? (body.notifications as ApprovalNotification[]) : null);
   const note = (body: Record<string, unknown>) => { const all = notes(body); return all && all.length === 1 ? all[0] : null; };
+  // `nextCursor` is absent on a server without paging (= no next page), null on the last page, a cursor otherwise.
+  const page = (body: Record<string, unknown>): NotificationPage | null => {
+    const rows = notes(body);
+    if (!rows) return null;
+    const next = body.nextCursor;
+    if (next !== undefined && next !== null && !isCursor(next)) return null;
+    return { rows, nextCursor: next ?? null };
+  };
 
   return {
     submit: (p) => call('submit', p, one),
@@ -117,6 +133,11 @@ export function createApprovalClient(input: {
     get: (candidateId) => call('get', { candidateId }, one),
     list: (socialAccountId) => call('list', { socialAccountId }, many),
     notifications: (limit = 50) => call('notifications', { limit }, notes),
+    async notificationPage({ limit = 50, before }) {
+      // A request the server would refuse (G3 §5b: limit 1-100, before a positive integer) is never sent.
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || (before !== undefined && !isCursor(before))) return { ok: false, code: 'REQUEST_INVALID', status: 0, definite: true };
+      return call('notifications', before === undefined ? { limit } : { limit, before }, page);
+    },
     markRead: (notificationId) => call('markRead', { notificationId }, note),
   };
 }
