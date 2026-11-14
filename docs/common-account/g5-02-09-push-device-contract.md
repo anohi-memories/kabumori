@@ -1,4 +1,10 @@
-# POSTONA push devices: registration, revocation and the delivery read (G5-02 task 9; tasks 10, 11)
+# POSTONA push devices: registration, revocation and the delivery read (G5-02 task 9; tasks 10, 11, 12)
+
+**G5-02 task 12** fixes H4 #331 task 26's two P2 on PR #676:
+- **P2-1:** no deliverable registration of an unproven token. It is pending until the phone answers the provider's nonce, and a proof is the newer control (section 2b).
+- **P2-2:** one per-person cap and writer lock, shared by register and "off", plus retention (section 2c).
+
+Each is reproduced on PR #676's own files, then passes (section 8). **No push provider is connected. A real proof is NOT_RUN, and nothing in this candidate counts as one.**
 
 **G5-02 task 11** fixes H4 #331 task 25's two P2 on PR #672:
 - **P2-1:** an ended session never frees a token for another person. It moves only on the same installation, with its device secret (section 3, "Takeover").
@@ -52,6 +58,48 @@ A token is active on **one row only** (a partial unique index on its SHA-256).
 
 **"Off" rows (task 11).** Unregister with the phone's device secret, for an installation that has no row yet, writes a revoked row (`unregistered`, version 1, no token, platform null) for this person and phone. That keeps the "off" before the first registration lands.
 
+### 2b. Proof of token control (task 12, P2-1)
+
+A registration is **active at once** only for a token whose control was already proven:
+- the person's own (the claim is the person's: re-login, reinstall, lost storage);
+- this installation's, handed over with its device secret (the claim names this installation: the same phone signed in to another account).
+
+**Anything else is `pending`:** a token nobody proved, or another person's. A pending registration:
+- stores the token, but is **never a delivery target**;
+- writes no claim;
+- does not stop anyone else's active registration.
+
+| step | who | what |
+| --- | --- | --- |
+| 1 | the app | register → `pending_proof` |
+| 2 | the push worker (owner-only `private.postona_push_proof_issue(limit, installation_id)`) | a fresh nonce for each pending registration without a live one: at most 3 per registration, 10 minutes each; only its SHA-256 is stored. The worker sends `{ kind: 'postona_push_proof', installation_id, nonce }` as a data-only push **to that token** through the provider |
+| 3 | the app on the phone that receives it | `confirmPushDevice`: only for its own installation id, only while notifications are on now → register with `p_proof_nonce` (CAS on the pending version) |
+| 4 | the server | the nonce's hash matches and has not expired → active, the claim moves here, the token's earlier active holder (anyone's) is revoked `taken_over` |
+
+- **The proof is the newer control of the token,** because the provider delivers to the phone that holds it. A wrong first binding therefore never locks the real phone out: it proves and takes the token.
+- **A third party without the phone never sees the nonce:**
+  - a guess is `PROOF_INVALID`; five wrong answers end the registration (`proof_failed`);
+  - an expired nonce is `PROOF_EXPIRED`;
+  - a pending registration never proven within 15 minutes is revoked `proof_expired` by purge.
+- **No expiry can be abused:** a claim's expiry (section 2c) only means that the next registration of that token is pending until proven.
+- **In this candidate no provider is connected.** The local tests play the provider: they read the worker's nonce and hand it to the app that registered from the phone holding the token. In production, step 2's send needs its own approval and is NOT_RUN.
+
+### 2c. Per-person capacity and retention (task 12, P2-2)
+
+- **One writer per person.** Register and unregister both take the person's advisory lock before any installation lock. The count, the room and the write are one step. Lock order: account (register only) → fence (register only) → person → token → installation → rows.
+- **One cap: 100 rows of any status per person.** A row the person does not hold yet (a new installation, or one taken over) needs room. When full, the person's oldest **revoked rows older than 1 day** are deleted first (`private.postona_push_make_room`).
+- **When nothing can be pruned** (more than ~85 revocations within a day):
+  - register of a new installation answers `DEVICE_LIMIT`;
+  - unregister of a new installation records nothing and answers `'recorded': false`.
+  Because no new installation of that person can register while full, nothing is delivered to that installation: **fail-closed**. It can only reopen for a request delayed for more than the 1-day window.
+- **Retention (purge):**
+  - revoked rows (history and "off" rows) are deleted 30 days after the revoke;
+  - a token claim is released when its account is gone, or 180 days after its last activation when no active row holds the token;
+  - pending registrations end after 15 minutes.
+- **The audit trade-off:**
+  - an "off" row protects against a delayed first registration only while it exists (30 days, or 1 day under cap pressure);
+  - a claim is a token hash, kept so that the owner's reinstall stays one step. After it expires, the owner's next registration simply needs a proof.
+
 ### 2a. The stop fence (task 10, P2-1)
 
 `private.postona_push_control`: one row, `enabled`. The install turns it on; `001_push_devices_stop.sql` turns it off.
@@ -73,7 +121,7 @@ Three RPCs, `authenticated` only (the only SECURITY DEFINER functions this adds)
 
 | RPC | gates | answers |
 | --- | --- | --- |
-| `postona_push_device_register(installation_id, device_secret, platform, push_token, expected_version)` | S2-2 session `active` → T13 (account lock; account active, x_autopost active, no deletion, session live after the lock) → the stop fence → S2-3 `own` | `registered` / `unchanged` + the device; `STALE_REGISTRATION` (+ the person's own row version, or null); `DEVICE_IN_USE`; `DEVICE_LIMIT`; `PUSH_DEVICES_STOPPED`; `PUSH_BUSY`; `INVALID_INPUT`; the gates' refusals |
+| `postona_push_device_register(installation_id, device_secret, platform, push_token, expected_version, proof_nonce)` | S2-2 session `active` → T13 (account lock; account active, x_autopost active, no deletion, session live after the lock) → the stop fence → S2-3 `own` | `registered` / `unchanged` / **`pending_proof`** (task 12) + the device; `STALE_REGISTRATION` (+ the person's own row version, or null); `DEVICE_IN_USE`; `DEVICE_LIMIT`; `PROOF_NOT_PENDING` / `PROOF_EXPIRED` / `PROOF_INVALID`; `PUSH_DEVICES_STOPPED`; `PUSH_BUSY`; `INVALID_INPUT`; the gates' refusals |
 | `postona_push_device_unregister(installation_id)` | S2-2 only (works after a service end, a lock or an owner loss) | `unregistered` (idempotent) / `not_registered` (none, or another person's: the same answer) |
 | `postona_push_device_list()` | S2-2 only | the person's devices (no token), `delivery` (what the worker would be told now), `deliverable` / `this_session` per device |
 
@@ -83,14 +131,14 @@ Three RPCs, `authenticated` only (the only SECURITY DEFINER functions this adds)
 - **Takeover (task 10 P2-3, task 11 P2-1): refused by default.**
   - **The installation row is the phone.** It moves, to the same person or another, only with that installation's **device secret**. That is the same phone signed in to another account: an authenticated handover. A leaked installation id alone answers `DEVICE_IN_USE`, gives no version, and changes nothing, whatever state the row is in.
   - **A token held by another person's live registration** (active, its auth session live) is refused: `DEVICE_IN_USE`. A leaked token moves nothing.
-  - **A token another person registered last** answers `DEVICE_IN_USE`, whether that registration is live, signed out, expired, unregistered, stopped or purged. That is its claim (task 11). An ended session frees nothing.
+  - **A token another person registered last** never becomes active through a matching identifier: an ended session frees nothing (task 11). Since task 12 the registration is **pending** (no delivery) instead of refused, and only a proof (section 2b) moves the token.
   - **A token moves to another person only on the same installation, with that installation's device secret:** the same phone signed in to another account (an authenticated handover).
   - **The person's own other installation** (a reinstall, or lost secure storage) moves it, and the earlier row is revoked `taken_over`.
   - **Recovery:**
     - the owner signing in again on the same phone: the same installation and secret, its own row, compare-and-set;
     - the owner after lost storage: a new installation; the claim is the owner's, so it registers normally;
-    - another person after lost storage (the same OS token, a new installation): **held**. `DEVICE_IN_USE`, nothing stored, no delivery, until the claiming account is gone and purge releases the claim. A provider-side proof of control (a push-delivered nonce) would be the only other way; it is not built here, and nothing counts as such a proof.
-  - **A token nobody ever claimed is bound by its first registration, with no proof of control.** That is a stated limit: only a provider nonce could prove it.
+    - another person after lost storage (the same OS token, a new installation): **pending** until that phone answers the proof (task 12; no longer held until the account is gone).
+  - **A token nobody ever claimed is pending until proven** (task 12): no first binding without proof.
   - **No oracle any more.** `DEVICE_IN_USE` says that the identifier the caller already holds is in use; it reveals nothing else.
 - **At most 10 deliverable devices.**
 - **Serialization:**
@@ -107,7 +155,8 @@ Three RPCs, `authenticated` only (the only SECURITY DEFINER functions this adds)
 | after every sign-in, and on every app start while signed in | `syncPushDevice(client, readCurrent)`: `readCurrent()` reads, at that moment, notifications on / off, the OS token, the version stored **for this person**; store the answered version per person |
 | the OS gives a new token | the same |
 | `STALE_REGISTRATION` | **never re-sent** (task 10, P2-2). `recoverStaleRegistration(client, readCurrent)` is a new operation: it reads the server's row, then the app's state again. It does nothing when notifications are off now, or when the person removed this phone (revoked `unregistered`); otherwise it registers the **current** token from the server's version |
-| `DEVICE_IN_USE` | never retried. Token case: the other account signs out on this phone first. Installation case: a new installation id and device secret, then sync once |
+| `pending_proof` (task 12) | not deliverable yet. Wait for the proof push; `confirmPushDevice(client, readCurrent, push)` answers it for this installation only, while notifications are on |
+| `DEVICE_IN_USE` | never retried. The installation row belongs to another phone: a new installation id and device secret, then sync once |
 | sign-out | `unregisterPushDevice` **before** `auth.signOut()`; a failure must not block the sign-out (the server stops delivery to a device whose session is gone anyway); clear the stored version |
 | notifications off / on in the app | off: the local flag off **first**, then `unregisterPushDevice(client, installationId, deviceSecret)`, **always with the secret** (task 11: before the first registration it leaves an "off" row, so a delayed first registration is `STALE_REGISTRATION`); on: the flag on, then `syncPushDevice` with the version the off answered |
 | any registration answer | `syncPushDevice` / `recoverStaleRegistration` read the state again; if notifications are off **now**, they complete the off in this session and answer `disabled`. An old success never re-enables a phone |
@@ -154,11 +203,12 @@ It is owner-only and SECURITY INVOKER: no grant to any API role, `service_role` 
   - Through Expo: anyone holding a person's token can send to that phone unless enhanced push security is on (item 4 above).
   - Here: a leaked token or installation id no longer moves a live registration (P2-3).
   - Task 11: an ended session no longer frees a token either (P2-1).
+  - Task 12: no registration is deliverable without a proof, unless the token is the person's own proven one or the same installation is handed over.
   - **Residual:**
-    1. A token nobody has registered yet is bound by its first registration, with no proof (a leaked never-registered token).
-    2. Another person after lost secure storage is held until the claiming account is gone.
+    1. **The proof depends on the provider delivering only to the token's phone**, and on the app answering only its own installation's nonce. No provider is connected here (NOT_RUN): the whole flow is local and simulated.
+    2. A person's own proven token (the claim) is re-activated without a new proof on a reinstall: a stolen JWT plus the token could register it on another installation of the same person. That person's own notifications only.
     3. Another person's unregister with someone's installation id, **before that id's first registration**, leaves an "off" row with the wrong secret. That phone then answers `DEVICE_IN_USE` and must make a new installation id. It requires the id before it was ever used.
-  - A provider-side nonce (a later step with real sends) is the only proof of control; it is not counted as done here.
+    4. Under cap pressure (section 2c), a request delayed for more than a day may land after its "off" row was pruned. A new token is still pending, so it is not delivered unless proven.
 - **`service_role`** cannot read the table or call the worker side. A superuser or the owner can read everything.
 - **Push notification content and the outbox** are G3's.
 - **The KabuMori app's `public.device_push_tokens`** (section 1) is unchanged.
@@ -192,6 +242,8 @@ Tokens:
 | part | what |
 | --- | --- |
 | BEFORE | no POSTONA API; `public.device_push_tokens` as built: FAIL 1–4 of section 1 reproduced |
+| BEFORE (PR #676 files, task 12) | P2-1: an unproven first registration of a leaked token was active and a target, and the real phone was then locked out (`DEVICE_IN_USE`, also after the first registrant signed out). P2-2: at 100 rows, "off" of a new installation was refused (`DEVICE_LIMIT`) while a first registration still succeeded (101 rows), and the refused installation registered |
+| P2-1 / P2-2 after (task 12) | unproven first token pending (no target, no claim), wrong / expired / five wrong nonces, purge of the unproven; a wrong first binding recovers by proof (the victim's app ignores the other installation's nonce); claim release on account gone; the cap at 100 for register and "off" alike ("off" `recorded: false`, then the new installation `DEVICE_LIMIT`), pruning of rows older than a day, two concurrent "off"s queued on the person's lock, never 101; retention (30 days / 180 days) |
 | BEFORE (PR #672 files, task 11) | P2-1: after the owner signed out, another account took the token on another installation (the old row taken_over, a target of the other account), and the owner could not recover its own phone. P2-2: "off" before the first registration left nothing, and the delayed first registration succeeded; #672's client reported an old success while "off" |
 | P2-1 / P2-2 after (task 11) | the token stays with its owner after sign-out and unregister; the owner recovers on the same phone; reinstall; lost storage: owner ok, another person held until the claim is released; "off" before the first registration → delayed registration `STALE_REGISTRATION`, "on" again ok; first registration vs "off" both orders end off; old success while off → completed as off; rapid toggles from two sessions end off |
 | BEFORE (PR #667 files, task 10) | P2-1: a registration in flight commits after the stop and is a delivery target. P2-2: #667's client re-sends over "off" (the phone revived) and over a newer token (overwritten). P2-3: a leaked installation id and a leaked token take over a live registration of another person |
@@ -204,4 +256,4 @@ Tokens:
 | worker | stale provider receipt; purge |
 | stop / rollback | active / in-use refusals; stop erases tokens and EXECUTE; re-install; install + stop + rollback restores the catalog |
 | deny-net | no connection to Expo / APNs / FCM possible from the test process |
-| mutants | 23: each guard removed is noticed by its check. Task 10 added: register / targets ignore the fence, no device-secret check, no lock timeout. Task 11 added: the token claim ignored, the claim never written, no handover by the device secret, purge never releases, "off" before the first registration keeps nothing, the client reports an old success while off (on the client module) |
+| mutants | 31: each guard removed is noticed by its check. Task 12 added: every token active at once, targets include pending, the nonce unchecked, the nonce never expires, register ignores the cap, "off" without the person's lock, room prunes fresh rows, history kept forever, claims never expire. Task 10 added: register / targets ignore the fence, no device-secret check, no lock timeout. Task 11 added: the token claim ignored, the claim never written, no handover by the device secret, purge never releases, "off" before the first registration keeps nothing, the client reports an old success while off (on the client module) |

@@ -1,4 +1,8 @@
-# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11)
+# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12)
+
+Task 12 fixes H4 #331 task 26's two P2 on PR #676:
+- P2-1: an unproven token is `pending` (never delivered) until the phone answers the provider nonce from `private.postona_push_proof_issue`. No provider is connected: NOT_RUN.
+- P2-2: one per-person cap (100 rows) and writer lock for register and "off", plus retention in purge.
 
 Task 11 fixes H4 #331 task 25's two P2 on PR #672:
 - P2-1: token claims (`private.postona_push_token_claims`, hashes only). A token another person registered last moves only on the same installation with its device secret; an ended session frees nothing.

@@ -6,7 +6,9 @@
 // compared) and the runner scans every container log for the marker afterwards. Network: only the local API port (the runner's --allow-net).
 // G5-02 task 10: H4 #331 task 24's three P2 are first reproduced on PR #667's own files (G5LS_PR667: install / stop / rollback / client.ts
 // at 9140cefd), then the same cases pass on this tree's. G5-02 task 11: H4 #331 task 25's two P2 likewise on PR #672's files (G5LS_PR672,
-// a04c1709).
+// a04c1709). G5-02 task 12: H4 #331 task 26's two P2 likewise on PR #676's files (G5LS_PR676, 6bd753cf). A token whose control is not
+// proven is PENDING; the tests play the push provider: the worker's private.postona_push_proof_issue gives the nonce, and the app on the
+// phone that holds the token answers it (reg() does this for the phone the test registers from; reg1() never does).
 import assert from 'node:assert/strict';
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.115.0';
 
@@ -18,7 +20,8 @@ const MVP = Deno.env.get('G5LS_MVP') ?? '';
 const PUSH = Deno.env.get('G5LS_PUSH') ?? '';
 const PR667 = Deno.env.get('G5LS_PR667') ?? '';
 const PR672 = Deno.env.get('G5LS_PR672') ?? '';
-const enabled = API !== '' && PUBLISHABLE !== '' && SECRET !== '' && MVP !== '' && PUSH !== '' && DB_PORT !== '' && PR667 !== '' && PR672 !== '';
+const PR676 = Deno.env.get('G5LS_PR676') ?? '';
+const enabled = API !== '' && PUBLISHABLE !== '' && SECRET !== '' && MVP !== '' && PUSH !== '' && DB_PORT !== '' && PR667 !== '' && PR672 !== '' && PR676 !== '';
 const opts = { ignore: !enabled, sanitizeOps: false, sanitizeResources: false };
 const OWNER = 'postgres';
 const SUPER = 'supabase_admin';
@@ -29,6 +32,7 @@ const decoder = new TextDecoder();
 const pd = enabled ? await import(`file://${PUSH}/client.ts`) : null;
 const pd667 = enabled ? await import(`file://${PR667}/client.ts`) : null;
 const pd672 = enabled ? await import(`file://${PR672}/client.ts`) : null;
+const pd676 = enabled ? await import(`file://${PR676}/client.ts`) : null;
 const clientText = enabled ? await Deno.readTextFile(`${PUSH}/client.ts`) : '';
 // the client module the checks use (a mutant's while that mutant runs)
 let pc = pd;
@@ -87,7 +91,9 @@ async function until(pred: () => Promise<boolean>, ms = 10_000): Promise<boolean
   }
   return pred();
 }
-const holding = (name: string) => until(async () => (await sql(SUPER, `select coalesce(string_agg(state, ','), 'gone') from pg_stat_activity where application_name = '${name}'`)) === 'idle in transaction');
+// the newest session of that name (a check that failed under a mutant may leave an older one open; the mutant loop ends those)
+const holding = (name: string) => until(async () => (await sql(SUPER, `select coalesce((select state from pg_stat_activity where application_name = '${name}' order by backend_start desc limit 1), 'gone')`)) === 'idle in transaction');
+const endHolders = () => sql(SUPER, `select count(pg_terminate_backend(pid)) from pg_stat_activity where application_name like 'g5pd-holder-%'`);
 // API calls of <fn> waiting on a lock (PostgREST's backends; this polling query itself never waits on a lock)
 const waitingCalls = async (fn: string) => Number(await sql(SUPER, `select count(*) from pg_stat_activity where state = 'active' and wait_event_type = 'Lock' and query like '%${fn}%'`));
 const waitingStop = async () => Number(await sql(SUPER, `select count(*) from pg_stat_activity where state = 'active' and wait_event_type = 'Lock' and query like '%postona_push_control c set enabled = false%'`));
@@ -167,8 +173,25 @@ function clean<T>(x: T): T {
   return x;
 }
 type Answer = { ok: boolean; status: string; device?: { registration_version: number; status: string; deliverable: boolean; this_session: boolean }; registration_version?: number | null };
-const reg = async (c: SupabaseClient, inst: string, token: string, expected: number | null, platform = 'ios', secret = secretOf(inst)) =>
-  clean(await pd.registerPushDevice(c, { installationId: inst, deviceSecret: secret, platform, pushToken: token, expectedVersion: expected })) as Answer;
+// (G5-02 #12) the push worker's proof challenge for one installation: its nonce (the test is the provider; the nonce never leaves the test)
+const issueNonce = (inst: string) => sql(OWNER, `select coalesce((select x->>'nonce' from jsonb_array_elements(private.postona_push_proof_issue(5, '${inst}')) x limit 1), '')`);
+const randomNonce = () => Array.from(crypto.getRandomValues(new Uint8Array(32))).map((x) => x.toString(16).padStart(2, '0')).join('');
+const claimOf = async (token: string) => sql(SUPER, `select coalesce((select user_id || ':' || installation_id from private.postona_push_token_claims where token_sha256 = decode('${await hex(token)}', 'hex')), 'none')`);
+// a registration from the phone that holds the token: when it is pending, the phone answers the provider's nonce
+const reg = async (c: SupabaseClient, inst: string, token: string, expected: number | null, platform = 'ios', secret = secretOf(inst), prove = true): Promise<Answer> => {
+  const a = clean(await pd.registerPushDevice(c, { installationId: inst, deviceSecret: secret, platform, pushToken: token, expectedVersion: expected })) as Answer;
+  if (!prove || a.status !== 'pending_proof' || !a.device) return a;
+  const nonce = await issueNonce(inst);
+  if (nonce === '') return a;
+  return clean(await pd.registerPushDevice(c, { installationId: inst, deviceSecret: secret, platform, pushToken: token, expectedVersion: a.device.registration_version, proofNonce: nonce })) as Answer;
+};
+// one registration call, never proven (a third party, or the answer before any proof)
+const reg1 = (c: SupabaseClient, inst: string, token: string, expected: number | null, platform = 'ios', secret = secretOf(inst)) => reg(c, inst, token, expected, platform, secret, false);
+// revoked rows of a person, as history (no token), straight in as the owner
+const seedRevoked = (p: Person, k: number) => sql(OWNER, `insert into private.postona_push_devices (installation_id, device_secret_sha256, user_id, workspace_id, session_id, lifecycle_version,
+    platform, registration_version, status, revoked_reason, revoked_at)
+  select gen_random_uuid(), sha256(convert_to(gen_random_uuid()::text, 'UTF8')), '${p.id}', '${p.ws}', gen_random_uuid(), 1, null, 1, 'revoked', 'unregistered', now()
+    from generate_series(1, ${k})`);
 // PR #667's register (no device secret) through PR #667's client
 const reg667 = async (c: SupabaseClient, inst: string, token: string, expected: number | null) =>
   clean(await pd667.registerPushDevice(c, { installationId: inst, platform: 'ios', pushToken: token, expectedVersion: expected })) as Answer;
@@ -275,16 +298,20 @@ const checks: Record<string, () => Promise<void>> = {
     const A = await person('lt-a'), B = await person('lt-b');
     const iA = uuid(), iB = uuid(), t = fakeToken();
     assert.equal((await reg(A.client, iA, t, null)).status, 'registered');
-    assert.equal((await reg(B.client, iB, t, null)).status, 'DEVICE_IN_USE');
+    assert.equal((await reg1(B.client, iB, t, null)).status, 'pending_proof', 'a leaked token must stay unproven');
     assert.match(await row(iA), /^active:-:1:false:false$/u);
-    assert.equal(await row(iB), 'none');
+    assert.match(await row(iB), /^pending:/u);
     assert.deepEqual((await targets(A)).hashes, [await hex(t)]);
-    assert.deepEqual((await targets(B)).hashes, []);
-    // still live while the session is (a restart makes the generation stale, not the phone free)
+    assert.deepEqual((await targets(B)).hashes, [], 'a pending (unproven) token is a delivery target');
+    // the nonce goes to the token = A's phone; B can only guess
+    await issueNonce(iB);
+    assert.equal((clean(await pd.registerPushDevice(B.client, { installationId: iB, deviceSecret: secretOf(iB), platform: 'ios', pushToken: t, expectedVersion: 1, proofNonce: randomNonce() })) as Answer).status, 'PROOF_INVALID');
+    // after a restart (the generation stale, A's session live) still nothing for B
     await endService(A);
     await restart(A);
-    assert.equal((await reg(B.client, iB, t, null)).status, 'DEVICE_IN_USE');
+    assert.notEqual((await reg1(B.client, uuid(), t, null)).status, 'registered');
     assert.equal(await activeFor(t), '1');
+    assert.equal(await claimOf(t), `${A.id}:${iA}`);
   },
   // (H4 #24 P2-3) a leaked installation id moves nothing: without that phone's device secret, the row answers DEVICE_IN_USE, whatever version
   async leakedInstallationRefused() {
@@ -305,12 +332,15 @@ const checks: Record<string, () => Promise<void>> = {
     assert.equal((await reg(B.client, inst, fakeToken(), null, 'ios', newSecret())).status, 'DEVICE_IN_USE');
     assert.equal(await owner(inst), A.id);
   },
-  // the same phone signed in to another account (A never signed out there): the device secret proves the phone, so B takes it over
+  // the same phone signed in to another account (A never signed out there): the device secret proves the phone, so B takes it over at
+  // once. (G5-02 #12) A first proved the token on an older installation, then reinstalled (active at once: its own token); the handover
+  // follows the token's claim to the installation that holds it now.
   async handoverWithDeviceSecret() {
     const A = await person('ho-a'), B = await person('ho-b');
     const inst = uuid(), t = fakeToken();
-    assert.equal((await reg(A.client, inst, t, null)).status, 'registered');
-    assert.equal((await reg(B.client, inst, t, null)).status, 'registered');
+    assert.equal((await reg(A.client, uuid(), t, null)).status, 'registered');
+    assert.equal((await reg1(A.client, inst, t, null)).status, 'registered', 'the person\'s own proven token on a new installation');
+    assert.equal((await reg1(B.client, inst, t, null)).status, 'registered', 'the same phone handed over with its device secret');
     assert.equal(await owner(inst), B.id);
     assert.deepEqual((await targets(A)).hashes, []);
     assert.deepEqual((await targets(B)).hashes, [await hex(t)]);
@@ -324,41 +354,41 @@ const checks: Record<string, () => Promise<void>> = {
     const iA = uuid(), iB = uuid(), t = fakeToken();
     assert.equal((await reg(phone, iA, t, null)).status, 'registered');
     await phone.auth.signOut({ scope: 'local' });
-    assert.equal((await reg(B.client, iB, t, null)).status, 'DEVICE_IN_USE', 'a token moved to another account after the owner signed out');
+    assert.equal((await reg1(B.client, iB, t, null)).status, 'pending_proof', 'a token moved to another account after the owner signed out');
     assert.match(await row(iA), /^active:-:1:false:false$/u);
-    assert.equal(await row(iB), 'none');
     assert.deepEqual((await targets(B)).hashes, []);
-    // the owner signs in again on that phone: the same installation and secret, its own row
+    // the owner signs in again on that phone: the same installation and secret, its own proven token -- active at once
     const again = await second(A);
-    assert.equal((await reg(again, iA, t, 1)).status, 'registered');
+    assert.equal((await reg1(again, iA, t, 1)).status, 'registered');
     assert.deepEqual((await targets(A)).hashes, [await hex(t)]);
-    // the owner's own reinstall (a new installation id + secret, the same OS token) moves it
+    // the owner's own reinstall (a new installation id + secret, the same OS token) moves it at once
     const iA2 = uuid();
-    assert.equal((await reg(again, iA2, t, null)).status, 'registered');
+    assert.equal((await reg1(again, iA2, t, null)).status, 'registered');
     assert.match(await row(iA), /^revoked:taken_over:/u);
     // the owner turns it off: no row holds the token any more, the claim still does
     assert.equal((await unreg(again, iA2)).status, 'unregistered');
     assert.equal(await activeFor(t), '0');
-    assert.equal((await reg(B.client, iB, t, null)).status, 'DEVICE_IN_USE', 'an unregistered token moved to another account');
-    assert.equal(await row(iB), 'none');
+    assert.equal((await reg1(B.client, uuid(), t, null)).status, 'pending_proof', 'an unregistered token became active for another account');
+    assert.deepEqual((await targets(B)).hashes, []);
   },
-  // (H4 #25 P2-1) lost secure storage: the same person registers again normally; another person is held (DEVICE_IN_USE) until the account
-  // holding the token is gone (then purge releases the claim)
+  // (H4 #25 P2-1 / #26 P2-1) lost secure storage: the same person registers again at once; another person (the phone given away) is
+  // pending and gets it by answering the proof on that phone -- the earlier owner's registration then stops (no permanent lock-out)
   async secretLossRecovery() {
     const A = await person('sl-a'), B = await person('sl-b');
     const i1 = uuid(), t = fakeToken();
     assert.equal((await reg(A.client, i1, t, null)).status, 'registered');
     const i2 = uuid();   // storage wiped: a new installation id and a new secret
-    assert.equal((await reg(A.client, i2, t, null)).status, 'registered');
+    assert.equal((await reg1(A.client, i2, t, null)).status, 'registered');
     assert.deepEqual((await targets(A)).hashes, [await hex(t)]);
     const i3 = uuid();   // the phone wiped again and given to B
-    assert.equal((await reg(B.client, i3, t, null)).status, 'DEVICE_IN_USE');
-    // A's account gone (simulated in this throw-away world: the account row removed as the superuser), purge releases the claim
-    await sql(SUPER, `set session_replication_role = replica; delete from public.common_accounts where user_id = '${A.id}'`);
-    const counts = JSON.parse(await sql(OWNER, `select private.postona_push_devices_purge()`)) as Record<string, number>;
-    assert.ok(counts.claims_released >= 1, JSON.stringify(counts));
-    assert.equal((await reg(B.client, i3, t, null)).status, 'registered');
+    assert.equal((await reg1(B.client, i3, t, null)).status, 'pending_proof');
+    assert.deepEqual((await targets(A)).hashes, [await hex(t)], 'a pending registration stopped the owner');
+    const bState = () => Promise.resolve({ installationId: i3, deviceSecret: secretOf(i3), platform: 'ios', pushToken: t, expectedVersion: 1, notificationsEnabled: true });
+    assert.equal((clean(await pc.confirmPushDevice(B.client, bState, { kind: 'postona_push_proof', installation_id: i3, nonce: await issueNonce(i3) })) as Answer).status, 'registered');
+    assert.match(await row(i2), /^revoked:taken_over:/u);
+    assert.deepEqual((await targets(A)).hashes, []);
     assert.deepEqual((await targets(B)).hashes, [await hex(t)]);
+    assert.equal(await claimOf(t), `${B.id}:${i3}`);
   },
   // (H4 #25 P2-2) "off" before the first registration landed is kept: the delayed first registration is STALE, "on" again works
   async offBeforeFirstRegistration() {
@@ -374,7 +404,10 @@ const checks: Record<string, () => Promise<void>> = {
     assert.match(await row(inst), /^revoked:unregistered:1:/u);
     assert.deepEqual((await targets(A)).hashes, []);
     // "on" again, from the version the off answered
-    assert.equal((clean(await pc.syncPushDevice(A.client, () => Promise.resolve({ ...delayed, expectedVersion: 1, notificationsEnabled: true }))) as Answer).status, 'registered');
+    const on = () => Promise.resolve({ ...delayed, expectedVersion: 1, notificationsEnabled: true });
+    assert.equal((clean(await pc.syncPushDevice(A.client, on)) as Answer).status, 'pending_proof');
+    assert.equal((clean(await pc.confirmPushDevice(A.client, () => Promise.resolve({ ...delayed, expectedVersion: 2, notificationsEnabled: true }),
+      { kind: 'postona_push_proof', installation_id: inst, nonce: await issueNonce(inst) })) as Answer).status, 'registered');
     assert.deepEqual((await targets(A)).hashes, [await hex(t)]);
   },
   // (H4 #25 P2-2) the first registration and "off" at once (both queued on the installation's lock, either order): the phone ends off
@@ -392,7 +425,7 @@ const checks: Record<string, () => Promise<void>> = {
       assert.ok((await holder.close()).ok);
       const [r, u] = await Promise.all([pR, pU]);
       assert.equal(u.status, 'unregistered');
-      assert.ok(r.status === 'registered' || r.status === 'STALE_REGISTRATION', r.status);
+      assert.ok(r.status === 'pending_proof' || r.status === 'STALE_REGISTRATION', r.status);
       assert.match(await row(inst), /^revoked:unregistered:/u, `round ${k}: the phone is not off (register ${r.status})`);
       assert.equal(await activeFor(t), '0');
     }
@@ -435,29 +468,36 @@ const checks: Record<string, () => Promise<void>> = {
     assert.doesNotMatch(await row(inst), /^active:/u, 'rapid toggles ending "off" left the phone on');
     assert.deepEqual((await targets(A)).hashes, []);
   },
-  // two registrations of one token at once (A on a new installation, B on its existing one): serialized; B (first) holds it, A is refused
-  // (B's registration is live), exactly one active, no error
+  // two proofs of one token at once (two people's pending registrations, another person's proven one active): serialized on the token lock,
+  // the later proof wins, exactly one active, no error
   async sameTokenRace() {
-    const A = await person('rc-a'), B = await person('rc-b');
-    const iA = uuid(), iB = uuid(), t = fakeToken();
-    assert.equal((await reg(B.client, iB, fakeToken(), null)).status, 'registered');
+    const C = await person('rc-c'), A = await person('rc-a'), B = await person('rc-b');
+    const i0 = uuid(), iA = uuid(), iB = uuid(), t = fakeToken();
+    assert.equal((await reg(C.client, i0, t, null)).status, 'registered');
+    assert.equal((await reg1(A.client, iA, t, null)).status, 'pending_proof');
+    assert.equal((await reg1(B.client, iB, t, null)).status, 'pending_proof');
+    const nA = await issueNonce(iA), nB = await issueNonce(iB);
+    const proof = (c: SupabaseClient, inst: string, nonce: string) =>
+      (async () => clean(await pd.registerPushDevice(c, { installationId: inst, deviceSecret: secretOf(inst), platform: 'ios', pushToken: t, expectedVersion: 1, proofNonce: nonce })) as Answer)();
     const holder = new Session('g5pd-holder-token');
-    await holder.send(`begin; select 1 from private.postona_push_devices where installation_id = '${iB}' for update;`);
+    await holder.send(`begin; select 1 from private.postona_push_devices where installation_id = '${i0}' for update;`);
     assert.ok(await holding('g5pd-holder-token'));
-    const pB = reg(B.client, iB, t, 1);
-    assert.ok(await until(async () => await waitingCalls('postona_push_device_register') === 1), 'B did not queue behind the row lock');
-    let aDone = false;
-    const pA = reg(A.client, iA, t, null).finally(() => { aDone = true; });
-    await until(async () => aDone || await waitingCalls('postona_push_device_register') === 2, 5_000);
+    const pA = proof(A.client, iA, nA);
+    assert.ok(await until(async () => await waitingCalls('postona_push_device_register') === 1), 'A did not queue behind the row lock');
+    let bDone = false;
+    const pB = proof(B.client, iB, nB).finally(() => { bDone = true; });
+    await until(async () => bDone || await waitingCalls('postona_push_device_register') === 2, 5_000);
     await holder.send('commit;');
     assert.ok((await holder.close()).ok);
-    const [rB, rA] = await Promise.all([pB, pA]);
+    const [rA, rB] = await Promise.all([pA, pB]);
+    assert.equal(rA.status, 'registered', `A: ${rA.status}`);
     assert.equal(rB.status, 'registered', `B: ${rB.status}`);
-    assert.equal(rA.status, 'DEVICE_IN_USE', `A: ${rA.status}`);
     assert.equal(await activeFor(t), '1');
-    assert.match(await row(iB), /^active:-:2:/u, 'B registered first (it held the token); A may not take it from a live registration');
-    assert.deepEqual((await targets(A)).hashes, []);
+    assert.match(await row(i0), /^revoked:taken_over:/u);
+    assert.match(await row(iA), /^revoked:taken_over:/u, 'A proved first, then B');
     assert.deepEqual((await targets(B)).hashes, [await hex(t)]);
+    assert.deepEqual((await targets(A)).hashes, []);
+    assert.deepEqual((await targets(C)).hashes, []);
   },
   // another person cannot unregister, see or change an installation that is not theirs (and learns nothing about it)
   async othersCannotUnregister() {
@@ -538,7 +578,7 @@ const checks: Record<string, () => Promise<void>> = {
     const holder = new Session('g5pd-holder-sw');
     await holder.send(`begin; select pg_advisory_xact_lock(private.postona_push_lock_key('token', '${await hex(t)}'));`);
     assert.ok(await holding('g5pd-holder-sw'));
-    const pR = reg(A.client, inst, t, null);
+    const pR = reg1(A.client, inst, t, null);
     assert.ok(await until(async () => await waitingCalls('postona_push_device_register') === 1));
     const pS = runFile(STOP);
     assert.ok(await until(async () => await waitingStop() === 1), 'the stop did not wait for the registration holding the fence');
@@ -547,7 +587,7 @@ const checks: Record<string, () => Promise<void>> = {
     const [r, stop] = await Promise.all([pR, pS]);
     try {
       assert.ok(stop.ok, stop.error);
-      assert.equal(r.status, 'registered');
+      assert.equal(r.status, 'pending_proof');
       assert.match(await row(inst), /^revoked:stopped:2:true:true$/u);
       assert.equal(await sql(SUPER, `select count(*) from private.postona_push_devices where status = 'active' or push_token is not null`), '0');
       assert.deepEqual(await targets(A), { verdict: 'PUSH_DEVICES_STOPPED', hashes: [] });
@@ -608,7 +648,9 @@ const checks: Record<string, () => Promise<void>> = {
     const state = { installationId: inst, deviceSecret: secretOf(inst), platform: 'ios', pushToken: t1, expectedVersion: null as number | null, notificationsEnabled: true };
     const now = () => Promise.resolve({ ...state });
     const first = clean(await pd.syncPushDevice(A.client, now)) as Answer;
-    assert.equal(first.status, 'registered');
+    assert.equal(first.status, 'pending_proof');
+    assert.equal((clean(await pd.confirmPushDevice(A.client, () => Promise.resolve({ ...state, expectedVersion: 1 }),
+      { kind: 'postona_push_proof', installation_id: inst, nonce: await issueNonce(inst) })) as Answer).status, 'registered');
     state.expectedVersion = 1;
     const captured = { ...state };   // an operation built now, run later
     // "off": the flag first, then unregister
@@ -635,6 +677,136 @@ const checks: Record<string, () => Promise<void>> = {
     state.pushToken = t2;
     assert.equal((clean(await pd.recoverStaleRegistration(A.client, now)) as Answer).status, 'registered');
     assert.deepEqual((await targets(A)).hashes, [await hex(t2)]);
+  },
+  // (H4 #26 P2-1) a token nobody proved is PENDING: not a target, no claim; a wrong nonce is refused, an expired one too; five wrong answers
+  // end it; the nonce the worker sent to that token, answered by the phone, makes it active
+  async firstTokenNeedsProof() {
+    const A = await person('fp');
+    const inst = uuid(), t = fakeToken();
+    const p = await reg1(A.client, inst, t, null);
+    assert.equal(p.status, 'pending_proof', `an unproven first registration: ${p.status}`);
+    assert.match(await row(inst), /^pending:-:1:false:false$/u);
+    assert.deepEqual((await targets(A)).hashes, [], 'an unproven token is a delivery target');
+    assert.equal(await claimOf(t), 'none');
+    const l = await list(A.client);
+    assert.deepEqual([l.devices[0].status, l.devices[0].deliverable], ['pending', false]);
+    const nonce = await issueNonce(inst);
+    assert.match(nonce, /^[0-9a-f]{64}$/u);
+    const wrong = () => pd.registerPushDevice(A.client, { installationId: inst, deviceSecret: secretOf(inst), platform: 'ios', pushToken: t, expectedVersion: 1, proofNonce: randomNonce() });
+    assert.equal((clean(await wrong()) as Answer).status, 'PROOF_INVALID');
+    assert.deepEqual((await targets(A)).hashes, []);
+    assert.equal((clean(await pd.registerPushDevice(A.client, { installationId: inst, deviceSecret: secretOf(inst), platform: 'ios', pushToken: t, expectedVersion: 1, proofNonce: nonce })) as Answer).status, 'registered');
+    assert.deepEqual((await targets(A)).hashes, [await hex(t)]);
+    assert.equal(await claimOf(t), `${A.id}:${inst}`);
+    // an expired nonce
+    const i2 = uuid(), t2 = fakeToken();
+    assert.equal((await reg1(A.client, i2, t2, null)).status, 'pending_proof');
+    const n2 = await issueNonce(i2);
+    await sql(OWNER, `update private.postona_push_devices set proof_expires_at = now() - interval '1 second' where installation_id = '${i2}'`);
+    assert.equal((clean(await pd.registerPushDevice(A.client, { installationId: i2, deviceSecret: secretOf(i2), platform: 'ios', pushToken: t2, expectedVersion: 1, proofNonce: n2 })) as Answer).status, 'PROOF_EXPIRED');
+    assert.match(await row(i2), /^pending:/u);
+    // five wrong answers end it (the token erased)
+    const i3 = uuid(), t3 = fakeToken();
+    assert.equal((await reg1(A.client, i3, t3, null)).status, 'pending_proof');
+    await issueNonce(i3);
+    for (let k = 0; k < 5; k++) {
+      assert.equal((clean(await pd.registerPushDevice(A.client, { installationId: i3, deviceSecret: secretOf(i3), platform: 'ios', pushToken: t3, expectedVersion: 1, proofNonce: randomNonce() })) as Answer).status, 'PROOF_INVALID');
+    }
+    assert.match(await row(i3), /^revoked:proof_failed:2:true:true$/u);
+    // never proven in time: purge ends it
+    await sql(OWNER, `update private.postona_push_devices set pending_expires_at = now() - interval '1 second' where installation_id = '${i2}'`);
+    await sql(OWNER, `select private.postona_push_devices_purge()`);
+    assert.match(await row(i2), /^revoked:proof_expired:2:true:true$/u);
+  },
+  // (H4 #26 P2-1) a wrong first binding locks nobody out: X registered the victim's token first (it stays pending, X never gets the nonce:
+  // it goes to the victim's phone, whose app ignores a proof for another installation); the victim's phone proves and gets it
+  async wrongFirstBindingRecovers() {
+    const X = await person('wb-x'), V = await person('wb-v');
+    const iX = uuid(), iV = uuid(), t = fakeToken();
+    assert.equal((await reg1(X.client, iX, t, null)).status, 'pending_proof');
+    assert.equal((await reg1(V.client, iV, t, null)).status, 'pending_proof');
+    const nX = await issueNonce(iX);
+    const nV = await issueNonce(iV);
+    // both pushes reach the victim's phone (the token is its); its app answers only its own installation's
+    const vState = () => Promise.resolve({ installationId: iV, deviceSecret: secretOf(iV), platform: 'ios', pushToken: t, expectedVersion: 1, notificationsEnabled: true });
+    assert.equal((clean(await pc.confirmPushDevice(V.client, vState, { kind: 'postona_push_proof', installation_id: iX, nonce: nX })) as Answer).status, 'ignored');
+    assert.equal((clean(await pc.confirmPushDevice(V.client, vState, { kind: 'postona_push_proof', installation_id: iV, nonce: nV })) as Answer).status, 'registered');
+    assert.deepEqual((await targets(V)).hashes, [await hex(t)]);
+    assert.deepEqual((await targets(X)).hashes, []);
+    // X never saw the nonce: a guess is refused, and the victim's nonce does not fit X's registration
+    assert.equal((clean(await pd.registerPushDevice(X.client, { installationId: iX, deviceSecret: secretOf(iX), platform: 'ios', pushToken: t, expectedVersion: 1, proofNonce: randomNonce() })) as Answer).status, 'PROOF_INVALID');
+    assert.equal((clean(await pd.registerPushDevice(X.client, { installationId: iX, deviceSecret: secretOf(iX), platform: 'ios', pushToken: t, expectedVersion: 1, proofNonce: nV })) as Answer).status, 'PROOF_INVALID');
+    assert.equal(await activeFor(t), '1');
+    assert.equal(await claimOf(t), `${V.id}:${iV}`);
+    // and X registering again is pending again (never active, never taking it over)
+    assert.notEqual((await reg1(X.client, uuid(), t, null)).status, 'registered');
+    assert.deepEqual((await targets(X)).hashes, []);
+  },
+  // (H4 #26 P2-1) the token claim is released when its account is gone
+  async claimReleaseOnAccountGone() {
+    const A = await person('cr');
+    const t = fakeToken();
+    assert.equal((await reg(A.client, uuid(), t, null)).status, 'registered');
+    assert.notEqual(await claimOf(t), 'none');
+    await sql(SUPER, `set session_replication_role = replica; delete from public.common_accounts where user_id = '${A.id}'`);
+    const counts = JSON.parse(await sql(OWNER, `select private.postona_push_devices_purge()`)) as Record<string, number>;
+    assert.ok(counts.claims_released >= 1, JSON.stringify(counts));
+    assert.equal(await claimOf(t), 'none');
+  },
+  // (H4 #26 P2-2) one per-person cap for register and "off" alike, taken under one per-person lock: at 100 rows with nothing old enough to
+  // prune, "off" records nothing and every new installation's registration is refused (no delivery); rows older than a day are pruned
+  // for room; two concurrent "off"s queue on the person's lock; the count never exceeds 100; "on" again from a recorded "off" works
+  async capacityAtomic() {
+    const A = await person('cap');
+    const count = async () => Number(await sql(SUPER, `select count(*) from private.postona_push_devices where user_id = '${A.id}'`));
+    await seedRevoked(A, 99);
+    assert.equal(await count(), 99);
+    const i100 = uuid();
+    const off1 = clean(await pc.unregisterPushDevice(A.client, i100, secretOf(i100))) as { status: string; recorded?: boolean };
+    assert.deepEqual([off1.status, off1.recorded], ['unregistered', true]);
+    assert.equal(await count(), 100);
+    const i101 = uuid();
+    const off2 = clean(await pc.unregisterPushDevice(A.client, i101, secretOf(i101))) as { status: string; recorded?: boolean };
+    assert.deepEqual([off2.status, off2.recorded], ['unregistered', false], 'a 101st row, or a refused "off"');
+    assert.equal(await count(), 100);
+    assert.equal((await reg(A.client, i101, fakeToken(), null)).status, 'DEVICE_LIMIT', 'the unrecorded "off" installation registered (delivery after "off")');
+    assert.equal((await reg(A.client, uuid(), fakeToken(), null)).status, 'DEVICE_LIMIT', 'register is outside the cap "off" respects');
+    assert.equal(await count(), 100);
+    // two rows older than a day: two concurrent "off"s of new installations, queued on the person's lock, each prune one
+    await sql(SUPER, `update private.postona_push_devices set revoked_at = now() - interval '2 days' where installation_id in (select installation_id from private.postona_push_devices
+      where user_id = '${A.id}' and installation_id not in ('${i100}') order by installation_id limit 2)`);
+    const holder = new Session('g5pd-holder-cap');
+    await holder.send(`begin; select pg_advisory_xact_lock(private.postona_push_lock_key('user', '${A.id}'));`);
+    assert.ok(await holding('g5pd-holder-cap'));
+    const ia = uuid(), ib = uuid();
+    const pa = (async () => clean(await pc.unregisterPushDevice(A.client, ia, secretOf(ia))) as { recorded?: boolean })();
+    const pb = (async () => clean(await pc.unregisterPushDevice(A.client, ib, secretOf(ib))) as { recorded?: boolean })();
+    assert.ok(await until(async () => await waitingCalls('postona_push_device_unregister') === 2), 'the two "off"s did not queue on the person\'s lock');
+    await holder.send('commit;');
+    assert.ok((await holder.close()).ok);
+    const [ra, rb] = await Promise.all([pa, pb]);
+    assert.deepEqual([ra.recorded, rb.recorded], [true, true]);
+    assert.equal(await count(), 100);
+    // "on" again from a recorded "off": its own row, no room needed
+    assert.equal((await reg(A.client, i100, fakeToken(), 1)).status, 'registered');
+    assert.equal(await count(), 100);
+  },
+  // (H4 #26 P2-2) retention: revoked rows go 30 days after their revoke; a claim goes 180 days after its last activation when no active row
+  // holds the token, and stays while one does
+  async retentionPurge() {
+    const A = await person('ret');
+    const iOld = uuid(), tOld = fakeToken(), iLive = uuid(), tLive = fakeToken();
+    assert.equal((await reg(A.client, iOld, tOld, null)).status, 'registered');
+    assert.equal((await unreg(A.client, iOld)).status, 'unregistered');
+    assert.equal((await reg(A.client, iLive, tLive, null)).status, 'registered');
+    await sql(SUPER, `update private.postona_push_devices set revoked_at = now() - interval '31 days' where installation_id = '${iOld}';
+      update private.postona_push_token_claims set updated_at = now() - interval '181 days' where user_id = '${A.id}'`);
+    const counts = JSON.parse(await sql(OWNER, `select private.postona_push_devices_purge()`)) as Record<string, number>;
+    assert.ok(counts.history_deleted >= 1 && counts.claims_expired >= 1, JSON.stringify(counts));
+    assert.equal(await row(iOld), 'none');
+    assert.equal(await claimOf(tOld), 'none');
+    assert.equal(await claimOf(tLive), `${A.id}:${iLive}`, 'a claim with an active row expired');
+    assert.deepEqual((await targets(A)).hashes, [await hex(tLive)]);
   },
   // the rollback refuses while a device is active (its tokens would be dropped unseen; stop erases them first)
   async rollbackRefusesActive() {
@@ -811,6 +983,47 @@ Deno.test({ name: 'push: BEFORE (PR #672 a04c1709, its own install and client): 
   }
 });
 
+Deno.test({ name: 'push: BEFORE (PR #676 6bd753cf, its own install and client): H4 #26 P2-1 a never-proven first registration of a (leaked) token is active and deliverable, and the real phone is then locked out (DEVICE_IN_USE, also after the first registrant signs out); P2-2 at 100 rows "off" of a new installation is refused (DEVICE_LIMIT) while a normal first registration still succeeds (101 rows)', ...opts }, async () => {
+  await ensureProfile();
+  assert.equal(await sql(SUPER, `select to_regclass('private.postona_push_devices') is null`), 't');
+  const i676 = await psql(OWNER, ['-f', `${PR676}/${INSTALL}`]);
+  assert.ok(i676.ok, i676.error);
+  await reloadApi('present');
+  try {
+    // P2-1
+    const X = await person('b676-x'), V = await person('b676-v');
+    const phoneX = await second(X);
+    const iX = uuid(), iV = uuid(), t = fakeToken();
+    const r676 = (c: SupabaseClient, inst: string) =>
+      (async () => clean(await pd676.registerPushDevice(c, { installationId: inst, deviceSecret: secretOf(inst), platform: 'ios', pushToken: t, expectedVersion: null })) as Answer)();
+    assert.equal((await r676(phoneX, iX)).status, 'registered', 'P2-1 (#676): an unproven first registration is active');
+    assert.deepEqual((await targets(X)).hashes, [await hex(t)], 'P2-1 (#676): an unproven token is a delivery target');
+    assert.equal((await r676(V.client, iV)).status, 'DEVICE_IN_USE', 'P2-1 (#676): the real phone is locked out');
+    await phoneX.auth.signOut({ scope: 'local' });
+    assert.equal((await r676(V.client, iV)).status, 'DEVICE_IN_USE', 'P2-1 (#676): still locked out after the first registrant signed out');
+    // P2-2
+    const A = await person('b676-a');
+    const count = async () => Number(await sql(SUPER, `select count(*) from private.postona_push_devices where user_id = '${A.id}'`));
+    await seedRevoked(A, 99);
+    const i1 = uuid(), i2 = uuid();
+    assert.equal((clean(await pd676.unregisterPushDevice(A.client, i1, secretOf(i1))) as Answer).status, 'unregistered');
+    assert.equal(await count(), 100);
+    assert.equal((clean(await pd676.unregisterPushDevice(A.client, i2, secretOf(i2))) as Answer).status, 'DEVICE_LIMIT', 'P2-2 (#676): "off" of a new installation refused at 100 rows');
+    const i3 = uuid();
+    assert.equal((clean(await pd676.registerPushDevice(A.client, { installationId: i3, deviceSecret: secretOf(i3), platform: 'ios', pushToken: fakeToken(), expectedVersion: null })) as Answer).status, 'registered',
+      'P2-2 (#676): register is outside the cap');
+    assert.equal(await count(), 101, 'P2-2 (#676): the cap was passed');
+    assert.equal((clean(await pd676.registerPushDevice(A.client, { installationId: i2, deviceSecret: secretOf(i2), platform: 'ios', pushToken: fakeToken(), expectedVersion: null })) as Answer).status, 'registered',
+      'P2-2 (#676): the installation whose "off" was refused registered and is deliverable');
+  } finally {
+    const s = await psql(OWNER, ['-f', `${PR676}/${STOP}`]);
+    assert.ok(s.ok, s.error);
+    const r = await psql(OWNER, ['-f', `${PR676}/${ROLLBACK}`]);
+    assert.ok(r.ok, r.error);
+    await reloadApi('absent');
+  }
+});
+
 Deno.test({ name: 'push: install: refused as a superuser, on a squatted name, a foreign-owned function, a changed gate, or a failing postcondition -- each changing nothing (one transaction: no partial state); then idempotent; the table and the worker side reach no API role; only the three RPCs are definers', ...opts }, async () => {
   await ensureProfile();
   const before = await catalog();
@@ -853,6 +1066,7 @@ Deno.test({ name: 'push: install: refused as a superuser, on a squatted name, a 
     'postona_push_claims_session:false:false:false,postona_push_delivery_targets:false:false:false,postona_push_device_invalidate:false:false:false,'
     + 'postona_push_device_json:false:false:false,postona_push_device_list:true:true:false,postona_push_device_register:true:true:false,'
     + 'postona_push_device_unregister:true:true:false,postona_push_devices_purge:false:false:false,postona_push_lock_key:false:false:false,'
+    + 'postona_push_make_room:false:false:false,postona_push_proof_issue:false:false:false,'
     + 'postona_push_session_live:false:false:false,postona_push_writer_gate:false:false:false');
   const sr = await psql(SUPER, ['-c', `set role service_role; select private.postona_push_delivery_targets(null, null)`]);
   assert.equal(sr.ok, false);
@@ -873,6 +1087,15 @@ Deno.test({ name: 'push: H4 #25 P2-2 after: "off" before the first registration 
   await checks.firstRegistrationVsOff();
   await checks.oldSuccessKeepsOff();
   await checks.rapidTogglesEndOff();
+});
+
+Deno.test({ name: 'push: H4 #26 P2-1 / P2-2 after: an unproven first token is pending (never a target, no claim) until the phone answers the provider nonce; wrong / expired / five wrong answers; a wrong first binding never locks the real phone out; the claim is released when the account is gone; one per-person cap and lock for register and "off" (100 rows, "off" never lost: fail-closed), history pruning; retention purge', ...opts }, async () => {
+  await installed();
+  await checks.firstTokenNeedsProof();
+  await checks.wrongFirstBindingRecovers();
+  await checks.claimReleaseOnAccountGone();
+  await checks.capacityAtomic();
+  await checks.retentionPurge();
 });
 
 Deno.test({ name: 'push: register -> list -> token update (compare-and-set) -> the same call again (unchanged) -> replays refused -> unregister (idempotent; the token erased) -> register again; bad input; the device limit; the worker\'s targets follow every step, no answer carries a token', ...opts }, async () => {
@@ -1085,7 +1308,7 @@ Deno.test({ name: 'push: races (live sessions hold the lock, the API calls queue
   const ra = clean(r.data) as { status: string; device?: { registration_version: number }; registration_version?: number };
   assert.equal(ua.status, 'unregistered');
   const final = await row(inst);
-  if (ra.status === 'registered') {
+  if (ra.status === 'registered' || ra.status === 'pending_proof') {
     // register first (v4), then unregister (v5)
     assert.deepEqual([ra.device?.registration_version, ua.device.registration_version], [4, 5]);
     assert.match(final, /^revoked:unregistered:5:/u);
@@ -1123,7 +1346,9 @@ Deno.test({ name: 'push: the worker side: a stale provider receipt never revokes
   assert.match(await row(idel), /^revoked:account_gone:2:true:true$/u);
   assert.match(await row(ik), /^active:-:1:false:false$/u);
   assert.deepEqual((await targets(keep)).hashes, [await hex(tk)]);
-  assert.equal(await sql(OWNER, `select private.postona_push_devices_purge()::text`), '{"account_gone": 0, "session_ended": 0, "claims_released": 0, "stale_generation": 0}');
+  const again = JSON.parse(await sql(OWNER, `select private.postona_push_devices_purge()`)) as Record<string, number>;
+  assert.deepEqual(Object.keys(again).sort(), ['account_gone', 'claims_expired', 'claims_released', 'history_deleted', 'proof_expired', 'session_ended', 'stale_generation']);
+  assert.deepEqual(Object.values(again).filter((v) => v !== 0), [], JSON.stringify(again));
 });
 
 Deno.test({ name: 'push: stop / re-install / rollback: rollback refuses while a device is active and while another function names the worker side; stop erases every token and takes EXECUTE away; the install starts it again; stop + rollback restores the catalog as it was before the install', ...opts }, async () => {
@@ -1174,26 +1399,36 @@ Deno.test({ name: 'push: mutants: each guard taken out (or weakened) makes its c
     ['M2 targets ignore the generation', `and d.status = 'active' and d.lifecycle_version = v_lv\n`, `and d.status = 'active'\n`, 'restartMakesOldStale'],
     ['M3 targets ignore MV', `  if v_verdict <> 'active' then`, `  if false then`, 'ownerLossStopsDelivery'],
     ['M4 no compare-and-set', `    if p_expected_version is distinct from r.registration_version then`, `    if false then`, 'staleReplayRefused'],
-    ['M5 no token takeover', `  if v_holder is not null then\n    update`, `  if false then\n    update`, 'signedOutTokenStaysWithOwner'],
+    ['M5 no token takeover', `  if v_direct and v_holder is not null then`, `  if false then`, 'signedOutTokenStaysWithOwner'],
     ['M6 no token lock', `  perform pg_catalog.pg_advisory_xact_lock(private.postona_push_lock_key('token', pg_catalog.encode(v_hash, 'hex')));\n`, ``, 'sameTokenRace'],
     ['M7 unregister any installation', `where d.installation_id = p_installation_id and d.user_id = v_user for update;`, `where d.installation_id = p_installation_id for update;`, 'othersCannotUnregister'],
     ['M8 list every row', `from private.postona_push_devices d where d.user_id = v_user), '[]'::jsonb));`, `from private.postona_push_devices d), '[]'::jsonb));`, 'othersCannotList'],
     ['M9 receipt ignores the version', `where d.installation_id = p_installation_id and d.registration_version = p_registration_version and d.status = 'active';`,
       `where d.installation_id = p_installation_id and d.status = 'active';`, 'staleReceiptKeepsNewer'],
     ['M10 no workspace gate', `  return case v_state when 'own' then null when 'absent' then 'WORKSPACE_REQUIRED' else coalesce(v_state, 'OWN_WORKSPACE_CONFLICT') end;`, `  return null;`, 'workspaceGateOnRegister'],
-    ['M11 unchanged ignores the session', ` and r.session_id = v_session\n`, `\n`, 'newSessionRebinds'],
+    ['M11 unchanged ignores the session', `     and r.session_id = v_session and r.lifecycle_version = v_lv`, `     and r.lifecycle_version = v_lv`, 'newSessionRebinds'],
     ['M12 no T13', `    perform private.account_lifecycle_assert_active_service_write(v_user, 'x_autopost');`, `    null;`, 'serviceEndRefusesRegister'],
     ['M14 register ignores the stop fence', `  if v_enabled is not true then\n    return pg_catalog.jsonb_build_object('status', 'PUSH_DEVICES_STOPPED');`,
       `  if false then\n    return pg_catalog.jsonb_build_object('status', 'PUSH_DEVICES_STOPPED');`, 'stopFencesInFlightRegistration'],
     ['M15 targets ignore the stop fence', `  if (select c.enabled from private.postona_push_control c where c.id) is not true then\n    return pg_catalog.jsonb_build_object('verdict', 'PUSH_DEVICES_STOPPED'`,
       `  if false then\n    return pg_catalog.jsonb_build_object('verdict', 'PUSH_DEVICES_STOPPED'`, 'disabledFlagStopsDelivery'],
     ['M16 no device-secret check', `  if r.installation_id is not null and r.device_secret_sha256 is distinct from v_secret then`, `  if false then`, 'leakedInstallationRefused'],
-    ['M17 the token claim ignored', `(v_claim_user is not null and v_claim_user is distinct from v_user and (v_claim_inst is distinct from p_installation_id or r.installation_id is null))\n     or `, ``, 'signedOutTokenStaysWithOwner'],
+    ['M17 every token active at once (no proof)', `  v_direct := v_claim_user is not distinct from v_user or (v_claim_inst is not distinct from p_installation_id and r.installation_id is not null);`, `  v_direct := true;`, 'firstTokenNeedsProof'],
     ['M19 "off" before the first registration keeps nothing', `    if p_device_secret is null or exists (select 1 from private.postona_push_devices d where d.installation_id = p_installation_id) then`, `    if true then`, 'offBeforeFirstRegistration'],
-    ['M20 the claim never written', `  insert into private.postona_push_token_claims (token_sha256, user_id, installation_id, updated_at)\n  values (v_hash, v_user, p_installation_id, pg_catalog.clock_timestamp())\n  on conflict (token_sha256) do update set user_id = excluded.user_id, installation_id = excluded.installation_id, updated_at = excluded.updated_at;\n`, ``, 'signedOutTokenStaysWithOwner'],
-    ['M21 no handover by the device secret', `(v_claim_inst is distinct from p_installation_id or r.installation_id is null)`, `true`, 'handoverWithDeviceSecret'],
-    ['M22 purge never releases a claim', `  delete from private.postona_push_token_claims c\n   where not exists`, `  delete from private.postona_push_token_claims c\n   where false and not exists`, 'secretLossRecovery'],
-    ['M18 no lock timeout', [`set row_security = off set lock_timeout = '5s' as $$`, `'lock_timeout=5s' = any`], [`set row_security = off set lock_timeout = '0' as $$`, `'lock_timeout=0' = any`], 'lockTimeoutBusy'],
+    ['M20 the claim never written', `  insert into private.postona_push_token_claims (token_sha256, user_id, installation_id, updated_at)\n  values (v_hash, v_user, p_installation_id, pg_catalog.clock_timestamp())\n  on conflict (token_sha256) do update set user_id = excluded.user_id, installation_id = excluded.installation_id, updated_at = excluded.updated_at;\n`, ``, 'handoverWithDeviceSecret'],
+    ['M21 no handover by the device secret', `(v_claim_inst is not distinct from p_installation_id and r.installation_id is not null)`, `false`, 'handoverWithDeviceSecret'],
+    ['M22 purge never releases a claim', `  delete from private.postona_push_token_claims c\n   where not exists`, `  delete from private.postona_push_token_claims c\n   where false and not exists`, 'claimReleaseOnAccountGone'],
+    ['M24 targets include pending', `d.workspace_id = p_brand_id and d.status = 'active'`, `d.workspace_id = p_brand_id and d.status in ('active', 'pending')`, 'leakedTokenRefused'],
+    ['M25 the nonce unchecked', `    if pg_catalog.sha256(pg_catalog.convert_to(p_proof_nonce, 'UTF8')) is distinct from r.proof_sha256 then`, `    if false then`, 'firstTokenNeedsProof'],
+    ['M26 the nonce never expires', `    if r.proof_sha256 is null or r.proof_expires_at <= pg_catalog.clock_timestamp() then`, `    if r.proof_sha256 is null then`, 'firstTokenNeedsProof'],
+    ['M27 register ignores the cap', `  if (r.installation_id is null or r.user_id is distinct from v_user) and not private.postona_push_make_room(v_user) then`, `  if false then`, 'capacityAtomic'],
+    ['M28 "off" without the person\'s lock', `lock_key('user', v_user::text));\n  perform pg_catalog.pg_advisory_xact_lock(private.postona_push_lock_key('installation'`,
+      `lock_key('user-off', v_user::text));\n  perform pg_catalog.pg_advisory_xact_lock(private.postona_push_lock_key('installation'`, 'capacityAtomic'],
+    ['M29 room prunes fresh rows', `x.revoked_at < pg_catalog.clock_timestamp() - interval '1 day'`, `true`, 'capacityAtomic'],
+    ['M30 history kept forever', `where d.status = 'revoked' and d.revoked_at < pg_catalog.clock_timestamp() - interval '30 days';`, `where false;`, 'retentionPurge'],
+    ['M31 claims never expire', `   where c.updated_at < pg_catalog.clock_timestamp() - interval '180 days'`, `   where false and c.updated_at < pg_catalog.clock_timestamp() - interval '180 days'`, 'retentionPurge'],
+    ['M18 no lock timeout', [`p_proof_nonce text default null)\nreturns jsonb language plpgsql volatile security definer set search_path = '' set row_security = off set lock_timeout = '5s' as $$`, `'lock_timeout=5s' = any`],
+      [`p_proof_nonce text default null)\nreturns jsonb language plpgsql volatile security definer set search_path = '' set row_security = off set lock_timeout = '0' as $$`, `'lock_timeout=0' = any`], 'lockTimeoutBusy'],
   ];
   const results: string[] = [];
   const swap = async (text: string) => {
@@ -1222,11 +1457,12 @@ Deno.test({ name: 'push: mutants: each guard taken out (or weakened) makes its c
       } catch {
         killed = true;
       }
+      await endHolders();
       results.push(`${name}: ${killed ? 'killed' : 'SURVIVED'}`);
     }
     // the rollback without its active-device refusal
     await swap(installText);
-    const from = `    if exists (select 1 from private.postona_push_devices d where d.status = 'active') then`;
+    const from = `    if exists (select 1 from private.postona_push_devices d where d.status in ('active', 'pending')) then`;
     assert.equal(rollbackText.split(from).length, 2);
     currentRollback = rollbackText.replace(from, () => '    if false then');
     let killed = false;

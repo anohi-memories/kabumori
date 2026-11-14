@@ -25,7 +25,7 @@ begin
       lock table private.postona_push_control in access exclusive mode;
     end if;
     lock table private.postona_push_devices in access exclusive mode;
-    if exists (select 1 from private.postona_push_devices d where d.status = 'active') then
+    if exists (select 1 from private.postona_push_devices d where d.status in ('active', 'pending')) then
       raise exception 'PUSH_ACTIVE_DEVICES: run 001_push_devices_stop.sql first (it erases every token)';
     end if;
   end if;
@@ -44,12 +44,14 @@ begin
 end;
 $pre$;
 
-drop function if exists public.postona_push_device_register(uuid, text, text, text, integer);
+drop function if exists public.postona_push_device_register(uuid, text, text, text, integer, text);
 drop function if exists public.postona_push_device_unregister(uuid, text);
 drop function if exists public.postona_push_device_list();
 drop function if exists private.postona_push_delivery_targets(uuid, text);
 drop function if exists private.postona_push_device_invalidate(uuid, integer);
 drop function if exists private.postona_push_devices_purge();
+drop function if exists private.postona_push_make_room(uuid);
+drop function if exists private.postona_push_proof_issue(integer, uuid);
 drop function if exists private.postona_push_writer_gate();
 drop function if exists private.postona_push_claims_session();
 drop function if exists private.postona_push_session_live(uuid, uuid);
