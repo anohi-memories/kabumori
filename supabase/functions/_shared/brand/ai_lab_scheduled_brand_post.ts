@@ -16,6 +16,10 @@ import {
 import { collectAiLabContentViolations } from "./ai_lab_theme_guard.ts";
 import type { AiLabTopicPort } from "./ai_lab_brand_post_store.ts";
 import { AiLabProviderNoPostError } from "./ai_lab_provider_outcome.ts";
+import {
+  AI_LAB_VOICE_STYLE_REJECTED,
+  prepareAiLabVoiceRewrite,
+} from "./ai_lab_voice_rewrite.ts";
 
 // 汎用テーマ・「個人開発は、」書き出し・直近投稿との重複で弾かれた場合に、再生成する最大試行回数
 // （初回を含む）。全て不合格なら投稿せず失敗側に倒す（重複投稿を出すより1枠見送る方が安全）。
@@ -44,7 +48,10 @@ function xPostIdFrom(response: unknown): string | null {
 export function preXReleaseReason(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (/^BRAND_POST_(GENERATION_FAILED|EMPTY_OUTPUT|LENGTH_LIMIT_EXCEEDED)/u.test(message)) return "PRE_X_GENERATION_FAILED";
-  if (message === "AI_LAB_CONTENT_DIVERSITY_REJECTED") return "PRE_X_CONTENT_REJECTED";
+  if (message === "AI_LAB_CONTENT_DIVERSITY_REJECTED" || message === "AI_LAB_VOICE_REWRITE_REJECTED" ||
+    message === "AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED" || message === AI_LAB_VOICE_STYLE_REJECTED) {
+    return "PRE_X_CONTENT_REJECTED";
+  }
   if (message === "AI_LAB_CROSS_BRAND_DUPLICATE") return "PRE_X_FINGERPRINT_BLOCKED";
   return "PRE_X_FAILED";
 }
@@ -59,6 +66,7 @@ export async function dispatchAiLabScheduledBrandPost({
   publishText,
   completePublishedPost,
   generate = generateBrandPost,
+  rewriteVoice,
   recentPostTexts = [],
   onContentRejected,
 }: {
@@ -87,6 +95,7 @@ export async function dispatchAiLabScheduledBrandPost({
     /** Violations of the previous attempt (empty on the first attempt) so the prompt can name them. */
     retryViolations: readonly string[];
   }) => Promise<AiLabEngagementDraft>;
+  rewriteVoice?: (request: ReturnType<typeof prepareAiLabVoiceRewrite>["request"]) => Promise<unknown>;
   /** Recent own-post texts, when the caller has them. Hash-only history cannot supply these today. */
   recentPostTexts?: readonly string[];
   onContentRejected?: (info: { attempt: number; violations: readonly string[] }) => void;
@@ -97,6 +106,7 @@ export async function dispatchAiLabScheduledBrandPost({
   xPostId: string;
   fingerprintPersisted: boolean;
   pollCreated?: boolean;
+  voiceRewriteDecision?: "edited" | "keep";
   topicEventKey: string;
   /** "PUBLISHED" / "IDEMPOTENT"、または確定の書き込みに失敗した場合 "SETTLE_FAILED"（イベントは provider_started のまま保持）。 */
   topicSettlement: string;
@@ -124,6 +134,7 @@ export async function dispatchAiLabScheduledBrandPost({
   let pollOptions: string[] | undefined;
   let characterCount: number;
   let normalizedTextSha256: string;
+  let voiceRewriteDecision: "edited" | "keep" | undefined;
   try {
     const recentFingerprints = await loadRecentFingerprints();
     let retryViolations: readonly string[] = [];
@@ -160,13 +171,30 @@ export async function dispatchAiLabScheduledBrandPost({
     assertAiLabEngagementAllowed(draft);
     // Snapshot validated options before the async provider step. Never silently fall back to text.
     pollOptions = draft.pollOptions ? [...draft.pollOptions] : undefined;
-    const duplicate = await checkCrossBrandDuplicate({
-      brandId: context.brand.id,
-      candidateText: draft.text,
-      recentFingerprints,
-    });
-    if (duplicate.blocked) {
-      throw new BrandContextError("AI_LAB_CROSS_BRAND_DUPLICATE");
+    const assertNoCrossBrandDuplicate = async (text: string) => {
+      const duplicate = await checkCrossBrandDuplicate({
+        brandId: context.brand.id,
+        candidateText: text,
+        recentFingerprints,
+      });
+      if (duplicate.blocked) {
+        throw new BrandContextError("AI_LAB_CROSS_BRAND_DUPLICATE");
+      }
+    };
+    await assertNoCrossBrandDuplicate(draft.text);
+
+    if (rewriteVoice) {
+      const { request, validate } = prepareAiLabVoiceRewrite(draft);
+      const { text: editedText, decision } = validate(await rewriteVoice(request));
+      voiceRewriteDecision = decision;
+      const edited = { ...draft, text: editedText, pollOptions };
+      characterCount = assertAiLabBrandPostDispatchAllowed(context, postType, editedText);
+      assertAiLabEngagementAllowed(edited);
+      if (collectAiLabContentViolations({ text: editedText, seedText: claim.topic, recentPostTexts }).length > 0) {
+        throw new BrandContextError("AI_LAB_CONTENT_DIVERSITY_REJECTED");
+      }
+      await assertNoCrossBrandDuplicate(editedText);
+      draft = edited;
     }
     normalizedTextSha256 = await fingerprintText(draft.text);
   } catch (error) {
@@ -250,6 +278,7 @@ export async function dispatchAiLabScheduledBrandPost({
     xPostId,
     fingerprintPersisted: completion.fingerprintPersisted,
     ...(pollOptions ? { pollCreated: true } : {}),
+    ...(voiceRewriteDecision ? { voiceRewriteDecision } : {}),
     topicEventKey: claim.eventKey,
     topicSettlement,
   };
