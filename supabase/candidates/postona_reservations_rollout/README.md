@@ -266,6 +266,11 @@ What it showed, for the operator:
   - With it, a second member joining, owning another workspace, or a role change waits for a notification write. While the workspace is not personal, the list writes nothing.
   - L38 runs submit (3 concurrent replays) → approve with a lost answer → read back → retry → one reservation → the worker sends once; the gated real entry answers 503 with 0 writes.
   - The G2 #9 P3 decisions are in the G1 contract doc, section 5a. No SQL / Edge change.
+- **G3-02 #22 (H1 #47 P3)**:
+  - Notifications get \`seq\` (stable order). \`list_notifications(limit, before default null)\` pages by cursor, and the Edge's one-argument call still gets the first page.
+  - The drain is bounded: 250 ms per lock, stop at the first held lock, 2 s in all.
+  - Proof: PG17 AP27 (230 rows, every page), AP28 (230 pending events over two lists) and VR22 (8 events under a 20 s holder vs a 15 s timeout); local L41.
+  - The Edge cursor wiring is outside this TASK's paths (contract doc 5b).
 - **G3-02 #21 (H1 #46)**:
   - **P2**: the change trigger (\`reservations_record_event\`) no longer calls \`notify()\`. It records the event per revision in \`reservation_events\`, a G3 table whose FK points only at the reservation row the change already holds, so the worker's result never waits for G5 locks. Measured: a 20 s account holder against a 15 s statement timeout, and the finish commits in 0.05 s.
   - **P3**: \`drain_reservation_events\` (the list's call) turns each recorded revision into one notification and deletes the record. A revision that cannot be written yet stays recorded.

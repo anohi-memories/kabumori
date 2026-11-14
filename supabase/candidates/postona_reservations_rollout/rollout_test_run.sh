@@ -331,9 +331,9 @@ expect_ro "RC1 018 installed, a 16-step manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_
 own -c "alter table postona_x_resv.push_outbox rename to push_outbox_g3rc" >/dev/null
 expect_ro "RC2 018 partly present" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 13 of 14 objects" rollback "${AC[@]}"
 own -c "alter table postona_x_resv.push_outbox_g3rc rename to push_outbox" >/dev/null
-own -c "alter function postona_x_resv.list_notifications(integer) rename to list_notifications_g3rc" >/dev/null
+own -c "alter function postona_x_resv.list_notifications(integer, bigint) rename to list_notifications_g3rc" >/dev/null
 expect_ro "RC2b an 018 function missing" "G3_ROLLOUT_ROLLBACK_PARTIAL: x018 has 13 of 14 objects" rollback "${AC[@]}"
-own -c "alter function postona_x_resv.list_notifications_g3rc(integer) rename to list_notifications" >/dev/null
+own -c "alter function postona_x_resv.list_notifications_g3rc(integer, bigint) rename to list_notifications" >/dev/null
 grep -v -E '^(install|rollback)\tx017\t' "$here/MANIFEST.tsv" > "$work/m_no017.tsv"
 expect_ro "RC3 017 installed, not in the manifest" "G3_ROLLOUT_ROLLBACK_MANIFEST_MISMATCH: x017 is installed but not in the manifest" rollback G3RO_MANIFEST="$work/m_no017.tsv" "${AC[@]}"
 awk -F '\t' 'BEGIN { OFS = "\t" } $1 == "rollback" && $2 == "x018" { $2 = "x019" } { print }' "$here/MANIFEST.tsv" > "$work/m_half018.tsv"   # the same count, another step id
