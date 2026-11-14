@@ -23,6 +23,12 @@ const TEXT_SCHEMA: JsonSchema = {
 const GENERATE_ROLE = "ai_salaryman_lab.brand_post.generate";
 const REWRITE_ROLE = "ai_salaryman_lab.brand_post.rewrite_voice";
 
+const DRAFT_VOICE_INSTRUCTIONS = [
+  "友達との会話くらいの短い日本語。具体的なものや場面を最初に一つ出し、その話に必要なことだけ書く。文字数の目安を埋めるために段落を足さない。",
+  "前置き→解説→反例→教訓の組み立てにしない。『線引き』『決まる気がする』のような抽象語や遠回しな締めに頼らず、普段使う動詞と短い文で言い切れるところまで。一般論のまとめや格言を足さず、具体的なところで終えてよい。",
+  "読点は一文に最大1個。不要な主語は省く。必要な一人称は『私』。事実や体験を作らず、質問は交流の指定がある場合だけ。『。笑』を使わず、笑や絵文字は話に合う場合だけ。",
+].join("\n");
+
 const VOICE_REWRITE_SCHEMA = {
   name: "ai_lab_voice_rewrite",
   schema: {
@@ -93,6 +99,9 @@ export function createAiLabTextProvider(
       model: AI_LAB_POST_MODEL,
       logicalRole: stage === "rewrite" ? REWRITE_ROLE : GENERATE_ROLE,
       systemInstructions: request.instructions +
+        (twoStage && stage === "generate"
+          ? "\n" + DRAFT_VOICE_INSTRUCTIONS
+          : "") +
         (request.outputSchema || stage === "rewrite"
           ? ""
           : "\n返却形式のみJSONとし、完成した投稿本文をtextフィールドに入れてください。文章の内容・長さの指示はそのまま適用してください。"),

@@ -17,8 +17,9 @@ const INSTRUCTIONS = [
   "本文の読点「、」は一文に最大1個。読みやすければ0個。URL・引用・タグ・メンション・構造化データの中身は編集対象外です。",
   "「笑」の前には句点を置きません。「けど笑」「けど😂」のように自然につなぎます。絵文字は文脈に合う場合だけ少量使い、全ての文末に付ける必要はありません。",
   "提示された編集候補を選んで組み合わせます。editsはidの昇順で、optionは候補配列の0始まり番号です。",
+  "候補のうち言葉や文のつながりが変わるものを優先します。長い説明は具体的な動詞を残して分け、回りくどい言い方を短くします。読点と改行だけを直した案では送信できません。",
   "本文の体験・主張・話題・数値・引用・リンク・タグ・メンション・質問意図を維持し、本人の実績・近況・感想や方言を作らないでください。",
-  "編集したらdecisionをeditedとし、適用後の全文をtextに返してください。既に自然ならkeepとし、textに原文、editsに空配列を返してください。",
+  "編集したらdecisionをeditedとし、適用後の全文をtextに返してください。候補の適用で自然に改善できない場合はreviewを返します。",
   "必要な改善を候補だけで安全に表現できなければreviewとし、textに原文、editsに空配列を返してください。根拠のない言い換えは採用しません。",
 ].join("\n");
 
@@ -206,6 +207,22 @@ function editCandidates(text: string): Edit[] {
         : m[0].replace(/か？$/u, "？"),
     ],
   );
+  // Alternatives carry the same clause and certainty. Match the grammatical
+  // context instead of applying a general comma deletion or synonym pass.
+  offerMatches(/見えて、結局/gu, () => ["見える。結局", "見える。で、結局"]);
+  offerMatches(/(揃う|そろう|重なる|並ぶ|見つかる)ので、/gu, (m) => [
+    m[1] + "。だから",
+  ]);
+  offerMatches(/どこの、何が、(?=くらいは残す)/gu, () => ["場所と内容"]);
+  offerMatches(/詳しい経緯は本文に(?=書けば)/gu, () => ["細かい話は本文に"]);
+  offerMatches(
+    /そのあたりの線引きは、(?=[^。！？!?\n]{1,80}かどうかで決まる気がする。)/gu,
+    () => ["その目安は"],
+  );
+  offerMatches(
+    /言葉を入れておくかどうかで決まる気がする。/gu,
+    () => ["言葉が入ってるかどうかだと思う。"],
+  );
   // Reflow between complete sentences without editing their punctuation.
   offerMatches(
     /(?<=[。！？!?])[ \t\r\n]*(?=[^\s。！？!?\p{Pe}\p{Pf}])/gu,
@@ -255,6 +272,14 @@ export function prepareAiLabVoiceRewrite(draft: VoiceDraft) {
     validate: (reply: unknown) => {
       const accepted = validateReply(text, candidates, reply);
       assertFinalVoiceStyle(accepted.text);
+      const wording = (value: string) => value.replace(/[\s\p{P}😂😊]+/gu, "");
+      // A verified repair of the forbidden laugh boundary also counts as
+      // changing sentence structure even when the words are the same.
+      const laughBoundaryRepaired = STOP_BEFORE_LAUGH.test(text) &&
+        !STOP_BEFORE_LAUGH.test(accepted.text);
+      if (wording(accepted.text) === wording(text) && !laughBoundaryRepaired) {
+        throw new BrandContextError("AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED");
+      }
       return accepted;
     },
   };

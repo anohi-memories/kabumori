@@ -494,11 +494,16 @@ const chatExamples: typeof structuralExamples = [
   [
     "regular",
     0,
-    detail + "田中さんと2026年11月12日の記録を2台で確認できてほっとしました。" +
+    detail +
+    "確認を行いました。田中さんと2026年11月12日の記録を2台で確認できてほっとしました。" +
     preservedLines,
-    detail + "田中さんと2026年11月12日の記録を2台で確認できてほっとしました😊" +
+    detail +
+    "確認しました。田中さんと2026年11月12日の記録を2台で確認できてほっとしました😊" +
     preservedLines,
-    [["ほっとしました。", "ほっとしました😊"]],
+    [["確認を行いました", "確認しました"], [
+      "ほっとしました。",
+      "ほっとしました😊",
+    ]],
   ],
   [
     "experience",
@@ -708,7 +713,7 @@ test("flag OFF uses the existing OpenAI path and reads no Anthropic credential",
   assert.deepEqual(f.payloads, [{ text: ORIGINAL, pollOptions: undefined }]);
 });
 
-test("successful review of an already natural draft may leave every line intact", async () => {
+test("unchanged keep cannot fall through to the X send boundary", async () => {
   const f = fixture((_call, index) =>
     providerResponse(
       index
@@ -716,10 +721,101 @@ test("successful review of an already natural draft may leave every line intact"
         : { text: ORIGINAL },
     )
   );
-  const result = await dispatchAiLabScheduledBrandPost(f.args);
-  assert.equal(result.voiceRewriteDecision, "keep");
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
   assert.equal(f.recorder.calls.length, 2);
-  assert.equal(f.payloads[0].text, ORIGINAL);
+  assert.deepEqual(f.events, [
+    "claim",
+    "Claude:0",
+    "Claude:1",
+    "release:PRE_X_CONTENT_REJECTED",
+  ]);
+  assert.deepEqual(f.payloads, []);
+});
+
+test("a whitespace-only edit cannot fall through to the X send boundary", async () => {
+  const original = "通知の順番を確認しました。次は予定です。";
+  const edited = "通知の順番を確認しました。\n次は予定です。";
+  const f = fixture((call, index) =>
+    providerResponse(
+      index ? editedReply(call, edited, [["", "\n"]]) : { text: original },
+    )
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  assert.deepEqual(f.events, [
+    "claim",
+    "Claude:0",
+    "Claude:1",
+    "release:PRE_X_CONTENT_REJECTED",
+  ]);
+  assert.deepEqual(f.payloads, []);
+});
+
+test("the saved synthetic Opus draft can be repaired with substantive candidates", async () => {
+  // Exact nonsecret synthetic first draft from the authorized preview.
+  const original = [
+    "開発メモの見出しって、書いた直後は長いほうが親切に見える。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいに。",
+    "でも後から探すときに目で拾えるのは、たぶん最初の数文字くらい。一覧にずらっと並ぶと、長い見出しほど似たような文に見えて、結局ひとつずつ開くことになりがちだと思う。",
+    "「ログイン：ボタン無反応」くらいまで削ると、画面名や機能名が頭に揃うので、流し見でも引っかかりやすい。詳しい経緯は本文に書けばいい。",
+    "ただ短くしすぎて「修正」「バグ対応」だけになると、それはそれで何の話かわからない。どこの、何が、くらいは残す。そのあたりの線引きは、後から自分が検索しそうな言葉を入れておくかどうかで決まる気がする。",
+    "#個人開発",
+  ].join("\n\n");
+  assert.equal(original.length, 326);
+  const selections = [
+    ["見えて、結局", "見える。で、結局"],
+    ["揃うので、", "揃う。だから"],
+    ["詳しい経緯は本文に", "細かい話は本文に"],
+    ["どこの、何が、", "場所と内容"],
+    ["そのあたりの線引きは、", "その目安は"],
+    [
+      "言葉を入れておくかどうかで決まる気がする。",
+      "言葉が入ってるかどうかだと思う。",
+    ],
+  ] as const;
+  const edited = selections.reduce(
+    (s, [from, to]) => s.replace(from, to),
+    original,
+  );
+  const f = fixture((call, index) =>
+    providerResponse(
+      index ? editedReply(call, edited, selections) : { text: original },
+    )
+  );
+  await dispatchAiLabScheduledBrandPost(f.args);
+  assert.deepEqual(f.payloads, [{ text: edited, pollOptions: undefined }]);
+  const { system } = f.recorder.calls[0].body as { system: string };
+  assert.match(system, /文字数の目安を埋めるために段落を足さない/u);
+  assert.match(system, /読点は一文に最大1個/u);
+  const rewrite = f.recorder.calls[1].body as { system: string };
+  assert.match(rewrite.system, /読点と改行だけを直した案では送信できません/u);
+});
+
+test("emoji decoration alone holds before X", async () => {
+  const original = "通知を見つけてほっとしました。";
+  const edited = "通知を見つけてほっとしました😊";
+  const f = fixture((call, index) =>
+    providerResponse(
+      index
+        ? editedReply(call, edited, [["ほっとしました。", "ほっとしました😊"]])
+        : { text: original },
+    )
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  assert.deepEqual(f.events, [
+    "claim",
+    "Claude:0",
+    "Claude:1",
+    "release:PRE_X_CONTENT_REJECTED",
+  ]);
+  assert.deepEqual(f.payloads, []);
 });
 
 test("original content and fingerprint guards run before rewrite", async () => {
@@ -954,7 +1050,10 @@ test("duplicate or out-of-order edit IDs cannot be applied or counted as keep", 
 test("a mechanically allowed reflow still goes through the final engagement line guard", async () => {
   const original =
     "画面を見ました。通知を読みました。履歴を開きました。予定も見ました。どれを選びますか？";
-  const text = original.replaceAll("。", "。\n\n");
+  const text = original.replaceAll("。", "。\n\n").replace(
+    "どれを選びますか？",
+    "どれを選びます？",
+  );
   const f = fixture((call, index) => {
     if (!index) {
       return providerResponse({ text: original, poll_options: options });
@@ -967,6 +1066,10 @@ test("a mechanically allowed reflow still goes through the final engagement line
       option: options.indexOf("\n\n"),
     }));
     assert.equal(edits.length, 4);
+    edits.push(
+      ...editedReply(call, text, [["どれを選びますか？", "どれを選びます？"]])
+        .edits,
+    );
     return providerResponse({ decision: "edited", text, edits });
   }, { rotation: 8 });
   await assert.rejects(
