@@ -73,9 +73,11 @@ export function useThreadsManualPublish(
     try {
       const { data, error } = await supabase.functions.invoke<unknown>(THREADS_PUBLISH_FUNCTION, { body, headers: { Authorization: `Bearer ${bearer}` } });
       if (!error) return { ok: true, payload: data };
-      const response = (error as { context?: unknown }).context;
-      if (response instanceof Response) {
-        try { return { ok: false, payload: await response.clone().json() }; } catch { /* generic below */ }
+      const response = (error as { context?: unknown }).context as { clone?: () => { json: () => Promise<unknown> }; json?: () => Promise<unknown> } | null | undefined;
+      // G1 TASK 49 (found on the iOS Simulator): Expo's fetch answers with a Response that is not `instanceof Response`, so every refusal
+      // read as the generic failure. Any context that reads as JSON is read; anything else stays the generic failure.
+      if (response && typeof response.json === 'function') {
+        try { return { ok: false, payload: typeof response.clone === 'function' ? await response.clone().json() : await response.json() }; } catch { /* generic below */ }
       }
       return { ok: false, payload: null };
     } catch {
