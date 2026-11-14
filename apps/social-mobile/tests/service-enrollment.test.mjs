@@ -163,6 +163,8 @@ async function gateHarness(server, options = {}) {
     react,
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: 'Fragment' },
     'react-native': { ActivityIndicator: 'ActivityIndicator', Pressable: 'Pressable', ScrollView: 'ScrollView', Text: 'Text', View: 'View' },
+    // G1 TASK 50: the gate keeps its own screens below the status bar (a test sets the insets; default none).
+    'react-native-safe-area-context': { useSafeAreaInsets: () => options.insets ?? { top: 0, bottom: 0, left: 0, right: 0 } },
     '@/constants/theme': { colors: {}, typography: {} },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
@@ -636,7 +638,8 @@ test('T46 ended + approval UI on: the history opens read-only for this person; b
     h.button(HISTORY).props.onPress();
     h.render();
     assert.equal(h.history()?.props.userId, 'user-A');
-    assert.equal(h.button('利用登録する'), null, 'the history view has no write of its own');
+    assert.ok(h.button('利用登録する'), 'the history offers the person\'s own restart (G1 TASK 50: a way out); showing it sends nothing');
+    assert.equal(server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service').length, 0, 'the history view itself restarts nothing');
     assert.equal(h.isApp(), false);
     h.back().props.onPress();
     h.render();
@@ -794,5 +797,112 @@ test('T47 check, a definite refusal (account locked): the app closes to that ref
     await h.settle();
     assert.equal(h.isApp(), false);
     assert.equal(h.history(), null);
+  } finally { h.unmount(); h.restore(); }
+});
+
+// ---- G1 TASK 50 (G2 #12 P3): the read-only history of an ended service always has a way out ------------------------------------------
+const hasText = (node, text) => JSON.stringify(node ?? null).includes(text);
+const all = (tree, predicate, out = []) => {
+  if (Array.isArray(tree)) { tree.forEach((c) => all(c, predicate, out)); return out; }
+  if (!tree || typeof tree !== 'object') return out;
+  if (predicate(tree)) out.push(tree);
+  all(tree.props?.children, predicate, out);
+  return out;
+};
+
+test('T50 history: back (top and bottom), the person\'s own restart and sign-out are all on the read-only view; the top is kept clear of the status bar', async () => {
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? { body: ACTIVE } : ENDED(7)));
+  const h = await gateHarness(server, { approvalUi: true, insets: { top: 59, bottom: 34, left: 0, right: 0 } });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    h.button(HISTORY).props.onPress();
+    const tree = h.render();
+    assert.equal(h.history()?.props.userId, 'user-A');
+    const scroll = all(tree, (n) => n.type === 'ScrollView')[0];
+    assert.equal(scroll.props.contentContainerStyle.paddingBottom >= 34, true, 'bottom inset kept');
+    const frame = all(tree, (n) => n.type === 'View' && n.props.style?.paddingTop === 59);
+    assert.equal(frame.length, 1, 'the whole history view sits below the status bar (top inset 59)');
+    const tops = all(tree, (n) => n.type === 'Pressable' && hasText(n.props.children, '‹ 戻る'));
+    assert.equal(tops.length, 1);
+    assert.ok(tops[0].props.accessibilityLabel && tops[0].props.hitSlop > 0, 'the top back is labelled and easy to hit');
+    assert.ok(h.button('戻る'), 'a back button at the bottom too');
+    assert.ok(h.button('利用登録する'), 'the person\'s own restart is reachable from here');
+    assert.ok(h.hasSignOut(), 'sign-out is reachable from here');
+    assert.equal(server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service').length, 0, 'showing the exits restarts nothing');
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T50 history: both back buttons return; sign-out stays; the bottom restart sends one restart at the reported version, closes the history, and a later end shows the restart screen first', async () => {
+  let ended = true;
+  const server = fakeServer((entry) => (entry.fn === 'reactivate_x_autopost_service' ? { body: ACTIVE } : ended ? ENDED(7) : { body: ACTIVE }));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    h.button(HISTORY).props.onPress();
+    h.render();
+    h.button('戻る').props.onPress();   // the bottom one
+    h.render();
+    assert.equal(h.history(), null);
+    assert.ok(h.button('利用登録する') && h.button(HISTORY), 'back at the restart screen');
+    h.button(HISTORY).props.onPress();
+    h.render();
+    h.back().props.onPress();   // the top one
+    h.render();
+    assert.equal(h.history(), null);
+    h.button(HISTORY).props.onPress();
+    h.render();
+    h.button('利用登録する').props.onPress();   // the restart from the history
+    await h.settle();
+    const restart = server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service');
+    assert.equal(restart.length, 1, 'exactly one restart');
+    assert.deepEqual(restart[0].body, { p_expected_lifecycle_version: 7 });
+    assert.equal(restart[0].token, tokenOf('A'), 'with this login\'s own token');
+    assert.ok(h.isApp(), 'the restarted service opens the app');
+    // ended again later, in the same login: the restart screen is shown first, not the old history
+    server.requests.length = 0;
+    ended = true;
+    assert.equal(await h.lifecycle().confirmActive(), 'ended');
+    await h.settle();
+    assert.equal(h.isApp(), false);
+    assert.equal(h.history(), null, 'the history is not reopened by itself');
+    assert.ok(h.button(HISTORY));
+  } finally { h.unmount(); h.restore(); }
+});
+
+test('T50 history: another person (or a new login) never inherits the open history or its restart; without the approval UI there is no history and no way into it', async () => {
+  const server = fakeServer(() => ENDED(7));
+  const h = await gateHarness(server, { approvalUi: true });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    h.button(HISTORY).props.onPress();
+    h.render();
+    h.setSession(sessionOf('B'));
+    await h.settle();
+    assert.equal(h.history(), null);
+    h.button('利用登録する').props.onPress();
+    await h.settle();
+    const restarts = server.requests.filter((r) => r.fn === 'reactivate_x_autopost_service');
+    assert.deepEqual(restarts.map((r) => r.token), [tokenOf('B')], 'B\'s own click, B\'s own token');
+  } finally { h.unmount(); h.restore(); }
+  const off = await gateHarness(fakeServer(() => ENDED(7)));
+  try {
+    off.setSession(sessionOf('A'));
+    await off.settle();
+    assert.equal(off.button(HISTORY), null);
+    assert.equal(off.history(), null);
+  } finally { off.unmount(); off.restore(); }
+});
+
+test('T50 the gate\'s own screens leave room for the status bar (insets.top), on every screen outside the app', async () => {
+  const server = fakeServer(() => ENDED(7));
+  const h = await gateHarness(server, { approvalUi: true, insets: { top: 59, bottom: 34, left: 0, right: 0 } });
+  try {
+    h.setSession(sessionOf('A'));
+    await h.settle();
+    const scroll = all(h.render(), (n) => n.type === 'ScrollView')[0];
+    assert.equal(scroll.props.contentContainerStyle.paddingTop, 59);
   } finally { h.unmount(); h.restore(); }
 });
