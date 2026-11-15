@@ -791,6 +791,8 @@ test("the saved synthetic Opus draft can be repaired with substantive candidates
   const { system } = f.recorder.calls[0].body as { system: string };
   assert.match(system, /文字数の目安を埋めるために段落を足さない/u);
   assert.match(system, /読点は一文に最大1個/u);
+  assert.match(system, /声に出して言える話し言葉/u);
+  assert.match(system, /教訓でまとめたりしない/u);
   const rewrite = f.recorder.calls[1].body as { system: string };
   assert.match(rewrite.system, /読点と改行だけを直した案では送信できません/u);
 });
