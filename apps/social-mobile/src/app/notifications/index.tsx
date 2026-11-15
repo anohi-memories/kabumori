@@ -44,6 +44,12 @@ export default function NotificationsScreen() {
             </Card>
           </Pressable>
         ))}
+        {view.list.state === 'ready' && view.more.state !== 'none' ? (
+          <View style={{ gap: 8 }}>
+            {view.more.text ? <Text style={styles.muted}>{view.more.text}</Text> : null}
+            {view.more.label ? <ActionButton label={view.more.label} onPress={view.more.load} disabled={view.more.state === 'loading'} /> : null}
+          </View>
+        ) : null}
         {view.list.state === 'ready' ? <ActionButton label="最新の状態を読み込む" onPress={view.reload} /> : null}
       </ScrollView>
     </Screen>

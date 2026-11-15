@@ -41,6 +41,9 @@ export function EndedHistory({ userId }: { userId: string | null }) {
               {older.length ? <Text style={styles.muted}>{olderRequestsText(older.length)}</Text> : null}
             </Card>
           ))}
+          {/* G1 TASK 51: the older pages, on the person's press; reads only. */}
+          {view.more.text ? <Text style={styles.muted}>{view.more.text}</Text> : null}
+          {view.more.label ? <ActionButton label={view.more.label} onPress={view.more.load} disabled={view.more.state === 'loading'} /> : null}
           <ActionButton label="最新の状態を読み込む" onPress={view.reload} />
         </>
       ) : null}

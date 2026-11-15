@@ -117,7 +117,9 @@ export type NotificationGroup = { row: ApprovalNotification; older: ApprovalNoti
  * request only; the older ones of that candidate are behind it and are not counted again. Every other kind stays one line per row.
  */
 export function groupNotifications(rows: readonly ApprovalNotification[]): NotificationGroup[] {
-  const newestFirst = [...rows].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || (b.subjectRevision ?? 0) - (a.subjectRevision ?? 0));
+  // G3-02 #23: a row's cursor is its place in the person's stable order (rows made in the same instant included); without one, the time.
+  const newestFirst = [...rows].sort((a, b) => (a.cursor !== undefined && b.cursor !== undefined ? b.cursor - a.cursor : 0)
+    || b.createdAt.localeCompare(a.createdAt) || (b.subjectRevision ?? 0) - (a.subjectRevision ?? 0));
   const out: NotificationGroup[] = [];
   const requests = new Map<string, NotificationGroup>();
   for (const row of newestFirst) {

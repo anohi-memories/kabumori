@@ -8,6 +8,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as approvalClient from '../src/features/approvals/approval-client.ts';
 import * as approvalView from '../src/features/approvals/approval-view.ts';
+import * as notificationPages from '../src/features/approvals/notification-pages.ts';
 import * as reservationView from '../src/features/reservations/reservation-view.ts';
 
 const transpile = async (rel) => ts.transpileModule(await readFile(new URL(rel, import.meta.url), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -60,10 +61,10 @@ export async function mountApprovals(initial) {
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status }) },
     './approval-client': approvalClient,
     './approval-gate': { get POSTONA_APPROVAL_UI_ENABLED() { return world.gate; }, get APPROVAL_ENDPOINT() { return world.endpoint; } },
-    './approval-view': approvalView,
+    './approval-view': approvalView, './notification-pages': notificationPages,
   });
   const crypto = { randomUUID: () => (world.uuid ? world.uuid() : `00000000-0000-4000-8000-${String(++world.ids).padStart(12, '0')}`), CryptoDigestAlgorithm: { SHA256: 'SHA-256' }, digestStringAsync: async (_a, text) => createHash('sha256').update(text, 'utf8').digest('hex') };
-  const hookStubs = { 'expo-crypto': crypto, react, '@/features/reservations/reservation-view': reservationView, './approval-client': approvalClient, './approval-view': approvalView, './use-approval-env': env };
+  const hookStubs = { 'expo-crypto': crypto, react, '@/features/reservations/reservation-view': reservationView, './approval-client': approvalClient, './approval-view': approvalView, './notification-pages': notificationPages, './use-approval-env': env };
   const approvals = load(APPROVALS_JS, hookStubs);
   const notifications = load(NOTIFICATIONS_JS, hookStubs);
   const jsx = (type, props) => ({ type: typeof type === 'function' ? type.name : type, props });

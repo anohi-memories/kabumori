@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as approvalClient from '../src/features/approvals/approval-client.ts';
 import * as approvalView from '../src/features/approvals/approval-view.ts';
+import * as notificationPages from '../src/features/approvals/notification-pages.ts';
 import * as reservationView from '../src/features/reservations/reservation-view.ts';
 import { settle, walk } from './approvals-harness.mjs';
 
@@ -35,7 +36,7 @@ export async function mountEndedHistory(initial) {
     '@/lib/supabase': { supabase, getSupabaseConfig: () => world.config },
     './approval-client': approvalClient,
     './approval-gate': { get POSTONA_APPROVAL_UI_ENABLED() { return world.gate; }, get APPROVAL_ENDPOINT() { return world.endpoint; } },
-    './approval-view': approvalView,
+    './approval-view': approvalView, './notification-pages': notificationPages,
   });
   const jsx = (type, props) => ({ type: typeof type === 'function' ? type.name : type, props });
   const component = load(VIEW_JS, {
@@ -43,7 +44,7 @@ export async function mountEndedHistory(initial) {
     'react-native': { Text: 'Text', View: 'View' },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', SectionTitle: 'SectionTitle', styles: {} },
     '@/features/reservations/reservation-view': reservationView,
-    './approval-view': approvalView,
+    './approval-view': approvalView, './notification-pages': notificationPages,
     './use-ended-history': hook,
   });
   const once = () => { cursor = 0; return component.EndedHistory({ userId: world.userId }); };
@@ -51,5 +52,5 @@ export async function mountEndedHistory(initial) {
   const wait = world.wait ?? settle;
   const render = async (times = 5) => { for (let i = 0; i < times; i++) { frames.push(once()); for (const [i2, fn] of effects.splice(0)) { const c = fn(); slots[i2].cleanup = typeof c === 'function' ? c : null; } await wait(); } const t = once(); frames.push(t); return t; };
   const buttons = (tree) => { const out = []; walk(tree, (n) => { if (n.type === 'ActionButton') out.push(n.props); if (n.type === 'TextInput' || n.type === 'Pressable') out.push({ label: `${n.type}!` }); }); return out; };
-  return { world, render, frames, buttons };
+  return { world, render, once, frames, buttons };
 }
