@@ -66,6 +66,8 @@ export type ApprovalResponse = {
 };
 
 const MAX_BODY_BYTES = 64 * 1024;
+/** SQL 018 list_notifications refuses more than this per call. */
+const LIST_MAX = 100;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const ACCOUNT_RE = /^[A-Za-z0-9_:-]{1,128}$/u;
 const SHA_RE = /^[0-9a-f]{64}$/u;
@@ -140,7 +142,9 @@ function toCall(input: unknown): Call | null {
       if (!onlyKeys(p, ["limit", "before"]) || (p.limit !== undefined && !isInt(p.limit, 1, 100))) return null;
       if (p.before !== undefined && !isInt(p.before, 1, Number.MAX_SAFE_INTEGER)) return null;
       const limit = (p.limit ?? 50) as number;
-      return { fn: "list_notifications", args: [limit, p.before ?? null], result: "notifications", page: limit };
+      // G3-02 #24 (H1 #48 P3): ask for one row more than the page (the SQL caps a call at 100), so a page that is exactly the last one
+      // answers nextCursor: null; at limit 100 the one-row look-ahead is a second call below
+      return { fn: "list_notifications", args: [Math.min(limit + 1, LIST_MAX), p.before ?? null], result: "notifications", page: limit };
     }
     case "markRead":
       if (!onlyKeys(p, ["notificationId"]) || !isUuid(p.notificationId)) return null;
@@ -187,6 +191,11 @@ function toNotification(row: Record<string, unknown>): NotificationDto | null {
     readAt: isoOrNull(row.read_at),
     cursor: row.cursor as number,
   };
+}
+
+/** Newest first, strictly below `before` (when given), at most `max` rows. */
+function strictlyBelow(rows: NotificationDto[], before: number | null, max: number): boolean {
+  return rows.length <= max && rows.every((n, i) => (before === null || n.cursor < before) && (i === 0 || n.cursor < rows[i - 1].cursor));
 }
 
 export function createApprovalApi(deps: { enabled: boolean; auth?: AuthVerifier; db?: ApprovalDb }): (request: ApprovalRequest) => Promise<ApprovalResponse> {
@@ -236,15 +245,27 @@ export function createApprovalApi(deps: { enabled: boolean; auth?: AuthVerifier;
     }
     const rows = result.rows.map(toNotification);
     if (rows.some((row) => row === null)) return fail(500, "INTERNAL");
-    const notifications = rows as NotificationDto[];
-    if (call.page === undefined) return { status: 200, body: { ok: true, notifications } };
-    // a page must come back newest first, strictly below `before`, at most `limit` rows; anything else is not a page we can continue from
+    const fetched = rows as NotificationDto[];
+    if (call.page === undefined) return { status: 200, body: { ok: true, notifications: fetched } };
+    // a page must come back newest first, strictly below `before`, at most what was asked; anything else is not a page we can continue from
     const before = call.args[1] as number | null;
-    if (notifications.length > call.page
-        || notifications.some((n, i) => (before !== null && n.cursor >= before) || (i > 0 && n.cursor >= notifications[i - 1].cursor))) {
-      return fail(500, "INTERNAL");
+    if (!strictlyBelow(fetched, before, call.args[0] as number)) return fail(500, "INTERNAL");
+    const notifications = fetched.slice(0, call.page);
+    let more = fetched.length > call.page;
+    if (!more && notifications.length === call.page && call.page === LIST_MAX) {
+      // limit 100: the look-ahead is one more row strictly below the last one, read by the same owner function as the same person, so it
+      // can only ever see this person's own rows (no count of anything else). An unusable answer keeps the cursor: the next page then
+      // simply comes back empty with nextCursor: null.
+      const last = notifications[notifications.length - 1].cursor;
+      try {
+        const probe = await db.call("list_notifications", [1, last], subject);
+        const row = probe.ok && probe.rows.length <= 1 ? probe.rows.map(toNotification) : null;
+        more = row === null || row.some((r) => r === null) || !strictlyBelow(row as NotificationDto[], last, 1) || row.length === 1;
+      } catch {
+        more = true;
+      }
     }
-    const nextCursor = notifications.length === call.page ? notifications[notifications.length - 1].cursor : null;
+    const nextCursor = more ? notifications[notifications.length - 1].cursor : null;
     return { status: 200, body: { ok: true, notifications, nextCursor } };
   };
 }
