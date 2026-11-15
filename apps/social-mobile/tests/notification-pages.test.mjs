@@ -83,9 +83,9 @@ test('T51 rules: 279 rows are reached as 50 + 100 + 100 + 29, each once, in orde
 });
 
 test('T51 rules: a full last page ends with an empty page and null; a server without paging gives one page and no continuation', () => {
-  let walk = pages.startWalk(pageOf(100, 51, 51), 50 + 50);
+  let walk = pages.startWalk(pageOf(150, 51, 51), 50 + 50);
   const r = pages.acceptPage(walk, 51, { rows: [], nextCursor: null });
-  assert.deepEqual([r.added, r.walk.next, r.walk.stopped, r.walk.rows.length], [true, null, null, 50]);
+  assert.deepEqual([r.added, r.walk.next, r.walk.stopped, r.walk.rows.length], [true, null, null, 100]);
   const old = pages.startWalk({ rows: [{ ...row(1), cursor: undefined }], nextCursor: null });
   assert.deepEqual([old.next, old.stopped], [null, null]);
 });
@@ -99,6 +99,7 @@ test('T51 rules: anything that is not the next older page stops the walk and add
     ['ascending', { rows: [row(100), row(200)], nextCursor: null }, 'order'],
     ['nextCursor not the last cursor', { rows: [row(229), row(228)], nextCursor: 100 }, 'cursor'],
     ['nextCursor on an empty page', { rows: [], nextCursor: 5 }, 'cursor'],
+    ['a short page that still points on (G3 #24 gives a cursor only on a full page)', { rows: [row(229), row(228)], nextCursor: 228 }, 'invalid_page'],
     ['too many rows', { rows: Array.from({ length: 101 }, (_, i) => row(229 - i)), nextCursor: 129 }, 'invalid_page'],
     ['a row without a cursor', { rows: [{ ...row(229), cursor: undefined }], nextCursor: null }, 'cursor'],
   ];

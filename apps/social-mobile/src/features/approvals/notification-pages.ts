@@ -1,4 +1,4 @@
-// G1 TASK 51 (G3-02 #22/#23, contract §5b): the history of notifications past the first page. Pure: the hooks keep the state and send; this
+// G1 TASK 51 / G1-02 TASK 1 (G3-02 #22/#23/#24, contract §5b): the history of notifications past the first page. Pure: the hooks keep the state and send; this
 // decides what a page may add. A walk is started by a first page read (the screen opens, or reads again) and kept in memory only. It only ever
 // asks for `before` = the last cursor it was given, adds a page only if it is exactly the next older page, and stops for good (until a new
 // first page) at the first answer that is not a page it can continue from.
@@ -48,6 +48,9 @@ export function pageProblem(page: NotificationPage, before: number | null, size:
   if (page.nextCursor !== null) {
     const last = page.rows[page.rows.length - 1];
     if (!last || last.cursor === undefined || page.nextCursor !== last.cursor) return 'cursor';
+    // G3-02 #24 (contract §5b): a cursor is given only when something older exists, which needs a full page. A short page that still points on
+    // is not a page this walk can continue from.
+    if (page.rows.length !== size) return 'invalid_page';
   }
   return null;
 }

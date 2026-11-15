@@ -575,3 +575,75 @@ test('T51 paging on the real runtime: the read-only history of an ended service 
   console.log(`G1T51 measured (ended history): 279 rows in ${wire.slice(at).length} reads, no write`);
   console.log('G1T51_PAGING_LOCAL_STACK_PASS');
 });
+
+// ---- G1-02 TASK 1 (G3-02 #24, PR #684's Edge): the last page on the real runtime ---------------------------------------------------------
+// `nextCursor` is null exactly on the last page; a page with exactly `limit` rows left says so too (at limit 100 through the Edge's one-row
+// look-ahead). SYNTHETIC rows as above. Needs a tree that carries #684's Edge.
+const STOPPED = (tree) => texts(tree).some((t) => t.includes('ここで止めました') || t.includes('もう一度押してください'));
+const END_LINE = 'これより古いお知らせはありません。';
+const ROW_LABEL = 'お知らせ ';
+
+test('G1-02 last page on the real runtime: 50 / 51 / 100 / 101 / 150 / 151 rows — each row once, the exact number of reads, the end line only when a second page was read, nothing asked after the end', opts, async () => {
+  const measured = [];
+  for (const [total, reads] of [[50, 1], [51, 2], [100, 2], [101, 2], [150, 2], [151, 3]]) {
+    const P = await stack.person(`fp${total}`);
+    assert.equal(await seedNotes(P, total), String(total));
+    const at = wire.length;
+    const h = await mountFor(P, { screen: 'notifications' });
+    let tree = await until(h, (t) => pressables(t, ROW_LABEL).length === Math.min(total, 50), `${total}: first page`);
+    for (let i = 0; i < 6 && button(tree, MORE_LABEL); i += 1) {
+      const had = pressables(tree, ROW_LABEL).length;
+      button(tree, MORE_LABEL).onPress();
+      tree = await until(h, (t) => pressables(t, ROW_LABEL).length > had, `${total}: next page`);
+    }
+    assert.equal(pressables(tree, ROW_LABEL).length, total, `${total}: all rows`);
+    assert.equal(new Set(minuteTexts(tree)).size, total, `${total}: each once`);
+    assert.equal(has(tree, END_LINE), total > 50, `${total}: the end line`);
+    assert.equal(STOPPED(tree), false, `${total}: no error line`);
+    assert.equal(button(tree, MORE_LABEL), undefined);
+    const readsMade = () => wire.slice(at).filter((w) => w.startsWith('notifications ')).length;
+    assert.equal(readsMade(), reads, `${total}: reads ${wire.slice(at).join(' | ')}`);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await h.render(3);
+    assert.equal(readsMade(), reads, `${total}: nothing asked after the end`);
+    assert.deepEqual([...new Set(wire.slice(at).map((w) => w.split(' ')[0]))], ['notifications'], `${total}: only reads`);
+    assert.equal(await q("select count(*) from postona_x_resv.notifications where user_id = :'u' and read_at is not null", { u: P.userId }), '0');
+    measured.push(`${total}:${reads}`);
+  }
+  console.log(`G1T52 measured (last page): rows:reads ${measured.join(' ')}`);
+});
+
+test('G1-02 last page on the real runtime: the one row behind the first page removed before the press -> an empty page and null, a clean end; the read-only history of an ended service at 150 rows reads 2 pages and stops', opts, async () => {
+  const P = await stack.person('fpgone');
+  assert.equal(await seedNotes(P, 51), '51');
+  const h = await mountFor(P, { screen: 'notifications' });
+  let tree = await until(h, (t) => pressables(t, ROW_LABEL).length === 50, 'first page of 50');
+  assert.equal(await q("with d as (delete from postona_x_resv.notifications where id = (select id from postona_x_resv.notifications where user_id = :'u' order by created_at, id limit 1) returning 1) select count(*) from d", { u: P.userId }), '1');
+  const at = wire.length;
+  button(tree, MORE_LABEL).onPress();
+  tree = await until(h, (t) => has(t, END_LINE), 'the end after an empty page');
+  assert.equal(pressables(tree, ROW_LABEL).length, 50);
+  assert.equal(STOPPED(tree), false);
+  assert.equal(wire.slice(at).filter((w) => w.startsWith('notifications ')).length, 1, 'one request');
+
+  const E = await stack.person('fpend');
+  assert.equal(await seedNotes(E, 150), '150');
+  await stack.endService(E);
+  const base = { endpoint: { functionName: FN, allowLoopbackHttpForTests: true }, config: { ok: true, config: { url: stack.API, publishableKey: stack.PUBLISHABLE } }, fetch: recorded, wait: () => new Promise((resolve) => setTimeout(resolve, 60)) };
+  const from = wire.length;
+  const g = await mountEndedHistory({ ...base, userId: E.userId, session: { token: E.token, userId: E.userId } });
+  let ht = await g.render(4);
+  const waitFor = async (fn, label) => { for (let i = 0; i < 200 && !fn(ht); i++) { await new Promise((resolve) => setTimeout(resolve, 100)); ht = await g.render(2); } assert.ok(fn(ht), `${label}: ${texts(ht).slice(0, 6).join(' / ')}`); };
+  const count = (t) => texts(t).filter((x) => x === view.NOTIFICATION_KIND_TEXT.approval_requested).length;
+  await waitFor((t) => count(t) === 50, 'first page of 50');
+  g.buttons(ht).find((b) => b.label === MORE_LABEL).onPress();
+  await waitFor((t) => count(t) === 150, '150 rows');
+  assert.equal(g.buttons(ht).find((b) => b.label === MORE_LABEL), undefined, 'no more button: G3 says the second page was the last');
+  assert.ok(has(ht, END_LINE));
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await g.render(3);
+  assert.equal(wire.slice(from).filter((w) => w.startsWith('notifications ')).length, 2, 'two reads, no empty third');
+  assert.deepEqual([...new Set(wire.slice(from).map((w) => w.split(' ')[0]))].sort(), ['notifications'], 'only reads');
+  assert.equal(await q("select count(*) from postona_x_resv.notifications where user_id = :'u' and read_at is not null", { u: E.userId }), '0');
+  console.log('G1T52_FINAL_PAGE_LOCAL_STACK_PASS');
+});
