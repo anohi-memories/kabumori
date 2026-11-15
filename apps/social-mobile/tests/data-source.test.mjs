@@ -101,6 +101,6 @@ test('every EXPO_PUBLIC env read in src is a static property access; the provide
     assert.doesNotMatch(code, /=\s*process\.env\s*[,)]|process\.env\s*\[|\(\s*process\.env\s*\)|\.\.\.process\.env/u, `${path}: dynamic process.env access is dropped by native bundles`);
   }
   const provider = await readFile(join(root, 'src/providers/data-provider.tsx'), 'utf8');
-  assert.match(provider, /useState<DataStatus>\(initialDataStatus\)/u);
+  assert.match(provider, /status: initialDataStatus\(\)/u);
   assert.doesNotMatch(provider, /process\.env/u);
 });
