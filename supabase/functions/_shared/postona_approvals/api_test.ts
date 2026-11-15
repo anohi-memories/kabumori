@@ -57,8 +57,8 @@ test("each action calls exactly one SQL 018 function as the verified subject, wi
     assert.equal(res.status, 200, fn);
     assert.deepEqual(calls, [{ fn, args, subject: { userId: USER, sessionId: SESSION, isAnonymous: false } }]);
   }
-  for (const [body, fn, args] of [[{ action: "notifications", payload: {} }, "list_notifications", [50, null]], [{ action: "notifications", payload: { limit: 7 } }, "list_notifications", [7, null]],
-                                  [{ action: "notifications", payload: { limit: 7, before: 42 } }, "list_notifications", [7, 42]],
+  for (const [body, fn, args] of [[{ action: "notifications", payload: {} }, "list_notifications", [51, null]], [{ action: "notifications", payload: { limit: 7 } }, "list_notifications", [8, null]],
+                                  [{ action: "notifications", payload: { limit: 7, before: 42 } }, "list_notifications", [8, 42]],
                                   [{ action: "markRead", payload: { notificationId: NID } }, "mark_notification_read", [NID]]] as const) {
     const { db, calls } = recordingDb([note()]);
     const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req(body));
@@ -115,8 +115,11 @@ test("G3-02 #23 paging: cursor on every row, nextCursor = the last cursor of a f
   const page = (cursors: number[]) => cursors.map((c, i) => note({ notification_id: `21111111-2222-4333-8444-${String(i).padStart(12, "0")}`, cursor: c }));
   const list = async (rows: Record<string, unknown>[], payload: Record<string, unknown>) =>
     (await createApprovalApi({ enabled: true, auth: verifier, db: recordingDb(rows).db })(req({ action: "notifications", payload }))).body as Record<string, unknown>;
-  const full = await list(page([90, 80, 70]), { limit: 3 });
+  // G3-02 #24: the database is asked for limit + 1; the extra row only says "there is more" and is not returned
+  const full = await list(page([90, 80, 70, 60]), { limit: 3 });
   assert.deepEqual([(full.notifications as { cursor: number }[]).map((n) => n.cursor), full.nextCursor], [[90, 80, 70], 70]);
+  const exact = await list(page([90, 80, 70]), { limit: 3 });
+  assert.deepEqual([(exact.notifications as { cursor: number }[]).map((n) => n.cursor), exact.nextCursor], [[90, 80, 70], null], "exactly limit rows left: the last page");
   const next = await list(page([60, 50]), { limit: 3, before: 70 });
   assert.deepEqual([(next.notifications as { cursor: number }[]).map((n) => n.cursor), next.nextCursor], [[60, 50], null]);
   assert.deepEqual((await list([], { limit: 3, before: 50 })).nextCursor, null, "an empty page ends it");
@@ -124,7 +127,7 @@ test("G3-02 #23 paging: cursor on every row, nextCursor = the last cursor of a f
     [page([90, 95]), { limit: 3 }],              // not newest first
     [page([90, 90]), { limit: 3 }],              // a repeated cursor
     [page([70, 60]), { limit: 3, before: 70 }],  // not strictly below before
-    [page([90, 80, 70, 60]), { limit: 3 }],      // more than limit
+    [page([90, 80, 70, 60, 50]), { limit: 3 }],  // more than limit + 1
     [[note({ cursor: 0 })], { limit: 3 }],       // not a cursor
     [[note({ cursor: "41" })], { limit: 3 }],
   ] as [Record<string, unknown>[], Record<string, unknown>][]) {
@@ -134,6 +137,44 @@ test("G3-02 #23 paging: cursor on every row, nextCursor = the last cursor of a f
     req({ action: "markRead", payload: { notificationId: NID } }))).body as Record<string, unknown>;
   assert.ok(!("nextCursor" in marked), "markRead has no page");
   assert.deepEqual((marked.notifications as { cursor: number }[])[0].cursor, 41);
+});
+
+test("G3-02 #24 limit 100 (the SQL cap): a full page is followed by a one-row look-ahead below its last cursor, as the same person; none -> nextCursor null, one -> continue, an unusable look-ahead keeps the cursor", async () => {
+  const hundred = (top: number) => Array.from({ length: 100 }, (_, i) => note({ notification_id: `31111111-2222-4333-8444-${String(i).padStart(12, "0")}`, cursor: top - i }));
+  const scripted = (answers: (Record<string, unknown>[] | "error" | "throw")[]) => {
+    const calls: { fn: ApprovalDbFunction; args: readonly unknown[]; subject: unknown }[] = [];
+    const db: ApprovalDb = {
+      call: (fn, args, subject) => {
+        calls.push({ fn, args, subject });
+        const a = answers.shift();
+        if (a === "throw") return Promise.reject(new Error("x"));
+        if (a === "error") return Promise.resolve({ ok: false as const, code: "DB_ERROR" });
+        return Promise.resolve({ ok: true as const, rows: a ?? [] });
+      },
+    };
+    return { db, calls };
+  };
+  const run = async (answers: (Record<string, unknown>[] | "error" | "throw")[], payload: Record<string, unknown> = { limit: 100 }) => {
+    const { db, calls } = scripted(answers);
+    const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req({ action: "notifications", payload }));
+    return { body: res.body as Record<string, unknown>, calls };
+  };
+  const last = await run([hundred(500), []]);
+  assert.deepEqual([(last.body.notifications as unknown[]).length, last.body.nextCursor], [100, null], "exactly 100 left: the last page");
+  assert.deepEqual(last.calls.map((c) => [c.fn, c.args, c.subject]), [
+    ["list_notifications", [100, null], { userId: USER, sessionId: SESSION, isAnonymous: false }],
+    ["list_notifications", [1, 401], { userId: USER, sessionId: SESSION, isAnonymous: false }],
+  ], "the look-ahead is the same function, the same person, strictly below the page's last cursor");
+  const more = await run([hundred(500), [note({ cursor: 400 })]]);
+  assert.deepEqual([(more.body.notifications as unknown[]).length, more.body.nextCursor], [100, 401]);
+  for (const bad of ["error", "throw", [note({ cursor: 401 })], [note({ cursor: "x" })], [note({ cursor: 300 }), note({ cursor: 200 })]] as const) {
+    const r = await run([hundred(500), bad as never]);
+    assert.deepEqual([(r.body.notifications as unknown[]).length, r.body.nextCursor], [100, 401], `unusable look-ahead ${JSON.stringify(bad).slice(0, 40)}: keep the cursor`);
+  }
+  const short = await run([hundred(500).slice(0, 99)]);
+  assert.deepEqual([(short.body.notifications as unknown[]).length, short.body.nextCursor, short.calls.length], [99, null, 1], "a short page: no look-ahead");
+  const fifty = await run([hundred(500).slice(0, 50)], { limit: 50 });
+  assert.deepEqual([fifty.body.nextCursor, fifty.calls.map((c) => c.args)], [null, [[51, null]]], "limit 50, exactly 50 left");
 });
 
 test("401 before the database: no token, an unverified token, an anonymous or session-less token", async () => {

@@ -1406,4 +1406,50 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await owner("insert into public.brand_memberships select * from public.g3ls23_bm; drop table public.g3ls23_bm;", {});
     assert.deepStrictEqual((await page()).rows.length, 100, "the owner again");
   });
+
+  await t.step("L43 G3-02 #24 (H1 #48 P3): the last page says nextCursor: null exactly, over HTTP -- 0 / 50 / 51 / 100 / 101 rows; a repeated cursor, a row removed mid-walk, a signed-out session", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const e = await signUp("e24");
+    await firstRun(e);
+    type Row = { notificationId: string; cursor: number };
+    const page = async (limit: number, before?: number, token = e.token) => {
+      const a = await http(AP, { action: "notifications", payload: before === undefined ? { limit } : { limit, before } }, token);
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body).slice(0, 200));
+      return { rows: (a.body.notifications ?? []) as Row[], next: a.body.nextCursor as number | null };
+    };
+    const shape = async (limit: number) => {
+      const sizes: string[] = [];
+      let p = await page(limit);
+      sizes.push(`${p.rows.length}${p.next === null ? "." : ">"}`);
+      while (p.next !== null && sizes.length < 10) { p = await page(limit, p.next); sizes.push(`${p.rows.length}${p.next === null ? "." : ">"}`); }
+      return sizes.join(" ");
+    };
+    const add = (n: number) => owner("insert into postona_x_resv.notifications (user_id, brand_id, event_key, kind, subject_revision, state) select :'u', (select brand_id from public.brand_memberships where user_id = :'u' and role = 'owner'), 'approval_requested:' || gen_random_uuid() || ':r1', 'approval_requested', 1, 'pending_approval' from generate_series(1, :'n'::int)", { u: e.userId, n: String(n) });   // SYNTHETIC
+    const shapes: Record<string, string> = {};
+    shapes["0 @50"] = await shape(50);
+    await add(50); shapes["50 @50"] = await shape(50);
+    await add(1); shapes["51 @50"] = await shape(50);
+    await add(49); shapes["100 @100"] = await shape(100); shapes["100 @50"] = await shape(50);
+    await add(1); shapes["101 @100"] = await shape(100);
+    console.log(`G3LS_L43 ${JSON.stringify(shapes)}`);
+    assert.deepStrictEqual(shapes, {
+      "0 @50": "0.", "50 @50": "50.", "51 @50": "50> 1.", "100 @100": "100.", "100 @50": "50> 50.", "101 @100": "100> 1.",
+    }, "never a full last page with a cursor, never an empty page after one");
+    // the same cursor twice: the same rows
+    const p1 = await page(50);
+    const a = await page(50, p1.next!);
+    const b2 = await page(50, p1.next!);
+    assert.deepStrictEqual(a.rows.map((r) => r.notificationId), b2.rows.map((r) => r.notificationId));
+    // a row of the next page removed mid-walk (SYNTHETIC): no duplicate, the walk still ends with null
+    const ids: string[] = [...p1.rows.map((r) => r.notificationId)];
+    await owner("delete from postona_x_resv.notifications where id = :'i'", { i: a.rows[3].notificationId });
+    let q = await page(50, p1.next!);
+    ids.push(...q.rows.map((r) => r.notificationId));
+    while (q.next !== null) { q = await page(50, q.next); ids.push(...q.rows.map((r) => r.notificationId)); }
+    assert.deepStrictEqual([ids.length, new Set(ids).size], [100, 100], "101 rows - 1 removed, each once");
+    // signed out: 401
+    const out = await fetch(`${API}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: PUBLISHABLE, authorization: `Bearer ${e.token}` } });
+    await out.body?.cancel();
+    assert.deepStrictEqual(code(await http(AP, { action: "notifications", payload: { limit: 50, before: p1.next } }, e.token)), "401 AUTH_REQUIRED");
+  });
 });
