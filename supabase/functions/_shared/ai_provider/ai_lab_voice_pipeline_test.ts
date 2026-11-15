@@ -608,7 +608,7 @@ for (const rotation of [0, 2, 5, 8]) {
     ] as const
   ) {
     test(
-      "keep holds " + kind + " before X in format slot " + rotation,
+      "keep is refused for " + kind + " before X in format slot " + rotation,
       async () => {
         const f = fixture((_call, index) =>
           providerResponse(
@@ -618,15 +618,16 @@ for (const rotation of [0, 2, 5, 8]) {
               ? { text: original, poll_options: options }
               : { text: original },
           ), { rotation });
+        // keep is no longer in the reply schema, so it is refused before X.
         await assert.rejects(
           dispatchAiLabScheduledBrandPost(f.args),
-          /AI_LAB_VOICE_STYLE_REJECTED/,
+          /AI_LAB_OPUS_GENERATION_FAILED:SCHEMA_VIOLATION/,
         );
         assert.deepEqual(f.events, [
           "claim",
           "Claude:0",
           "Claude:1",
-          "release:PRE_X_CONTENT_REJECTED",
+          "release:PRE_X_FAILED",
         ]);
         assert.deepEqual(f.payloads, []);
       },
@@ -656,6 +657,15 @@ test("an ambiguous protected boundary and alternate first-person forms hold befo
       "僕は予定から確認しました。",
     ]
   ) {
+    assert.throws(
+      () =>
+        prepareAiLabVoiceRewrite({
+          brandId: "ai_salaryman_lab",
+          postType: "brand_post",
+          text: original,
+        }).validate({ decision: "keep", text: original, edits: [] }),
+      /AI_LAB_VOICE_STYLE_REJECTED/,
+    );
     const f = fixture((_call, index) =>
       providerResponse(
         index
@@ -665,7 +675,7 @@ test("an ambiguous protected boundary and alternate first-person forms hold befo
     );
     await assert.rejects(
       dispatchAiLabScheduledBrandPost(f.args),
-      /AI_LAB_VOICE_STYLE_REJECTED/,
+      /AI_LAB_OPUS_GENERATION_FAILED:SCHEMA_VIOLATION/,
     );
     assert.deepEqual(f.payloads, []);
   }
@@ -723,14 +733,14 @@ test("unchanged keep cannot fall through to the X send boundary", async () => {
   );
   await assert.rejects(
     dispatchAiLabScheduledBrandPost(f.args),
-    /VOICE_REWRITE_REVIEW_REQUIRED/,
+    /AI_LAB_OPUS_GENERATION_FAILED:SCHEMA_VIOLATION/,
   );
   assert.equal(f.recorder.calls.length, 2);
   assert.deepEqual(f.events, [
     "claim",
     "Claude:0",
     "Claude:1",
-    "release:PRE_X_CONTENT_REJECTED",
+    "release:PRE_X_FAILED",
   ]);
   assert.deepEqual(f.payloads, []);
 });
@@ -1402,7 +1412,7 @@ const freeRewriteRejects: readonly [string, string, string, RegExp][] = [
   ["added first person", QUESTION_DRAFT, R.replace("設定の説明、", "私も設定の説明"), /VOICE_REWRITE_REJECTED/],
   ["added time", syntheticDraft326, S.replace("後で探すとき", "昨日探したとき"), /VOICE_REWRITE_REJECTED/],
   ["added person", syntheticDraft326, S.replace("ただ「修正」", "上司に言われたけど「修正」"), /VOICE_REWRITE_REJECTED/],
-  ["too many new words", syntheticDraft326, S.replace("細かい話は本文に", "詳細手順は別資料の添付画像に"), /VOICE_REWRITE_REJECTED/],
+  ["too many new words", syntheticDraft326, S.replace("細かい話は本文に", "詳細手順は別資料の添付画像と動作確認表と障害記録と検証環境に"), /VOICE_REWRITE_REJECTED/],
   ["two new emoji", syntheticDraft326, S.replace("十分かな。", "十分かな😂😊"), /VOICE_REWRITE_REJECTED/],
   ["longer than the draft", syntheticDraft326, syntheticDraft326.replace("みたいに。", "みたいにね。"), /VOICE_REWRITE_REJECTED/],
   ["cut to fragments", syntheticDraft326, "「ログイン画面でボタンを押しても反応しない件の原因と対応について」「ログイン：ボタン無反応」「修正」「バグ対応」\n\n#個人開発", /VOICE_REWRITE_REJECTED/],
@@ -1459,4 +1469,216 @@ test("free rewrite: a rewrite that changes a fact never reaches X", async () => 
   assert.deepEqual(f.payloads, []);
   assert.equal(f.events.includes("start X"), false);
   assert.equal(f.recorder.calls.length, 2);
+});
+
+
+// ---- Task32: frank rewrite of the rejected real draft, fabrication held ----
+// The draft below is the real Claude stage-1 output from Task31 (Issue #321 REPORT
+// 6886308815), which the user rated "not frank enough". The rewrite is hand-written
+// for this test. It is not Claude output.
+const TASK31_REAL_DRAFT_254 = [
+  "AIに頼めば一発でできる。最初はそう思ってた。",
+  "実際に詰まるのはだいたい頼み方のほうだった。「ボタンを押しやすくして」と書くと大きさが変わる。色が変わることもある。自分が欲しかったのは押したあとの反応だったりする。",
+  "頭の中ではわかってるつもりでも、言葉にすると半分くらい抜けてる。AIはその抜けたところを勝手に埋めてくる。だから出てきたものを見て初めて「あ、そこじゃない」って気づく。",
+  "最近は頼む前に、何がどうなったらOKなのかを一行だけ書くようにしてる。それでもズレるときはズレるけど。",
+  "#個人開発",
+].join("\n\n");
+const HANDWRITTEN_FRANK_254 = [
+  "AIに頼めば一発でできる、って思いがち。",
+  "でも詰まるのはだいたい頼み方のほう。「ボタンを押しやすくして」って書くと大きさが変わったり色が変わったり。欲しかったのは押したあとの反応なのに😂",
+  "頭ではわかってるつもりでも言葉にすると半分くらい抜けてる。AIはそこを勝手に埋めてくるから、出てきたのを見て「あ、そこじゃない」ってなる。",
+  "たとえば頼む前に、何がどうなったらOKかを一行書いておくとか。それでもズレるときはズレるけど。",
+  "#個人開発",
+].join("\n\n");
+const F = HANDWRITTEN_FRANK_254;
+
+test("Task32: the rejected real draft cannot pass as it is (invented habit and recollection)", () => {
+  assert.equal(TASK31_REAL_DRAFT_254.length, 254);
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: TASK31_REAL_DRAFT_254,
+  });
+  assert.throws(
+    () =>
+      prepared.validate({
+        decision: "keep",
+        text: TASK31_REAL_DRAFT_254,
+        edits: [],
+      }),
+    /VOICE_REWRITE_REJECTED/,
+  );
+});
+
+test("Task32: a frank rewrite that drops the invented habit passes", () => {
+  assert.ok(F.length < TASK31_REAL_DRAFT_254.length);
+  assert.deepEqual(freeRewrite(TASK31_REAL_DRAFT_254, F), {
+    text: F,
+    decision: "edited",
+  });
+});
+
+const task32Rejects: readonly [string, string, RegExp][] = [
+  [
+    "keeps the invented habit",
+    F.replace(
+      "たとえば頼む前に、何がどうなったらOKかを一行書いておくとか。",
+      "頼む前に、何がどうなったらOKかを一行書くようにしてる。",
+    ),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "keeps the recollection",
+    F.replace("って思いがち。", "って最初はそう思ってた。"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "adds a routine",
+    F.replace("たとえば頼む前に、", "毎回頼む前に、"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "adds a recent episode",
+    F.replace("でも詰まるのは", "最近も詰まるのは"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "adds a person",
+    F.replace(
+      "「ボタンを押しやすくして」って書くと",
+      "上司に「ボタンを押しやすくして」って言われて書くと",
+    ),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "drops a protected word",
+    F.replace("何がどうなったらOKかを", "何がどうなったら正解かを"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "changes a quote",
+    F.replace("「あ、そこじゃない」", "「あ、違う」"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "two commas in one sentence",
+    F.replace("頭ではわかってる", "頭では、わかってる").replace(
+      "言葉にすると",
+      "言葉にすると、",
+    ),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  ],
+  [
+    "。笑",
+    F.replace("ズレるけど。", "ズレるけど。笑"),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  ],
+];
+for (const [label, text, pattern] of task32Rejects) {
+  test(`Task32 hold: ${label}`, () => {
+    assert.notEqual(text, F);
+    assert.throws(() => freeRewrite(TASK31_REAL_DRAFT_254, text), pattern);
+  });
+}
+
+test("Task32: casual adverbs do not count as new words, the cap grows with length", () => {
+  // 326 characters allow 3 + 3 new words. 十分 and these four make five.
+  const five = S.replace(
+    "細かい話は本文に",
+    "詳細手順は別資料の添付画像と動作確認表に",
+  );
+  assert.equal(freeRewrite(syntheticDraft326, five).decision, "edited");
+  const casual = five.replace("どれも同じに見えて", "正直どれも同じに見えて")
+    .replace("流し見でも引っかかる。", "流し見でも結構引っかかる。");
+  assert.equal(freeRewrite(syntheticDraft326, casual).decision, "edited");
+  assert.throws(
+    () =>
+      freeRewrite(
+        syntheticDraft326,
+        five.replace("動作確認表に", "動作確認表と障害記録と検証環境に"),
+      ),
+    /VOICE_REWRITE_REJECTED/,
+  );
+});
+
+test("Task32: both prompts ask for a frank X voice and forbid invented experience", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? {
+          decision: "rewritten",
+          text:
+            "2台で通知の表示を比べてます。\nhttps://example.test/notes\n#個人開発",
+          edits: [],
+        }
+        : { text: ORIGINAL },
+    )
+  );
+  await dispatchAiLabScheduledBrandPost(f.args);
+  const draft = f.recorder.calls[0].body as { system: string };
+  assert.match(draft.system, /Xで気軽につぶやく友達口調/u);
+  assert.match(draft.system, /題材に無い自分の習慣・日課・近況・回想/u);
+  assert.match(draft.system, /『。笑』は使わない/u);
+  assert.match(draft.system, /一人称『私』は本当に必要な時だけ/u);
+  const rewrite = f.recorder.calls[1].body as Record<string, unknown> & {
+    system: string;
+  };
+  assert.match(
+    rewrite.system,
+    /文の順番・言葉選び・段落の切り方・長さまで変えて/u,
+  );
+  assert.match(rewrite.system, /原文のままを返す選択肢はありません/u);
+  assert.match(rewrite.system, /本人の実話として残さず/u);
+  const schema = JSON.stringify(rewrite.output_config);
+  assert.match(schema, /"rewritten"/u);
+  assert.doesNotMatch(schema, /"keep"/u);
+});
+
+test("Task32: the frank rewrite of the real draft is the only X payload", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "rewritten", text: F, edits: [] }
+        : { text: TASK31_REAL_DRAFT_254 },
+    )
+  );
+  const result = await dispatchAiLabScheduledBrandPost(f.args);
+  assert.deepEqual(f.payloads, [{ text: F, pollOptions: undefined }]);
+  assert.equal(result.voiceRewriteDecision, "edited");
+});
+
+test("Task32: a rewrite that keeps the invented habit never reaches X", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "rewritten", text: task32Rejects[0][1], edits: [] }
+        : { text: TASK31_REAL_DRAFT_254 },
+    )
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /VOICE_REWRITE_REJECTED/,
+  );
+  assert.deepEqual(f.payloads, []);
+  assert.equal(f.events.includes("start X"), false);
+  assert.equal(f.events.at(-1), "release:PRE_X_CONTENT_REJECTED");
+});
+
+test("preview Task32: rejected real draft vs hand-written frank rewrite", () => {
+  for (
+    const [label, original, rewritten] of [
+      ["第31TASKの実Claude原案（本人評価: 不合格）", TASK31_REAL_DRAFT_254, F],
+      ["保存済みの説明調見本（合成）", syntheticDraft326, S],
+    ]
+  ) {
+    const accepted = freeRewrite(original, rewritten);
+    console.log([
+      "【手書きの改稿例】試験用に人が書いた改稿です。実Claudeの出力ではありません。",
+      `■ ${label}`,
+      `--- 原案（${original.length}字）---`,
+      original,
+      `--- 改稿例（${accepted.text.length}字）---`,
+      accepted.text,
+    ].join("\n"));
+  }
 });
