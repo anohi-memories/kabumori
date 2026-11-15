@@ -1,0 +1,132 @@
+OK local stack g3ls (ports 55921 / 55922)
+OK RM hosts localhost / 127.0.0.2 / ::1 / db.example.invalid refused
+OK world: G4's personal world at c6df19cc on the real local schema (as postgres)
+OK G5 W0 (PR #590 2c8087fc) installed and given to authenticated, as G5's files do
+OK 016 worker tick installed (pg_net + Vault + pgcrypto; re-apply refused; production target rule measured); TEST ONLY target: this stack's kong
+OK G3 rollout.sh preflight + install (17 steps + postcheck) on the real local stack (attested; another attestation refused); a second install refused
+OK G5 PR #645 ownership-lock trigger applied (pinned a4d6c0eb; this stack only)
+[0m[38;5;245mrunning 1 test from ../../../../tmp/g2q14/w690/supabase/candidates/postona_reservations_rollout/local_stack/local_test.ts[0m
+G3-02 reservations on the real local Supabase runtime (create decided in the database) ...
+  L0 the real entries (release gates OFF in source) answer 503 NOT_AVAILABLE on the real runtime ... [0m[32mok[0m [0m[38;5;245m(218ms)[0m
+  L1 G5's real first run over PostgREST (start + W0, idempotent) for A and B; G4's real X connect; G4 verdict VERIFIED ... [0m[32mok[0m [0m[38;5;245m(223ms)[0m
+  L2 401: gateway (no apikey, garbage, EXPIRED token) and handler (no bearer, anonymous, signed-out session) -- create included ... [0m[32mok[0m [0m[38;5;245m(212ms)[0m
+  L3 HTTP create (real JWT, G5 W0 workspace, active service, G4 VERIFIED) -> planned; list / get read it back ... [0m[32mok[0m [0m[38;5;245m(365ms)[0m
+  L4 double post: the same clientBatchId + payload answers the same row (one row); the same id with another body -> 409 ... [0m[32mok[0m [0m[38;5;245m(582ms)[0m
+  L5 other person / workspace: B and C cannot create on, read or cancel A's account / rows (404, no oracle); A's rows unchanged ... [0m[32mok[0m [0m[38;5;245m(895ms)[0m
+  L6 reschedule -> needs_reconfirm; a stale revision 409; reconfirm with the content hash; cancel; ALREADY_FINAL ... [0m[32mok[0m [0m[38;5;245m(979ms)[0m
+  L7 X disconnected (G4's real disconnect): create / reschedule 403 X_ACCOUNT_NOT_VERIFIED, own rows still readable / cancellable; reconnect -> new generation, create 200 ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L8 service end (SYNTHETIC, the entitlement as G5's end leaves it): create 403 SERVICE_NOT_ACTIVE; the person still cancels own rows ... [0m[32mok[0m [0m[38;5;245m(852ms)[0m
+  L9 nothing is sent: the worker entry claims nothing (credential source deny); an uncertain row is never re-sent nor cancelled ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L10 Threads through HTTP: G4 VERIFIED (SYNTHETIC binding) but create 403 PUBLISH_DISABLED from the database (U8); receipt / cancel 404 ... [0m[32mok[0m [0m[38;5;245m(667ms)[0m
+  L11 no grant: PostgREST does not expose G3 / G4; the API and worker roles cannot execute G4's verdicts ... [0m[32mok[0m [0m[38;5;245m(209ms)[0m
+  L12 the database unreachable for the API login -> create 503 STORE_UNAVAILABLE (never a guess), nothing written; restored -> 200 ... [0m[32mok[0m [0m[38;5;245m(284ms)[0m
+  L13 the app's X store: save -> read-back saved; edit -> reconfirm -> cancel; each refusal routed to the screen action; unknown never saved ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+  L14 the app's Threads store: create refused by U8 (not available), another person's account not found, a receipt for nothing not found ... [0m[32mok[0m [0m[38;5;245m(405ms)[0m
+  L15 measured: the app store without the apikey header (the gateway's answer is recorded, not assumed) ...
+[0m[38;5;245m------- output -------[0m
+G3LS_APIKEY_OMITTED {"ok":true,"value":[{"reservationId":"4c18a96e-1331-48b0-b928-e8d5c42bece0","batchId":"dc960ccd-27e9-4b20-b52e-7e91e7c62
+[0m[38;5;245m----- output end -----[0m
+  L15 measured: the app store without the apikey header (the gateway's answer is recorded, not assumed) ... [0m[32mok[0m [0m[38;5;245m(145ms)[0m
+  L16 gap scope (G3-02 #6): two EXISTING rows 20 minutes apart never block a far save / reschedule; near ones still refused ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L17 a send now handed back before any send (SYNTHETIC shape) is not a reservation: the app store's reschedule -> NOT_PLANNED (final) ... [0m[32mok[0m [0m[38;5;245m(478ms)[0m
+  L18 the send-now draft namespace is reserved (G3-02 #8): a `single:` draft from the app store -> 422 ITEM_INVALID (fix_input), nothing written ... [0m[32mok[0m [0m[38;5;245m(462ms)[0m
+  L19 E2E one send: HTTP create -> due -> worker HTTP -> generation-bound claim / pre-send -> fake X once -> published; read back; never again ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L20 E2E reconnect between snapshot and claim (generation changed): claimed, NOT sent (CREDENTIAL_GENERATION_CHANGED) ... [0m[32mok[0m [0m[38;5;245m(906ms)[0m
+  L21 E2E no claim while disconnected or after the service ended; a cancel before the run is never sent ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L22 E2E an unknown X answer -> uncertain, never re-sent, not cancellable (final) ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L23 E2E X refuses (401) -> recorded failed before send (X_REJECTED_401), never retried ... [0m[32mok[0m [0m[38;5;245m(881ms)[0m
+  L24 E2E two workers at once: each due row is claimed and sent exactly once ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L25 tick: nothing is called without a pinned ref, without / with a short Vault key, or when the ref yields no target ... [0m[32mok[0m [0m[38;5;245m(388ms)[0m
+  L26 tick -> the production worker entry (release gate OFF): 503, nothing claimed; the real queue holds the ticket, never the key ...
+[0m[38;5;245m------- output -------[0m
+G3LS_TICK_VERIFY_JWT_TRUE 401|{"code":"UNAUTHORIZED_NO_AUTH_HEADER","message":"Missing authorization heade
+[0m[38;5;245m----- output end -----[0m
+  L26 tick -> the production worker entry (release gate OFF): 503, nothing claimed; the real queue holds the ticket, never the key ... [0m[32mok[0m [0m[38;5;245m(720ms)[0m
+  L27 tick signed with another key / pinned to another project -> the worker's 401, nothing claimed or sent ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+  L28 tick -> the e2e worker: the due row sent once, a future row not; the ticket is one-use; forged / stale / foreign tickets refused ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+  L29 tick: an unknown X answer -> uncertain; the next tick never re-sends it ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+  L30 tick never stacks: a previous call still without an answer -> PREVIOUS_IN_FLIGHT; a tick already running -> TICK_BUSY ... [0m[32mok[0m [0m[38;5;245m(4s)[0m
+  L31 tick to an unreachable host: pg_net's failure shows in the health read (TRANSPORT_ERROR), nothing claimed ... [0m[32mok[0m [0m[38;5;245m(223ms)[0m
+  L32 restart, old connection: create / reschedule / reconfirm 403 (reconnect), nothing written, nothing sent; list / get / cancel go on; others 404; bad JWT 401 ... [0m[32mok[0m [0m[38;5;245m(3s)[0m
+  L33 after an explicit reconnect: create and send work once; rows of the earlier generation stay unmovable (final) but cancellable; never sent ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+  L34 connectionGeneration: unknown when it cannot be proven (unbound row, disconnected, service not active); read-only; never another person's; old clients and write answers unchanged ... [0m[32mok[0m [0m[38;5;245m(3s)[0m
+  L35 approvals + notifications (G3-02 #16): submit / revise / approve / reject over real JWT -> Kong -> Edge -> PG; not approved = not a reservation, never sent; approved = one reservation, sent once; another person sees nothing; events once each ... [0m[32mok[0m [0m[38;5;245m(6s)[0m
+  L36 G3-02 #17 (H1 #37): a G4-only reconnect refuses an earlier candidate (P2-1); a former owner's list writes nothing (P2-2); expired / anonymous tokens 401 ... [0m[32mok[0m [0m[38;5;245m(1s)[0m
+  L37 G3-02 #18 (H1 #38): an ownership loss vs a notification write over real JWT -> Edge -> PG: a loss during the write waits for it; a loss in flight first leaves 0 writes ... [0m[32mok[0m [0m[38;5;245m(7s)[0m
+  L38 G3-02 #19: approve -> reservation -> notifications with G5 PR #645's ownership lock; a second member joining waits for a notification write; replays and a lost answer make nothing twice; the gated real entry writes nothing ...[0m[1m[33m'G3-02 reservations on the real local Supabase runtime (create decided in the database)' has been running for over [0m[38;5;245m(1m0s)[0m[0m
+
+[0m[38;5;245m------- output -------[0m
+G3LS_L38_LOST_ANSWER read back approved
+G3LS_L38_RACE list 200 {"ok":true,"notifications":[{"notificationId":"ebbfa7ff-be76-4ab7-a576-72f1cd86a in 3147 ms; insert waited 2145 ms; deadlocks 0 -> 0
+[0m[38;5;245m----- output end -----[0m
+  L38 G3-02 #19: approve -> reservation -> notifications with G5 PR #645's ownership lock; a second member joining waits for a notification write; replays and a lost answer make nothing twice; the gated real entry writes nothing ... [0m[32mok[0m [0m[38;5;245m(8s)[0m
+  L39 G3-02 #20: the worker's result is enqueued in its own transaction (published / uncertain, once, no list needed); markRead after a service end is 403 and writes nothing (G2 #11); after the restart it works ... [0m[32mok[0m [0m[38;5;245m(5s)[0m
+  L40 G3-02 #21 (H1 #46 P2): a G5 holder of the person's account row (20 s) never holds up the worker: the send's result commits at once, the event is recorded, the list turns it into one notification after the holder ...
+[0m[38;5;245m------- output -------[0m
+G3LS_L40 worker run 4278 ms, {"claimed":1,"sends":1,"published":1,"failedBeforeSend":0,"uncertain":0,"skipped":0,"released":0,"notAvailable":false,"stopped":false}, row published/9000000014
+[0m[38;5;245m----- output end -----[0m
+  L40 G3-02 #21 (H1 #46 P2): a G5 holder of the person's account row (20 s) never holds up the worker: the send's result commits at once, the event is recorded, the list turns it into one notification after the holder ... [0m[32mok[0m [0m[38;5;245m(23s)[0m
+  L41 G3-02 #22 (H1 #47 P3): 8 pending events while a G5 step holds the person's account row 20 s: the list over HTTP answers at once (the Edge's 15 s timeout untouched), keeps them, and writes them once after the holder ...
+[0m[38;5;245m------- output -------[0m
+G3LS_L41 list under the holder: 200 in 387 ms
+[0m[38;5;245m----- output end -----[0m
+  L41 G3-02 #22 (H1 #47 P3): 8 pending events while a G5 step holds the person's account row 20 s: the list over HTTP answers at once (the Edge's 15 s timeout untouched), keeps them, and writes them once after the holder ... [0m[32mok[0m [0m[38;5;245m(20s)[0m
+  L42 G3-02 #23: HTTP paging end to end (JWT -> Kong -> Edge -> PG): 230+ notifications reached once each through nextCursor in strict order; the 100 boundary; no before = the first page; another person sees none of them; additions during paging change nothing; bad cursors / tokens refused ...
+[0m[38;5;245m------- output -------[0m
+G3LS_L42 279 notifications in 3 pages (100/100/79)
+[0m[38;5;245m----- output end -----[0m
+  L42 G3-02 #23: HTTP paging end to end (JWT -> Kong -> Edge -> PG): 230+ notifications reached once each through nextCursor in strict order; the 100 boundary; no before = the first page; another person sees none of them; additions during paging change nothing; bad cursors / tokens refused ... [0m[32mok[0m [0m[38;5;245m(3s)[0m
+  L43 G3-02 #24 (H1 #48 P3): the last page says nextCursor: null exactly, over HTTP -- 0 / 50 / 51 / 100 / 101 rows; a repeated cursor, a row removed mid-walk, a signed-out session ...[0m[1m[33m'G3-02 reservations on the real local Supabase runtime (create decided in the database)' has been running for over [0m[38;5;245m(2m0s)[0m[0m
+
+[0m[38;5;245m------- output -------[0m
+G3LS_L43 {"0 @50":"0.","50 @50":"50.","51 @50":"50> 1.","100 @100":"100.","100 @50":"50> 50.","101 @100":"100> 1."}
+[0m[38;5;245m----- output end -----[0m
+  L43 G3-02 #24 (H1 #48 P3): the last page says nextCursor: null exactly, over HTTP -- 0 / 50 / 51 / 100 / 101 rows; a repeated cursor, a row removed mid-walk, a signed-out session ... [0m[32mok[0m [0m[38;5;245m(2s)[0m
+  L44 G3-02 #25 (H1 #49 P3): the session ends between the page and its limit-100 look-ahead (a real GoTrue sign-out while the first call waits): 401, no row returned; the next request is 401 too ...
+[0m[38;5;245m------- output -------[0m
+G3LS_L44 page answered 401 {"ok":false,"code":"POSTONA_RESV_AUTH_REQUIRED"}
+[0m[38;5;245m----- output end -----[0m
+  L44 G3-02 #25 (H1 #49 P3): the session ends between the page and its limit-100 look-ahead (a real GoTrue sign-out while the first call waits): 401, no row returned; the next request is 401 too ... [0m[32mok[0m [0m[38;5;245m(3s)[0m
+G3-02 reservations on the real local Supabase runtime (create decided in the database) ... [0m[32mok[0m [0m[38;5;245m(2m4s)[0m
+
+[0m[32mok[0m | 1 passed (45 steps) | 0 failed [0m[38;5;245m(2m4s)[0m
+
+node:internal/modules/cjs/loader:1517
+  const err = new Error(message);
+              ^
+
+Error: Cannot find module 'typescript'
+Require stack:
+- /private/tmp/g2q14/w690/apps/social-mobile/package.json
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1517:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1071:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1095:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1122:12)
+    at Module._load (node:internal/modules/cjs/loader:1294:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1617:12)
+    at require (node:internal/modules/helpers:153:16)
+    at file:///private/tmp/g2q14/w690/supabase/candidates/postona_reservations_rollout/local_stack/g1_screen_integration.test.mjs:20:52
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/private/tmp/g2q14/w690/apps/social-mobile/package.json' ]
+}
+
+Node.js v24.19.0
+✖ /tmp/g2q14/w690/supabase/candidates/postona_reservations_rollout/local_stack/g1_screen_integration.test.mjs (40.820709ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 44.7545
+
+✖ failing tests:
+
+test at ../../../../tmp/g2q14/w690/supabase/candidates/postona_reservations_rollout/local_stack/g1_screen_integration.test.mjs:1:1
+✖ /tmp/g2q14/w690/supabase/candidates/postona_reservations_rollout/local_stack/g1_screen_integration.test.mjs (40.820709ms)
+  'test failed'
+FAIL G1 screen integration
+exit 1
