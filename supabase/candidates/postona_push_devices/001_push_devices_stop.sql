@@ -8,7 +8,7 @@
 -- off. Restart: run 001_push_devices.sql again (it turns the fence on and grants EXECUTE again).
 -- G5-02 task 11: the token claims (private.postona_push_token_claims, hashes only) are kept: after a restart a token still moves to another
 -- person only on its own installation with its device secret.
--- G5-02 task 13: the "off" fences (private.postona_push_off_fences, no secret) are kept too. The fence above also waits for a proof issue
+-- G5-02 task 14: every ON grant (private.postona_push_on_grants) is deleted: after a restart, "on" needs a new explicit enable. The fence above also waits for a proof issue
 -- in flight (it holds the fence FOR SHARE); an issue after the stop sees it off and issues nothing.
 
 begin;
@@ -34,7 +34,8 @@ update private.postona_push_control c set enabled = false where c.id;
 do $revoke$
 declare v_fn text;
 begin
-  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer,text)', 'public.postona_push_device_unregister(uuid,text)', 'public.postona_push_device_list()'] loop
+  foreach v_fn in array array['public.postona_push_device_register(uuid,text,text,text,integer,text,text)', 'public.postona_push_device_unregister(uuid,text)', 'public.postona_push_device_list()',
+                             'public.postona_push_device_enable(uuid,text)'] loop
     if pg_catalog.to_regprocedure(v_fn) is not null then
       execute pg_catalog.format('revoke all on function %s from public, anon, authenticated, service_role', pg_catalog.to_regprocedure(v_fn));
     end if;
@@ -46,11 +47,15 @@ update private.postona_push_devices d
    set status = 'revoked', pending_expires_at = null, proof_sha256 = null, proof_expires_at = null, revoked_reason = 'stopped', revoked_at = pg_catalog.clock_timestamp(), push_token = null, token_sha256 = null,
        registration_version = d.registration_version + 1, updated_at = pg_catalog.clock_timestamp()
  where d.status in ('active', 'pending');
+delete from private.postona_push_on_grants;
 
 do $post$
 begin
   if exists (select 1 from private.postona_push_devices d where d.status = 'active' or d.push_token is not null or d.token_sha256 is not null) then
     raise exception 'PUSH_STOP_POSTCONDITION_TOKENS';
+  end if;
+  if exists (select 1 from private.postona_push_on_grants) then
+    raise exception 'PUSH_STOP_POSTCONDITION_GRANTS';
   end if;
   if exists (select 1 from private.postona_push_control c where c.enabled) then
     raise exception 'PUSH_STOP_POSTCONDITION_FENCE';

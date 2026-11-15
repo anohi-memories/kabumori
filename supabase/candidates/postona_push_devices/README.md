@@ -1,4 +1,8 @@
-# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12 / 13)
+# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12 / 13 / 14)
+
+Task 14 fixes H4 #331 task 28's P2 and P3 on PR #687:
+- P2: "on" again only with a one-time ON grant from `public.postona_push_device_enable` (the person's explicit act; bound to installation, device secret, session, generation; deleted by every "off"), stored hashed in `private.postona_push_on_grants`. Task 13's JWT-age rule and "off" fences are removed.
+- P3: `private.postona_push_proof_presend` is the proof push's pre-send read; delivery targets stay active-only.
 
 Task 13 fixes H4 #331 task 27's three P2 on PR #681:
 - P2-1: `private.postona_push_proof_issue` issues a nonce only where delivery would accept the registration now (fence, MV at the current generation, the row's generation / workspace / live session), with one lock order (the fence FOR SHARE, then never waiting: the account, advisory and row locks skip when taken).
@@ -22,7 +26,7 @@ Task 10 fixes H4 #331 task 24's three P2 on PR #667:
 
 | file | what |
 | --- | --- |
-| `001_push_devices.sql` | As the lifecycle owner (never a superuser): `private.postona_push_devices` (owner-only, row security on, no policy), three RPCs for `authenticated` (register / unregister / list; the only definers), and the owner-only worker side (delivery targets, provider-receipt invalidation, purge). Refuses on a world it is not for, changing nothing; a re-run changes nothing. |
+| `001_push_devices.sql` | As the lifecycle owner (never a superuser): `private.postona_push_devices` (owner-only, row security on, no policy), four RPCs for `authenticated` (register / unregister / list / enable; the only definers), and the owner-only worker side (delivery targets, provider-receipt invalidation, purge). Refuses on a world it is not for, changing nothing; a re-run changes nothing. |
 | `001_push_devices_stop.sql` | The fence off first (it waits for in-flight registrations), no new registration (EXECUTE taken away), every active device revoked `stopped` with its token erased: the worker side answers `PUSH_DEVICES_STOPPED`. Keeps the tables; the install starts it again. |
 | `001_push_devices_rollback.sql` | Drops everything. Refuses while a device is active (stop first) or while another function names the worker side. |
 | `client.ts` | The app's contract (G1): `syncPushDevice` / `registerPushDevice` / `unregisterPushDevice` / `listPushDevices`, and the app lifecycle in its header. |
