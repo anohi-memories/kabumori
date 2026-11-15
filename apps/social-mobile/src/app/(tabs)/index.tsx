@@ -86,6 +86,14 @@ export default function HomeScreen() {
         </Card>
 
         <Card>
+          <SectionTitle detail="入力 → プレビュー → 送信前の確認 の順に進みます">手入力でXに投稿</SectionTitle>
+          <Text style={styles.muted}>送信は、接続・利用権・投稿許可をサーバーで確認できたときだけ有効になります。</Text>
+          <Link href="/manual-publish" asChild>
+            <ActionButton label="投稿を作成する" onPress={() => {}} />
+          </Link>
+        </Card>
+
+        <Card>
           <SectionTitle detail="次に投稿される予定">次回の投稿予定</SectionTitle>
           {postsView.kind === 'loading' ? (
             <Text style={styles.muted}>読み込み中…</Text>
