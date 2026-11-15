@@ -177,6 +177,23 @@ test("G3-02 #24 limit 100 (the SQL cap): a full page is followed by a one-row lo
   assert.deepEqual([fifty.body.nextCursor, fifty.calls.map((c) => c.args)], [null, [[51, null]]], "limit 50, exactly 50 left");
 });
 
+test("G3-02 #25 limit 100: an explicit POSTONA_RESV_AUTH_REQUIRED from the look-ahead is 401 with no rows; a flaky look-ahead still keeps the page and the cursor", async () => {
+  const hundred = Array.from({ length: 100 }, (_, i) => note({ notification_id: `31111111-2222-4333-8444-${String(i).padStart(12, "0")}`, cursor: 500 - i }));
+  const run = async (second: () => Promise<{ ok: false; code: string }>) => {
+    let n = 0;
+    const db: ApprovalDb = { call: () => (n++ === 0 ? Promise.resolve({ ok: true as const, rows: hundred }) : second()) };
+    const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req({ action: "notifications", payload: { limit: 100 } }));
+    return { res, n };
+  };
+  const expired = await run(() => Promise.resolve({ ok: false as const, code: "POSTONA_RESV_AUTH_REQUIRED" }));
+  assert.deepEqual([expired.res.status, expired.res.body, expired.n], [401, { ok: false, code: "POSTONA_RESV_AUTH_REQUIRED" }, 2], "expiry between the two queries: fail closed, the fetched rows are not leaked");
+  for (const code of ["DB_UNAVAILABLE", "DB_ERROR", "POSTONA_RESV_SERVICE_BUSY"]) {
+    const r = await run(() => Promise.resolve({ ok: false as const, code }));
+    const b = r.res.body as { notifications: unknown[]; nextCursor: number | null };
+    assert.deepEqual([r.res.status, b.notifications.length, b.nextCursor], [200, 100, 401], `${code}: transient, keep the page and the cursor`);
+  }
+});
+
 test("401 before the database: no token, an unverified token, an anonymous or session-less token", async () => {
   for (const token of ["", "not-a-real-token-at-all", tokenFor({ sub: USER, session_id: SESSION, is_anonymous: true }), tokenFor({ sub: USER, is_anonymous: false })]) {
     const { db, calls } = recordingDb();
