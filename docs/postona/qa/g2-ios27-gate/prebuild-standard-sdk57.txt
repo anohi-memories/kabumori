@@ -1,0 +1,37 @@
+# expo prebuild --platform ios --no-install on G1 PR #366 HEAD 44ab2e6bb812f3484c85f847574de103757e3dfc (expo 57.0.23, @expo/prebuild-config 57.0.16, template expo-template-bare-minimum sdk-57), disposable worktree, 2026-10-20 JST
+Info.plist UIApplicationSceneManifest: Print: Entry, ":UIApplicationSceneManifest", Does Not Exist
+SceneDelegate in ios/SocialOperations/*.swift: 0
+AppDelegate creates its own UIWindow: 1
+AppDelegate adopts ExpoReactNativeFactoryProvider: 0
+IPHONEOS_DEPLOYMENT_TARGET: IPHONEOS_DEPLOYMENT_TARGET = 16.4
+
+## tracked files changed by the standard prebuild
+diff --git a/apps/social-mobile/app.json b/apps/social-mobile/app.json
+index c6a7e2a1..0eef8c22 100644
+--- a/apps/social-mobile/app.json
++++ b/apps/social-mobile/app.json
+@@ -15,7 +15,8 @@
+       "typedRoutes": true
+     },
+     "ios": {
+-      "usesAppleSignIn": true
++      "usesAppleSignIn": true,
++      "bundleIdentifier": "com.anohi-memories.kabumori-social-mobile"
+     }
+   }
+ }
+diff --git a/apps/social-mobile/package.json b/apps/social-mobile/package.json
+index 6d675a14..8656986f 100644
+--- a/apps/social-mobile/package.json
++++ b/apps/social-mobile/package.json
+@@ -5,8 +5,8 @@
+   "main": "expo-router/entry",
+   "scripts": {
+     "start": "expo start",
+-    "android": "expo start --android",
+-    "ios": "expo start --ios",
++    "android": "expo run:android",
++    "ios": "expo run:ios",
+     "web": "expo start --web",
+     "lint": "expo lint",
+     "typecheck": "tsc --noEmit",

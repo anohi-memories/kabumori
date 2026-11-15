@@ -1,0 +1,22 @@
+# node --test tests/g2-ios27-scene-gate.test.mjs  (origin/main 0c42933ca5030ab31a56267529430d0473d9b155 + this G2 test; app.json blob c6a7e2a1 is identical on main, #366, #369 and #381; node v24.19.0)
+✔ FINDING G2-IOS27 (release blocker, owner of the native config undecided): Expo SDK 57 with no scene adoption in the app config -- the standard prebuild cannot produce a scene-based app (0.616666ms)
+✔ G2 check: the installed Expo already ships what a scene adoption needs (ExpoAppSceneDelegate, ExpoReactNativeFactoryProvider) -- no new dependency for a config-plugin fix (0.261125ms)
+✔ OBSERVATION G2-IOS27-B (owner of the native config): the standard prebuild rewrites tracked files -- no ios.bundleIdentifier in app.json, and the "ios" script is "expo start --ios" -- so a clean build dirties the tree (0.045958ms)
+✔ negative control: the gap condition is true for today's config and false for each fix (infoPlist key + AppDelegate change via a local plugin, an app.config, or SDK 58) (0.115583ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 47.211916
+
+# whole app suite on the same tree
+ℹ tests 281
+ℹ suites 0
+ℹ pass 281
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0

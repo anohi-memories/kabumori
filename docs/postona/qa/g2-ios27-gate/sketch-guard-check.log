@@ -1,0 +1,3 @@
+changed template -> THROWS: withIos27Scene: the AppDelegate is not the SDK 57 template this plugin was written for
+objc template    -> THROWS: withIos27Scene: expected a Swift AppDelegate
+already applied  -> applied

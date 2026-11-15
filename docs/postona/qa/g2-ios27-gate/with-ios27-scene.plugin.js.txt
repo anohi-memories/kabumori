@@ -1,0 +1,42 @@
+// G2 PROPOSAL SKETCH (not product, not wired anywhere): an Expo config plugin that makes the SDK 57 prebuild adopt
+// the UIScene life cycle the iOS 27 SDK asserts on -- the same three changes as G2's scene fixture (PR #348
+// scene-fixture.diff) and the SDK 58 template. Owner: whoever owns the app's native config (undecided).
+// It refuses (throws) when the generated AppDelegate is not the SDK 57 template it was written for, so a template
+// change can never be patched silently.
+const { withAppDelegate, withInfoPlist } = require('expo/config-plugins');
+
+const SCENE_MANIFEST = {
+  UIApplicationSupportsMultipleScenes: false,
+  UISceneConfigurations: {
+    UIWindowSceneSessionRoleApplication: [
+      { UISceneConfigurationName: 'Default Configuration', UISceneDelegateClassName: '$(PRODUCT_MODULE_NAME).SceneDelegate' },
+    ],
+  },
+};
+
+const DECLARATION = 'class AppDelegate: ExpoAppDelegate {';
+// The SDK 57 template creates its own window and starts React Native in didFinishLaunching.
+const OWN_WINDOW = /#if os\(iOS\) \|\| os\(tvOS\)\n\s*window = UIWindow\(frame: UIScreen\.main\.bounds\)\n\s*factory\.startReactNative\(\n[\s\S]*?\)\n#endif\n/;
+
+function withIos27Scene(config) {
+  config = withInfoPlist(config, (cfg) => {
+    cfg.modResults.UIApplicationSceneManifest = SCENE_MANIFEST;
+    return cfg;
+  });
+  config = withAppDelegate(config, (cfg) => {
+    if (cfg.modResults.language !== 'swift') throw new Error('withIos27Scene: expected a Swift AppDelegate');
+    let source = cfg.modResults.contents;
+    if (source.includes('class SceneDelegate')) return cfg; // already applied
+    if (!source.includes(DECLARATION) || !OWN_WINDOW.test(source)) {
+      throw new Error('withIos27Scene: the AppDelegate is not the SDK 57 template this plugin was written for');
+    }
+    source = source.replace(DECLARATION, 'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {');
+    source = source.replace(OWN_WINDOW, '');
+    source += '\n// The window and React Native are started by the scene (iOS 27 SDK requires the scene life cycle).\n@objc(SceneDelegate)\nclass SceneDelegate: ExpoAppSceneDelegate {}\n';
+    cfg.modResults.contents = source;
+    return cfg;
+  });
+  return config;
+}
+
+module.exports = withIos27Scene;
