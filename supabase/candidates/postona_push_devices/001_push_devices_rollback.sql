@@ -1,7 +1,8 @@
 -- G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9). NOT applied anywhere. The ROLLBACK of 001_push_devices.sql: drops the three
 -- RPCs, the owner-only functions, private.postona_push_devices, the stop fence private.postona_push_control and the token claims
--- private.postona_push_token_claims and (G5-02 #13) the "off" fences private.postona_push_off_fences -- the rollback forgets every "off"
--- (a re-install starts without them; a first registration older than the 1-day period is still refused). Refuses (nothing changed) while a device is active (run
+-- private.postona_push_token_claims and (G5-02 #14) the ON grants private.postona_push_on_grants (and G5-02 #13's "off" fences, if that
+-- earlier candidate is the one installed). The rollback forgets every "off" row: after a re-install every installation registers only
+-- with a new ON grant (an explicit enable). Refuses (nothing changed) while a device is active (run
 -- 001_push_devices_stop.sql first: it erases every token) or while a function that is not ours names one of ours (e.g. a G3 delivery
 -- function calling the targets: roll that back first). Idempotent. Run as the lifecycle owner with ON_ERROR_STOP.
 
@@ -45,7 +46,10 @@ begin
 end;
 $pre$;
 
+drop function if exists public.postona_push_device_register(uuid, text, text, text, integer, text, text);
 drop function if exists public.postona_push_device_register(uuid, text, text, text, integer, text);
+drop function if exists public.postona_push_device_enable(uuid, text);
+drop function if exists private.postona_push_proof_presend(uuid, integer, text);
 drop function if exists public.postona_push_device_unregister(uuid, text);
 drop function if exists public.postona_push_device_list();
 drop function if exists private.postona_push_delivery_targets(uuid, text);
@@ -70,11 +74,13 @@ drop table if exists private.postona_push_devices;
 drop table if exists private.postona_push_control;
 drop table if exists private.postona_push_token_claims;
 drop table if exists private.postona_push_off_fences;
+drop table if exists private.postona_push_on_grants;
 
 do $post$
 begin
   if pg_catalog.to_regclass('private.postona_push_devices') is not null or pg_catalog.to_regclass('private.postona_push_control') is not null
      or pg_catalog.to_regclass('private.postona_push_token_claims') is not null or pg_catalog.to_regclass('private.postona_push_off_fences') is not null
+     or pg_catalog.to_regclass('private.postona_push_on_grants') is not null
      or exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid = p.pronamespace
                  where n.nspname in ('public', 'private') and p.proname like 'postona\_push\_%') then
     raise exception 'PUSH_ROLLBACK_POSTCONDITION';

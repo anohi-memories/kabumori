@@ -1,4 +1,4 @@
-// G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9; task 10 fixes H4 #331 task 24 P2-2 / P2-3; task 11 H4 #331 task 25 P2-1 / P2-2; task 12 H4 #331 task 26 P2-1 / P2-2; task 13 H4 #331 task 27 P2-2 / P2-3): the POSTONA push-device client
+// G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9; task 10 fixes H4 #331 task 24 P2-2 / P2-3; task 11 H4 #331 task 25 P2-1 / P2-2; task 12 H4 #331 task 26 P2-1 / P2-2; task 13 H4 #331 task 27 P2-2 / P2-3; task 14 H4 #331 task 28 P2): the POSTONA push-device client
 // contract, dependency-free. G1 may copy this file into the app (or re-implement it to the same contract,
 // docs/common-account/g5-02-09-push-device-contract.md). It needs only `client.rpc(fn, args)` from supabase-js v2. The person is whoever
 // the client's session is: the app never sends a user id, a workspace id or a session id. The push token and the device secret are
@@ -38,10 +38,13 @@
 //     new installation until old rows age out (1 day) -- try again later.
 //   - (G5-02 #13 P2-2) PROOF_STALE / PROOF_EXPIRED on a proof answer: the nonce belongs to another session or generation, or the pending
 //     registration expired; nothing to answer -- the next syncPushDevice registers again (a new pending registration, a new nonce).
-//   - (G5-02 #13 P2-3) a first registration (expectedVersion null) is accepted only with a session token issued within the last day and
-//     after this person's last "off" fence: STALE_REGISTRATION with reason 'REQUEST_BEFORE_OFF' otherwise. Never re-send it. "on" again
-//     after an "off" that answered 'fenced': true (or any REQUEST_BEFORE_OFF): refresh the session first (supabase.auth.refreshSession()),
-//     then syncPushDevice(...) -- an explicit new request with a token issued after the "off".
+//   - (G5-02 #14 P2) "notifications on" is an explicit act of the person, recorded by the server: ONLY when the person turns
+//     notifications on (the toggle, the first permission grant, or choosing "on" for an account newly signed in on this phone) call
+//     enablePushDevice(client, installationId, deviceSecret) and put the answered onGrant into the state readCurrent() returns, then
+//     syncPushDevice(...). The grant is one-time, 10 minutes, bound to this installation, device secret, session and generation. A
+//     registration that turns this installation on for this person -- its first, after its "off" row, after the row was pruned or never
+//     recorded, after another account held it -- answers ENABLE_REQUIRED without it. Never call enablePushDevice from a background sync,
+//     a retry, a session refresh or an app start: a refreshed session authorizes nothing. Any "off" deletes the grant.
 
 export type PushPlatform = 'ios' | 'android';
 export type PushDevice = {
@@ -55,7 +58,7 @@ export type PushDevice = {
   created_at: string;
   updated_at: string;
 };
-export type PushFailureClass = 'auth' | 'forbidden' | 'workspace' | 'stale' | 'in_use' | 'limit' | 'invalid' | 'proof' | 'unavailable';
+export type PushFailureClass = 'auth' | 'forbidden' | 'workspace' | 'stale' | 'in_use' | 'limit' | 'invalid' | 'proof' | 'enable' | 'unavailable';
 export type PushFailure = { ok: false; class: PushFailureClass; status: string; registration_version?: number | null; reason?: string };
 
 // every refusal the three RPCs answer, and how the app should treat it
@@ -65,7 +68,7 @@ export const PUSH_STATUS_CLASS: Readonly<Record<string, PushFailureClass>> = {
   SERVICE_NOT_REGISTERED: 'forbidden', SERVICE_NOT_ACTIVE: 'forbidden', SERVICE_DELETION_IN_PROGRESS: 'forbidden',
   WORKSPACE_REQUIRED: 'workspace', OWN_WORKSPACE_CONFLICT: 'forbidden', WORKSPACE_OWNER_UNKNOWN: 'forbidden',
   STALE_REGISTRATION: 'stale', DEVICE_IN_USE: 'in_use', DEVICE_LIMIT: 'limit', INVALID_INPUT: 'invalid',
-  PROOF_NOT_PENDING: 'proof', PROOF_EXPIRED: 'proof', PROOF_INVALID: 'proof', PROOF_STALE: 'proof',
+  PROOF_NOT_PENDING: 'proof', PROOF_EXPIRED: 'proof', PROOF_INVALID: 'proof', PROOF_STALE: 'proof', ENABLE_REQUIRED: 'enable',
   PUSH_DEVICES_STOPPED: 'unavailable', PUSH_BUSY: 'unavailable', ACCOUNT_LIFECYCLE_BUSY: 'unavailable', ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE: 'unavailable',
 };
 
@@ -73,6 +76,7 @@ export const PUSH_STATUS_CLASS: Readonly<Record<string, PushFailureClass>> = {
 export const PUSH_TOKEN_PATTERN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{16,64}\]$/;
 export const DEVICE_SECRET_PATTERN = /^[A-Za-z0-9_-]{43,128}$/;
 export const PROOF_NONCE_PATTERN = /^[0-9a-f]{64}$/;
+export const ON_GRANT_PATTERN = /^[0-9a-f]{64}$/;
 
 // a new device secret: 32 random bytes, base64url (call once per installation; keep it in secure storage)
 export function newDeviceSecret(): string {
@@ -82,7 +86,7 @@ export function newDeviceSecret(): string {
 }
 
 type RpcClient = { rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { code?: string } | null }> };
-type Answer = { status: string; device?: PushDevice; registration_version?: number | null; delivery?: string; devices?: PushDevice[]; recorded?: boolean; fenced?: boolean; reason?: string };
+type Answer = { status: string; device?: PushDevice; registration_version?: number | null; delivery?: string; devices?: PushDevice[]; recorded?: boolean; reason?: string; on_grant?: string; expires_at?: string };
 
 function failure(a: Answer | null, error: { code?: string } | null): PushFailure {
   if (error) return { ok: false, class: error.code === '42501' || error.code === 'PGRST301' ? 'auth' : 'unavailable', status: `HTTP:${error.code ?? 'unknown'}` };
@@ -91,7 +95,7 @@ function failure(a: Answer | null, error: { code?: string } | null): PushFailure
     ...(a && typeof a.reason === 'string' ? { reason: a.reason } : {}) };
 }
 
-export type RegisterInput = { installationId: string; deviceSecret: string; platform: PushPlatform; pushToken: string; expectedVersion: number | null; proofNonce?: string };
+export type RegisterInput = { installationId: string; deviceSecret: string; platform: PushPlatform; pushToken: string; expectedVersion: number | null; proofNonce?: string; onGrant?: string };
 // 'pending_proof' is not a failure, and not deliverable: see the lifecycle above
 export type Registered = { ok: true; status: 'registered' | 'unchanged' | 'pending_proof'; device: PushDevice };
 // the data-only push the worker sends for a pending registration
@@ -103,10 +107,12 @@ export type Skipped = { ok: true; status: 'disabled' | 'removed' };
 // one registration, exactly as given (no retry of any kind)
 export async function registerPushDevice(client: RpcClient, input: RegisterInput): Promise<Registered | PushFailure> {
   if (!PUSH_TOKEN_PATTERN.test(input.pushToken) || !DEVICE_SECRET_PATTERN.test(input.deviceSecret)
-      || (input.proofNonce !== undefined && !PROOF_NONCE_PATTERN.test(input.proofNonce))) return { ok: false, class: 'invalid', status: 'INVALID_INPUT' };
+      || (input.proofNonce !== undefined && !PROOF_NONCE_PATTERN.test(input.proofNonce))
+      || (input.onGrant !== undefined && !ON_GRANT_PATTERN.test(input.onGrant))) return { ok: false, class: 'invalid', status: 'INVALID_INPUT' };
   const r = await client.rpc('postona_push_device_register', {
     p_installation_id: input.installationId, p_device_secret: input.deviceSecret, p_platform: input.platform, p_push_token: input.pushToken,
     p_expected_version: input.expectedVersion, ...(input.proofNonce !== undefined ? { p_proof_nonce: input.proofNonce } : {}),
+    ...(input.onGrant !== undefined ? { p_on_grant: input.onGrant } : {}),
   });
   const a = r.data as Answer | null;
   if (!r.error && (a?.status === 'registered' || a?.status === 'unchanged' || a?.status === 'pending_proof') && a.device) return { ok: true, status: a.status, device: a.device };
@@ -149,15 +155,27 @@ export async function confirmPushDevice(client: RpcClient, readCurrent: () => Pr
   const s = await readCurrent();
   if (push.kind !== 'postona_push_proof' || push.installation_id !== s.installationId || !PROOF_NONCE_PATTERN.test(push.nonce)) return { ok: true, status: 'ignored' };
   if (!s.notificationsEnabled) return { ok: true, status: 'disabled' };
-  return keepOffAfter(client, readCurrent, await registerPushDevice(client, { ...s, proofNonce: push.nonce }));
+  return keepOffAfter(client, readCurrent, await registerPushDevice(client, { ...s, onGrant: undefined, proofNonce: push.nonce }));
 }
 
 // with the device secret, "off" is kept on the server even before the first registration (G5-02 #11 P2-2); without it, only an existing row
-export async function unregisterPushDevice(client: RpcClient, installationId: string, deviceSecret?: string): Promise<{ ok: true; status: 'unregistered' | 'not_registered'; recorded?: boolean; fenced?: boolean; device?: PushDevice } | PushFailure> {
+export async function unregisterPushDevice(client: RpcClient, installationId: string, deviceSecret?: string): Promise<{ ok: true; status: 'unregistered' | 'not_registered'; recorded?: boolean; device?: PushDevice } | PushFailure> {
   if (deviceSecret !== undefined && !DEVICE_SECRET_PATTERN.test(deviceSecret)) return { ok: false, class: 'invalid', status: 'INVALID_INPUT' };
   const r = await client.rpc('postona_push_device_unregister', { p_installation_id: installationId, p_device_secret: deviceSecret ?? null });
   const a = r.data as Answer | null;
-  if (!r.error && (a?.status === 'unregistered' || a?.status === 'not_registered')) return { ok: true, status: a.status, ...(a.recorded !== undefined ? { recorded: a.recorded } : {}), ...(a.fenced !== undefined ? { fenced: a.fenced } : {}), ...(a.device ? { device: a.device } : {}) };
+  if (!r.error && (a?.status === 'unregistered' || a?.status === 'not_registered')) return { ok: true, status: a.status, ...(a.recorded !== undefined ? { recorded: a.recorded } : {}), ...(a.device ? { device: a.device } : {}) };
+  return failure(a, r.error);
+}
+
+// (G5-02 #14 P2) the person's explicit "notifications on" for this installation: a one-time ON grant for its next registration. Call it
+// ONLY from that user action (see the lifecycle above); keep the grant in memory for the registration that follows, never store it.
+export async function enablePushDevice(client: RpcClient, installationId: string, deviceSecret: string): Promise<{ ok: true; status: 'enabled'; onGrant: string; expiresAt: string } | PushFailure> {
+  if (!DEVICE_SECRET_PATTERN.test(deviceSecret)) return { ok: false, class: 'invalid', status: 'INVALID_INPUT' };
+  const r = await client.rpc('postona_push_device_enable', { p_installation_id: installationId, p_device_secret: deviceSecret });
+  const a = r.data as Answer | null;
+  if (!r.error && a?.status === 'enabled' && typeof a.on_grant === 'string' && ON_GRANT_PATTERN.test(a.on_grant)) {
+    return { ok: true, status: 'enabled', onGrant: a.on_grant, expiresAt: a.expires_at ?? '' };
+  }
   return failure(a, r.error);
 }
 
