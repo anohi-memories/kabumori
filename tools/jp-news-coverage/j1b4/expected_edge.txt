@@ -1,0 +1,9 @@
+# Expected visible ids (title-sorted, "id:tracking_type") on the edge-case set, derived from the rules, not from the code:
+#  E01/E02 exactly 72h apart = same event -> earliest kept (E01); E03/E04 72h+1s -> both; E05/E06 same time -> lower id (E05);
+#  E07/E08 different category -> both; E09/E10 single number and E11/E12 years only -> signature null -> both;
+#  E13 company row (tracker only), E14 market row both shown; E15/E16 same event -> E16 (earlier, equal priority);
+#  E17/E18 equal event key after removing follow-up markers -> E17; E19/E20 key shorter than 8 chars -> both.
+u1: [E01]:holding,[E03]:holding,[E04]:holding,[E05]:holding,[E07]:holding,[E08]:holding,[E09]:holding,[E10]:holding,[E11]:holding,[E12]:holding,[E13]:holding,[E14]:holding,[E16]:holding
+u2: [E17]:holding,[E19]:holding,[E20]:holding
+u5: [E01]:market,[E03]:market,[E04]:market,[E05]:market,[E07]:market,[E08]:market,[E09]:market,[E10]:market,[E11]:market,[E12]:market,[E14]:market,[E16]:market,[E17]:market,[E19]:market,[E20]:market
+u6:
