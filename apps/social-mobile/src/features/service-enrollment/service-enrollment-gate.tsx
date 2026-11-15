@@ -211,7 +211,7 @@ export function ServiceEnrollmentGate({ children }: PropsWithChildren) {
           onPress={() => setDeletionOpenFor(userId)}
           style={({ pressed }) => [{ alignItems: 'center', paddingVertical: 10 }, pressed && styles.buttonPressed]}
         >
-          <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>アカウントの削除について</Text>
+          <Text style={[styles.muted, { textDecorationLine: 'underline' }]}>利用終了・共通IDの管理</Text>
         </Pressable>
       </ScrollView>
     </Screen>

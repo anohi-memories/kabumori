@@ -6,7 +6,6 @@ import { Platform } from 'react-native';
 import { getSupabaseConfig, getSupabaseHost, supabase } from '@/lib/supabase';
 import { signInErrorMessage } from '@/lib/auth-errors';
 import { stripProviderCredentials } from '@/lib/session-storage';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   completeAuthCallbackUrl,
   isNativeAppleAvailable,
@@ -19,21 +18,13 @@ import {
   type AuthFlowResult,
 } from '@/lib/auth-client-flows';
 import {
-  ACCOUNT_DELETION_CONFIRMATION,
-  ACCOUNT_DELETION_FUNCTION,
   deletionAvailability,
-  deletionResultMessage,
-  parseDeletionPreview,
-  parseDeletionResponse,
-  sameDeletionContext,
   type DeletionAvailability,
   type DeletionContext,
-  type DeletionOutcome,
-  type DeletionPreview,
-  type DeletionScope,
   type ReauthMethod,
 } from '@/domain/account-deletion';
-import { onboardingStorageKey } from '@/domain/onboarding';
+import { endFailure, POSTONA_END_FUNCTION, POSTONA_END_SOURCE_ENABLED, type EndFailure, type EndResult } from '@/domain/postona-service-end';
+import { createPostonaEndClient, type BoundEndPreview, type EndInput } from '@/lib/postona-service-end-client';
 import {
   applePath,
   AUTH_CALLBACK_URL,
@@ -81,10 +72,11 @@ type AuthContextValue = {
   /** A fresh sign-in with one of the user's own methods; must end as the same user. */
   /** On success: the exact user + session the confirmation belongs to (deletion is pinned to it). */
   reauthenticate: (method: ReauthMethod, password?: string) => Promise<{ ok: true; context: DeletionContext; appleAuthorizationCode?: string } | { ok: false; cancelled?: boolean; message: string }>;
-  /** Read-only: the scope and Apple needs the server would apply now. */
-  previewDeletion: () => Promise<DeletionPreview>;
-  /** Server-side deletion of the signed-in account; success only when the server confirmed it. */
-  deleteAccount: (input: { context: DeletionContext; scope: DeletionScope; appleAuthorizationCode?: string }) => Promise<DeletionOutcome>;
+  /** Retired compatibility methods: always deny; never contact the legacy server. */
+  previewDeletion: () => Promise<EndFailure>;
+  deleteAccount: (input: { context: DeletionContext; scope: 'social_only' | 'social_and_login'; appleAuthorizationCode?: string }) => Promise<EndFailure>;
+  previewPostonaEnd: () => Promise<BoundEndPreview | EndFailure>;
+  endPostonaService: (input: EndInput) => Promise<EndResult | EndFailure>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const NO_BACKEND = { ok: false as const, message: 'Supabase接続設定がありません。' };
@@ -238,58 +230,31 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return { ok: true, context: { userId, sessionId }, appleAuthorizationCode };
   }, [build, email.signIn, readiness, session?.user.email, session?.user.id]);
 
-  const callDeletion = useCallback(async (payload: Record<string, unknown>, accessToken: string) => {
-    if (!config.ok) throw new Error('no backend');
-    const response = await fetch(`${config.config.url.replace(/\/$/u, '')}/functions/v1/${ACCOUNT_DELETION_FUNCTION}`, {
-      method: 'POST',
-      headers: { apikey: config.config.publishableKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    return { status: response.status, body: await response.json().catch(() => null) as unknown };
-  }, [config]);
-
-  const previewDeletion = useCallback<AuthContextValue['previewDeletion']>(async () => {
-    if (!supabase || !config.ok) return { ok: false, code: 'FAILED' };
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) return { ok: false, code: 'AUTH_REQUIRED' };
-    try {
-      const { status, body } = await callDeletion({ action: 'preview' }, data.session.access_token);
-      return parseDeletionPreview(status, body);
-    } catch {
-      return { ok: false, code: 'FAILED' };
-    }
-  }, [callDeletion, config.ok]);
-
-  const deleteAccount = useCallback<AuthContextValue['deleteAccount']>(async ({ context, scope, appleAuthorizationCode }) => {
-    if (!supabase || !config.ok) return { ok: false, code: 'FAILED' };
-    const { data } = await supabase.auth.getSession();
-    const current = data.session;
-    if (!current) return { ok: false, code: 'AUTH_REQUIRED' };
-    // The confirmation belongs to one user + session; any switch cancels it.
-    if (!sameDeletionContext(context, { userId: current.user.id, sessionId: sessionIdOf(current) })) return { ok: false, code: 'SESSION_CHANGED' };
-    let outcome: DeletionOutcome;
-    try {
-      const { status, body } = await callDeletion({
-        action: 'delete',
-        confirmation: ACCOUNT_DELETION_CONFIRMATION,
-        expected_scope: scope,
-        ...(appleAuthorizationCode ? { apple_authorization_code: appleAuthorizationCode } : {}),
-      }, current.access_token);
-      outcome = parseDeletionResponse(status, body);
-    } catch {
-      outcome = { ok: false, code: 'FAILED' };
-    }
-    if (!outcome.ok) return outcome;
-    // The server confirmed: forget this device's session and per-user state.
-    try { await AsyncStorage.removeItem(onboardingStorageKey(current.user.id)); } catch { /* best effort */ }
-    await supabase.auth.signOut({ scope: 'local' });
-    setSession(null);
-    recoveryRef.current = null;
-    setRecovery(null);
-    // Stated on the sign-in screen: exactly what happened to the login.
-    setDeletionNotice(deletionResultMessage(outcome));
-    return outcome;
-  }, [callDeletion, config.ok]);
+  const previewDeletion = useCallback(async () => endFailure('LEGACY_DELETION_DISABLED'), []);
+  const deleteAccount = useCallback(async () => endFailure('LEGACY_DELETION_DISABLED'), []);
+  const postonaEnd = useMemo(() => createPostonaEndClient({
+    // The old build flag cannot enable this new contract. Separate release review required.
+    enabled: POSTONA_END_SOURCE_ENABLED && Boolean(supabase) && config.ok,
+    session: async () => {
+      if (!supabase) return null;
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !data.session) return null;
+      return { userId: data.session.user.id, sessionId: sessionIdOf(data.session), accessToken: data.session.access_token };
+    },
+    call: async (payload, accessToken) => {
+      if (!config.ok) throw new Error('no backend');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15_000);
+      try {
+        const response = await fetch(`${config.config.url.replace(/\/$/u, '')}/functions/v1/${POSTONA_END_FUNCTION}`, {
+          method: 'POST', signal: controller.signal,
+          headers: { apikey: config.config.publishableKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        return { status: response.status, body: await response.json().catch(() => null) as unknown };
+      } finally { clearTimeout(timer); }
+    },
+  }), [config]);
 
   const value = useMemo<AuthContextValue>(() => ({
     session, loading, error, backendAvailable: Boolean(supabase), readiness, email,
@@ -357,7 +322,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     reauthenticate,
     previewDeletion,
     deleteAccount,
-  }), [deleteAccount, deletionNotice, email, error, linkProvider, loading, previewDeletion, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
+    previewPostonaEnd: postonaEnd.preview,
+    endPostonaService: postonaEnd.end,
+  }), [postonaEnd, deleteAccount, deletionNotice, email, error, linkProvider, loading, previewDeletion, readiness, reauthenticate, recovery, releaseReport, session, settings, signInWithProvider]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
