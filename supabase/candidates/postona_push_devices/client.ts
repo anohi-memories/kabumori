@@ -45,6 +45,9 @@
 //     registration that turns this installation on for this person -- its first, after its "off" row, after the row was pruned or never
 //     recorded, after another account held it -- answers ENABLE_REQUIRED without it. Never call enablePushDevice from a background sync,
 //     a retry, a session refresh or an app start: a refreshed session authorizes nothing. Any "off" deletes the grant.
+//   - (G5-02 #15) "off" always lands as this person's own 'unregistered' row with a new registration_version, also when the server had
+//     already revoked it for another reason (signed out, stopped, provider receipt, proof expired, ...): a sync from the version before
+//     is STALE_REGISTRATION, one from the new version needs the explicit "on" (ENABLE_REQUIRED) -- never re-register silently.
 
 export type PushPlatform = 'ios' | 'android';
 export type PushDevice = {

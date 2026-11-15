@@ -652,7 +652,10 @@ begin
     returning * into r;
     return pg_catalog.jsonb_build_object('status', 'unregistered', 'recorded', true, 'device', private.postona_push_device_json(r, v_session, false));
   end if;
-  if r.status in ('active', 'pending') then
+  -- (G5-02 #15, H4 #29 P2) the person's own row is "off" after this, whatever stopped it before (signed out, stopped, taken over, provider
+  -- rejected, proof expired / failed, ...): only 'unregistered' makes register ask for a NEW ON grant, so a revoked row of another reason
+  -- moves to it too (a new version: a registration from the version before is STALE). Already 'unregistered': nothing changes (idempotent).
+  if r.status in ('active', 'pending') or r.revoked_reason is distinct from 'unregistered' then
     update private.postona_push_devices d
        set status = 'revoked', pending_expires_at = null, proof_sha256 = null, proof_expires_at = null, revoked_reason = 'unregistered',
            revoked_at = pg_catalog.clock_timestamp(), push_token = null, token_sha256 = null,

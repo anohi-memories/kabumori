@@ -1,4 +1,6 @@
-# POSTONA push devices: registration, revocation and the delivery read (G5-02 task 9; tasks 10–14)
+# POSTONA push devices: registration, revocation and the delivery read (G5-02 task 9; tasks 10–15)
+
+**G5-02 task 15** fixes H4 #331 task 29's P2 on PR #692: an "off" of the person's own installation whose row was already revoked for another reason (signed out, stopped, taken over, provider rejected, session ended, older generation, account gone, proof expired / failed) now moves it to `unregistered` with a new `registration_version`, so the next registration needs a new ON grant (section 2e). An "off" of a row already `unregistered` changes nothing. Reproduced on PR #692's own files, then passes (section 8); the local tests are not an independent H4 review.
 
 **G5-02 task 14** fixes H4 #331 task 28's P2 and P3 on PR #687:
 - **P2:** "on" again is the person's explicit, server-recorded act — a one-time ON grant bound to installation, device secret, session and generation — never a JWT's age. Task 13's JWT-age rule and "off" fences are removed (section 2e).
@@ -63,7 +65,7 @@ It is another app's shared table, so this candidate leaves it unchanged and adds
 | `lifecycle_version` | `common_accounts.lifecycle_version`, read under T13's account lock |
 | `push_token` | the secret; **only while active** (a revoked row keeps neither the token nor its hash) |
 | `registration_version` | bumped by every change (compare-and-set) |
-| `status` / `revoked_reason` | `active`, or `revoked` with `unregistered` / `taken_over` / `provider_rejected` / `session_ended` / `stale_generation` / `account_gone` / `stopped` |
+| `status` / `revoked_reason` | `active`, or `revoked` with `unregistered` / `taken_over` / `provider_rejected` / `session_ended` / `stale_generation` / `account_gone` / `stopped` / `proof_expired` / `proof_failed` |
 
 A token is active on **one row only** (a partial unique index on its SHA-256).
 
@@ -155,6 +157,8 @@ A registration needs the grant (else **`ENABLE_REQUIRED`**) when it turns a non-
 - from none: never registered, its "off" row pruned, an "off" the cap could not record, or the row held by another person (a handover);
 - from this person's own "off" row (revoked `unregistered`).
 
+(task 15) Every "off" of the person's own row leaves it `unregistered`: an active or pending row, and also a row already revoked for another reason (`taken_over`, `provider_rejected`, `session_ended`, `stale_generation`, `account_gone`, `stopped`, `proof_expired`, `proof_failed`) — each moves to `unregistered` with `registration_version` + 1 under the person's and the installation's locks, so a registration from the version before is `STALE_REGISTRATION` and one from the new version needs a new grant. A row already `unregistered` is left as it is (no new version). Another person's row is never touched (`not_registered`). Without this, only the reason `unregistered` asked for a grant, and an "off" of a row revoked for another reason was answered `recorded: true` while an old automatic sync could re-register it with a proven token, no grant.
+
 The grant is consumed by the registration it authorizes. **Every "off"** (unregister, with or without the device secret, recorded or not) deletes the person's grant for that installation first, under the person's writer lock; the stop deletes every grant; purge deletes expired ones and those of accounts that are gone. So:
 - a request made before an "off" — delayed, retried after a real session refresh, or carrying a grant asked before the "off" — never registers, even with a proven token;
 - "on" and "off" at once are serialized on the person's lock: either order ends off;
@@ -197,7 +201,7 @@ Three RPCs, `authenticated` only (the only SECURITY DEFINER functions this adds)
 | RPC | gates | answers |
 | --- | --- | --- |
 | `postona_push_device_register(installation_id, device_secret, platform, push_token, expected_version, proof_nonce)` | S2-2 session `active` → T13 (account lock; account active, x_autopost active, no deletion, session live after the lock) → the stop fence → S2-3 `own` | `registered` / `unchanged` / **`pending_proof`** (task 12) + the device; `STALE_REGISTRATION` (+ the person's own row version, or null); `DEVICE_IN_USE`; `DEVICE_LIMIT`; `PROOF_NOT_PENDING` / `PROOF_EXPIRED` / `PROOF_INVALID`; `PUSH_DEVICES_STOPPED`; `PUSH_BUSY`; `INVALID_INPUT`; the gates' refusals |
-| `postona_push_device_unregister(installation_id)` | S2-2 only (works after a service end, a lock or an owner loss) | `unregistered` (idempotent) / `not_registered` (none, or another person's: the same answer) |
+| `postona_push_device_unregister(installation_id)` | S2-2 only (works after a service end, a lock or an owner loss) | `unregistered` (idempotent; the person's own row, whatever its earlier revoke reason, ends `unregistered`: task 15) / `not_registered` (none, or another person's: the same answer) |
 | `postona_push_device_list()` | S2-2 only | the person's devices (no token), `delivery` (what the worker would be told now), `deliverable` / `this_session` per device |
 
 **Register rules:**

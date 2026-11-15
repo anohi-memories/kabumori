@@ -15,7 +15,7 @@
 #                    assist gate that sends only for a W0-ready workspace the snapshot then shows
 #   G5-02 #5        then postona_personal_media_box_local_test.ts: the media box (supabase/candidates/postona_personal_media_box) on the same
 #                    stack, storage-api v1.70.3 with its local file backend (real bytes written, read back by signed URL, removed)
-#   G5-02 #9-#14   then postona_push_devices_local_test.ts: push devices (supabase/candidates/postona_push_devices) on the same stack; fake
+#   G5-02 #9-#15   then postona_push_devices_local_test.ts: push devices (supabase/candidates/postona_push_devices) on the same stack; fake
 #                    tokens only (marker g5ptok), nothing sent. Afterwards every container log of the project and the Edge serve log are
 #                    scanned for the marker: any hit fails the run (G5LS_TOKEN_IN_LOGS).
 # Needs: supabase CLI 2.116.0, a running Docker-API engine with the images below already present (never pulls; refuses instead), deno, psql,
@@ -35,6 +35,7 @@ PR672=a04c170981145de390a5c0a219c1a175a5950f20  # G5 PR #672 HEAD: push devices 
 PR676=6bd753cfcb47abaff79d7c222fd3f67eb035c80f  # G5 PR #676 HEAD: push devices before H4 #331 task 26 P2-1 / P2-2 (G5-02 #12 reproduces them)
 PR681=9081a1514c7f8d7aa41a2446c7ef8dc5e3c4ab00  # G5 PR #681 HEAD: push devices before H4 #331 task 27 P2-1 / P2-2 / P2-3 (G5-02 #13 reproduces them)
 PR687=fb75e682ce9b9741b1edf6e2e05beb88952eb77b  # G5 PR #687 HEAD: push devices before H4 #331 task 28 P2 / P3 (G5-02 #14 reproduces them)
+PR692=fa94a03998041c6b658eeb88fc7445f9e7b0091f  # G5 PR #692 HEAD: push devices before H4 #331 task 29 P2 (G5-02 #15 reproduces it)
 ENGINE="${G5LS_ENGINE:-podman}"
 API_PORT=55721 DB_PORT=55722 FAKE_PORT=55799
 
@@ -42,7 +43,7 @@ API_PORT=55721 DB_PORT=55722 FAKE_PORT=55799
 for image in postgres:17.6.1.165 gotrue:v2.196.0 postgrest:v16.1 kong:2.8.1 edge-runtime:v1.74.3 storage-api:v1.70.3; do
   "$ENGINE" image exists "public.ecr.aws/supabase/$image" || { echo "G5LS_IMAGE_MISSING: $image (this script does not pull)"; exit 2; }
 done
-for commit in "$G5W" "$G6" "$G1" "$G1B" "$W0_585" "$PR600" "$PR636" "$PR637" "$PR667" "$PR672" "$PR676" "$PR681" "$PR687"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G5LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
+for commit in "$G5W" "$G6" "$G1" "$G1B" "$W0_585" "$PR600" "$PR636" "$PR637" "$PR667" "$PR672" "$PR676" "$PR681" "$PR687" "$PR692"; do git -C "$REPO" cat-file -e "$commit^{commit}" || { echo "G5LS_COMMIT_MISSING: $commit (git fetch origin)"; exit 2; }; done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/g5ls.XXXXXX")"
 SERVE_PID=""
@@ -69,10 +70,11 @@ mkdir -p "$WORK/pr637"
 for f in 001_media_box.sql 001_media_box_stop.sql 001_media_box_rollback.sql; do git -C "$REPO" show "$PR637:supabase/candidates/postona_personal_media_box/$f" > "$WORK/pr637/$f"; done
 mkdir -p "$WORK/pr667"
 for f in 001_push_devices.sql 001_push_devices_stop.sql 001_push_devices_rollback.sql client.ts; do git -C "$REPO" show "$PR667:supabase/candidates/postona_push_devices/$f" > "$WORK/pr667/$f"; done
-mkdir -p "$WORK/pr672" "$WORK/pr676" "$WORK/pr681" "$WORK/pr687"
+mkdir -p "$WORK/pr672" "$WORK/pr676" "$WORK/pr681" "$WORK/pr687" "$WORK/pr692"
 for f in 001_push_devices.sql 001_push_devices_stop.sql 001_push_devices_rollback.sql client.ts; do git -C "$REPO" show "$PR676:supabase/candidates/postona_push_devices/$f" > "$WORK/pr676/$f"; done
 for f in 001_push_devices.sql 001_push_devices_stop.sql 001_push_devices_rollback.sql client.ts; do git -C "$REPO" show "$PR681:supabase/candidates/postona_push_devices/$f" > "$WORK/pr681/$f"; done
 for f in 001_push_devices.sql 001_push_devices_stop.sql 001_push_devices_rollback.sql client.ts; do git -C "$REPO" show "$PR687:supabase/candidates/postona_push_devices/$f" > "$WORK/pr687/$f"; done
+for f in 001_push_devices.sql 001_push_devices_stop.sql 001_push_devices_rollback.sql client.ts; do git -C "$REPO" show "$PR692:supabase/candidates/postona_push_devices/$f" > "$WORK/pr692/$f"; done
 for f in 001_push_devices.sql 001_push_devices_stop.sql 001_push_devices_rollback.sql client.ts; do git -C "$REPO" show "$PR672:supabase/candidates/postona_push_devices/$f" > "$WORK/pr672/$f"; done
 git -C "$REPO" archive "$G1" apps/social-mobile/src/data apps/social-mobile/src/features/schedule apps/social-mobile/src/domain | tar -x -C "$WORK/g1"
 git -C "$REPO" archive "$G1B" apps/social-mobile/src/data apps/social-mobile/src/features/schedule apps/social-mobile/src/domain | tar -x -C "$WORK/g1b"
@@ -191,9 +193,9 @@ done
 env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL -u OPENAI_API_KEY \
     G5LS_API="http://127.0.0.1:$API_PORT" G5LS_PUBLISHABLE="$PUBLISHABLE" G5LS_DB_PORT="$DB_PORT" G5LS_FAKE_PORT="$FAKE_PORT" \
     G5LS_MVP="$REPO/supabase/candidates/postona_personal_mvp_auth" G5LS_BRANDS_FIX="$REPO/supabase/candidates/postona_brands_tenant_isolation" G5LS_SECRET="$SECRET" G5LS_PR600="$WORK/pr600" G5LS_MEDIA="$REPO/supabase/candidates/postona_personal_media_box" G5LS_PR636="$WORK/pr636" G5LS_PR637="$WORK/pr637" G5LS_G1="$g1" G5LS_G1B="$g1b" G5LS_G6="$WORK/g6/supabase/functions/_shared" G5LS_W0_585="$WORK/w0_585.sql" \
-    G5LS_PUSH="$REPO/supabase/candidates/postona_push_devices" G5LS_PR667="$WORK/pr667" G5LS_PR672="$WORK/pr672" G5LS_PR676="$WORK/pr676" G5LS_PR681="$WORK/pr681" G5LS_PR687="$WORK/pr687" \
+    G5LS_PUSH="$REPO/supabase/candidates/postona_push_devices" G5LS_PR667="$WORK/pr667" G5LS_PR672="$WORK/pr672" G5LS_PR676="$WORK/pr676" G5LS_PR681="$WORK/pr681" G5LS_PR687="$WORK/pr687" G5LS_PR692="$WORK/pr692" \
   deno test --no-config --no-check --cached-only \
-    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_PR600,G5LS_MEDIA,G5LS_PR636,G5LS_PR637,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,G5LS_PUSH,G5LS_PR667,G5LS_PR672,G5LS_PR676,G5LS_PR681,G5LS_PR687,PGPASSWORD \
+    --allow-env=G5LS_API,G5LS_PUBLISHABLE,G5LS_DB_PORT,G5LS_FAKE_PORT,G5LS_MVP,G5LS_BRANDS_FIX,G5LS_SECRET,G5LS_PR600,G5LS_MEDIA,G5LS_PR636,G5LS_PR637,G5LS_G1,G5LS_G1B,G5LS_G6,G5LS_W0_585,G5LS_PUSH,G5LS_PR667,G5LS_PR672,G5LS_PR676,G5LS_PR681,G5LS_PR687,G5LS_PR692,PGPASSWORD \
     --allow-net="127.0.0.1:$API_PORT,127.0.0.1:$FAKE_PORT" --allow-read="$WORK,$REPO" --allow-run=psql ${G5LS_FILTER:+--filter "$G5LS_FILTER"} \
     "$REPO/supabase/tests/postona_personal_workspace_local_test.ts" "$REPO/supabase/tests/postona_personal_media_box_local_test.ts" \
     "$REPO/supabase/tests/postona_push_devices_local_test.ts" && rc=0 || rc=$?
