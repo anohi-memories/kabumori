@@ -3,7 +3,7 @@
 //     injected reader), no console output;
 //   - the only external dependency is the exactly pinned official Anthropic SDK, in the Anthropic adapter only;
 //   - provider hosts and model ids appear only where they belong;
-//   - F6 V0 (Opus primary for the close report): the shared market report handler is the ONE production user.
+//   - The market report handler and the exact AI Lab scheduled entry are the only production users.
 //     Outside this module, only the files in AUTHORIZED_REFERENCES name it, with exactly those imports; of all
 //     deployable sources only that handler and its entry point reach it (directly or through other files); the
 //     Anthropic SDK and key names stay inside it (plus the handler's offline test); no app references it or the key.
@@ -89,10 +89,11 @@ const AUTHORIZED_REFERENCES: Record<string, readonly string[]> = {
   "market-report-analysis/handler.ts": [
     "../_shared/ai_provider/market_report_primary.ts",
   ],
+  "x-test-post/index.ts": ["../_shared/ai_provider/ai_lab_post.ts"],
 };
 
 /** The deployable sources that may reach this module through their imports: the handler and its entry point. */
-const AUTHORIZED_REACHERS = ["market-report-analysis/handler.ts", "market-report-analysis/index.ts"];
+const AUTHORIZED_REACHERS = ["market-report-analysis/handler.ts", "market-report-analysis/index.ts", "x-test-post/index.ts"];
 
 /** Outside this module, the Anthropic SDK and ANTHROPIC_* names appear only in the handler's offline test. */
 const AUTHORIZED_ANTHROPIC_NAMES = ["market-report-analysis/opus_primary_handler_test.ts"];
@@ -178,11 +179,11 @@ async function appTree(): Promise<Map<string, string>> {
 const sortedAuthorized = () =>
   Object.fromEntries(Object.entries(AUTHORIZED_REFERENCES).map(([path, specifiers]) => [path, [...specifiers].sort()]));
 
-test("Primary scope: only the authorized market report files name the provider module, with exactly these imports", async () => {
+test("Primary scope: only the authorized market report and AI Lab entry name the provider module, with exact imports", async () => {
   assert.deepEqual(directReferences(await functionsTree), sortedAuthorized());
 });
 
-test("Primary scope: of all deployable sources, only the market report handler and its entry point reach the module", async () => {
+test("Primary scope: only the authorized market report and AI Lab entry reach the module", async () => {
   assert.deepEqual(reachingProductionFiles(await functionsTree), AUTHORIZED_REACHERS);
 });
 

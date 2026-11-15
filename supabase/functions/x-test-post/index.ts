@@ -1,3 +1,5 @@
+import { createAiLabTextProvider } from "../_shared/ai_provider/ai_lab_post.ts";
+import { generateBrandPost } from "../_shared/brand/brand_post_generator.ts";
 import {
   evaluateMorningFacts,
   ensureUsSessionClosureDisclosure,
@@ -4167,6 +4169,7 @@ Deno.serve(async (req) => {
               excludedLocally: exclusions,
             }),
         });
+        const aiLabTextProvider = createAiLabTextProvider({ readEnv: (name) => Deno.env.get(name) });
         const result = await dispatchAiLabScheduledBrandPost({
           context: brandContext,
           postType: scheduledPost.post_type,
@@ -4179,7 +4182,8 @@ Deno.serve(async (req) => {
               attempt,
               violations,
             }),
-          generate: createAiLabScheduledPostGenerator(rotationIndex),
+          generate: createAiLabScheduledPostGenerator(rotationIndex, (args) =>
+            generateBrandPost({ ...args, textProvider: aiLabTextProvider })),
           loadRecentFingerprints: () => loadAiLabRecentDedupeFingerprints({
             supabaseUrl,
             serviceRoleKey,

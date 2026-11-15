@@ -20,6 +20,9 @@ import type { AiProvider, AiReasoningEffort } from "./types.ts";
 
 export const AI_PROVIDER_CATALOG_VERSION = "ai-provider-catalog/2026-10-10.1";
 
+/** Explicit AI Lab selection; other workloads keep their existing model policy. */
+export const AI_LAB_POST_MODEL = "claude-opus-5-5";
+
 /** USD per 1M tokens. */
 export type PriceTier = {
   /** This tier applies when the request's total prompt tokens are ABOVE this value (0 = from the first token). */
