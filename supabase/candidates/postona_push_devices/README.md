@@ -1,4 +1,6 @@
-# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12 / 13 / 14)
+# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12 / 13 / 14 / 15)
+
+Task 15 fixes H4 #331 task 29's P2 on PR #692: "off" of the person's own row already revoked for another reason (signed out, stopped, taken over, provider rejected, proof expired, ...) moves it to `unregistered` with a new version, so turning it on again needs a new ON grant; an `unregistered` row is left as it is.
 
 Task 14 fixes H4 #331 task 28's P2 and P3 on PR #687:
 - P2: "on" again only with a one-time ON grant from `public.postona_push_device_enable` (the person's explicit act; bound to installation, device secret, session, generation; deleted by every "off"), stored hashed in `private.postona_push_on_grants`. Task 13's JWT-age rule and "off" fences are removed.
