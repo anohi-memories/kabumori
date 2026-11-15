@@ -17,7 +17,10 @@ import { createAiLabScheduledPostGenerator } from "../brand/ai_lab_engagement.ts
 import { dispatchAiLabScheduledBrandPost } from "../brand/ai_lab_scheduled_brand_post.ts";
 import { generateBrandPost } from "../brand/brand_post_generator.ts";
 import { fingerprintText } from "../brand/cross_brand_dedupe.ts";
-import { prepareAiLabVoiceRewrite } from "../brand/ai_lab_voice_rewrite.ts";
+import {
+  prepareAiLabVoiceRewrite,
+  wordingSimilarity,
+} from "../brand/ai_lab_voice_rewrite.ts";
 
 const ORIGINAL =
   "通知の表示を2台で比較しています。\nhttps://example.test/notes\n#個人開発";
@@ -794,7 +797,7 @@ test("the saved synthetic Opus draft can be repaired with substantive candidates
   assert.match(system, /声に出して言える話し言葉/u);
   assert.match(system, /教訓でまとめたりしない/u);
   const rewrite = f.recorder.calls[1].body as { system: string };
-  assert.match(rewrite.system, /読点と改行だけを直した案では送信できません/u);
+  assert.match(rewrite.system, /語尾や読点・改行だけを直した案、ほぼ原文のままの案は送信できません/u);
 });
 
 test("emoji decoration alone holds before X", async () => {
@@ -1459,4 +1462,197 @@ test("free rewrite: a rewrite that changes a fact never reaches X", async () => 
   assert.deepEqual(f.payloads, []);
   assert.equal(f.events.includes("start X"), false);
   assert.equal(f.recorder.calls.length, 2);
+});
+
+// ---- Task32: casual-voice remediation after the user rejected the Task31 draft ----
+// REAL_DRAFT_254 is the Task31 real Claude draft, copied from Issue #321 REPORT
+// 6886308815 and used here only as a fixed input. Every rewrite below is
+// hand-written for this test (no API call) and is not Claude output.
+const HAND_WRITTEN_NOTICE =
+  "【手書きの非課金テスト用改稿】原案に対する手書きの書き直し例です。実Claudeの新規出力ではありません。";
+const REAL_DRAFT_254 = [
+  "AIに頼めば一発でできる。最初はそう思ってた。",
+  "実際に詰まるのはだいたい頼み方のほうだった。「ボタンを押しやすくして」と書くと大きさが変わる。色が変わることもある。自分が欲しかったのは押したあとの反応だったりする。",
+  "頭の中ではわかってるつもりでも、言葉にすると半分くらい抜けてる。AIはその抜けたところを勝手に埋めてくる。だから出てきたものを見て初めて「あ、そこじゃない」って気づく。",
+  "最近は頼む前に、何がどうなったらOKなのかを一行だけ書くようにしてる。それでもズレるときはズレるけど。",
+  "#個人開発",
+].join("\n\n");
+const HAND_REWRITE_254 = [
+  "AIに頼めば一発でできるって思いがち。",
+  "でも詰まるのはだいたい頼み方のほう。「ボタンを押しやすくして」って書くと大きさが変わったり色が変わったり。欲しかったのは押したあとの反応なのに😂",
+  "頭ではわかってるつもりでも言葉にすると半分くらい抜けてる。AIはそこを勝手に埋めてくるから、出てきたのを見て「あ、そこじゃない」ってなる。",
+  "何がどうなったらOKか先に一行書いとくとズレは減りそう。それでもズレるときはズレるけど。",
+  "#個人開発",
+].join("\n\n");
+const HAND_REWRITE_326 = [
+  "開発メモの見出し、書いた直後は長いほうが親切な気がするんですよね。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいな。",
+  "でも後で探すとき見てるのは最初の数文字だけ。長いのが並ぶとどれも同じに見えて全部開くはめになる😂",
+  "「ログイン：ボタン無反応」くらいがちょうどいい。画面名が頭に来るから流し見でも拾える。",
+  "とはいえ「修正」「バグ対応」だけだと何の話かわからないし、どこで何が起きたかは残したい。細かい話は本文で。",
+  "#個人開発",
+].join("\n\n");
+
+test("task32: the draft prompt puts fabrication first and asks for a casual X voice", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "rewritten", text: HAND_REWRITE_254, edits: [] }
+        : { text: REAL_DRAFT_254 },
+    )
+  );
+  await dispatchAiLabScheduledBrandPost(f.args);
+  const { system } = f.recorder.calls[0].body as { system: string };
+  const draftRules = system.slice(system.indexOf("最優先: "));
+  assert.match(draftRules, /^最優先: 題材と設定に書かれていない自己経験・日課・近況/u);
+  assert.match(draftRules, /『最近は〜してる』『最初はそう思ってた』/u);
+  assert.match(draftRules, /『たとえば〜とか』と仮定だとわかる形にするか、使わない/u);
+  assert.match(draftRules, /整った説明文・気取った導入・名言風の結論・『勉強になる話』にしない/u);
+  assert.match(draftRules, /見出し付きの解説、毎回の総括/u);
+  assert.match(draftRules, /一人称は本当に必要な時だけ『私』。『。笑』は禁止/u);
+  assert.match(draftRules, /無理な関西弁や馴れ馴れしすぎる言い方はしない/u);
+  const rewrite = f.recorder.calls[1].body as { system: string };
+  assert.match(rewrite.system, /基本はdecisionをrewritten、editsを空配列/u);
+  assert.match(rewrite.system, /文の順番・語彙・段落の切り方・長さまで変えてかまいません/u);
+  assert.match(rewrite.system, /原文のままのkeepも送信されず保留になります/u);
+  assert.match(rewrite.system, /日課・習慣・「最近は〜してる」「最初は〜思ってた」のような自己経験/u);
+});
+
+test("task32 preview: hand-written casual rewrites of the 254 and 326 drafts pass", () => {
+  for (
+    const [label, original, text] of [
+      ["Task31の実Claude原案（254字）", REAL_DRAFT_254, HAND_REWRITE_254],
+      ["保存済み合成の説明調見本（326字）", syntheticDraft326, HAND_REWRITE_326],
+    ]
+  ) {
+    assert.deepEqual(freeRewrite(original, text), { text, decision: "edited" });
+    assert.ok(wordingSimilarity(original, text) < 0.85);
+    console.log(
+      [
+        "",
+        HAND_WRITTEN_NOTICE,
+        `■ ${label}`,
+        `--- 原案（${original.length}字）---`,
+        original,
+        `--- 手書き改稿（${text.length}字）---`,
+        text,
+        "",
+      ].join("\n"),
+    );
+  }
+});
+
+const R254 = HAND_REWRITE_254;
+const R326 = HAND_REWRITE_326;
+const task32Holds: readonly [string, string, string, RegExp][] = [
+  [
+    "254: a new daily habit (毎朝)",
+    REAL_DRAFT_254,
+    R254.replace("何がどうなったらOKか先に一行書いとくとズレは減りそう。", "最近は毎朝、何がどうなったらOKか一行書いてる。"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "254: an invented count in the example",
+    REAL_DRAFT_254,
+    R254.replace("って書くと", "って3回書くと"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "326: an invented past belief (最初は…思ってた)",
+    syntheticDraft326,
+    R326.replace("みたいな。", "みたいな。最初はそう思ってた。"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "326: an invented habit (ようにしてる)",
+    syntheticDraft326,
+    R326.replace("細かい話は本文で。", "細かい話は本文に書くようにしてる。"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "326: an invented try (やってみた)",
+    syntheticDraft326,
+    R326.replace("くらいがちょうどいい。", "くらいでやってみた。"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+  [
+    "254: ending tweaks only are not a rewrite",
+    REAL_DRAFT_254,
+    REAL_DRAFT_254.replace("ほうだった。", "ほうでした。").replace("だったりする。", "だったり。"),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  ],
+  [
+    "254: the dropped quote example is a lost quote",
+    REAL_DRAFT_254,
+    R254.replace("「ボタンを押しやすくして」って書くと", "ふわっと書くと"),
+    /VOICE_REWRITE_REJECTED/,
+  ],
+];
+for (const [label, original, text, pattern] of task32Holds) {
+  test(`task32 hold: ${label}`, () => {
+    assert.notEqual(text, original === REAL_DRAFT_254 ? R254 : R326);
+    assert.throws(() => freeRewrite(original, text), pattern);
+  });
+}
+
+test("task32 hold: an unchanged keep of the real 254 draft is not a two-stage success", () => {
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: REAL_DRAFT_254,
+  });
+  assert.throws(
+    () => prepared.validate({ decision: "keep", text: REAL_DRAFT_254, edits: [] }),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  assert.throws(
+    () => prepared.validate({ decision: "rewritten", text: REAL_DRAFT_254, edits: [] }),
+    /VOICE_REWRITE_REJECTED/,
+  );
+});
+
+test("task32: wording similarity ignores punctuation, protected masks and laugh marks", () => {
+  assert.equal(wordingSimilarity("通知を見た。", "通知を、見た😂"), 1);
+  assert.equal(wordingSimilarity("", ""), 1);
+  assert.equal(wordingSimilarity("あいう", ""), 0);
+  assert.ok(wordingSimilarity("あいうえお", "かきくけこ") === 0);
+});
+
+for (
+  const [label, reply] of [
+    ["keep of the real draft", { decision: "keep", text: REAL_DRAFT_254, edits: [] }],
+    ["rewrite with an invented habit", {
+      decision: "rewritten",
+      text: R254.replace("何がどうなったらOKか先に一行書いとくとズレは減りそう。", "毎朝、何がどうなったらOKか一行書いてる。"),
+      edits: [],
+    }],
+  ] as const
+) {
+  test(`task32 dispatch: ${label} sends no X payload`, async () => {
+    const f = fixture((_call, index) =>
+      providerResponse(index ? reply : { text: REAL_DRAFT_254 })
+    );
+    await assert.rejects(
+      dispatchAiLabScheduledBrandPost(f.args),
+      /VOICE_REWRITE_(?:REVIEW_REQUIRED|REJECTED)/,
+    );
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.includes("start X"), false);
+    assert.equal(f.recorder.calls.length, 2);
+  });
+}
+
+test("task32 dispatch: the checked casual rewrite of the real draft is the only X payload", async () => {
+  const f = fixture((_call, index) =>
+    providerResponse(
+      index
+        ? { decision: "rewritten", text: HAND_REWRITE_254, edits: [] }
+        : { text: REAL_DRAFT_254 },
+    )
+  );
+  const result = await dispatchAiLabScheduledBrandPost(f.args);
+  assert.deepEqual(f.payloads, [{ text: HAND_REWRITE_254, pollOptions: undefined }]);
+  assert.equal(result.voiceRewriteDecision, "edited");
+  for (const call of f.recorder.calls) {
+    assert.equal(new URL(call.url).hostname, "api.anthropic.com");
+  }
 });
