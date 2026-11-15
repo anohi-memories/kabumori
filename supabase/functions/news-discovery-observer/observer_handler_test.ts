@@ -91,6 +91,7 @@ function handler(db: FakeDb, fetchMap: Record<string, string | number>, extra: P
   const logs: Array<Record<string, unknown>> = [];
   const h = createObserverHandler({
     observerSecret: SECRET,
+    pauseCheck: () => Promise.resolve("running" as const),
     rpc: db,
     loadStocks: () => Promise.resolve([{ ticker_code: "7203", company_name: "トヨタ自動車", is_listed: true }]),
     fetchImpl: fetch.impl,

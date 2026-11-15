@@ -70,6 +70,7 @@ function setup(opts: { clockStepMs?: number; provider?: WebSearchProvider; db?: 
   const fetched: string[] = [];
   const handler = createObserverHandler({
     observerSecret: SECRET,
+    pauseCheck: () => Promise.resolve("running" as const),
     rpc: db,
     loadStocks: () => Promise.resolve([]),
     fetchImpl: (url: string) => {
