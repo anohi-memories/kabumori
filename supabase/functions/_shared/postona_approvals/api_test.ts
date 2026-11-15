@@ -154,6 +154,15 @@ test("G3-02 #24 limit 100 (the SQL cap): a full page is followed by a one-row lo
     };
     return { db, calls };
   };
+  const scriptedCodes = (answers: (Record<string, unknown>[] | string)[]) => {
+    const db: ApprovalDb = {
+      call: () => {
+        const a = answers.shift();
+        return Promise.resolve(typeof a === "string" ? { ok: false as const, code: a } : { ok: true as const, rows: a ?? [] });
+      },
+    };
+    return { db };
+  };
   const run = async (answers: (Record<string, unknown>[] | "error" | "throw")[], payload: Record<string, unknown> = { limit: 100 }) => {
     const { db, calls } = scripted(answers);
     const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req({ action: "notifications", payload }));
@@ -170,6 +179,17 @@ test("G3-02 #24 limit 100 (the SQL cap): a full page is followed by a one-row lo
   for (const bad of ["error", "throw", [note({ cursor: 401 })], [note({ cursor: "x" })], [note({ cursor: 300 }), note({ cursor: 200 })]] as const) {
     const r = await run([hundred(500), bad as never]);
     assert.deepEqual([(r.body.notifications as unknown[]).length, r.body.nextCursor], [100, 401], `unusable look-ahead ${JSON.stringify(bad).slice(0, 40)}: keep the cursor`);
+  }
+  // G3-02 #25 (H1 #49 P3): a definite refusal of the look-ahead refuses the whole answer, with no row of the first call; a temporary code keeps the cursor
+  for (const [code, status] of [["POSTONA_RESV_AUTH_REQUIRED", 401], ["POSTONA_RESV_NOT_FOUND", 404], ["POSTONA_RESV_SERVICE_NOT_ACTIVE", 403], ["POSTONA_RESV_REQUEST_INVALID", 422]] as const) {
+    const { db } = scriptedCodes([hundred(500), code]);
+    const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req({ action: "notifications", payload: { limit: 100 } }));
+    assert.deepEqual(res, { status, body: { ok: false, code } }, code);
+  }
+  for (const code of ["POSTONA_RESV_SERVICE_BUSY", "DB_UNAVAILABLE", "DB_ERROR", "SOMETHING_NEW"]) {
+    const { db } = scriptedCodes([hundred(500), code]);
+    const res = await createApprovalApi({ enabled: true, auth: verifier, db })(req({ action: "notifications", payload: { limit: 100 } }));
+    assert.deepEqual([res.status, ((res.body as Record<string, unknown>).notifications as unknown[]).length, (res.body as Record<string, unknown>).nextCursor], [200, 100, 401], `temporary ${code}: keep the rows and the cursor`);
   }
   const short = await run([hundred(500).slice(0, 99)]);
   assert.deepEqual([(short.body.notifications as unknown[]).length, short.body.nextCursor, short.calls.length], [99, null, 1], "a short page: no look-ahead");

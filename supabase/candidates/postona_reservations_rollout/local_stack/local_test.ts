@@ -1452,4 +1452,27 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await out.body?.cancel();
     assert.deepStrictEqual(code(await http(AP, { action: "notifications", payload: { limit: 50, before: p1.next } }, e.token)), "401 AUTH_REQUIRED");
   });
+
+  await t.step("L44 G3-02 #25 (H1 #49 P3): the session ends between the page and its limit-100 look-ahead (a real GoTrue sign-out while the first call waits): 401, no row returned; the next request is 401 too", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const total = Number(await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId }));
+    assert.ok(total > 100, `d has ${total} notifications (a full first page is needed)`);
+    // one pending event (SYNTHETIC record) makes the first call's drain write a notification; a test-only 3 s barrier on that write holds the
+    // first call after its session check, and the person signs out (real GoTrue) meanwhile; the look-ahead is the second call
+    const pick = await owner("select c.reservation_id || ' ' || c.id from postona_x_resv.approval_candidates c where c.user_id = :'u' and c.state = 'approved' and c.reservation_id is not null limit 1", { u: d.userId });
+    const [rid, cid] = pick.split(" ");
+    await owner("insert into postona_x_resv.reservation_events (reservation_id, revision, status, user_id, brand_id, candidate_id, scheduled_at) select :'i', 4001, 'planned', :'u', brand_id, :'c', now() from postona_x_resv.approval_candidates where id = :'c'", { i: rid, u: d.userId, c: cid });
+    await owner("create function public.g3ls25_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return new; end $$; create trigger g3ls25_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls25_barrier();", {});
+    const listing = http(AP, { action: "notifications", payload: { limit: 100 } }, d.token);
+    await sleep(1000);
+    const out = await fetch(`${API}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: PUBLISHABLE, authorization: `Bearer ${d.token}` } });
+    await out.body?.cancel();
+    assert.ok(out.status === 204 || out.status === 200, `logout ${out.status}`);
+    const answered = await listing;
+    await owner("drop trigger g3ls25_barrier on postona_x_resv.notifications; drop function public.g3ls25_barrier();", {});
+    console.log(`G3LS_L44 page answered ${answered.status} ${JSON.stringify(answered.body).slice(0, 80)}`);
+    assert.deepStrictEqual([answered.status, answered.body.code, "notifications" in answered.body], [401, "POSTONA_RESV_AUTH_REQUIRED", false], "the session ended before the look-ahead: refused, no rows");
+    assert.deepStrictEqual(code(await http(AP, { action: "notifications", payload: { limit: 100 } }, d.token)), "401 AUTH_REQUIRED", "and stays refused");
+  });
 });

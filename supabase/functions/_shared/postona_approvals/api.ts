@@ -254,16 +254,24 @@ export function createApprovalApi(deps: { enabled: boolean; auth?: AuthVerifier;
     let more = fetched.length > call.page;
     if (!more && notifications.length === call.page && call.page === LIST_MAX) {
       // limit 100: the look-ahead is one more row strictly below the last one, read by the same owner function as the same person, so it
-      // can only ever see this person's own rows (no count of anything else). An unusable answer keeps the cursor: the next page then
-      // simply comes back empty with nextCursor: null.
+      // can only ever see this person's own rows (no count of anything else).
+      // G3-02 #25 (H1 #49 P3): a DEFINITE refusal of the look-ahead (a fixed 4xx code, e.g. POSTONA_RESV_AUTH_REQUIRED: the session ended
+      // between the two calls) refuses the whole answer with that code, so not even the rows already read are returned. Only a temporary
+      // failure (a thrown call, a 5xx code such as SERVICE_BUSY / DB_UNAVAILABLE, an unknown code, a malformed answer) keeps the cursor:
+      // the next page then returns whatever is left, or comes back empty with nextCursor: null.
       const last = notifications[notifications.length - 1].cursor;
+      let probe: ApprovalDbResult | null = null;
       try {
-        const probe = await db.call("list_notifications", [1, last], subject);
-        const row = probe.ok && probe.rows.length <= 1 ? probe.rows.map(toNotification) : null;
-        more = row === null || row.some((r) => r === null) || !strictlyBelow(row as NotificationDto[], last, 1) || row.length === 1;
+        probe = await db.call("list_notifications", [1, last], subject);
       } catch {
-        more = true;
+        probe = null;
       }
+      if (probe !== null && !probe.ok) {
+        const status = STATUS_BY_CODE[probe.code];
+        if (status !== undefined && status >= 400 && status < 500) return fail(status, probe.code);
+      }
+      const row = probe !== null && probe.ok && probe.rows.length <= 1 ? probe.rows.map(toNotification) : null;
+      more = row === null || row.some((r) => r === null) || !strictlyBelow(row as NotificationDto[], last, 1) || row.length === 1;
     }
     const nextCursor = more ? notifications[notifications.length - 1].cursor : null;
     return { status: 200, body: { ok: true, notifications, nextCursor } };
