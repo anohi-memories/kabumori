@@ -40,6 +40,12 @@
 # site: this app's source has no code path that would even read such a variable today, and it must stay
 # that way for Netlify to remain a thin, secret-free authenticated UI as this task's Goal requires.
 #
+# The one exception is ADMIN_INVITE_BINDING_SECRET: a random key (at least 32 bytes, e.g. from
+# `openssl rand -base64 48`) generated for this app alone, used only to sign the short-lived invite-purpose
+# cookie on the password setup page (src/lib/invite-purpose.ts). It grants no Supabase or X access. Set it
+# in the Netlify UI with Functions scope, never in this file and never as NEXT_PUBLIC_*. Without it, invite
+# links fail closed (no password setup form); password recovery is unaffected.
+#
 # Uncomment locally in the Netlify UI (do not hardcode real values in this file, even though they are not
 # secret, so the same file can be reused across environments without editing):
 #   NEXT_PUBLIC_SUPABASE_URL
