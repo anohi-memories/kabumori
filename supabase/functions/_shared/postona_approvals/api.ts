@@ -259,6 +259,8 @@ export function createApprovalApi(deps: { enabled: boolean; auth?: AuthVerifier;
       const last = notifications[notifications.length - 1].cursor;
       try {
         const probe = await db.call("list_notifications", [1, last], subject);
+        // an explicit expiry (session / owner / JWT) between the two queries is a real refusal, not a flaky probe: fail closed, no rows
+        if (!probe.ok && probe.code === "POSTONA_RESV_AUTH_REQUIRED") return fail(401, "POSTONA_RESV_AUTH_REQUIRED");
         const row = probe.ok && probe.rows.length <= 1 ? probe.rows.map(toNotification) : null;
         more = row === null || row.some((r) => r === null) || !strictlyBelow(row as NotificationDto[], last, 1) || row.length === 1;
       } catch {
