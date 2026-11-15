@@ -1,0 +1,17 @@
+#342 48427b80c972f16015785097a65f43965ccc5828 draft=true OPEN base=claude/f4-postona-threads-disconnect-20261012
+#346 c71f2a1f59d3b1eb72447a73b602adf51639c691 draft=true OPEN base=claude/f1-postona-keyboard-avoidance-dark-statusbar-20261019
+#348 e3963e1167aecfe349315428c317a1441257ac83 draft=true OPEN base=main
+#353 4d42b5c7a511831151bd98a34e473866dea43173 draft=true OPEN base=main
+#361 44a04fc0e9604f02fff2e1a77a452be870c9ecd9 draft=true OPEN base=claude/g1-postona-statusbar-redbox-keyboard-20261019
+#362 a2145eed2abda32b6f545c529b5b11a39c0d1e2c draft=true OPEN base=claude/f4-postona-pr251-android-intent-filter-p2-20261017
+#365 8ddcb4723fcb6fc6d3e33a11fc5862ab21b182e4 draft=true OPEN base=claude/g4-postona-threads-send-beforepublish-20261020
+#366 44ab2e6bb812f3484c85f847574de103757e3dfc draft=true OPEN base=claude/g1-postona-statusbar-redbox-keyboard-20261019
+#368 92d170b8ca9563e55a540dfb495cbcd402b70aa6 draft=true OPEN base=claude/g3-threads-owner-epoch-aba-20261020
+#369 6c363afeec63327deeedeec4ee37ae8f3206fa96 draft=true OPEN base=main
+#374 e3dfbd3cce3fffccdb638159f3aa6c3313d5098c draft=true OPEN base=claude/g3-threads-owner-epoch-aba-20261020
+#376 66cce840924820bbd223e70071efbb4eb125ebcc draft=true OPEN base=claude/g1-postona-manual-draft-preservation-20261020
+#380 825fc837227af9b81c7d6e9db3c0744d9b8f01ed draft=true OPEN base=claude/g1-postona-manual-draft-preservation-20261020
+#381 8eefb3b63f4efba0727e99de980e0d56733d1d8e draft=true OPEN base=claude/g4-postona-threads-common-service-key-20261020
+#383 759b89fa376f5b3ba9286fa49d5295a6e4938459 draft=true OPEN base=claude/g5-06-brandless-oauth-bootstrap-20261020
+#385 fb11542fb2febc592337e83361f2c9462d553c65 draft=true OPEN base=claude/g2-pr366-sessionmark-offline-qa-20261020
+#386 7c64c011831dea36608ebb2b62c6e96bc455d247 draft=true OPEN base=claude/g3-threads-g4-credential-sql-e2e-20261020

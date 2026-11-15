@@ -1,0 +1,16 @@
+# PR #369 HEAD 6c363afe: G1 tests/g1-not-found-screen.test.mjs
+✔ the screen says "page not found" in Japanese and offers exactly one way out: the home screen (24.917083ms)
+✔ whatever the link is -- tokens, queries, fragments, broken or repeated encodings, giant paths, /_sitemap -- the screen is IDENTICAL and shows none of it (32.238292ms)
+✔ the source reads nothing about the link and logs nothing: only `Link` from the router, no hooks, no console, no network, no sign-in (1.992625ms)
+✔ expo-router resolves the real src/app tree so that `+not-found` is THIS file, not the generated Unmatched screen (4.52675ms)
+✔ read-only state of the shared setting: the `/_sitemap` route is still generated unless the router option `sitemap: false` is set (NOT FIXED here; owner: shared app config) (1.1215ms)
+✔ no network entry point was touched by any step (0.0515ms)
+ℹ tests 6
+ℹ pass 6
+ℹ fail 0
+
+# PR #369 HEAD 6c363afe: whole app suite
+ℹ tests 283
+ℹ pass 283
+ℹ fail 0
+ℹ skipped 0
