@@ -1,0 +1,12 @@
+captureTime: 2026-10-19 22:08:12.1105 +0900
+exception: EXC_BREAKPOINT SIGTRAP
+termination: Trace/BPT trap: 5
+faulting thread frames (top 8):
+  0 UIKitCore ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke
+  1 libdispatch.dylib _dispatch_client_callout
+  2 libdispatch.dylib _dispatch_once_callout
+  3 UIKitCore -[UIApplication workspace:didCreateScene:withTransitionContext:completion:]
+  4 UIKitCore -[UIApplicationSceneClientAgent scene:didInitializeWithEvent:completion:]
+  5 FrontBoardServices __95-[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]_block_invoke
+  6 FrontBoardServices -[FBSScene _callOutQueue_maybeCoalesceClientSettingsUpdates:]
+  7 FrontBoardServices -[FBSScene _callOutQueue_didCreateWithTransitionContext:alternativeCreationCallout:completion:]

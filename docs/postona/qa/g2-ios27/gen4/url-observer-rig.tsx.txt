@@ -1,0 +1,56 @@
+// F2 QA RIG ONLY (2026-10-19, never committed): replaces the auth provider in this QA worktree's Metro bundle so the
+// Simulator can reach the manual-publish screen without any sign-in, network or token. The session is a fixed fake.
+import { useEffect, type PropsWithChildren } from 'react';
+import * as Linking from 'expo-linking';
+
+// G2 QA RIG (2026-10-20): observe what the native scene delegate forwards to JS. Logs only the scheme, host, path and the
+// sorted parameter NAMES (never values), so no code/state/token reaches the log.
+function shape(url: string | null): string {
+  if (!url) return 'null';
+  try {
+    const u = new URL(url);
+    const names = [...new Set([...u.searchParams.keys(), ...new URLSearchParams(u.hash.replace(/^#/u, '')).keys()])].sort();
+    return `${u.protocol}//${u.host}${u.pathname} params=[${names.join(',')}] len=${url.length}`;
+  } catch {
+    return `unparsable len=${url.length}`;
+  }
+}
+
+
+const RIG_SESSION = Object.freeze({ user: Object.freeze({ id: '00000000-0000-4000-8000-0000000f2a01' }), access_token: 'f2-qa-rig-not-a-token' });
+const notAvailable = async () => ({ ok: false, message: 'QA rig: not available' });
+
+const RIG_AUTH = Object.freeze({
+  loading: false,
+  session: RIG_SESSION,
+  recoveryMode: false,
+  error: null,
+  email: null,
+  readiness: null,
+  releaseReport: null,
+  settings: null,
+  signOut: notAvailable,
+  signInWithProvider: notAvailable,
+  linkProvider: notAvailable,
+  requestPasswordReset: notAvailable,
+  completePasswordRecovery: notAvailable,
+  accountDeletion: { available: false },
+  deletionNotice: null,
+  dismissDeletionNotice: () => {},
+  reauthenticate: notAvailable,
+  previewDeletion: notAvailable,
+  deleteAccount: notAvailable,
+});
+
+export function AuthProvider({ children }: PropsWithChildren) {
+  useEffect(() => {
+    void Linking.getInitialURL().then((url) => console.log(`[G2QA] initialURL ${shape(url)} t=${Date.now()}`));
+    const sub = Linking.addEventListener('url', ({ url }) => console.log(`[G2QA] url-event ${shape(url)} t=${Date.now()}`));
+    return () => sub.remove();
+  }, []);
+  return <>{children}</>;
+}
+
+export function useAuth() {
+  return RIG_AUTH as never;
+}

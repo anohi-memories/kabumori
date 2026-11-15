@@ -1,0 +1,10 @@
+# [G2QA] lines from the QA rig (scheme/host/path + parameter NAMES only; values are never logged). 2026-10-20 JST.
+13:15:35 initialURL kabumori-social://oauth-callback params=[code,state] len=70      # cold start via simctl openurl
+13:16:23 url-event  kabumori-social://oauth-callback params=[code,state] len=72      # foreground
+13:16:51 url-event  kabumori-social://auth-callback params=[code,sb_flow_id] len=68  # background -> resume
+13:17:33 url-event  kabumori-social://auth-callback params=[code,sb_flow_id] len=68  # duplicate of the previous one
+13:17:36 url-event  kabumori-social://manual-publish params=[accountId,text] len=70
+13:17:41 url-event  kabumori-social://accounts/sa_th_connected params=[] len=42
+13:17:45 url-event  kabumori-social://account-deletion params=[] len=34
+13:17:50 url-event  kabumori-social://no-such-route params=[x] len=35
+(kabumori-social://%%% — no [G2QA] line was observed for it; the router still showed Unmatched Route with the URL as "kabumori-social://%2525%2525%2525". Cause not investigated -> NOT_VERIFIED)
