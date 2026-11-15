@@ -1,0 +1,11 @@
+# the existing app test on a CLEAN tree (origin/main)
+✔ the real app.json: scheme, plugins and Apple entitlement match; bundle id is an operator gate until set (2.449917ms)
+ℹ pass 1
+ℹ fail 0
+
+# the same test after a local 'expo prebuild --platform ios' (app.json now carries ios.bundleIdentifier, not committed)
+ apps/social-mobile/app.json | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+✔ the real app.json: scheme, plugins and Apple entitlement match; bundle id is an operator gate until set (3.571042ms)
+ℹ pass 1
+ℹ fail 0

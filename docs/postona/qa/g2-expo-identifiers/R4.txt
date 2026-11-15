@@ -1,0 +1,6 @@
+# R4: after R3 the ids are in app.json -- prebuild again (no --clean), then --clean: does anything else move?
+  app.json changed by the 2nd prebuild: no  package.json: no
+  app.json changed by --clean: no  package.json: no
+  app.json ios.bundleIdentifier= "com.anohi-memories.kabumori-social-mobile" android.package= "com.anohimemories.kabumorisocialmobile"
+  PRODUCT_BUNDLE_IDENTIFIER: PRODUCT_BUNDLE_IDENTIFIER = "com.anohi-memories.kabumori-social-mobile" 
+  build.gradle:  namespace 'com.anohimemories.kabumorisocialmobile' applicationId 'com.anohimemories.kabumorisocialmobile' versionCode 1 versionName "0.1.0" 

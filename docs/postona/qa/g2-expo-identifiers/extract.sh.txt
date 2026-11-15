@@ -1,0 +1,23 @@
+#!/bin/bash
+# Print the identifiers a prebuild generated (run inside apps/social-mobile of a DISPOSABLE worktree).
+echo "## tracked files (git diff --stat / app.json ids / package.json scripts)"
+git diff --stat -- app.json package.json .gitignore | sed 's/^/  /'
+node -e 'const a=require("./app.json").expo;console.log("  app.json ios.bundleIdentifier=",JSON.stringify(a.ios&&a.ios.bundleIdentifier),"android.package=",JSON.stringify(a.android&&a.android.package));const p=require("./package.json");console.log("  package.json scripts.ios=",JSON.stringify(p.scripts.ios),"scripts.android=",JSON.stringify(p.scripts.android))'
+if [ -d ios ]; then
+  echo "## iOS"
+  echo "  PRODUCT_BUNDLE_IDENTIFIER: $(grep -o 'PRODUCT_BUNDLE_IDENTIFIER = [^;]*' ios/*.xcodeproj/project.pbxproj | sort -u | tr '\n' ' ')"
+  P=$(ls ios/*/Info.plist | head -1)
+  echo "  CFBundleDisplayName: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$P" 2>&1)"
+  echo "  CFBundleShortVersionString: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$P" 2>&1)  CFBundleVersion: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$P" 2>&1)"
+  echo "  CFBundleURLSchemes: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes' "$P" 2>&1 | grep -v -E '^\s*(Array|Dict|\}|CFBundleURLSchemes = Array \{)' | tr -s ' \n' ' ')"
+  echo "  UIApplicationSceneManifest: $(/usr/libexec/PlistBuddy -c 'Print :UIApplicationSceneManifest' "$P" 2>&1 | head -1)"
+  E=$(ls ios/*/*.entitlements 2>/dev/null | head -1)
+  [ -n "$E" ] && echo "  entitlements keys: $(/usr/libexec/PlistBuddy -c 'Print' "$E" 2>&1 | grep -o '^    [a-zA-Z.-]*' | tr -s ' \n' ' ')"
+fi
+if [ -d android ]; then
+  echo "## Android"
+  echo "  build.gradle: $(grep -E '^\s*(namespace|applicationId|versionCode|versionName)\b' android/app/build.gradle | tr -s ' \n' ' ')"
+  echo "  app_name: $(grep -o '<string name="app_name">[^<]*' android/app/src/main/res/values/strings.xml | sed 's/.*>//')"
+  echo "  intent-filters (scheme/host/autoVerify):"
+  grep -E 'android:scheme|android:host|autoVerify|android:pathPrefix|android:launchMode' android/app/src/main/AndroidManifest.xml | sed 's/^ */    /'
+fi
