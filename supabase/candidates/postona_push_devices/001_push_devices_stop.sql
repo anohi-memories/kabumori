@@ -8,6 +8,8 @@
 -- off. Restart: run 001_push_devices.sql again (it turns the fence on and grants EXECUTE again).
 -- G5-02 task 11: the token claims (private.postona_push_token_claims, hashes only) are kept: after a restart a token still moves to another
 -- person only on its own installation with its device secret.
+-- G5-02 task 13: the "off" fences (private.postona_push_off_fences, no secret) are kept too. The fence above also waits for a proof issue
+-- in flight (it holds the fence FOR SHARE); an issue after the stop sees it off and issues nothing.
 
 begin;
 set local lock_timeout = '5s';

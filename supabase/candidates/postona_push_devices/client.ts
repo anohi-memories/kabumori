@@ -1,4 +1,4 @@
-// G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9; task 10 fixes H4 #331 task 24 P2-2 / P2-3; task 11 H4 #331 task 25 P2-1 / P2-2; task 12 H4 #331 task 26 P2-1 / P2-2): the POSTONA push-device client
+// G5 SOURCE CANDIDATE (2026-11-13, Issue #587 G5-02 task 9; task 10 fixes H4 #331 task 24 P2-2 / P2-3; task 11 H4 #331 task 25 P2-1 / P2-2; task 12 H4 #331 task 26 P2-1 / P2-2; task 13 H4 #331 task 27 P2-2 / P2-3): the POSTONA push-device client
 // contract, dependency-free. G1 may copy this file into the app (or re-implement it to the same contract,
 // docs/common-account/g5-02-09-push-device-contract.md). It needs only `client.rpc(fn, args)` from supabase-js v2. The person is whoever
 // the client's session is: the app never sends a user id, a workspace id or a session id. The push token and the device secret are
@@ -36,6 +36,12 @@
 //     handed over with its device secret are active at once. Never answer a proof for another installation id; never show the nonce.
 //   - DEVICE_LIMIT on register / 'recorded': false on unregister (G5-02 #12 P2-2): the person's history is full; nothing is delivered to a
 //     new installation until old rows age out (1 day) -- try again later.
+//   - (G5-02 #13 P2-2) PROOF_STALE / PROOF_EXPIRED on a proof answer: the nonce belongs to another session or generation, or the pending
+//     registration expired; nothing to answer -- the next syncPushDevice registers again (a new pending registration, a new nonce).
+//   - (G5-02 #13 P2-3) a first registration (expectedVersion null) is accepted only with a session token issued within the last day and
+//     after this person's last "off" fence: STALE_REGISTRATION with reason 'REQUEST_BEFORE_OFF' otherwise. Never re-send it. "on" again
+//     after an "off" that answered 'fenced': true (or any REQUEST_BEFORE_OFF): refresh the session first (supabase.auth.refreshSession()),
+//     then syncPushDevice(...) -- an explicit new request with a token issued after the "off".
 
 export type PushPlatform = 'ios' | 'android';
 export type PushDevice = {
@@ -50,7 +56,7 @@ export type PushDevice = {
   updated_at: string;
 };
 export type PushFailureClass = 'auth' | 'forbidden' | 'workspace' | 'stale' | 'in_use' | 'limit' | 'invalid' | 'proof' | 'unavailable';
-export type PushFailure = { ok: false; class: PushFailureClass; status: string; registration_version?: number | null };
+export type PushFailure = { ok: false; class: PushFailureClass; status: string; registration_version?: number | null; reason?: string };
 
 // every refusal the three RPCs answer, and how the app should treat it
 export const PUSH_STATUS_CLASS: Readonly<Record<string, PushFailureClass>> = {
@@ -59,7 +65,7 @@ export const PUSH_STATUS_CLASS: Readonly<Record<string, PushFailureClass>> = {
   SERVICE_NOT_REGISTERED: 'forbidden', SERVICE_NOT_ACTIVE: 'forbidden', SERVICE_DELETION_IN_PROGRESS: 'forbidden',
   WORKSPACE_REQUIRED: 'workspace', OWN_WORKSPACE_CONFLICT: 'forbidden', WORKSPACE_OWNER_UNKNOWN: 'forbidden',
   STALE_REGISTRATION: 'stale', DEVICE_IN_USE: 'in_use', DEVICE_LIMIT: 'limit', INVALID_INPUT: 'invalid',
-  PROOF_NOT_PENDING: 'proof', PROOF_EXPIRED: 'proof', PROOF_INVALID: 'proof',
+  PROOF_NOT_PENDING: 'proof', PROOF_EXPIRED: 'proof', PROOF_INVALID: 'proof', PROOF_STALE: 'proof',
   PUSH_DEVICES_STOPPED: 'unavailable', PUSH_BUSY: 'unavailable', ACCOUNT_LIFECYCLE_BUSY: 'unavailable', ACCOUNT_LIFECYCLE_WRITER_FENCE_UNAVAILABLE: 'unavailable',
 };
 
@@ -76,12 +82,13 @@ export function newDeviceSecret(): string {
 }
 
 type RpcClient = { rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { code?: string } | null }> };
-type Answer = { status: string; device?: PushDevice; registration_version?: number | null; delivery?: string; devices?: PushDevice[]; recorded?: boolean };
+type Answer = { status: string; device?: PushDevice; registration_version?: number | null; delivery?: string; devices?: PushDevice[]; recorded?: boolean; fenced?: boolean; reason?: string };
 
 function failure(a: Answer | null, error: { code?: string } | null): PushFailure {
   if (error) return { ok: false, class: error.code === '42501' || error.code === 'PGRST301' ? 'auth' : 'unavailable', status: `HTTP:${error.code ?? 'unknown'}` };
   const status = a?.status ?? 'UNKNOWN';
-  return { ok: false, class: PUSH_STATUS_CLASS[status] ?? 'unavailable', status, ...(a && 'registration_version' in a ? { registration_version: a.registration_version ?? null } : {}) };
+  return { ok: false, class: PUSH_STATUS_CLASS[status] ?? 'unavailable', status, ...(a && 'registration_version' in a ? { registration_version: a.registration_version ?? null } : {}),
+    ...(a && typeof a.reason === 'string' ? { reason: a.reason } : {}) };
 }
 
 export type RegisterInput = { installationId: string; deviceSecret: string; platform: PushPlatform; pushToken: string; expectedVersion: number | null; proofNonce?: string };
@@ -146,11 +153,11 @@ export async function confirmPushDevice(client: RpcClient, readCurrent: () => Pr
 }
 
 // with the device secret, "off" is kept on the server even before the first registration (G5-02 #11 P2-2); without it, only an existing row
-export async function unregisterPushDevice(client: RpcClient, installationId: string, deviceSecret?: string): Promise<{ ok: true; status: 'unregistered' | 'not_registered'; recorded?: boolean; device?: PushDevice } | PushFailure> {
+export async function unregisterPushDevice(client: RpcClient, installationId: string, deviceSecret?: string): Promise<{ ok: true; status: 'unregistered' | 'not_registered'; recorded?: boolean; fenced?: boolean; device?: PushDevice } | PushFailure> {
   if (deviceSecret !== undefined && !DEVICE_SECRET_PATTERN.test(deviceSecret)) return { ok: false, class: 'invalid', status: 'INVALID_INPUT' };
   const r = await client.rpc('postona_push_device_unregister', { p_installation_id: installationId, p_device_secret: deviceSecret ?? null });
   const a = r.data as Answer | null;
-  if (!r.error && (a?.status === 'unregistered' || a?.status === 'not_registered')) return { ok: true, status: a.status, ...(a.recorded !== undefined ? { recorded: a.recorded } : {}), ...(a.device ? { device: a.device } : {}) };
+  if (!r.error && (a?.status === 'unregistered' || a?.status === 'not_registered')) return { ok: true, status: a.status, ...(a.recorded !== undefined ? { recorded: a.recorded } : {}), ...(a.fenced !== undefined ? { fenced: a.fenced } : {}), ...(a.device ? { device: a.device } : {}) };
   return failure(a, r.error);
 }
 
