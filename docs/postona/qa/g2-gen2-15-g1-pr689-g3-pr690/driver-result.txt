@@ -1,0 +1,21 @@
+PASS D1-n0 rows=0 unique=0 db=0 order=true lastNextCursor=null requests=1/1 stopped=undefined
+PASS D1-n50 rows=50 unique=50 db=50 order=true lastNextCursor=null requests=1/1 stopped=undefined
+PASS D1-n51 rows=51 unique=51 db=51 order=true lastNextCursor=null requests=2/2 stopped=undefined
+PASS D1-n100 rows=100 unique=100 db=100 order=true lastNextCursor=null requests=2/2 stopped=undefined
+PASS D1-n101 rows=101 unique=101 db=101 order=true lastNextCursor=null requests=2/2 stopped=undefined
+PASS D1-n150 rows=150 unique=150 db=150 order=true lastNextCursor=null requests=2/2 stopped=undefined
+PASS D1-n151 rows=151 unique=151 db=151 order=true lastNextCursor=null requests=3/3 stopped=undefined
+PASS D1-n279 rows=279 unique=279 db=279 order=true lastNextCursor=null requests=4/4 stopped=undefined
+PASS D1-n300 rows=300 unique=300 db=300 order=true lastNextCursor=null requests=4/4 stopped=undefined
+PASS D1-past-end server past the last cursor: 200 rows=0 next=null
+PASS D2-cap pages=20 rows=1950 stopped=capped requests=20
+PASS D3-client client refused 4/4 locally, requests=0
+PASS D3-server server: 400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID,400:REQUEST_INVALID
+PASS D4-markRead markRead of a shown row during the walk: ok
+PASS D4-mid rows=299 (300 - 1 removed, +5 newer not in later pages) unique=true order=true removedShown=false
+PASS D5-isolation B rows=3 with A's cursor 200 rows=0 leaked=0
+PASS D6-ended walk rows=130 markRead=POSTONA_RESV_SERVICE_NOT_ACTIVE submit=404:POSTONA_RESV_ACCOUNT_NOT_FOUND rows/read before=130:0 after=130:0
+PASS D7-late late page for the old cursor added=false
+PASS D8-auth logout=204 page=401:POSTONA_RESV_AUTH_REQUIRED rows=0 next call=401
+PASS D9-lookahead-temp page=200 rows=100 nextCursor kept=true -> next page 200 rows=50 next=null functionRestored=true
+G2T15_DRIVER_DONE fails=0

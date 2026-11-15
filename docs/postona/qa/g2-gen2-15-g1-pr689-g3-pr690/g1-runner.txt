@@ -1,0 +1,17 @@
+ℹ pass 15
+ℹ fail 0
+ℹ skipped 1
+G1T44_APPROVALS_LOCAL_STACK_PASS
+G1T45_APPROVALS_LOCAL_STACK_PASS
+G1T46_APPROVALS_LOCAL_STACK_PASS
+✖ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2030.577ms)
+✔ T51 paging on the real runtime: 279 synthetic notifications are read as 50 + 100 + 100 + 29 by the person's presses, each once, only reads; the first page is as before (1807.678584ms)
+G1T51_PAGING_LOCAL_STACK_PASS
+G1T52_FINAL_PAGE_LOCAL_STACK_PASS
+ℹ pass 17
+ℹ fail 1
+ℹ skipped 0
+✖ failing tests:
+✖ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2030.577ms)
+  AssertionError [ERR_ASSERTION]: only reads: 
+G2_T15_APPROVALS_E2E_FAILED_CONTINUING

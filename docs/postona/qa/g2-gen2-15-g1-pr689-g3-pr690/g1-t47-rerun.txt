@@ -1,0 +1,8 @@
+✔ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2584.43325ms)
+✔ T47 on the real runtime: an expired / foreign JWT gives the check no answer -> nothing marked; another person's screen reads none of P's rows (2286.9215ms)
+ℹ pass 2
+ℹ fail 0
+✔ T47 G2 #11 P3 on the real runtime: service ended with the notification screen open -> the tap sends no markRead, the rows stay unread, the screen is read-only; G3 itself would still accept it (measured); restart -> marks once (2732.014417ms)
+✔ T47 on the real runtime: an expired / foreign JWT gives the check no answer -> nothing marked; another person's screen reads none of P's rows (1935.929666ms)
+ℹ pass 2
+ℹ fail 0
