@@ -1,0 +1,10 @@
+  L23 E2E X refuses (401) -> recorded failed before send (X_REJECTED_401), never retried ... ok (1s)
+G3LS_L40 worker run 4545 ms, {"claimed":1,"sends":1,"published":1,"failedBeforeSend":0,"uncertain":0,"skipped":0,"released":0,"notAvailable":false,"stopped":false}, row published/9000000014
+G3LS_L42 278 notifications in 3 pages (100/100/78)
+G3LS_L43 {"0 @50":"0.","50 @50":"50.","51 @50":"50> 1.","100 @100":"100.","100 @50":"50> 50.","101 @100":"100> 1."}
+G3LS_L44 page answered 401 {"ok":false,"code":"POSTONA_RESV_AUTH_REQUIRED"}
+ok | 1 passed (45 steps) | 0 failed (3m28s)
+ℹ pass 11
+ℹ fail 0
+OK G1 SCREEN: G1's real screen (PR #606 f0c5148d20e7e54654375b93591539eb8f99bf9c) over G3's real stores and the real GoTrue / Kong / Edge / Postgres
+G3LS_LOCAL_STACK_PASS
