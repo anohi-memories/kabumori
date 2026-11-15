@@ -1,4 +1,11 @@
-# POSTONA push devices: registration, revocation and the delivery read (G5-02 task 9; tasks 10, 11, 12)
+# POSTONA push devices: registration, revocation and the delivery read (G5-02 task 9; tasks 10, 11, 12, 13)
+
+**G5-02 task 13** fixes H4 #331 task 27's three P2 on PR #681:
+- **P2-1:** a nonce is issued only to a pending registration that delivery itself would accept now, under one lock order with the stop and lifecycle changes (section 2d).
+- **P2-2:** a proof answer is accepted only before its pending registration expires, from the session and generation it was registered under; the nonce is bound to that registration and never outlives it (section 2d).
+- **P2-3:** "off" is durable: a first registration is accepted only with a JWT issued within the 1-day "off" protection period and after the person's "off" fence (section 2d).
+
+Each is reproduced on PR #681's own files, then passes (section 8). Still **no push provider is connected; a real proof is NOT_RUN**, and an issued nonce is not a delivery GO: the worker's read-to-send re-authorization (section 5) is still to be built.
 
 **G5-02 task 12** fixes H4 #331 task 26's two P2 on PR #676:
 - **P2-1:** no deliverable registration of an unproven token. It is pending until the phone answers the provider's nonce, and a proof is the newer control (section 2b).
@@ -72,9 +79,9 @@ A registration is **active at once** only for a token whose control was already 
 | step | who | what |
 | --- | --- | --- |
 | 1 | the app | register → `pending_proof` |
-| 2 | the push worker (owner-only `private.postona_push_proof_issue(limit, installation_id)`) | a fresh nonce for each pending registration without a live one: at most 3 per registration, 10 minutes each; only its SHA-256 is stored. The worker sends `{ kind: 'postona_push_proof', installation_id, nonce }` as a data-only push **to that token** through the provider |
+| 2 | the push worker (owner-only `private.postona_push_proof_issue(limit, installation_id)`) | a fresh nonce for each **eligible** pending registration without a live one (task 13: section 2d): at most 3 per registration, 10 minutes each but never past the pending registration's expiry; only a hash bound to the registration is stored. The worker sends `{ kind: 'postona_push_proof', installation_id, nonce }` as a data-only push **to that token** through the provider |
 | 3 | the app on the phone that receives it | `confirmPushDevice`: only for its own installation id, only while notifications are on now → register with `p_proof_nonce` (CAS on the pending version) |
-| 4 | the server | the nonce's hash matches and has not expired → active, the claim moves here, the token's earlier active holder (anyone's) is revoked `taken_over` |
+| 4 | the server | the pending registration and the nonce have not expired, the answer comes from the registration's own session and generation (task 13), the bound hash matches → active, the claim moves here, the token's earlier active holder (anyone's) is revoked `taken_over` |
 
 - **The proof is the newer control of the token,** because the provider delivers to the phone that holds it. A wrong first binding therefore never locks the real phone out: it proves and takes the token.
 - **A third party without the phone never sees the nonce:**
@@ -91,14 +98,52 @@ A registration is **active at once** only for a token whose control was already 
 - **When nothing can be pruned** (more than ~85 revocations within a day):
   - register of a new installation answers `DEVICE_LIMIT`;
   - unregister of a new installation records nothing and answers `'recorded': false`.
-  Because no new installation of that person can register while full, nothing is delivered to that installation: **fail-closed**. It can only reopen for a request delayed for more than the 1-day window.
+  Because no new installation of that person can register while full, nothing is delivered to that installation: **fail-closed**. Since task 13 that "off" also sets the person's "off" fence (`'fenced': true`), so it stays in force after room frees up (section 2d).
 - **Retention (purge):**
   - revoked rows (history and "off" rows) are deleted 30 days after the revoke;
   - a token claim is released when its account is gone, or 180 days after its last activation when no active row holds the token;
   - pending registrations end after 15 minutes.
 - **The audit trade-off:**
-  - an "off" row protects against a delayed first registration only while it exists (30 days, or 1 day under cap pressure);
+  - an "off" row protects against a delayed first registration while it exists (30 days, or 1 day under cap pressure); since task 13 the JWT-age rule and the person's fence cover the time after (section 2d);
   - a claim is a token hash, kept so that the owner's reinstall stays one step. After it expires, the owner's next registration simply needs a proof.
+
+### 2d. Issue eligibility, answer freshness and durable "off" (task 13)
+
+**P2-1, the issue.** `private.postona_push_proof_issue` issues a nonce only when, read again after the row's locks:
+- the stop fence is on;
+- MV's verdict is `active` for (user, the row's workspace, the **current** lifecycle_version): account active, no deletion, `x_autopost` active, S2-3 `own`;
+- the row was registered under that lifecycle_version and the derived workspace, and its session is live;
+- the pending registration has not expired, has no live nonce and fewer than 3 issues.
+
+| step | lock | if taken |
+| --- | --- | --- |
+| 1 | the stop fence **FOR SHARE** (the call holds nothing else; run it in its own transaction) | waits up to 5 s (`lock_timeout`), then `PUSH_BUSY` is raised |
+| 2 | per row: the account **FOR SHARE NOWAIT** (T13 holds it FOR UPDATE for every lifecycle change) | the row is skipped |
+| 3 | the person / token / installation advisory locks by **try-lock** | the row is skipped |
+| 4 | the row **FOR UPDATE NOWAIT** | the row is skipped |
+
+Nothing waits after the fence, so there is no cycle with register (account → fence → person → token → installation → rows) or the stop (fence FOR UPDATE → rows). A stop in progress makes the issue wait and then issue nothing; an issue in progress makes the stop wait, and the stop then erases the row (its nonce fits nothing). A skipped row gets no nonce: the worker asks again later. **An issued nonce is not a delivery:** the worker must still read `postona_push_delivery_targets` right before every send.
+
+**P2-2, the answer.** The register with `p_proof_nonce` (after S2-2, T13 and S2-3, as every register):
+1. the caller's pending row of this token at the version the caller saw, else `PROOF_NOT_PENDING`;
+2. the pending registration not expired (purge may not have run), else `PROOF_EXPIRED`;
+3. the caller's session, the current lifecycle_version and the derived workspace equal the row's, else `PROOF_STALE` (not counted as a wrong answer): another session of the person, also after the registering one signed out, a restart, a lock;
+4. a live nonce, else `PROOF_EXPIRED`;
+5. the stored hash is `sha256('postona_push_proof' | nonce | installation | session | lifecycle_version | registration_version | token hash)` (`private.postona_push_proof_hash`), else `PROOF_INVALID` (five end it).
+
+The nonce's expiry is the earlier of 10 minutes and the pending registration's expiry. A re-registration clears the nonce; a used nonce is spent (the row is active).
+
+**P2-3, durable "off".** A registration **from none** (`expected_version` null: a new installation, or one held by another person) is accepted only when the JWT's signed `iat` (`private.postona_push_claims_issued_at`):
+- is present;
+- is within the **"off" protection period, 1 day** — the same age before which `make_room` never prunes an "off" row;
+- is after the person's **"off" fence** (`private.postona_push_off_fences`, one row per person).
+
+Otherwise `STALE_REGISTRATION` with `'reason': 'REQUEST_BEFORE_OFF'`. A request is never older than its JWT, so:
+- a first registration made before an "off" whose row was pruned since (older than a day) is refused;
+- an "off" the cap could not record sets the fence; a first registration made before it stays refused after room frees up;
+- an installation moved to another person (the same phone, with its device secret) sets the earlier person's fence: their "off" row of it was overwritten.
+
+"On" again after a fenced "off": the app refreshes its session (`supabase.auth.refreshSession()`), then registers. Until then, that person's other new installations with a JWT older than the fence are refused the same way (they refresh and register). The fence is deleted by purge once older than the period, or when the account is gone. GoTrue's access-token lifetime does not matter: the period is checked on `iat`, not `exp`.
 
 ### 2a. The stop fence (task 10, P2-1)
 
@@ -208,7 +253,8 @@ It is owner-only and SECURITY INVOKER: no grant to any API role, `service_role` 
     1. **The proof depends on the provider delivering only to the token's phone**, and on the app answering only its own installation's nonce. No provider is connected here (NOT_RUN): the whole flow is local and simulated.
     2. A person's own proven token (the claim) is re-activated without a new proof on a reinstall: a stolen JWT plus the token could register it on another installation of the same person. That person's own notifications only.
     3. Another person's unregister with someone's installation id, **before that id's first registration**, leaves an "off" row with the wrong secret. That phone then answers `DEVICE_IN_USE` and must make a new installation id. It requires the id before it was ever used.
-    4. Under cap pressure (section 2c), a request delayed for more than a day may land after its "off" row was pruned. A new token is still pending, so it is not delivered unless proven.
+    4. (task 13) A fenced "off" refuses that person's other new installations whose JWT predates it until the app refreshes the session. The rollback drops every "off" row and fence: after a re-install, a first registration made before the rollback within the 1-day period is accepted.
+    5. (task 13) The 1-day period trusts GoTrue's signed `iat` and one clock for GoTrue and the database (the same host locally; a managed project's skew is NOT_VERIFIED).
 - **`service_role`** cannot read the table or call the worker side. A superuser or the owner can read everything.
 - **Push notification content and the outbox** are G3's.
 - **The KabuMori app's `public.device_push_tokens`** (section 1) is unchanged.
@@ -223,11 +269,11 @@ Refusals (each changes nothing):
 - `PUSH_GATE_CHANGED` (S2-2 `a5d4d71c…`, S2-3 `fa462360…`, T13 `1f8cd9c7…`, MV `066b958a…`, by body md5 and owner);
 - `PUSH_OWNER_FILTERED`;
 - `PUSH_TAKEN`;
-- `PUSH_POSTCONDITION_*`: the table's ACL and row security; exactly 11 functions; only the 3 public ones definers; their ACL `owner + authenticated`; no API role reaching the private ones.
+- `PUSH_POSTCONDITION_*`: the tables' ACL and row security (devices, fence, claims, "off" fences); exactly 15 functions; register's and the proof issue's 5 s lock timeout; only the 3 public ones definers; their ACL `owner + authenticated`; no API role reaching the private ones.
 
 A re-run changes nothing.
 
-- **Stop:** EXECUTE off and every token erased; the install starts it again.
+- **Stop:** EXECUTE off and every token erased; the claims and the "off" fences are kept; the install starts it again.
 - **Rollback:** refuses while a device is active (`PUSH_ACTIVE_DEVICES`), or while another function names the worker side (`PUSH_IN_USE`).
 
 ## 8. Tests
@@ -242,6 +288,8 @@ Tokens:
 | part | what |
 | --- | --- |
 | BEFORE | no POSTONA API; `public.device_push_tokens` as built: FAIL 1–4 of section 1 reproduced |
+| BEFORE (PR #681 files, task 13) | P2-1: a nonce was issued for a pending registration after its owner lost the workspace and after its service ended (session live, purge not run). P2-2: the nonce outlived its pending registration (2 minutes left) and activated it after that expired; another session of the person activated the nonce issued to the first (signed out). P2-3: a first registration made two days before an "off" (only `iat` changed on the real claims) was active once the "off" row was pruned and room was there; after an "off" the cap could not record (`recorded: false`) and room freed up, the delayed first registration over the real client was active and a target |
+| P2-1 / P2-2 / P2-3 after (task 13) | issue: none after owner loss / service end / restart / sign-out; a lifecycle change or a registration holding its lock → skipped at once (< 3 s); a stop holding the fence → the issue waits, then nothing; an issue in progress → the stop waits, then erases the row. Answer: the nonce capped at the pending expiry; expired pending → `PROOF_EXPIRED` (still pending, no target); another session, also after sign-out → `PROOF_STALE` (failures 0); restart → `PROOF_STALE`; re-registration → the old nonce `PROOF_EXPIRED` / `PROOF_NOT_PENDING`; a nonce works once. "Off": the pruned "off" + room → `STALE_REGISTRATION`; the fenced "off" + room → `STALE_REGISTRATION` / `REQUEST_BEFORE_OFF`, then "on" again after a session refresh; a handover fences the earlier person; no `iat` / older than a day → refused, 10 minutes old → accepted |
 | BEFORE (PR #676 files, task 12) | P2-1: an unproven first registration of a leaked token was active and a target, and the real phone was then locked out (`DEVICE_IN_USE`, also after the first registrant signed out). P2-2: at 100 rows, "off" of a new installation was refused (`DEVICE_LIMIT`) while a first registration still succeeded (101 rows), and the refused installation registered |
 | P2-1 / P2-2 after (task 12) | unproven first token pending (no target, no claim), wrong / expired / five wrong nonces, purge of the unproven; a wrong first binding recovers by proof (the victim's app ignores the other installation's nonce); claim release on account gone; the cap at 100 for register and "off" alike ("off" `recorded: false`, then the new installation `DEVICE_LIMIT`), pruning of rows older than a day, two concurrent "off"s queued on the person's lock, never 101; retention (30 days / 180 days) |
 | BEFORE (PR #672 files, task 11) | P2-1: after the owner signed out, another account took the token on another installation (the old row taken_over, a target of the other account), and the owner could not recover its own phone. P2-2: "off" before the first registration left nothing, and the delayed first registration succeeded; #672's client reported an old success while "off" |
@@ -256,4 +304,4 @@ Tokens:
 | worker | stale provider receipt; purge |
 | stop / rollback | active / in-use refusals; stop erases tokens and EXECUTE; re-install; install + stop + rollback restores the catalog |
 | deny-net | no connection to Expo / APNs / FCM possible from the test process |
-| mutants | 31: each guard removed is noticed by its check. Task 12 added: every token active at once, targets include pending, the nonce unchecked, the nonce never expires, register ignores the cap, "off" without the person's lock, room prunes fresh rows, history kept forever, claims never expire. Task 10 added: register / targets ignore the fence, no device-secret check, no lock timeout. Task 11 added: the token claim ignored, the claim never written, no handover by the device secret, purge never releases, "off" before the first registration keeps nothing, the client reports an old success while off (on the client module) |
+| mutants | 44: each guard removed is noticed by its check. Task 13 added: the issue ignores MV / the generation / the session, the issue without the fence lock / the account lock, the nonce outlives the pending registration, the answer ignores the pending expiry / the session and generation, a first registration of any age, ignoring the "off" fence, an unrecorded "off" or a handover setting no fence, a JWT without `iat` accepted. Task 12 added: every token active at once, targets include pending, the nonce unchecked, the nonce never expires, register ignores the cap, "off" without the person's lock, room prunes fresh rows, history kept forever, claims never expire. Task 10 added: register / targets ignore the fence, no device-secret check, no lock timeout. Task 11 added: the token claim ignored, the claim never written, no handover by the device secret, purge never releases, "off" before the first registration keeps nothing, the client reports an old success while off (on the client module) |

@@ -1,4 +1,9 @@
-# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12)
+# POSTONA push devices (G5 source candidate, G5-02 tasks 9 / 10 / 11 / 12 / 13)
+
+Task 13 fixes H4 #331 task 27's three P2 on PR #681:
+- P2-1: `private.postona_push_proof_issue` issues a nonce only where delivery would accept the registration now (fence, MV at the current generation, the row's generation / workspace / live session), with one lock order (the fence FOR SHARE, then never waiting: the account, advisory and row locks skip when taken).
+- P2-2: a proof answer only before the pending registration expires, from its own session and generation (`PROOF_STALE` otherwise); the nonce bound to the registration and capped at its expiry.
+- P2-3: a first registration only with a JWT issued within the 1-day "off" period and after the person's "off" fence (`private.postona_push_off_fences`, set by an "off" the cap cannot record and by a handover).
 
 Task 12 fixes H4 #331 task 26's two P2 on PR #676:
 - P2-1: an unproven token is `pending` (never delivered) until the phone answers the provider nonce from `private.postona_push_proof_issue`. No provider is connected: NOT_RUN.
