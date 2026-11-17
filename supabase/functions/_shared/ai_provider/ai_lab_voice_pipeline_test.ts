@@ -3725,7 +3725,7 @@ for (const pattern of T45_PATTERNS) {
   test(`task46 (B) ${pattern}: a weak topic is held before any request; X payload 0`, async () => {
     const weak = [
       ...TASK46_NEGATIVES.map((c) => ({ id: c.id, seed: c.seed })),
-      { id: "実記録 20261009", seed: await t46RecordedTopic("20261009-shared-account-withdrawal-safety") },
+      { id: "実記録 20261009（本人判断待ち。現行の判定の記録で、正解ではない）", seed: await t46RecordedTopic("20261009-shared-account-withdrawal-safety") },
     ];
     for (const c of weak) {
       const expected = assessAiLabTopicValue(c.seed).postable ? AI_LAB_TOPIC_INTEREST_HELD : AI_LAB_TOPIC_VALUE_HELD;

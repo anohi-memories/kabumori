@@ -20,10 +20,34 @@ const FACT_LINE = /^[ \t]*(できごと|詰まったこと|決めたこと)[:：
  * that did happen (「消えそうになった」) does.
  */
 const FAILURE_OR_SNAG =
-  /(?:間違え|失敗|不具合|問題を見つけ|問題が見つか|壊れ|消え(?:て|た|そうになっ)|消してしま|置き忘れ|忘れて|二重|押せてしま|動かな|届かな|伝わらな|読めな|重なっ|重なり|崩れ|矛盾|すり抜け|見落とし|混ざ|食い違|詰ま|時間がかか|うまくいっていな|嘘|うそ|不自然|迷っ|同じ[^、。]{0,12}(?:続いて|続けて|並んで|重複))(?![^、。]{0,12}?(?:場合|ないよう|ないため|可能性|そう(?:だ|なので|なら)))/gu;
+  /(?:間違え|失敗|不具合|問題を見つけ|問題が見つか|壊れ|消え(?:て|た|そうになっ)|消してしま|置き忘れ|忘れて|二重|押せてしま|動かな|届かな|伝わらな|読めな|重なっ|重なり|崩れ|矛盾|すり抜け|見落とし|混ざ|食い違|詰ま|うまくいっていな|嘘|うそ|不自然|迷っ|同じ[^、。]{0,12}(?:続いて|続けて|並んで|重複))(?![^、。]{0,12}?(?:場合|ないよう|ないため|可能性|そう(?:だ|なので|なら)))/gu;
+/**
+ * 「時間がかかった」 is a snag only when the sentence says what took the time. A bare effort word
+ * (「時間がかかった」「色合わせに時間がかかった」) tells a reader nothing, so it is not counted; a sentence
+ * that names the cause at some length, or a number or quoted phrase, is (「原因を探すのに〜時間がかかった」).
+ */
+const EFFORT = /時間が(?:かか|掛か)/u;
+const EFFORT_FILLER = /かなり|とても|すごく|結構|ちょっと|少し|思った(?:より|以上に?)|予想以上に?|だいぶ|けっこう/gu;
+const SPECIFIC_EFFORT_MIN = 12;
+function effortEvidence(facts: string): { specific: string[]; generic: string[] } {
+  const specific: string[] = [];
+  const generic: string[] = [];
+  for (const sentence of facts.split(/[。\n]/u)) {
+    const hit = sentence.match(EFFORT);
+    if (!hit) continue;
+    const rest = sentence.replace(EFFORT, "").replace(EFFORT_FILLER, "").replace(/[\s、「」。た]|かった|かかっ|でした|です/gu, "");
+    const detailed = [...rest].length >= SPECIFIC_EFFORT_MIN || /\d|「[^」]{2,}」/u.test(sentence);
+    (detailed ? specific : generic).push(hit[0]);
+  }
+  return { specific: unique(specific), generic: unique(generic) };
+}
 /** Something noticed that was not expected. */
+// Natural spoken forms of "it was not what I expected" (「思ってたのと全然ちがった」「想定とは違った」). A
+// conditional or a precaution (「違ったら」「違わないよう」「もし〜」) is not an event and does not match.
+const COLLOQUIAL =
+  "(?<!もし[^、。]{0,20})(?:思って(?:た|いた)(?:の|もの)?(?:と|より)(?:は)?[^、。]{0,8}?(?:ぜんぜん|全然|(?:違|ちが)(?:っ(?!たら)|う(?!と|なら|か[もな])|い))|(?:想定|予想|予定)(?:と|とは)[^、。]{0,6}?(?:違|ちが)(?:っ(?!たら)|う(?!と|なら|か[もな])|い)|(?:予想|想定)外)";
 const SURPRISE =
-  /実は|気づ|分かった|わかった|思ったが|思ったけど|意外|想定(?:と違|外|していな|していたのと違)|ように見えてしま|同じに見え|後から届|正しくても|普通でも|通っても/gu;
+  new RegExp(`実は|気づ|分かった|わかった|思ったが|思ったけど|意外|想定(?:と違(?!うと|うなら|わな)|外|していな|していたのと違(?!うと|うなら|わな))|ように見えてしま|同じに見え|後から届|正しくても|普通でも|通っても|${COLLOQUIAL}`, "gu");
 /** A deliberate choice or trade-off: doing less, separating, putting one thing before another. */
 const INGENUITY =
   /ではなく|代わりに|より先に|より[「」]?[^\s、。]{0,12}を?優先|を優先|分け|とどめ|逃がし|だけを|だけ[^\s、。]{0,6}(?:する|にし|解約|直)|一度まとめて|1か所|してみた|止め|停止|先に作|前に[^、。]{0,12}(?:読む|取る|見る|確かめ|書く)/gu;
@@ -48,7 +72,8 @@ export type AiLabTopicInterestWeakness =
   | "PROMOTIONAL"
   | "AI_MADE_REPORT"
   | "REPORT_TONE"
-  | "REPEATED_STRUCTURE";
+  | "REPEATED_STRUCTURE"
+  | "GENERIC_EFFORT";
 
 export type AiLabTopicInterest = {
   readonly postable: boolean;
@@ -75,6 +100,7 @@ const WEAKNESS_LABEL: Record<AiLabTopicInterestWeakness, string> = {
   AI_MADE_REPORT: "「AIで作った」という報告",
   REPORT_TONE: "報告書調",
   REPEATED_STRUCTURE: "同じ内容の言い直し",
+  GENERIC_EFFORT: "「時間がかかった」だけで中身が無い",
 };
 
 const unique = (values: readonly string[]) => [...new Set(values)];
@@ -113,8 +139,9 @@ export function assessAiLabTopicInterest(seed: string): AiLabTopicInterest {
     return { postable: true, tier: "medium", signals: [], weaknesses: [], evidence: empty, summary: "日記の題材ではない（判定対象外）" };
   }
   const all = lines.join("\n");
+  const effort = effortEvidence(all);
   const evidence = {
-    FAILURE_OR_SNAG: matches(FAILURE_OR_SNAG, all),
+    FAILURE_OR_SNAG: unique([...matches(FAILURE_OR_SNAG, all), ...effort.specific]),
     SURPRISE: matches(SURPRISE, all),
     INGENUITY: matches(INGENUITY, all),
     CONCRETE_DETAIL: matches(CONCRETE_DETAIL, all),
@@ -124,6 +151,8 @@ export function assessAiLabTopicInterest(seed: string): AiLabTopicInterest {
 
   const weaknesses: AiLabTopicInterestWeakness[] = [];
   if (signals.length === 0) weaknesses.push("NO_STORY");
+  // Only a bare effort word and nothing else: say so, so a person sees why the topic is held.
+  if (signals.length === 0 && effort.generic.length > 0) weaknesses.push("GENERIC_EFFORT");
   if (PROMOTIONAL.test(all)) weaknesses.push("PROMOTIONAL");
   if (AI_MADE.test(all)) weaknesses.push("AI_MADE_REPORT");
   if ((all.match(REPORT_TONE) ?? []).length >= 2) weaknesses.push("REPORT_TONE");
@@ -144,4 +173,40 @@ export function assessAiLabTopicInterest(seed: string): AiLabTopicInterest {
     : `採用(${tier === "high" ? "高" : "中"}): ${signals.map(shown).join("、")}` +
       (weaknesses.length ? `／注意: ${weaknesses.map((w) => WEAKNESS_LABEL[w]).join("・")}` : "");
   return { postable: !held, tier, signals, weaknesses, evidence, summary };
+}
+
+export type AiLabStructureComparison = {
+  /** unverified: no earlier candidate information was supplied, so nothing was compared (never "distinct"). */
+  readonly status: "similar" | "distinct" | "unverified";
+  /** Evidence fragments (from the fact lines) both topics share; empty unless similar. */
+  readonly shared: readonly string[];
+  readonly summary: string;
+};
+
+const STRUCTURE_KEYS = ["FAILURE_OR_SNAG", "SURPRISE", "INGENUITY"] as const;
+const STRUCTURE_OVERLAP = 0.5;
+
+/**
+ * Task47: read-only audit of "the same story shape two days running". It compares only the fact-line
+ * evidence of two seeds that the caller already holds (for example the previous day's diary candidate);
+ * it reads no DB, writes nothing and never holds a topic. Without an earlier seed the answer is
+ * `unverified`, not `distinct`. Similar = the same set of story signals and at least half of the
+ * matched fragments in common (Jaccard), so one shared common word does not trigger it.
+ */
+export function compareAiLabTopicStructure(seed: string, previousSeed?: string | null): AiLabStructureComparison {
+  if (!previousSeed) return { status: "unverified", shared: [], summary: "前日の題材情報が無く、構造の重複は未確認" };
+  const now = assessAiLabTopicInterest(seed);
+  const before = assessAiLabTopicInterest(previousSeed);
+  if (now.signals.length === 0 || before.signals.length === 0) {
+    return { status: "distinct", shared: [], summary: "どちらかに材料が無く、構造の比較対象外" };
+  }
+  const sameSignals = now.signals.join() === before.signals.join();
+  const a = new Set(STRUCTURE_KEYS.flatMap((k) => now.evidence[k]));
+  const b = new Set(STRUCTURE_KEYS.flatMap((k) => before.evidence[k]));
+  const shared = [...a].filter((x) => b.has(x));
+  const union = new Set([...a, ...b]).size;
+  const similar = sameSignals && union > 0 && shared.length / union >= STRUCTURE_OVERLAP;
+  return similar
+    ? { status: "similar", shared, summary: `前日と同じ構造（${now.signals.map((s) => SIGNAL_LABEL[s]).join("・")}、共通「${shared.slice(0, 3).join("」「")}」）` }
+    : { status: "distinct", shared: [], summary: "前日と構造は別" };
 }
