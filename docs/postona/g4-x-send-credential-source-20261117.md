@@ -1,7 +1,78 @@
-# G4-02 #19: G4's X send credential source for G3's send paths (local only)
+# G4-02 #19, #20: G4's X send credential source for G3's send paths (local only)
 
 Status: G4 SOURCE CANDIDATE. Nothing here is deployed. No real X OAuth, X post, token fetch, paid API, hosted or production read/write was made. PRODUCTION_NO_GO.
 Issue #561 (G4-02, task 19). Base: PR #701 HEAD `1c2b239e86c5b7b56991bdb26105409b317291d2`. G3 source read (never changed): PR #699 HEAD `8ebf3a7b079a79817644a2317139c16cb7465ca4`.
+
+## 0. G4-02 #20 (H1 #50 CHANGES_REQUIRED, P2×2): the read is bound to a send attempt and to the account's own Vault references
+
+Status: G4 SOURCE CANDIDATE, local PG17 only. Base: PR #706 HEAD `2bc386b5268b02f27914bc69801ef8eeed3f5160`. G3 PR #699 `8ebf3a7b079a79817644a2317139c16cb7465ca4` read only. PRODUCTION_NO_GO.
+Sections 1–6 below describe #19 and stay as its record; where they differ, this section is the contract.
+
+**P2-1 (an account id was enough).** `public.postona_x_send_credential_v1(text)` is gone. 003 now installs
+`public.postona_x_send_credential_for_claim_v1(p_reservation_id uuid, p_lease_token uuid, p_social_account_id text, p_session_id uuid)`
+→ `(code, credential_generation, access_token, refresh_generation)`, one row always, EXECUTE for service_role only. Install refuses while #19's
+account-only read exists, and refuses when any API role (service_role included) can read G3's `postona_x_resv.reservations` (the lease must stay a capability only the claimer holds).
+
+A token is answered only when, in one transaction:
+
+| check | refusal code |
+|---|---|
+| the attempt is G3's claimed reservation row with exactly this lease and account (unknown id, wrong lease, another account: one code) | `CLAIM_INVALID` |
+| still `claimed` (published / failed / uncertain / cancelled / expired never read again) | `CLAIM_NOT_ACTIVE` (cancelled clears the lease: `CLAIM_INVALID`) |
+| lease not run out | `CLAIM_EXPIRED` |
+| user-authored text with intact consent (G3's `row_publishable` consent rule) | `CLAIM_NOT_PUBLISHABLE` |
+| manual send (`claimed_by = 'single_post'`, draft `single:`): a session id is given and is a live `auth.sessions` row of the attempt's person; G3's `single_post_bindings` row matches person / workspace and has no recorded result | `SESSION_REQUIRED`, `SESSION_NOT_ACTIVE`, `CLAIM_INVALID` |
+| worker: no session id; the claim pinned a generation (014) | `INPUT_INVALID`, `CLAIM_INVALID` |
+| the account row (locked FOR SHARE) is in the attempt's workspace, whose single owner is the attempt's person | `CLAIM_INVALID`, `NOT_OWN_WORKSPACE` |
+| G4's verdict 002 VERIFIED; on the personal profile G4's 007 precheck `allow` (G5's service generation) | the verdict's / precheck's codes |
+| publishing on; no `revoked` stop in `public.x_account_publish_authority` (where it exists) | `PUBLISH_DISABLED`, `PUBLISH_AUTHORITY_REVOKED` |
+| G3's derivation of the verdict's generation (`sha256('g3x1|' || 'g4x1:<epoch>')`) equals the generation the attempt bound | `CREDENTIAL_GENERATION_CHANGED` |
+
+**P2-2 (Vault references not bound).** Before decrypting, 003 now refuses: both references not set (`CREDENTIAL_MISSING`); access = refresh (`CREDENTIAL_REF_ALIASED`); either reference used by any other account row, in either column (`CREDENTIAL_REF_SHARED`, the refresh core's rule); a secret whose name is not the one G4's connect gives it, `<account>_access_token` / `<account>_refresh_token` (`CREDENTIAL_REF_PURPOSE`: swapped, or a restored copy of another account's secret); a dangling or unnamed reference (`CREDENTIAL_UNREADABLE`). Only names are read for the refresh secret; it is never decrypted.
+
+**Errors and logs.** A lock wait over 3 s answers `CREDENTIAL_BUSY`; any other error answers `CREDENTIAL_UNAVAILABLE`. No database text, reference or value passes (outer handler, plus a separate handler around Vault). The function has no RAISE / NOTICE. The TS source answers `null` for anything else, logs nothing and puts nothing into an error.
+
+**TS.** `credentialFor(socialAccountId, { reservationId, leaseToken, sessionId })`. Without a well-formed attempt it answers `null` and does not call the database. The RPC body is `{ p_reservation_id, p_lease_token, p_social_account_id, p_session_id }` (the worker sends `null` for the session).
+
+**What G3 has to change (G3's code; G4 has not touched it).** G3's port `credentialFor(socialAccountId)` passes no attempt, so **today G4's source answers nothing on both of G3's send paths** (fail-closed: `X_CREDENTIALS_UNAVAILABLE`, never sent). G3's change:
+- manual send: `credentialFor(account, { reservationId, leaseToken: lease, sessionId: subject.sessionId })`, after `post_now_begin`;
+- worker: `credentialFor(item.socialAccountId, { reservationId: item.reservationId, leaseToken: item.leaseToken })`, after `claim_due`;
+- `xGenerationSourceFromG4Raw` has to pass the second argument through.
+
+Contract differences to note for G3:
+- the worker now also needs `publish_enabled` on; G3's worker check does not ask for it;
+- the session is checked as "a live session of the attempt's person". G3 does not store which session began the manual send, so binding to *that* session needs a G3 column. Until then, G3's `post_now_preflight` re-checks the caller's session right after this read.
+
+**P3 (a refresh between the read and the X call).** Unchanged by design: G4's generation does not move on a refresh, so an attempt keeps its token across one (case 19: the next read answers the NEW token). A token read just before a refresh can be stale. X then answers 401, G3 records `failed` (`X_REJECTED_401`) and never re-sends. An unknown result stays `uncertain` and is never re-sent; nothing records a provider success that did not happen. `refresh_generation` (the refresh core's counter, 0 without a row) is now answered with VERIFIED. A caller that wants to detect "replaced since read" can compare it, but G3 does not compare it today. A safe retry would re-authorize only an explicit, provably-unsent refusal (401 before creation) under a new attempt; that is G3's and the central chat's decision.
+
+**Still release gates (not verifiable here).** Real access-token expiry: this world's refresh state has no `access_expires_at`; main's refresh core has one, and it is not read here. Effective OAuth scopes per account: not stored. App permissions and pricing: see section 6.
+
+**Evidence (local PG17, `supabase/tests/postona_g4_x_send_credential_run.sh`).**
+- BEFORE on PR #706's 003, in the same world: an account id alone, publishing off, alias, shared, and another account's secret all answered VERIFIED with a token (5/5 reproduced).
+- AFTER, behavior: 89/89 on the full profile and 89/89 on the personal profile. These are #19's 40 state cases read through a fresh attempt, plus:
+  - no attempt, forged id / lease, another account's attempt;
+  - no / another person's / unknown / expired / signed-out session;
+  - reuse after published / failed / uncertain, cancelled, lease expired, text changed, result already recorded;
+  - the worker attempt with no session, with a session, and without a pin;
+  - another person's attempt, another workspace;
+  - publishing off; stop recorded / lifted;
+  - refresh (same attempt, new token, refresh generation 1); manual and worker attempts across a reconnect (ABA); a new attempt after it;
+  - service_role reads no lease and no Vault;
+  - alias, shared (access / refresh), swapped, a restored copy of another account's secret, unnamed, dangling, missing, restored; the other account untouched;
+  - no refusal carries a token.
+- Races:
+  - R1: an open read holds the account against a disconnect;
+  - R2: a reconnect in flight makes the read wait, then the attempt bound before it is refused and a new attempt reads the new token;
+  - R3: a held attempt row → `CREDENTIAL_BUSY`.
+- G3 contract (PR #699 adapter, attempt passed): 0 violations; G3's one-argument port answered 0 tokens.
+- Install refusals:
+  - no 002, 002 drift, no G3 tables, no 014 pin, #19's read present, a readable lease;
+  - twice: refused;
+  - ACL: service_role only.
+- 16 mutants, all caught (each P2 binding, the lock on the attempt and on the account, the grant).
+- Rollback, including drift refusal. Deno unit 6/6.
+- NOT_RUN: the real local runtime e2e (`postona_g4_x_send_credential_e2e_run.sh` now stops with `G4XS_E2E_NOT_APPLICABLE`): it needs G3's port change above.
+
 
 ## 1. What was missing
 
