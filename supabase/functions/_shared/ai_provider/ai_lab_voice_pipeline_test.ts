@@ -3016,11 +3016,13 @@ for (const provider of TASK39_PROVIDERS) {
 test("task40 (D): every postable synthetic topic reaches both providers as the identical two-stage prompt", async () => {
   const lines = ["=== task40 D: 合成題材 × 両provider（非課金・原案/自然化は手書き固定。実モデル出力ではない）==="];
   for (const c of SYNTHETIC.filter((x) => x.postable && x.preview)) {
-    const draft = c.preview + "\n\n#個人開発";
+    // Task41: a stiffer hand-written draft and its rewrite (the preview), not the preview twice.
+    const draft = c.draft + "\n\n#個人開発";
+    const rewrite = c.preview + "\n\n#個人開発";
     const sent: ReturnType<typeof sentPrompt>[][] = [];
     const verdicts: string[] = [];
     for (const provider of TASK39_PROVIDERS) {
-      const f = task39Fixture(provider, { topic: c.seed, draft, rewrite: draft });
+      const f = task39Fixture(provider, { topic: c.seed, draft, rewrite });
       verdicts.push(
         await dispatchAiLabScheduledBrandPost(f.args).then(() => "投稿前検査を通過", (e: Error) => e.message),
       );
@@ -3030,9 +3032,11 @@ test("task40 (D): every postable synthetic topic reaches both providers as the i
     // The draft prompt (and the editor prompt, when reached) is byte-identical across providers.
     assert.deepEqual(sent[0], sent[1], c.id);
     assert.equal(verdicts[0], verdicts[1], c.id);
+    assert.equal(verdicts[0], "投稿前検査を通過", c.id);
+    assert.equal(sent[0].length, 2, c.id);
     assert.ok(sent[0][0].user.includes(c.seed.split("\n")[0]), c.id);
     lines.push(
-      `[合成] ${c.id}\n  題材: ${c.seed.replaceAll("\n", " / ")}\n  両providerのプロンプトは同一／本文検査: ${verdicts[0]}\n  手書き本文（実モデル出力ではない）: ${c.preview}`,
+      `[合成・手書き] ${c.id}\n  題材: ${c.seed.replaceAll("\n", " / ")}\n  両providerのプロンプトは同一／本文検査: ${verdicts[0]}\n  手書き原案: ${c.draft}\n  手書き自然化（実モデル出力ではない）: ${c.preview}`,
     );
   }
   console.log(lines.join("\n"));
@@ -3057,4 +3061,70 @@ test("task40 (B): the existing OpenAI one-stage path holds a weak diary topic be
   const outcome = await dispatchAiLabScheduledBrandPost(good.args).then(() => "published", (e: Error) => e.message);
   assert.ok(good.events.includes("OpenAI"), String(outcome));
   assert.equal(good.recorder.calls.length, 0);
+});
+
+// Task41: grounded natural paraphrase through the dispatch, on both providers. No real provider is called.
+const T41_TAG = "\n\n#個人開発";
+const t41 = (prefix: string) => SYNTHETIC.find((c) => c.id.startsWith(prefix))!;
+
+for (const provider of TASK39_PROVIDERS) {
+  test(`task41 (4) ${provider}: each synthetic draft → rewrite is the only X payload`, async () => {
+    for (const c of SYNTHETIC.filter((x) => x.postable)) {
+      const f = task39Fixture(provider, { topic: c.seed, draft: c.draft + T41_TAG, rewrite: c.preview + T41_TAG });
+      const result = await dispatchAiLabScheduledBrandPost(f.args);
+      assert.equal(result.voiceRewriteDecision, "edited", c.id);
+      assert.deepEqual(f.payloads, [{ text: c.preview + T41_TAG, pollOptions: undefined }], c.id);
+      assert.equal(f.recorder.calls.length, 2, c.id);
+    }
+  });
+
+  test(`task41 (2) ${provider}: the preview sent back unchanged as the rewrite is held, never published`, async () => {
+    for (const c of SYNTHETIC.filter((x) => x.postable)) {
+      const text = c.preview + T41_TAG;
+      const f = task39Fixture(provider, { topic: c.seed, draft: text, rewrite: text });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /VOICE_REWRITE_REJECTED/, c.id);
+      assert.deepEqual(f.payloads, [], c.id);
+    }
+  });
+
+  test(`task41 (3)(4) ${provider}: an ungrounded rewrite or draft holds before X with the same verdict`, async () => {
+    const c = t41("S7");
+    for (
+      const [draft, rewrite, stage] of [
+        [c.draft!, c.preview!.replace("決めることにした", "決めた"), 2],
+        [c.draft!, c.preview!.replace("決めることにした。", "決めることにした。帰りに合鍵も作った。"), 2],
+        ["家の鍵を玄関に置き忘れた。鞄の定位置を決めました。", c.preview!, 1],
+      ] as const
+    ) {
+      const f = task39Fixture(provider, { topic: c.seed, draft: draft + T41_TAG, rewrite: rewrite + T41_TAG });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /SOURCE_GROUNDING_REJECTED/, rewrite);
+      assert.deepEqual(f.payloads, []);
+      // A draft that is already ungrounded never reaches the editor.
+      assert.equal(f.recorder.calls.length, stage);
+    }
+  });
+
+  test(`task41 (4) ${provider}: a weak synthetic topic is held by the topic filter before any request, even with a grounded draft`, async () => {
+    for (const c of SYNTHETIC.filter((x) => !x.postable)) {
+      const f = task39Fixture(provider, { topic: c.seed, draft: t41("S7").draft + T41_TAG, rewrite: t41("S7").preview + T41_TAG });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), new RegExp(AI_LAB_TOPIC_VALUE_HELD), c.id);
+      assert.equal(f.recorder.calls.length, 0, c.id);
+      assert.deepEqual(f.payloads, [], c.id);
+    }
+  });
+}
+
+test("task41 (4): the Task36/38 rejected real rewrites keep their hold code; the Task39 plain rewrite still passes", () => {
+  for (
+    const [draft, text] of [
+      [TASK38_REAL_DRAFT_200, TASK38_REAL_REWRITE_180],
+      [REAL_DRAFT_167, REAL_REWRITE_156],
+    ]
+  ) {
+    assert.throws(() => groundedRewrite(draft, TOPIC_0930, text), /AI_LAB_VOICE_STYLE_REJECTED/);
+  }
+  assert.equal(
+    groundedRewrite(TASK38_REAL_DRAFT_200, TOPIC_0930, TASK39_PLAIN_REWRITE_0930).text,
+    TASK39_PLAIN_REWRITE_0930,
+  );
 });

@@ -318,7 +318,51 @@ function maskedBody(text: string, spans: readonly Span[]) {
  * checked against candidates. Hold it unless every protected string survives
  * in order and nothing that looks like a new fact appears.
  */
-function assertFreeRewriteKeepsFacts(original: string, text: string) {
+// Task41: everyday words a rewrite may use for a topic word with the same
+// meaning (「出社後」 → 「会社に着いてから」). Each entry is licensed only by its own
+// words in the draft or the topic; anything else new in the rewrite must
+// already be in one of them.
+const EVERYDAY_PARAPHRASES: Readonly<Record<string, readonly string[]>> = {
+  会社: ["出社", "退社"],
+  一回: ["一度"],
+  一度: ["一回"],
+  全部: ["ひとつずつ", "一つずつ", "すべて", "全て"],
+};
+// Evaluative words that state no event, person, time or count.
+const EVALUATIVE_WORDS = new Set(["十分", "大事", "便利", "正直", "普通", "結局"]);
+
+const licensedWord = (word: string, known: string) =>
+  known.includes(word) || EVALUATIVE_WORDS.has(word) ||
+  (EVERYDAY_PARAPHRASES[word] ?? []).some((value) => known.includes(value));
+
+/**
+ * Content words the rewrite adds that neither the draft nor the topic has.
+ * A kanji run joins words with a verb stem (「影響出」 = 影響 + 出る), so a run is
+ * licensed when known words of two or more characters cover it and only single
+ * characters (verb stems) are left between them.
+ */
+function unlicensedNewRuns(oldBody: string, newBody: string, source: string) {
+  const known = oldBody + "\n" + source;
+  return [...new Set(newBody.match(CONTENT_RUN) ?? [])].filter((run) => {
+    const chars = [...run];
+    const covered = chars.map(() => false);
+    for (let size = chars.length; size >= 2; size -= 1) {
+      for (let start = 0; start + size <= chars.length; start += 1) {
+        const word = chars.slice(start, start + size).join("");
+        if (licensedWord(word, known)) {
+          covered.fill(true, start, start + size);
+        }
+      }
+    }
+    return covered.some((c, i) => !c && i > 0 && !covered[i - 1]);
+  });
+}
+
+function assertFreeRewriteKeepsFacts(
+  original: string,
+  text: string,
+  source: string,
+) {
   const reject = () => new BrandContextError("AI_LAB_VOICE_REWRITE_REJECTED");
   if (!text.trim() || text === original) throw reject();
   const before = protectedSpans(original);
@@ -359,6 +403,10 @@ function assertFreeRewriteKeepsFacts(original: string, text: string) {
     (newBody.match(CONTENT_RUN) ?? []).filter((run) => !oldBody.includes(run)),
   );
   if (newRuns.size > MAX_NEW_CONTENT_RUNS) throw reject();
+  // Task41: a new event or object is a new fact even under the count above.
+  if (unlicensedNewRuns(oldBody, newBody, source).length) {
+    throw new BrandContextError(AI_LAB_SOURCE_GROUNDING_REJECTED);
+  }
   if (
     wordingSimilarity(oldBody, newBody) >= MAX_REWRITE_SIMILARITY
   ) throw new BrandContextError("AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED");
@@ -382,7 +430,8 @@ const SELF_EXPERIENCE_FAMILIES = [
   ],
   [/思って(?:い)?た/gu, /思って(?:い)?(?:た|ました)/gu],
   [/ようになった/gu, /ように(?:なっ[たて]|なりました)/gu],
-  [/ことにした/gu, /ことに(?:し[たて]|しました)/gu],
+  // Task41: the polite 「ことにしました」 is the same decision claim.
+  [/ことにし(?:た|ました)/gu, /ことに(?:し[たて]|しました)/gu],
   [/始めた/gu, /始め(?:[たて]|ました)/gu],
   [/やめた/gu, /やめ(?:[たて]|ました)/gu],
   [/(?:ハマ|はま)った/gu, /(?:ハマ|はま)っ[たて]/gu],
@@ -422,19 +471,43 @@ const SENTENCE = /[^。！？!?\n]+/gu;
 // something the line does not mention is still held.
 const DECISION_LINE = /^[ \t]*決めたこと[:：][ \t]*(.+?)[ \t]*$/gmu;
 const DECISION_STATED = /(?:にした|に決めた|と決めた|ことにした|にする)[。.]?$/u;
-const DECISION_CLAIM = /ことにした/gu;
+const DECISION_CLAIM = /ことにし(?:た|ました)/gu;
+// Task41: 「決めたこと: 使っていないサブスクを1つだけ解約する。」 states the decision
+// in the plain present form. Its last verb (「解約する」「決める」「取る」) may be
+// retold as 「解約することにした」 only when that very verb stands right before
+// ことにした and every content word of the line is in the same sentence. The
+// verb is a kanji or katakana word plus at most two kana (「無効にする」); a
+// kana-only, past, negative or polite ending is not a stated plain decision.
+const DECISION_PLAIN_VERB =
+  /[\p{Script=Han}\p{Script=Katakana}ー]+(?:にする|する|[\p{Script=Hiragana}]?[るうくすつぬむぶぐ])$/u;
+
+type DecisionLine = {
+  runs: Set<string>;
+  /** Plain present verb at the end of the line, when the line has one. */
+  verb?: string;
+  stated: boolean;
+};
+
+function decisionLines(source: string): DecisionLine[] {
+  return [...source.matchAll(DECISION_LINE)].map(([, raw]) => ({
+    runs: new Set(raw.match(CONTENT_RUN) ?? []),
+    verb: raw.replace(/[。.]$/u, "").match(DECISION_PLAIN_VERB)?.[0],
+    stated: DECISION_STATED.test(raw),
+  }));
+}
 
 function decisionLineGrounds(text: string, source: string): number {
-  const lines = [...source.matchAll(DECISION_LINE)]
-    .map(([, line]) => line)
-    .filter((line) => DECISION_STATED.test(line))
-    .map((line) => new Set(line.match(CONTENT_RUN) ?? []));
+  const lines = decisionLines(source);
   let grounded = 0;
   for (const sentence of text.match(SENTENCE) ?? []) {
-    for (const _claim of sentence.match(DECISION_CLAIM) ?? []) {
-      const runs = sentence.match(CONTENT_RUN) ?? [];
+    for (const claim of sentence.matchAll(DECISION_CLAIM)) {
+      const runs = new Set(sentence.match(CONTENT_RUN) ?? []);
+      const before = sentence.slice(0, claim.index);
       const index = lines.findIndex((line) =>
-        new Set(runs.filter((run) => line.has(run))).size >= 2
+        (line.stated &&
+          [...runs].filter((run) => line.runs.has(run)).length >= 2) ||
+        (!!line.verb && before.endsWith(line.verb) && line.runs.size > 0 &&
+          [...line.runs].every((run) => runs.has(run)))
       );
       if (index < 0) continue;
       lines.splice(index, 1);
@@ -442,6 +515,69 @@ function decisionLineGrounds(text: string, source: string): number {
     }
   }
   return grounded;
+}
+
+// Task41: a plain decision is not a finished action. 「解約する」 in the topic
+// grounds 「解約することにした」 but never 「解約した」「解約しました」 or
+// 「解約するようにした」 (the topic does not say it was done). Both the ichidan
+// and godan past of a final る are refused.
+function pastForms(verb: string): string[] {
+  const stem = verb.slice(0, -1);
+  const last = verb.at(-1)!;
+  const done = [verb + "ようにした", verb + "ようにしました"];
+  if (verb.endsWith("する")) {
+    return [...done, verb.slice(0, -2) + "した", verb.slice(0, -2) + "しました"];
+  }
+  const past: Record<string, string[]> = {
+    る: ["た", "った", "ました", "りました"],
+    う: ["った", "いました"],
+    つ: ["った", "ちました"],
+    く: ["いた", "きました"],
+    ぐ: ["いだ", "ぎました"],
+    す: ["した", "しました"],
+    ぬ: ["んだ", "にました"],
+    む: ["んだ", "みました"],
+    ぶ: ["んだ", "びました"],
+  };
+  return [...done, ...(past[last] ?? []).map((ending) => stem + ending)];
+}
+
+function decisionTenseOverclaims(text: string, source: string): string[] {
+  // The 「決めたこと:」 label itself is not a past 「決めた」 the topic states.
+  const stated = source.replace(/^[ \t]*[^:：\n]{1,12}[:：]/gmu, "");
+  const found: string[] = [];
+  for (const { verb } of decisionLines(source)) {
+    for (const form of verb ? pastForms(verb) : []) {
+      if (text.includes(form) && !stated.includes(form)) found.push(form);
+    }
+  }
+  return found;
+}
+
+// Task41: digit quantities must come from the topic, compared by value so
+// 「５分」 and 「5分」 match. Kana and kanji counts are not compared: 「ひとつずつ」
+// and 「十分」 are idioms, so they stay with the prompt and the review.
+const QUANTITY = /[0-9０-９]+/gu;
+const quantityValue = (token: string) =>
+  String(
+    Number(token.replace(/[０-９]/gu, (d) => String(d.charCodeAt(0) - 0xff10))),
+  );
+
+// Links, handles and structured data carry ids, not counts the post claims.
+const NOT_A_COUNT =
+  /(?:[a-z][a-z\d+.-]*:\/\/|www\.)\S+|[#＃@＠][\p{L}\p{M}\p{N}_]+|\{[^{}]*\}|\[[^[\]]*\]/giu;
+
+function ungroundedQuantities(text: string, source: string): string[] {
+  const counts = (value: string) =>
+    value.replace(NOT_A_COUNT, " ").match(QUANTITY) ?? [];
+  const available = counts(source).map(quantityValue);
+  const found: string[] = [];
+  for (const token of counts(text)) {
+    const index = available.indexOf(quantityValue(token));
+    if (index < 0) found.push(token);
+    else available.splice(index, 1);
+  }
+  return found;
 }
 
 /**
@@ -486,6 +622,10 @@ export function ungroundedClaims(text: string, source: string): string[] {
       if (count(body, marker) > count(src, marker)) found.push(marker);
     }
   }
+  found.push(
+    ...decisionTenseOverclaims(text, source),
+    ...ungroundedQuantities(text, source),
+  );
   const sourceRuns = new Set(source.match(CONTENT_RUN) ?? []);
   for (const sentence of text.match(SENTENCE) ?? []) {
     const episodes = [
@@ -559,7 +699,7 @@ export function prepareAiLabVoiceRewrite(draft: VoiceDraft, source: string) {
       }),
     },
     validate: (reply: unknown) => {
-      const accepted = validateReply(text, candidates, reply);
+      const accepted = validateReply(text, candidates, reply, source);
       assertFinalVoiceStyle(accepted.text);
       assertNaturalPhrasing(accepted.text, source);
       assertGroundedInSource(accepted.text, source);
@@ -580,6 +720,7 @@ function validateReply(
   original: string,
   candidates: readonly Edit[],
   reply: unknown,
+  source: string,
 ): {
   text: string;
   decision: "edited" | "keep";
@@ -602,7 +743,7 @@ function validateReply(
     return { text, decision };
   }
   if (decision === "rewritten" && edits.length === 0) {
-    assertFreeRewriteKeepsFacts(original, text);
+    assertFreeRewriteKeepsFacts(original, text, source);
     // Reported as an edit: the dispatch records only edited/keep.
     return { text, decision: "edited" };
   }
