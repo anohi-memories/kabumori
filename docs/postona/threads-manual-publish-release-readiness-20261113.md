@@ -93,6 +93,19 @@ publish. Measured locally: install, twice-refused, rollback, reinstall, 002 → 
 - Does a timed-out publish request still post? Does an old token keep working after a reconnect?
 - Token lifetime / refresh behaviour for long-lived tokens.
 
+### 6.1 Checked against Meta's current public documentation (G4-02 #18, 2026-11-17; documentation, not behaviour)
+
+| Topic | What the documentation says | What it means here |
+| --- | --- | --- |
+| Container status ([troubleshooting](https://developers.facebook.com/documentation/threads/troubleshooting)) | EXPIRED = "not published within 24 hours and has expired"; ERROR / FINISHED / IN_PROGRESS / PUBLISHED as G4's contract maps them | the recovery's worst case is bounded: a container that never published reports EXPIRED within about 24 h, so an expired credential + unknown outcome is settled by a reconnect at most ~24 h later (still NOT_VERIFIED in behaviour) |
+| Publishing ([posts](https://developers.facebook.com/documentation/threads/posts)) | two steps (container, then `threads_publish`); wait ~30 s on average before publishing; **250 API-published posts per profile per 24 h moving window**, checkable at `GET /{threads-user-id}/threads_publishing_limit` | G4 waits for FINISHED before publishing (already); a rate-limit answer maps to `failed` THREADS_RATE_LIMITED (not_written, never resent). Showing the remaining quota is a G1 / product choice, not built |
+| Tokens ([long-lived tokens](https://developers.facebook.com/documentation/threads/get-started/long-lived-tokens)) | short-lived (~1 h) → long-lived via `th_exchange_token` (server-side, app secret); long-lived = **60 days**; refresh via `GET /refresh_access_token?grant_type=th_refresh_token` once ≥ 24 h old and not expired; an expired token cannot be refreshed | `THREADS_TOKEN_REFRESH_ENABLED = false` in source: without a refresh job every person must reconnect every 60 days (the expired-credential recovery then applies). **Release decision**: build / enable the refresh, or accept reconnects |
+| Permissions & review ([permissions](https://developers.facebook.com/docs/permissions)) | `threads_basic` (base) and `threads_content_publish` (depends on it); App Review is required for people without a role on the app; review screencasts show OAuth login and a post made and visible in the Threads app | the pilot can run with **Threads Tester** roles before review; public release needs App Review of both permissions |
+| App settings ([Threads use case](https://developers.facebook.com/docs/development/create-an-app/threads-use-case)) | valid OAuth redirect URIs; a deauthorize callback URL; a data deletion URL | the exact production redirect (`POSTONA_THREADS_CALLBACK`) must be registered; `threads-meta-callbacks` (gate false; N1 store is a central STOP) is what those two URLs would point at |
+
+Not found in the documentation: any container → post id link (so `published_unidentified` stays the honest result for a lost
+answer); whether a token of a NEW grant reads an OLD container; whether a timed-out publish still completes.
+
 ## 7. Local integration (this TASK)
 
 Scenario 35 runs the whole journey in one run: connect → consent → post (final) → post whose answer is lost → reconcile
@@ -103,3 +116,26 @@ Measured 2026-11-13 (runner `G4T_APP_FLOW=1`, disposable PG17.11, fake Threads /
 **35/35** personal and **35/35** full, exit 0 `G4T_APP_FLOW_ALL_PASS` both; the reconnect waited 2,050 ms (personal) /
 2,018 ms (full) for the other session and completed, with no new SQL error. Every earlier stage (fail-before stacks, 15
 mutants, 25 rollback drift cases) ran in both profiles; `G4T_VERDICT` / `G4T_BRIDGE_FLOW` ALL_PASS.
+
+## 8. What still stands between this candidate and the first real Threads user (G4-02 #18, 2026-11-17)
+
+Measured locally and on the real local runtime: nothing in G4's code path is known broken (PG17 e2e 35/35 × 2 profiles; real
+local runtime connect 32/32 and manual publish 8/8, see `threads-local-stack-publish-release-readiness-20261117.md`). What is
+left is decisions, approvals and provider facts, in this order:
+
+1. **Token refresh** — `THREADS_TOKEN_REFRESH_ENABLED = false`: long-lived tokens last 60 days and an expired one cannot be
+   refreshed (§6.1). Decide: build and enable a refresh before release, or ship with "reconnect every 60 days" (the expired
+   credential recovery already handles an unknown outcome in that window).
+2. **Meta app** — Threads use case with `threads_basic` + `threads_content_publish`; the exact production redirect URI; Threads
+   Tester roles for the pilot; App Review for public use; the deauthorize / data deletion URLs (they point at
+   `threads-meta-callbacks`, whose N1 store is a central STOP).
+3. **Production read (read-only window)** — the prerequisites of §4, owners, Vault entries, `postona_threads_runtime`.
+4. **Apply + rehearse** the SQL candidates (§4) on a production-shaped copy, then in a mutation window; provision the
+   attestation key; deploy with gates closed; byte-verify (x-test-post ships G4-02 #9 too).
+5. **Real-provider checks with a named tester (read-only first)** — the §6 questions; especially whether a new grant's token
+   reads an old container (the recovery depends on it; if not, a support path is needed for up to ~24 h per stuck post).
+6. **Lift the gates** by a reviewed source change for a named pilot (connect 5 + manual publish 8 prerequisites).
+
+The committed real-stack harness world stops before manual publish 001 / 002 and serves no publish twin; moving the scratch
+harness recorded in `threads-local-stack-publish-release-readiness-20261117.md` into `supabase/tests/postona_g4_oauth_local_stack/`
+needs a TASK that allows that path.
