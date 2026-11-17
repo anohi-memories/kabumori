@@ -2926,3 +2926,135 @@ test("task39 preview: Task38 real two-stage vs hand-written plain rewrite (manua
   console.log(lines.join("\n"));
   assert.equal(assessAiLabTopicValue(TOPIC_0930).postable, false);
 });
+
+// ---------------------------------------------------------------------------
+// Task40: topic quality and provider contract audit. No provider is called; fetch is a recorder.
+import { findModelSpec, AI_LAB_POST_MODELS } from "./model_catalog.ts";
+import { SYNTHETIC } from "../brand/ai_lab_topic_quality_fixtures.ts";
+
+const T40_DRAFT_TEXT = {
+  anthropic: TASK39_GOOD_DRAFT,
+  openai: TASK39_GOOD_DRAFT,
+} as const;
+
+test("task40 (C): the exact request each provider receives, for both stages", async () => {
+  const bodies: Record<string, unknown[]> = {};
+  for (const provider of TASK39_PROVIDERS) {
+    const f = task39Fixture(provider);
+    await dispatchAiLabScheduledBrandPost(f.args);
+    bodies[provider] = f.recorder.calls.map((c) => c.body);
+    for (const call of f.recorder.calls) {
+      assert.equal(call.url, TASK39_URL[provider]);
+      assert.equal(call.method, "POST");
+      // Only the provider's dedicated key is sent, never the shared one, and never in a body.
+      const secret = provider === "anthropic" ? FAKE_ANTHROPIC_KEY : FAKE_OPENAI_KEY;
+      assert.doesNotMatch(JSON.stringify(call.body), new RegExp(secret));
+      assert.equal(
+        provider === "anthropic" ? call.headers.get("x-api-key") : call.headers.get("authorization"),
+        provider === "anthropic" ? secret : `Bearer ${secret}`,
+      );
+      assert.ok(![...call.headers.values()].some((v) => v.includes("shared-")));
+      assert.equal(JSON.stringify(call.body).includes("temperature"), false);
+    }
+  }
+  // deno-lint-ignore no-explicit-any
+  const [a0, a1] = bodies.anthropic as Record<string, any>[];
+  // deno-lint-ignore no-explicit-any
+  const [o0, o1] = bodies.openai as Record<string, any>[];
+  // Same model catalog ids, same caps, same reasoning effort.
+  assert.equal(a0.model, AI_LAB_POST_MODELS.anthropic);
+  assert.equal(o0.model, AI_LAB_POST_MODELS.openai);
+  assert.deepEqual([a0.max_tokens, a1.max_tokens], [o0.max_output_tokens, o1.max_output_tokens]);
+  assert.equal(a1.max_tokens, 3072);
+  assert.equal(a0.output_config.effort, "low");
+  assert.equal(o0.reasoning.effort, "low");
+  // Same JSON schema on both wires; OpenAI adds strict + store:false, Claude uses adaptive thinking.
+  assert.deepEqual(a0.output_config.format.schema, o0.text.format.schema);
+  assert.deepEqual(a1.output_config.format.schema, o1.text.format.schema);
+  assert.deepEqual(o0.text.format.name, "ai_lab_post_text");
+  assert.deepEqual(o1.text.format.name, "ai_lab_voice_rewrite");
+  assert.equal(o0.text.format.strict, true);
+  assert.equal(o0.store, false);
+  assert.deepEqual(a0.thinking, { type: "adaptive" });
+  // The catalog prices both models, so neither is treated as free.
+  for (const model of Object.values(AI_LAB_POST_MODELS)) {
+    const spec = findModelSpec(model);
+    assert.ok(spec && spec.priceTiers[0].inputPer1M > 0 && spec.priceTiers[0].outputPer1M > 0, model);
+  }
+  console.log(
+    "[task40 C] 実API未検証: 上記request形・モデルID・単価はmock+catalog(2026-10-10 記載)照合のみ。実アカウントでのモデル有効性・課金は未確認。",
+  );
+});
+
+for (const provider of TASK39_PROVIDERS) {
+  test(`task40 (C) ${provider}: a response from another model holds before X and tries no other provider`, async () => {
+    const f = task39Fixture(provider, {
+      respond: () =>
+        jsonResponse(
+          200,
+          provider === "anthropic"
+            ? anthropicBody({ text: TASK39_GOOD_DRAFT }, { model: "claude-haiku-5-5" })
+            : openAiBody({ text: TASK39_GOOD_DRAFT }, { model: "gpt-6-luna" }),
+        ),
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /RESPONSE_MODEL_MISMATCH/);
+    assert.equal(f.recorder.calls.length, 1);
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.at(-1), "release:PRE_X_FAILED");
+  });
+
+  test(`task40 (C) ${provider}: a failed first stage never reaches the editor or X`, async () => {
+    const f = task39Fixture(provider, {
+      respond: () => jsonResponse(500, { error: { message: "synthetic" } }),
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /GENERATION_FAILED/);
+    assert.equal(f.recorder.calls.length, 1);
+    assert.deepEqual(f.payloads, []);
+  });
+}
+
+test("task40 (D): every postable synthetic topic reaches both providers as the identical two-stage prompt", async () => {
+  const lines = ["=== task40 D: 合成題材 × 両provider（非課金・原案/自然化は手書き固定。実モデル出力ではない）==="];
+  for (const c of SYNTHETIC.filter((x) => x.postable && x.preview)) {
+    const draft = c.preview + "\n\n#個人開発";
+    const sent: ReturnType<typeof sentPrompt>[][] = [];
+    const verdicts: string[] = [];
+    for (const provider of TASK39_PROVIDERS) {
+      const f = task39Fixture(provider, { topic: c.seed, draft, rewrite: draft });
+      verdicts.push(
+        await dispatchAiLabScheduledBrandPost(f.args).then(() => "投稿前検査を通過", (e: Error) => e.message),
+      );
+      sent.push(f.recorder.calls.map((call) => sentPrompt(provider, call)));
+      assert.ok(sent.at(-1)!.length >= 1, c.id);
+    }
+    // The draft prompt (and the editor prompt, when reached) is byte-identical across providers.
+    assert.deepEqual(sent[0], sent[1], c.id);
+    assert.equal(verdicts[0], verdicts[1], c.id);
+    assert.ok(sent[0][0].user.includes(c.seed.split("\n")[0]), c.id);
+    lines.push(
+      `[合成] ${c.id}\n  題材: ${c.seed.replaceAll("\n", " / ")}\n  両providerのプロンプトは同一／本文検査: ${verdicts[0]}\n  手書き本文（実モデル出力ではない）: ${c.preview}`,
+    );
+  }
+  console.log(lines.join("\n"));
+  void T40_DRAFT_TEXT;
+});
+
+test("task40 (B): the existing OpenAI one-stage path holds a weak diary topic before any request and keeps others", async () => {
+  const { SYNTHETIC: cases } = await import("../brand/ai_lab_topic_quality_fixtures.ts");
+  const weak = cases.find((c) => c.id.startsWith("S5"))!;
+  const f = fixture(() => jsonResponse(500, {}), { flag: "disabled", kind: "diary", topic: weak.seed });
+  assert.equal(f.args.rewriteVoice, undefined);
+  await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), new RegExp(AI_LAB_TOPIC_VALUE_HELD));
+  assert.deepEqual(f.events, ["claim", "release:PRE_X_CONTENT_REJECTED"]);
+  assert.deepEqual(f.payloads, []);
+  // A weak-looking evergreen seed is not diary-judged: today's one-stage behaviour is unchanged.
+  const evergreen = fixture(() => jsonResponse(500, {}), { flag: "disabled", kind: "evergreen", topic: weak.seed });
+  const evergreenResult = await dispatchAiLabScheduledBrandPost(evergreen.args).then(() => "ok", (e: Error) => e.message);
+  assert.doesNotMatch(evergreenResult, new RegExp(AI_LAB_TOPIC_VALUE_HELD));
+  assert.ok(evergreen.events.includes("OpenAI"));
+  // A postable diary topic goes through the old generator path unchanged (OpenAI fetch, no editor stage).
+  const good = fixture(() => jsonResponse(500, {}), { flag: "disabled", kind: "diary", topic: TASK39_GOOD_TOPIC });
+  const outcome = await dispatchAiLabScheduledBrandPost(good.args).then(() => "published", (e: Error) => e.message);
+  assert.ok(good.events.includes("OpenAI"), String(outcome));
+  assert.equal(good.recorder.calls.length, 0);
+});
