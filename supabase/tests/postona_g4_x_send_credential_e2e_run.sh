@@ -16,6 +16,13 @@
 # Run alone. Usage: supabase/tests/postona_g4_x_send_credential_e2e_run.sh
 set -euo pipefail
 export LC_ALL=C NO_COLOR=1
+# G4-02 #20: 003 now answers only for a G3 send attempt (reservation id + lease + the manual send's session). G3 PR #699's manual send
+# still calls credentialFor(account) with no attempt, so on this stack G4's source answers nothing and L47's "sent" cannot hold. This
+# harness (G4-02 #19's account-only 003) is kept as the record of #19; it is re-enabled only once G3's port passes the attempt.
+if [ "${G4XS_E2E_FORCE_19:-0}" != 1 ]; then
+  echo "G4XS_E2E_NOT_APPLICABLE: needs G3's credentialFor(account, attempt) port (G4-02 #20); nothing was run" >&2
+  exit 3
+fi
 G3=8ebf3a7b079a79817644a2317139c16cb7465ca4   # G3 PR #699 HEAD
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(git -C "$here" rev-parse --show-toplevel)"
