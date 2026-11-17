@@ -12,6 +12,7 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Dimensions, Keyboard, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
+import { THREADS_ENTRY_TITLE, threadsEntry } from '@/features/threads-publish/threads-entry';
 import { ManualPostPreview } from '@/features/manual-publish/manual-post-preview';
 import { acknowledgeAttempt, attemptMemory, inFlightSends, loadPersistedAttempt, reconcileLoadedRead, restoredAttemptOf, runReadinessCheck, runSend, ATTEMPT_CLEARED_CODE, UNRESOLVED_REFUSAL_CODE, type FlowDeps, type InFlightTakeOver } from '@/features/manual-publish/manual-publish-flow';
 import {
@@ -303,6 +304,7 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
     void draftStore.write(userId, { accountId: state.accountId, text, sessionMark, savedAt: now() });
   }, [userId, storeReady, draftRestore, state.phase, state.unresolved, state.draft, state.accountId, sessionMark, now]);
   const suggestedId = activeAccount?.platform === 'x' ? activeAccount.id : xAccounts.length === 1 ? xAccounts[0].id : null;
+  const threads = threadsEntry(accounts, activeAccount?.id ?? null);
   const account = resolveSelectedAccount(accounts, state.accountId);
 
   // The chosen account must always be one of the CURRENT list (account / workspace switch, disconnect).
@@ -439,6 +441,20 @@ export function ManualPublishScreen({ userId, sessionMark = '', now = Date.now, 
           <Text style={styles.muted}>
             送信の前に、サーバー側で接続・利用権・投稿許可を確認します。確認できないときは送信できません。接続状態の表示は参考情報で、送信の許可ではありません。
           </Text>
+        </Card>
+
+        <Card>
+          <SectionTitle detail="この画面はXへの投稿です">{THREADS_ENTRY_TITLE}</SectionTitle>
+          <Text style={styles.muted}>{threads.text}</Text>
+          {threads.kind === 'open' ? (
+            <Link href={{ pathname: '/accounts/[id]', params: { id: threads.accountId } }} asChild>
+              <ActionButton label={threads.label} onPress={() => {}} />
+            </Link>
+          ) : (
+            <Link href="/accounts" asChild>
+              <ActionButton label={threads.label} onPress={() => {}} />
+            </Link>
+          )}
         </Card>
 
         {state.store.kind !== 'ready' ? (

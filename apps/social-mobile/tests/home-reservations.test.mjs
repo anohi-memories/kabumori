@@ -13,6 +13,7 @@ import * as homeReservations from '../src/features/reservations/home-reservation
 import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
 import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
+import * as threadsEntry from '../src/features/threads-publish/threads-entry.ts';
 import { reservationErrorAction } from '../src/features/schedule/reservation-error-actions.ts';
 import * as reservationStore from '../src/features/schedule/reservation-store.ts';
 import * as serverState from '../src/features/schedule/server-reservations-state.ts';
@@ -129,7 +130,8 @@ async function home({ gate = true, reply = () => ok([]), account = ACCOUNT, work
     '@/features/reservations/x-reconnect-signal': signals, '@/features/reservations/x-write-view': xWriteView,
     '@/features/reservations/x-row-generation': xRowGeneration,
     '@/domain/data-view': dataView, '@/features/personal-workspace/personal-workspace-provider': workspaceStub,
-    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: world.account }) }, '@/providers/auth-provider': auth,
+    '@/features/threads-publish/threads-entry': threadsEntry,
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.accounts ?? (world.account ? [world.account] : []), activeAccount: world.account }) }, '@/providers/auth-provider': auth,
     '@/providers/data-provider': { useDataStatus: () => ({ status: world.status, reason: world.reason, snapshot: world.snapshot }) },
   });
   const render = () => { cursor = 0; return screen.default({}); };
@@ -427,4 +429,25 @@ test('use-refocus-count: the first arrival is no return', async () => {
   assert.equal(value, 0);
   focus();
   assert.equal(module.useRefocusCount(), 1);
+});
+
+// G1-02 TASK 2: the home is X's by hand ("手入力でXに投稿"); a person who uses Threads is pointed to the Threads account detail, and the
+// notifications are one tap away (they were only under 設定). Nothing here sends: the card is a pointer.
+test('G1-02 home: the Threads card points to the Threads account detail (or to connecting one); お知らせ is linked; nothing is read or sent for them', async () => {
+  const none = await home();
+  assert.match(none.text(), /Threadsに投稿する/u);
+  assert.match(none.text(), /Threadsアカウントはまだ接続されていません/u);
+  assert.ok(labelled(none.render(), 'ActionButton', 'アカウント画面を開く'), 'no Threads account: the accounts screen');
+  assert.ok(labelled(none.render(), 'ActionButton', 'お知らせを開く'));
+  assert.match(none.text(), /承認した予約の状態の変化を、あとから読み返せます/u);
+  const threads = { ...ACCOUNT, id: '22222222-2222-4222-8222-222222222222', platform: 'threads', postingState: 'paused' };
+  const some = await home();
+  some.world.accounts = [ACCOUNT, threads];
+  await some.update();
+  assert.match(some.text(), /Threadsへの投稿は、Threadsアカウントの詳細から行います/u);
+  assert.ok(labelled(some.render(), 'ActionButton', 'Threadsアカウントの詳細を開く'));
+  assert.doesNotMatch(some.text(), /Threadsアカウントはまだ接続されていません/u);
+  assert.match(some.text(), /手入力でXに投稿/u, 'the X card is unchanged');
+  assert.doesNotMatch(some.text(), /投稿しました|送信しました/u, 'a pointer says nothing was posted');
+  assert.equal(some.world.calls.filter((call) => call.body.action !== 'list').length, 0, 'only the reservation read the home always makes');
 });
