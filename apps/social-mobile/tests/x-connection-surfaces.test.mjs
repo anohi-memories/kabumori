@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as xWrite from '../src/features/reservations/x-write-view.ts';
+import * as initialRelease from '../src/domain/initial-release.ts';
 import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as accountSecurity from '../src/domain/account-security.ts';
 import * as authFlows from '../src/domain/auth-flows.ts';
@@ -39,6 +40,7 @@ async function mount(path, { selected = account(), status = 'ready' } = {}) {
     '@/features/threads-publish/threads-publish-card': { ThreadsPublishCard: 'ThreadsPublishCard' },
     '@/features/x-connect/use-x-connect': { useXConnect: () => ({ state: 'idle', stateText: '', verifiedHandle: null, connect() { throw new Error('no OAuth'); } }) },
     '@/features/reservations/x-write-view': xWrite,
+    '@/domain/initial-release': initialRelease,
     '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
     '@/features/personal-workspace/personal-workspace-provider': { usePersonalWorkspace: () => ({ view: { kind: 'ready', workspaceId: 'u_me' } }) },
     '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: world.account ? [world.account] : [], activeAccount: world.account, selectAccount() {} }) },

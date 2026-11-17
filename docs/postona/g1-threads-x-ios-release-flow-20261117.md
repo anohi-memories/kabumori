@@ -73,3 +73,10 @@ node --test tests/release-flow-threads-x.test.mjs
 ```
 
 実環境（Kong → Edge → PG17）は `tests/local-stack/run-x-disconnected.sh`（G3 の使い捨て環境を G1 の名前で起動）と `run-threads-g1-flow.sh <G4 #664 を手元で merge した使い捨ての木>`。どちらも 127.0.0.1 だけで、managed・実 SNS には届かない。
+
+## 第3TASK 統合記録（PR698 + PR700）
+- base は PR700 head `425908136be0a45eda6d9f3e635bc848b29502eb`。PR698 head `77a2cf7a8de20549fcdcf59c2262c402eeb53fba` を merge（衝突なし、共通 base = PR689 `c7b2ac41`）。
+- 採用（PR698）: `domain/initial-release.ts`、accounts 一覧/詳細の「後日対応」・接続CTAなし、active-account の Instagram 切替拒否、`initial-release-scope.test.mjs`、`x-connection-surfaces` の追記。
+- 採用（PR700）: Threads 入口（ホーム/手動投稿）、通知導線、投稿/予約の説明、`release-flow-threads-x.test.mjs` ほか。
+- 一本化: `x-write-view.ts` の `INSTAGRAM_LATER_LABEL` は `initial-release.ts` の `DEFERRED_PROVIDER_LABEL` を参照（文言の二重定義を解消）。`x-reservation-composer.test.mjs` は両 PR の負例を併存。
+- 不変: X 手動送信 port の `not_connected` は事実として維持（G4 第19資格情報が未接続の間は有効化しない）。素材BOX保存・投稿時添付は未実装、Threads 予約の実送信は G3 第27 依存。

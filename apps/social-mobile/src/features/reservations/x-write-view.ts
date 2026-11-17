@@ -1,6 +1,7 @@
 // What the X composer and the reservations screen say about a refused X write, and when they refuse before asking (G1 TASK 32).
 // Pure: no React, no network. The code -> action table is G3's; the only addition is the code below, by which a SERVER has decided
 // that the X connection must be made again (G3's POSTONA_RESV_X_ACCOUNT_NOT_VERIFIED is already 'reconnect_x' there).
+import { DEFERRED_PROVIDER_LABEL } from '../../domain/initial-release.ts';
 import { reservationMessage } from '../schedule/server-reservations-state.ts';
 import type { ReservationAction } from './reservation-ports.ts';
 import { accountRefusal, actionView, REREAD_TEXT, type ActionButtonKind } from './reservation-view.ts';
@@ -98,7 +99,7 @@ export function xOwnRefusal(input: {
 
 /** connection_status is a stored record, not G4/G5's current connection verdict. Neither an earlier row nor a current row proves an account's present authority. */
 /** G1-02 TASK 2: the first release is Threads and X; Instagram is added later, so it never shows a connection or a way to use it. */
-export const INSTAGRAM_LATER_LABEL = '後日対応';
+export const INSTAGRAM_LATER_LABEL = DEFERRED_PROVIDER_LABEL;
 export function connectionPill(connectionStatus: string, reconnectRequired: boolean, otherLabel: string, restartObserved = false, platform = 'x'): { label: string; tone: 'success' | 'warning' } {
   if (platform === 'instagram') return { label: INSTAGRAM_LATER_LABEL, tone: 'warning' };
   if (reconnectRequired) return { label: RECONNECT_REQUIRED_LABEL, tone: 'warning' };
