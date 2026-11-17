@@ -154,6 +154,11 @@ const FIXTURE_TOPIC = [
   "できごと: 田中さんとPOSTONAの通知画面を2台で確認した（@sample_dev）。通知と画面表示の確認。",
 ].join("\n");
 
+// Task35: a feeling is an assertion the topic must state, so the fixtures whose
+// drafts say 「ほっとしました」 use a topic that says it too.
+const RELIEVED_TOPIC = FIXTURE_TOPIC +
+  "\n気持ち: 私は並び順が見えるとほっとしました。確認できてほっとしました。";
+
 function fixture(
   respond: Responder,
   {
@@ -589,7 +594,7 @@ for (
             : pollOptions
             ? { text: original, poll_options: pollOptions }
             : { text: original },
-        ), { rotation });
+        ), { rotation, topic: RELIEVED_TOPIC });
       const result = await dispatchAiLabScheduledBrandPost(f.args);
       assert.equal(result.voiceRewriteDecision, "edited");
       assert.deepEqual(f.payloads, [{ text: edited, pollOptions }]);
@@ -713,8 +718,7 @@ test("voice edits allow at most one new emoji and cannot add a first-person clai
     const f = fixture((call, index) =>
       providerResponse(
         index ? editedReply(call, edited, selections) : { text: original },
-      )
-    );
+      ), { topic: RELIEVED_TOPIC });
     await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), expected);
     assert.deepEqual(f.payloads, []);
   }
@@ -829,8 +833,7 @@ test("emoji decoration alone holds before X", async () => {
       index
         ? editedReply(call, edited, [["ほっとしました。", "ほっとしました😊"]])
         : { text: original },
-    )
-  );
+    ), { topic: RELIEVED_TOPIC });
   await assert.rejects(
     dispatchAiLabScheduledBrandPost(f.args),
     /VOICE_REWRITE_REVIEW_REQUIRED/,
@@ -1921,5 +1924,273 @@ test("task33: the topic must be a string; nothing reaches the provider without o
     () =>
       assertGroundedInSource("通知を見た。", undefined as unknown as string),
     new RegExp(AI_LAB_SOURCE_GROUNDING_REJECTED),
+  );
+});
+
+// ---- Task35: topic grounding by word form, and unsourced reasons and plans ----
+// TOPIC_0930 is the #decided unit of the 2026-09-30 public diary entry and
+// REAL_DRAFT_278 the Task34 real Claude draft, both copied from Issue #321
+// REPORT 6939475232 and used here only as fixed inputs (no API call). The
+// grounded draft and its rewrite are hand-written.
+const TOPIC_0930 = [
+  "開発日記（2026-09-30、昨日の出来事）より。",
+  "できごと: iOS版で実データ接続とX認証の確認を進め、あわせて開発の進捗を投稿の題材として安全に残せる運用を整えた。",
+  "詰まったこと: テスト用のXアカウントが既存の接続と重なっていることに途中で気づき、そのまま進めると本番に影響する可能性があった。",
+  "決めたこと: 先に進めるより安全側で止めることを優先し、完了確認のたびに公開してよい開発内容だけを共有メモへ残す運用にした。",
+  "今回の切り口: なぜその判断（止める・変える・決める）をしたのか",
+].join("\n");
+const REAL_DRAFT_278 = [
+  "昨日はiOS版で実データをつないで、X認証の確認を進めてた。",
+  "途中で気づいたのが、テスト用のXアカウントが既存の接続とかぶってたこと。\nこのまま進めたら本番側に何か飛ぶかもしれない。",
+  "確認はあと少しだったけど、そこで止めた。\n少し遅れるのはあとで取り戻せる。\n本番に変な投稿が出たら取り消せない。\nそう考えたら迷う理由があまりなかった。",
+  "ついでに運用もひとつ変えた。\n完了確認のたびに、公開していい開発内容だけを共有メモに残す。\n投稿のネタにするとき、出しちゃいけない情報まで混ざるのが怖かったので。",
+  "アカウントの切り分けは次回やる。",
+  "#個人開発",
+].join("\n\n");
+const GROUNDED_DRAFT_0930 = [
+  "昨日はiOS版で実データをつないで、X認証の確認を進めてた。",
+  "途中で気づいたのが、テスト用のXアカウントが既存の接続とかぶってたこと。\nこのまま進めたら本番側に何か飛ぶかもしれない。",
+  "なので先に進めず、そこで止めた。",
+  "ついでに運用もひとつ変えた。\n完了確認のたびに、公開していい開発内容だけを共有メモに残す。",
+  "#個人開発",
+].join("\n\n");
+const GROUNDED_REWRITE_0930 = [
+  "昨日はiOS版の実データ接続とX認証を見てた。",
+  "そしたらテスト用のXアカウントが既存の接続とかぶってるのに途中で気づいた。\n進めたら本番に影響しそうだったからいったん止めた😂",
+  "あと完了確認のたびに公開していい内容だけ共有メモに残す運用にした。",
+  "#個人開発",
+].join("\n\n");
+
+test("task35 (1)(3): the topic's 「気づき」 grounds the draft's 「気づいた」", () => {
+  assert.equal([...REAL_DRAFT_278].length, 278);
+  const claims = ungroundedClaims(REAL_DRAFT_278, TOPIC_0930);
+  assert.equal(claims.includes("気づいた"), false);
+  assert.deepEqual(ungroundedClaims(GROUNDED_DRAFT_0930, TOPIC_0930), []);
+  // Spelling variants and affirmative forms of the same word.
+  for (
+    const [text, source] of [
+      ["途中で気付いた。", TOPIC_0930],
+      ["途中で気づいた。", TOPIC_0930.replace("気づき", "気付き")],
+      [
+        "接続が重なってるのに気づいた。",
+        "接続が重なっていることに気がついた。",
+      ],
+      ["接続が重なってるのに気がついた。", "接続が重なっているのに気づく。"],
+      [
+        "最初は通知で足りると思ってた。",
+        "最初は通知で足りると思っていました。",
+      ],
+      ["それで条件を書くことにした。", "条件を書くことにしました。"],
+    ]
+  ) {
+    assert.deepEqual(ungroundedClaims(text, source), [], text);
+  }
+});
+
+test("task35 (1): a negative form, another word or a bare stem does not ground the claim", () => {
+  for (
+    const source of [
+      "接続が重なっていることに気づかなかった。",
+      "接続が重なっていることに気づきませんでした。",
+      "接続の気温と気分が重なっていた。",
+      "接続が重なっていた。",
+    ]
+  ) {
+    assert.deepEqual(
+      ungroundedClaims("接続が重なってるのに気づいた。", source),
+      ["気づいた"],
+      source,
+    );
+  }
+  // One grounded 「気づき」 grounds one claim, not two.
+  assert.deepEqual(
+    ungroundedClaims(
+      "途中で気づいた。テスト用の接続にも気づいた。",
+      TOPIC_0930,
+    ),
+    ["気づいた"],
+  );
+});
+
+test("task35 (2)(3): unsourced progress, reasons, feelings and plans in the real draft are found", () => {
+  assert.deepEqual(ungroundedClaims(REAL_DRAFT_278, TOPIC_0930), [
+    "あと少し",
+    "取り戻せ",
+    "取り消せ",
+    "そう考えたら",
+    "迷う理由",
+    "怖かっ",
+    "次回",
+    "少し遅れるのはあとで取り戻せる",
+    "そう考えたら迷う理由があまりなかった",
+  ]);
+  for (
+    const [label, added] of [
+      ["progress", "確認はあと少しだった。"],
+      ["consequence", "本番に変な投稿が出たら取り消せない。"],
+      ["reasoning", "そう考えたら迷わなかった。"],
+      ["feeling", "テスト用のアカウントが怖かった。"],
+      ["feeling", "接続が重なっていて焦った。"],
+      ["plan", "アカウントの切り分けは次回やる。"],
+      ["plan", "アカウントは今度切り分けるつもり。"],
+    ] as const
+  ) {
+    assert.ok(
+      ungroundedClaims(GROUNDED_DRAFT_0930 + "\n" + added, TOPIC_0930).length >
+        0,
+      label + " " + added,
+    );
+  }
+  // The same statements are fine when the topic itself states them, but a
+  // topic word does not license an unrelated sentence.
+  const withPlan = TOPIC_0930 +
+    "\n残り: 次回はアカウントを切り分ける。本番に出るのが怖かった。";
+  assert.deepEqual(
+    ungroundedClaims(
+      GROUNDED_DRAFT_0930 +
+        "\nアカウントの切り分けは次回やる。\n本番に出るのが正直怖かった。",
+      withPlan,
+    ),
+    [],
+  );
+  assert.deepEqual(
+    ungroundedClaims("正直怖かった。", withPlan),
+    ["正直怖かった"],
+  );
+  assert.deepEqual(
+    ungroundedClaims("次回は飲み会に行く。", withPlan),
+    ["次回は飲み会に行く"],
+  );
+});
+
+test("task35 (2)(3): the real draft holds before the editor and X; the grounded one is rewritten and sent", async () => {
+  const held = fixture(
+    (_call, index) =>
+      providerResponse(
+        index
+          ? { decision: "rewritten", text: GROUNDED_REWRITE_0930, edits: [] }
+          : { text: REAL_DRAFT_278 },
+      ),
+    { topic: TOPIC_0930 },
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(held.args),
+    new RegExp(AI_LAB_SOURCE_GROUNDING_REJECTED),
+  );
+  assert.equal(held.recorder.calls.length, 1);
+  assert.deepEqual(held.payloads, []);
+  assert.deepEqual(held.events, [
+    "claim",
+    "Claude:0",
+    "release:PRE_X_CONTENT_REJECTED",
+  ]);
+
+  const sent = fixture(
+    (_call, index) =>
+      providerResponse(
+        index
+          ? { decision: "rewritten", text: GROUNDED_REWRITE_0930, edits: [] }
+          : { text: GROUNDED_DRAFT_0930 },
+      ),
+    { topic: TOPIC_0930 },
+  );
+  await dispatchAiLabScheduledBrandPost(sent.args);
+  assert.equal(sent.recorder.calls.length, 2);
+  assert.deepEqual(sent.payloads, [{
+    text: GROUNDED_REWRITE_0930,
+    pollOptions: undefined,
+  }]);
+  const editorInput = JSON.parse(
+    (sent.recorder.calls[1].body as {
+      messages: { content: string }[];
+    }).messages[0].content,
+  ) as { source: string };
+  assert.equal(editorInput.source, TOPIC_0930);
+});
+
+test("task35 (2)(4): an editor that adds a reason, feeling or plan is held before X", async () => {
+  for (
+    const text of [
+      GROUNDED_REWRITE_0930.replace(
+        "いったん止めた😂",
+        "取り消せないし止めた😂",
+      ),
+      GROUNDED_REWRITE_0930.replace("いったん止めた😂", "怖かったから止めた😂"),
+      GROUNDED_REWRITE_0930.replace(
+        "共有メモに残す運用にした。",
+        "共有メモに残す。切り分けは次回。",
+      ),
+    ]
+  ) {
+    assert.throws(
+      () => groundedRewrite(GROUNDED_DRAFT_0930, TOPIC_0930, text),
+      /REJECTED/,
+      text,
+    );
+    const f = fixture(
+      (_call, index) =>
+        providerResponse(
+          index
+            ? { decision: "rewritten", text, edits: [] }
+            : { text: GROUNDED_DRAFT_0930 },
+        ),
+      { topic: TOPIC_0930 },
+    );
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /REJECTED/);
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.includes("start X"), false);
+  }
+  // keep and an ending-only edit of the grounded draft stay held.
+  assert.throws(
+    () =>
+      prepareAiLabVoiceRewrite({
+        brandId: "ai_salaryman_lab",
+        postType: "brand_post",
+        text: GROUNDED_DRAFT_0930,
+      }, TOPIC_0930).validate({
+        decision: "keep",
+        text: GROUNDED_DRAFT_0930,
+        edits: [],
+      }),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  assert.throws(
+    () =>
+      groundedRewrite(
+        GROUNDED_DRAFT_0930,
+        TOPIC_0930,
+        GROUNDED_DRAFT_0930.replace("先に進めず、", "先に進めず"),
+      ),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+});
+
+test("task35 (2): both prompts forbid unsourced progress, reasons, feelings and plans", async () => {
+  const f = fixture(
+    (_call, index) =>
+      providerResponse(
+        index
+          ? { decision: "rewritten", text: GROUNDED_REWRITE_0930, edits: [] }
+          : { text: GROUNDED_DRAFT_0930 },
+      ),
+    { topic: TOPIC_0930 },
+  );
+  await dispatchAiLabScheduledBrandPost(f.args);
+  const { system } = f.recorder.calls[0].body as { system: string };
+  const draftRules = system.slice(system.indexOf("最優先: "));
+  assert.match(
+    draftRules,
+    /題材に書かれていない進み具合（『あと少しだった』）、決めた理由や考え/u,
+  );
+  assert.match(
+    draftRules,
+    /気持ち（『怖かった』『焦った』）、ねらい、次回の予定（『次回やる』）も足さない/u,
+  );
+  assert.match(draftRules, /題材にない理由を作る指示ではない/u);
+  assert.match(draftRules, /Xで友達に気軽につぶやくくらいの短い日本語/u);
+  const rewrite = f.recorder.calls[1].body as { system: string };
+  assert.match(
+    rewrite.system,
+    /進み具合（「あと少しだった」）・決めた理由（「取り消せないから」）・気持ち（「怖かった」）・次回の予定/u,
   );
 });
