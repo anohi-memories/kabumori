@@ -248,11 +248,14 @@ class ClaimDb {
 // ---------------------------------------------------------------------------------------------------
 // fixtures
 // ---------------------------------------------------------------------------------------------------
+// Task39: the event names something a reader can see (the connect screen); an internal-only check is
+// skipped by the post-value judgement before any claim (ai_lab_topic_value.ts), which these
+// claim/dedupe tests do not exercise.
 const INCIDENT_EVENT = `
 ## 2026-09-30
 event_id: 20260930-x-auth-test-account-overlap
 changed: X認証まわりの実データ接続を確認した
-difficulty: テスト用アカウントの重複に気づいた
+difficulty: 接続画面でテスト用アカウントの重複に気づいた
 decided: 本番影響を避けるため一旦停止した
 angle: 実データ接続では重複に気づくことが重要だった
 angle: 本番影響を出さないため止める判断をした

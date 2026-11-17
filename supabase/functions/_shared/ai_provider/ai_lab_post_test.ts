@@ -4,8 +4,10 @@ import { createAiLabTextProvider } from "./ai_lab_post.ts";
 import {
   anthropicBody,
   FAKE_ANTHROPIC_KEY,
+  FAKE_OPENAI_KEY,
   fakeEnv,
   jsonResponse,
+  openAiBody,
   recordingFetch,
 } from "./test_support.ts";
 import { resolveBrandContext } from "../brand/brand_context.ts";
@@ -234,4 +236,68 @@ test("real AI Lab/generic generator composition preserves all four modes and nat
       assert.match(body.system, /最大120文字/);
     }
   }
+});
+
+// Task39: the same AI Lab text contract on the OpenAI Responses API (mock only).
+test("OpenAI selection sends one strict Responses request with only the dedicated AI Lab key", async () => {
+  const env = fakeEnv({
+    AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY,
+    OPENAI_API_KEY: "shared-openai-key-must-never-be-used",
+    AI_LAB_TEXT_API_KEY: FAKE_ANTHROPIC_KEY,
+  });
+  const recorder = recordingFetch(() =>
+    jsonResponse(200, openAiBody({ text: "本文 #個人開発" }))
+  );
+  const provider = createAiLabTextProvider(
+    { readEnv: env.readEnv, fetch: recorder.fetch },
+    false,
+    "openai",
+  );
+  const result = await provider(request());
+  assert.equal(result.text, "本文 #個人開発");
+  assert.ok(result.apiCostUsd > 0);
+  assert.deepEqual(env.reads, ["AI_LAB_OPENAI_TEXT_API_KEY"]);
+  assert.equal(recorder.calls.length, 1);
+  assert.equal(recorder.calls[0].url, "https://api.openai.com/v1/responses");
+  const body = recorder.calls[0].body as {
+    model: string;
+    store: boolean;
+    input: string;
+    max_output_tokens: number;
+    reasoning: { effort: string };
+    text: { format: { type: string; strict: boolean } };
+  };
+  assert.equal(body.model, "gpt-6.1-sol");
+  assert.equal(body.store, false);
+  assert.equal(body.input, request().input);
+  assert.equal(body.max_output_tokens, 2000);
+  assert.equal(body.reasoning.effort, "low");
+  assert.deepEqual(
+    [body.text.format.type, body.text.format.strict],
+    ["json_schema", true],
+  );
+});
+
+test("OpenAI selection keeps the scope, budget and no-retry rules", async () => {
+  for (const change of [{ brandId: "kabumori" }, { maxOutputTokens: 3073 }]) {
+    const env = fakeEnv({ AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY });
+    const recorder = recordingFetch(() => jsonResponse(200, openAiBody({ text: "x" })));
+    const provider = createAiLabTextProvider(
+      { readEnv: env.readEnv, fetch: recorder.fetch },
+      false,
+      "openai",
+    );
+    await assert.rejects(provider({ ...request(), ...change }), /AI_LAB_OPENAI_TEXT_/);
+    assert.equal(recorder.calls.length, 0);
+    assert.equal(env.reads.length, 0);
+  }
+  const recorder = recordingFetch(() =>
+    jsonResponse(500, { error: { message: "synthetic" } })
+  );
+  const provider = createAiLabTextProvider({
+    readEnv: fakeEnv({ AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY }).readEnv,
+    fetch: recorder.fetch,
+  }, false, "openai");
+  await assert.rejects(provider(request()), /AI_LAB_OPENAI_TEXT_GENERATION_FAILED/);
+  assert.equal(recorder.calls.length, 1);
 });

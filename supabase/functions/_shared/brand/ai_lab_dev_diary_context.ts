@@ -23,6 +23,7 @@
 
 import { AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT } from "./ai_lab_dev_diary_context.snapshot.ts";
 import { type AiLabGenericThemeId, detectGenericThemes } from "./ai_lab_theme_guard.ts";
+import { assessAiLabTopicValue } from "./ai_lab_topic_value.ts";
 
 export type DevDiaryEntry = {
   date: string; // YYYY-MM-DD
@@ -383,7 +384,7 @@ export function evergreenEventKey(index: number): string {
 export type AiLabTopicExclusion = {
   /** 非機密の識別子のみ（日付・eventKey・unitKey）。本文は入れない。 */
   candidate: string;
-  stage: "freshness" | "sanitize" | "theme_cooldown" | "recent_overlap" | "capacity";
+  stage: "freshness" | "sanitize" | "theme_cooldown" | "recent_overlap" | "capacity" | "post_value";
   reason: string;
 };
 
@@ -528,6 +529,14 @@ export function buildAiLabTopicCandidates({
   for (const { entry, eventKey, age } of fresh) {
     const units = diaryUnitsFor(entry, eventKey, age, exclusions);
     const unit = pickByRotation(units, rotationIndex);
+    // Task39: a fresh event that is only an internal report, project-only account detail or a
+    // finished check is not posted. Its facts are shared by every angle, so the whole event is
+    // skipped and the evergreen tier keeps the slot going. Nothing is padded to make it postable.
+    const value = assessAiLabTopicValue(unit.seed);
+    if (!value.postable) {
+      exclusions.push({ candidate: eventKey, stage: "post_value", reason: `WEAK_POST_VALUE:${value.reasons.join(",")}` });
+      continue;
+    }
     candidates.push({ kind: "diary", eventKey, unitKey: unit.key, themeTags: [], topic: unit.seed });
   }
 

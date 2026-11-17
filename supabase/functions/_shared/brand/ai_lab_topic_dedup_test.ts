@@ -80,9 +80,12 @@ test("a generic diary angle (下調べだけで1日が終わる) is excluded wit
   // 新しい2件を使用済みにして、汎用角度を持つ 9/29 のイベントが選ばれる状況を作る。
   const used = ["diary:20261001-x-login-account-switch", "diary:20260930-x-auth-test-account-overlap"];
   const selected = select(0, DIARY, [], used);
-  assert.equal(selected.eventKey, "diary:20260929-research-before-content-access");
   const reasons = selected.exclusions.map((e) => `${e.candidate}:${e.reason}`);
   assert.ok(reasons.some((r) => r.startsWith("diary:20260929-research-before-content-access#angle1:GENERIC_THEME:research_only_day")), reasons.join("\n"));
+  // Task39: this 9/29 event (下調べ・担当者の判定・土台) has nothing a reader can picture, so the
+  // post-value judgement skips the whole event; it is not padded into a post.
+  assert.notEqual(selected.eventKey, "diary:20260929-research-before-content-access");
+  assert.ok(reasons.some((r) => r.startsWith("diary:20260929-research-before-content-access:WEAK_POST_VALUE:")), reasons.join("\n"));
   for (let i = 0; i < 40; i += 1) {
     assert.doesNotMatch(select(i, DIARY, [], used).topic, /今回の切り口: 下調べだけで/u);
   }
