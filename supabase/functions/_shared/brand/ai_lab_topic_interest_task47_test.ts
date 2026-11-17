@@ -89,35 +89,45 @@ const TASK46_VERDICT: Record<string, boolean> = {
   "20261009-shared-account-withdrawal-safety": false,
   "20261010-ai-consult-workspace-memory-safety": true,
 };
-const PENDING_OWNER = ["20261009-shared-account-withdrawal-safety", "20261010-ai-consult-workspace-memory-safety"];
+// Task49: the owner judged 10/09 and 10/10 both 採用 (2026-11-18, Issue #321 comment 6952421316). That approves
+// the topics only: not a model's wording, a post, spending or a merge.
+const OWNER_ADOPTED = ["20261009-shared-account-withdrawal-safety", "20261010-ai-consult-workspace-memory-safety"];
+const TASK49_EXPECTED_CHANGE = ["20261009-shared-account-withdrawal-safety"];
 
-test("task47 (A) 4: the 14 recorded topics — Task46 vs Task47 verdict diff, with 10/09 and 10/10 left to the owner (実記録)", async () => {
+test("task49 (A)(B) the 14 recorded topics — Task46 verdict diff: only 10/09 changes, and 10/09 and 10/10 both match the owner's 採用 (実記録)", async () => {
   const rows = await recorded();
   assert.equal(rows.length, 14);
   const diff: string[] = [];
   const lines = ["=== task47 実記録14件: 第46TASK → 第47TASK（面白さ判定のみ。非投稿・非課金）==="];
   for (const { entry, seed: s } of rows) {
     const r = ok(s);
-    const pending = PENDING_OWNER.includes(entry.eventId!);
+    const adopted = OWNER_ADOPTED.includes(entry.eventId!);
+    if (adopted) assert.equal(r.postable, true, `${entry.eventId}: ${r.summary}`);
     if (r.postable !== TASK46_VERDICT[entry.eventId!]) diff.push(entry.eventId!);
     lines.push(
       `[実記録] ${entry.date} ${entry.eventId}: ${TASK46_VERDICT[entry.eventId!] ? "採用" : "保留"} → ${r.postable ? `採用(${r.tier})` : "保留"}` +
-        `${pending ? " 【本人判断待ち】" : ""} / ${r.summary}`,
+        `${adopted ? " 【本人採用 2026-11-18】" : ""} / ${r.summary}`,
     );
   }
   console.log(lines.join("\n"));
-  // Nothing in the 14 changes: the two new rules do not collapse or inflate the recorded set.
-  assert.deepEqual(diff, []);
+  // Only 10/09 changes (held → adopted); the other 12 keep their Task46/47 verdict, 10/10 stays 採用(中).
+  assert.deepEqual(diff, TASK49_EXPECTED_CHANGE);
+  const tiers = Object.fromEntries(rows.map(({ entry, seed: s }) => [entry.eventId!, ok(s).tier]));
+  assert.equal(tiers["20261010-ai-consult-workspace-memory-safety"], "medium");
+  assert.notEqual(tiers["20261009-shared-account-withdrawal-safety"], "weak");
   // Every 時間がかかった in the records names its cause, so none of them became a bare effort word.
   for (const { seed: s } of rows) assert.ok(!ok(s).weaknesses.includes("GENERIC_EFFORT"));
 });
 
-test("task47 (A) 4: short preview for the owner — 10/09 and 10/10 as recorded (実記録の事実行。投稿文でもモデル出力でもない)", async () => {
-  const rows = (await recorded()).filter((r) => PENDING_OWNER.includes(r.entry.eventId!));
+test("task49 (A) 10/09 and 10/10 as recorded: owner-adopted, prototype stays a prototype (実記録の事実行。投稿文でもモデル出力でもない)", async () => {
+  const rows = (await recorded()).filter((r) => OWNER_ADOPTED.includes(r.entry.eventId!));
   assert.equal(rows.length, 2);
-  const out = ["=== task47 本人判断待ち（現行判定は参考。採否の正解ではありません）==="];
+  const out = ["=== task49 本人採用（題材のみ。文体PASS・投稿・課金・マージの許可ではありません）==="];
+  const r0 = ok(rows.find((r) => r.entry.eventId === "20261009-shared-account-withdrawal-safety")!.seed);
+  assert.ok(r0.signals.includes("INGENUITY") && r0.signals.length === 1, r0.summary);
+  assert.match(r0.summary, /試作段階/u);
   for (const { entry, seed: s } of rows) {
-    out.push(`[${entry.date}] できごと: ${entry.changed}`, `  現行判定: ${ok(s).summary}`, `  → 普通の人が読みたい内容ですか？ （はい／いいえ）`);
+    out.push(`[${entry.date}] できごと: ${entry.changed}`, `  現行判定: ${ok(s).summary}`, `  → 本人採用（2026-11-18）`);
   }
   console.log(out.join("\n"));
 });
@@ -166,4 +176,33 @@ test("task47 (A) 3: consecutive recorded days — audit list (実記録; read-on
   }
   console.log(lines.join("\n"));
   assert.ok(similar >= 0);
+});
+
+// Task49 (C): the narrow "choice of what an irreversible action applies to" release, synthetic only.
+test("task49 (A)(C) a prototype of choosing the target of 利用終了/削除 is adopted without a fixed date or id; the same shape without a real choice stays held (合成)", () => {
+  const positives = [
+    seed("できごと: 動画アプリだけ解約するか、共通のログインごと削除するかを別々に選べる画面を試作した。", "決めたこと: アプリの解約とログイン全体の削除をはっきり分けた。"),
+    seed("できごと: 「このアプリの利用だけ終了」と「アカウント全体を削除」を別々に選べる画面を試作した。", "決めたこと: 削除と利用終了を分けて選ぶ設計にした。"),
+  ];
+  for (const s of positives) {
+    const r = ok(s);
+    assert.equal(r.postable, true, `${s}: ${r.summary}`);
+    assert.deepEqual(r.signals, ["INGENUITY"]);
+    assert.match(r.summary, /完成・公開済みとは言えない/u);
+  }
+  const negatives = [
+    // Splitting with no irreversible action at all.
+    seed("できごと: 設定画面のファイルを分けて実装した。", "決めたこと: 画面ごとに分ける設計にした。"),
+    // A prototype with no choice of target.
+    seed("できごと: 退会画面を試作した。", "決めたこと: 画面の流れを設計にした。"),
+    // Precaution only: no event, no choice.
+    seed("できごと: 削除画面を試作した。", "決めたこと: 間違って削除しないよう別々に分ける設計にした。"),
+    // A real choice, but with a promotional / report-heavy rest.
+    seed("できごと: 解約と削除を別々に選べる画面を試作し、実施・完了・整備した。", "決めたこと: ぜひ使ってみてほしいのではっきり分けた。"),
+    // Target choice but the report words beyond prototype remain a work report.
+    seed("できごと: 利用終了と削除を別々に選べる画面を実装し、導入した。", "決めたこと: 対応した。"),
+  ];
+  for (const s of negatives) assert.equal(ok(s).postable, false, `${s}: ${ok(s).summary}`);
+  // The release never reads outside the fact lines.
+  assert.equal(ok(seed("できごと: 画面を作った。").replace("今回の切り口: 何が起きたのか", "今回の切り口: 解約と削除を別々に選べる画面を試作した")).postable, false);
 });

@@ -57,6 +57,24 @@ const CONCRETE_DETAIL = /\d+\s*(?:分|秒|時間|件|個|回|枚|%|％|倍|つ|�
 const READER_SCENE =
   /画面|表示|ボタン|見た目|押し|タップ|色|イラスト|グラフ|文字|タイトル|改行|見出し|通知|写真|画像|カード|リンク|メッセージ|入力/gu;
 
+/**
+ * Task49 (owner-approved 10/09): a recorded choice of *which thing an irreversible action applies to*
+ * (「利用終了」「退会」「解約」「削除」「解除」 and a statement that the targets are chosen / kept separately).
+ * A sentence that only guards against a mistake (「〜ないよう」「〜場合」「〜可能性」) does not count, and a bare
+ * 「分けた」 with no such action noun never does. It only stops the words 「試作」「設計にし」 from being counted
+ * as a work report for that topic: it adds no story signal, and a prototype is never restated as shipped.
+ */
+const TARGET_ACTION = "利用終了|退会|解約|削除|解除";
+const TARGET_SPLIT = "別々に選べ|はっきり分け|分けて選";
+const TARGET_CHOICE = new RegExp(`(?:${TARGET_ACTION})[^。]{0,40}(?:${TARGET_SPLIT})|(?:${TARGET_SPLIT})[^。]{0,40}(?:${TARGET_ACTION})`, "u");
+const TARGET_PRECAUTION = /ないよう|ないため|場合|可能性|そう(?:だ|なので|なら)/u;
+const PROTOTYPE_WORD = /^(?:試作|設計にし)$/u;
+function targetChoiceEvidence(facts: string): string[] {
+  return unique(
+    facts.split(/[。\n]/u).filter((s) => TARGET_CHOICE.test(s) && !TARGET_PRECAUTION.test(s)).map((s) => s.match(TARGET_CHOICE)![0]),
+  );
+}
+
 /** Advertising: a reader is asked to buy, try or look forward to something. */
 const PROMOTIONAL =
   /ぜひ|おすすめ|オススメ|お試し|使ってみて|ダウンロード|リリースしました|新登場|お楽しみに|好評|大幅に?(?:向上|改善)|フォロー/u;
@@ -155,7 +173,9 @@ export function assessAiLabTopicInterest(seed: string): AiLabTopicInterest {
   if (signals.length === 0 && effort.generic.length > 0) weaknesses.push("GENERIC_EFFORT");
   if (PROMOTIONAL.test(all)) weaknesses.push("PROMOTIONAL");
   if (AI_MADE.test(all)) weaknesses.push("AI_MADE_REPORT");
-  if ((all.match(REPORT_TONE) ?? []).length >= 2) weaknesses.push("REPORT_TONE");
+  const targetChoice = targetChoiceEvidence(all);
+  const reportWords = (all.match(REPORT_TONE) ?? []).filter((w) => !(targetChoice.length > 0 && PROTOTYPE_WORD.test(w)));
+  if (reportWords.length >= 2) weaknesses.push("REPORT_TONE");
   if (lines.some((a, i) => lines.slice(i + 1).some((b) => restates(a, b)))) weaknesses.push("REPEATED_STRUCTURE");
 
   // A story signal can carry a report-like or repetitive topic only when there is more than one.
@@ -171,7 +191,8 @@ export function assessAiLabTopicInterest(seed: string): AiLabTopicInterest {
     ? `保留: ${weaknesses.map((w) => WEAKNESS_LABEL[w]).join("・")}` +
       (signals.length && !weaknesses.includes("PROMOTIONAL") ? `（${signals.map(shown).join("、")}だけでは足りない）` : "")
     : `採用(${tier === "high" ? "高" : "中"}): ${signals.map(shown).join("、")}` +
-      (weaknesses.length ? `／注意: ${weaknesses.map((w) => WEAKNESS_LABEL[w]).join("・")}` : "");
+      (weaknesses.length ? `／注意: ${weaknesses.map((w) => WEAKNESS_LABEL[w]).join("・")}` : "") +
+      (targetChoice.length ? `／対象の選び分け「${targetChoice[0]}」（試作段階。完成・公開済みとは言えない）` : "");
   return { postable: !held, tier, signals, weaknesses, evidence, summary };
 }
 
