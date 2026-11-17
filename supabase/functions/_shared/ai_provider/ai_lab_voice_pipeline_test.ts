@@ -498,7 +498,12 @@ for (
             : pollOptions
             ? { text: original, poll_options: pollOptions }
             : { text: original },
-        ), { rotation });
+        ), {
+        rotation,
+        // Task42: editor-only, so the synthetic draft grounds its own scenes
+        // (「予定も見ました」 is not in FIXTURE_TOPIC) like editorOnly above.
+        topic: FIXTURE_TOPIC + "\n" + original,
+      });
       const result = await dispatchAiLabScheduledBrandPost(f.args);
       assert.deepEqual(f.events, [
         "claim",
@@ -614,7 +619,7 @@ for (
             : pollOptions
             ? { text: original, poll_options: pollOptions }
             : { text: original },
-        ), { rotation, topic: RELIEVED_TOPIC });
+        ), { rotation, topic: RELIEVED_TOPIC + "\n" + original });
       const result = await dispatchAiLabScheduledBrandPost(f.args);
       assert.equal(result.voiceRewriteDecision, "edited");
       assert.deepEqual(f.payloads, [{ text: edited, pollOptions }]);
@@ -789,8 +794,7 @@ test("a whitespace-only edit cannot fall through to the X send boundary", async 
   const f = fixture((call, index) =>
     providerResponse(
       index ? editedReply(call, edited, [["", "\n"]]) : { text: original },
-    )
-  );
+    ), { topic: FIXTURE_TOPIC + "\n" + original });
   await assert.rejects(
     dispatchAiLabScheduledBrandPost(f.args),
     /VOICE_REWRITE_REVIEW_REQUIRED/,
@@ -1034,8 +1038,7 @@ for (
           index
             ? editedReply(call, mutate(longEdited), structuralExamples[0][4])
             : { text: longDraft },
-        )
-      );
+        ), { topic: FIXTURE_TOPIC + "\n" + longDraft });
       await assert.rejects(
         dispatchAiLabScheduledBrandPost(f.args),
         /VOICE_REWRITE_REJECTED/,
@@ -1120,7 +1123,7 @@ test("a mechanically allowed reflow still goes through the final engagement line
         .edits,
     );
     return providerResponse({ decision: "edited", text, edits });
-  }, { rotation: 8 });
+  }, { rotation: 8, topic: FIXTURE_TOPIC + "\n" + original });
   await assert.rejects(
     dispatchAiLabScheduledBrandPost(f.args),
     /AI_LAB_ENGAGEMENT_INVALID/,
@@ -1512,11 +1515,17 @@ test("free rewrite: a rewrite that changes a fact never reaches X", async () => 
 
 // A hand-written diary topic in which the narrator really states the episodes
 // of REAL_DRAFT_254 (fixed test input, not production data).
-const TOPIC_254 = [
+// Task42: the Task32 topic never said what changed; the real draft's
+// 「色が変わることもある」 is an example it added. TOPIC_254 now states it so the
+// Task32/33 editor tests keep exercising the editor; task42 tests that the
+// Task32 topic itself (TOPIC_254_TASK32) holds the real draft.
+const TOPIC_254_TASK32 = [
   "開発日記（2026-11-14、1日前の出来事）より。",
   "できごと: AIに頼めば一発でできる。最初はそう思ってた。実際は頼み方で詰まった。",
   "決めたこと: 最近は頼む前に、OKの条件を一行だけ書くようにしてる。",
 ].join("\n");
+const TOPIC_254 = TOPIC_254_TASK32 +
+  "\n詰まったこと: 「ボタンを押しやすくして」と書くと大きさや色が変わった。";
 
 // ---- Task32: casual-voice remediation after the user rejected the Task31 draft ----
 // REAL_DRAFT_254 is the Task31 real Claude draft, copied from Issue #321 REPORT
@@ -3127,4 +3136,74 @@ test("task41 (4): the Task36/38 rejected real rewrites keep their hold code; the
     groundedRewrite(TASK38_REAL_DRAFT_200, TOPIC_0930, TASK39_PLAIN_REWRITE_0930).text,
     TASK39_PLAIN_REWRITE_0930,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Task42: grounding gaps, measured through the two-stage dispatch on both providers.
+// Every draft and rewrite is hand-written (合成・手書き); fetch is a recorder; nothing is posted.
+import {
+  TASK42_DRAFT_NEGATIVES,
+  TASK42_REWRITE_NEGATIVES,
+  TASK42_REWRITE_POSITIVES,
+} from "../brand/ai_lab_topic_quality_fixtures.ts";
+
+test("task42 (D): pass and hold counts on both providers (deny-net preview, not a real-model or voice PASS)", async () => {
+  const legit = [
+    ...SYNTHETIC.filter((c) => c.postable).map((c) => ({ id: c.id.slice(0, 2), draft: c.draft!, rewrite: c.preview!, why: "Task41プレビュー" })),
+    ...TASK42_REWRITE_POSITIVES.map((c) => ({ id: c.id, draft: t41(c.id).draft!, rewrite: c.text, why: c.why })),
+  ];
+  const fabricated = [
+    ...TASK42_REWRITE_NEGATIVES.map((c) => ({ id: c.id, draft: t41(c.id).draft!, rewrite: c.text, why: "自然化: " + c.why, stage: 2 })),
+    ...TASK42_DRAFT_NEGATIVES.map((c) => ({ id: c.id, draft: c.text, rewrite: t41(c.id).preview!, why: "原案: " + c.why, stage: 1 })),
+  ];
+  const lines = ["=== task42 D: 両provider 二段階 deny-net プレビュー（合成・手書き。実API未実施・本人の文体PASSではない）==="];
+  for (const provider of TASK39_PROVIDERS) {
+    let passed = 0;
+    const holds: Record<string, number> = {};
+    for (const c of legit) {
+      const f = task39Fixture(provider, { topic: t41(c.id).seed, draft: c.draft + T41_TAG, rewrite: c.rewrite + T41_TAG });
+      const result = await dispatchAiLabScheduledBrandPost(f.args);
+      assert.equal(result.voiceRewriteDecision, "edited", c.why);
+      assert.deepEqual(f.payloads, [{ text: c.rewrite + T41_TAG, pollOptions: undefined }], c.why);
+      passed += 1;
+    }
+    for (const c of fabricated) {
+      const f = task39Fixture(provider, { topic: t41(c.id).seed, draft: c.draft + T41_TAG, rewrite: c.rewrite + T41_TAG });
+      const code = await dispatchAiLabScheduledBrandPost(f.args).then(() => "PUBLISHED", (e: Error) => e.message);
+      assert.match(code, /AI_LAB_SOURCE_GROUNDING_REJECTED/, c.why);
+      assert.deepEqual(f.payloads, [], c.why);
+      // A draft-stage hold never reaches the editor.
+      assert.equal(f.recorder.calls.length, c.stage, c.why);
+      holds[c.stage === 1 ? "原案段階" : "自然化段階"] = (holds[c.stage === 1 ? "原案段階" : "自然化段階"] ?? 0) + 1;
+    }
+    assert.equal(passed, legit.length);
+    lines.push(
+      `[${provider}] 正当な文 ${passed}/${legit.length} 通過、捏造 ${fabricated.length}/${fabricated.length} 保留（${Object.entries(holds).map(([k, v]) => `${k}${v}`).join("・")}、すべて SOURCE_GROUNDING_REJECTED、X payload 0）`,
+    );
+  }
+  console.log(lines.join("\n"));
+});
+
+test("task42 (D): the Task32 real draft's unsourced example (「色が変わる」) now holds before the editor on the Task32 topic", async () => {
+  assert.deepEqual(ungroundedClaims(REAL_DRAFT_254, TOPIC_254_TASK32), ["色"]);
+  assert.deepEqual(ungroundedClaims(REAL_DRAFT_254, TOPIC_254), []);
+  for (const provider of TASK39_PROVIDERS) {
+    const f = task39Fixture(provider, { topic: TOPIC_254_TASK32, draft: REAL_DRAFT_254, rewrite: HAND_REWRITE_254 });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /SOURCE_GROUNDING_REJECTED/);
+    assert.equal(f.recorder.calls.length, 1);
+    assert.deepEqual(f.payloads, []);
+  }
+});
+
+test("task42 (D): the user-rejected Task36/38 real rewrites stay held; real drafts keep their Task35 verdicts (実記録)", () => {
+  for (
+    const [draft, text] of [
+      [TASK38_REAL_DRAFT_200, TASK38_REAL_REWRITE_180],
+      [REAL_DRAFT_167, REAL_REWRITE_156],
+    ]
+  ) {
+    assert.throws(() => groundedRewrite(draft, TOPIC_0930, text), /AI_LAB_VOICE_STYLE_REJECTED/);
+  }
+  assert.notDeepEqual(ungroundedClaims(REAL_DRAFT_278, TOPIC_0930), []);
+  assert.deepEqual(ungroundedClaims(GROUNDED_DRAFT_0930, TOPIC_0930), []);
 });

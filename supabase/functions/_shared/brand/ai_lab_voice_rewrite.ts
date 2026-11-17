@@ -327,6 +327,10 @@ const EVERYDAY_PARAPHRASES: Readonly<Record<string, readonly string[]>> = {
   一回: ["一度"],
   一度: ["一回"],
   全部: ["ひとつずつ", "一つずつ", "すべて", "全て"],
+  // Task42: the editor's own candidate 「どこの、何が、」 → 「場所と内容」.
+  場所: ["どこ"],
+  内容: ["何が"],
+  ネタ: ["題材"],
 };
 // Evaluative words that state no event, person, time or count.
 const EVALUATIVE_WORDS = new Set(["十分", "大事", "便利", "正直", "普通", "結局"]);
@@ -336,26 +340,57 @@ const licensedWord = (word: string, known: string) =>
   (EVERYDAY_PARAPHRASES[word] ?? []).some((value) => known.includes(value));
 
 /**
- * Content words the rewrite adds that neither the draft nor the topic has.
  * A kanji run joins words with a verb stem (「影響出」 = 影響 + 出る), so a run is
  * licensed when known words of two or more characters cover it and only single
  * characters (verb stems) are left between them.
  */
-function unlicensedNewRuns(oldBody: string, newBody: string, source: string) {
-  const known = oldBody + "\n" + source;
-  return [...new Set(newBody.match(CONTENT_RUN) ?? [])].filter((run) => {
-    const chars = [...run];
-    const covered = chars.map(() => false);
-    for (let size = chars.length; size >= 2; size -= 1) {
-      for (let start = 0; start + size <= chars.length; start += 1) {
-        const word = chars.slice(start, start + size).join("");
-        if (licensedWord(word, known)) {
-          covered.fill(true, start, start + size);
-        }
+function runLicensed(run: string, known: string) {
+  const chars = [...run];
+  const covered = chars.map(() => false);
+  for (let size = chars.length; size >= 2; size -= 1) {
+    for (let start = 0; start + size <= chars.length; start += 1) {
+      const word = chars.slice(start, start + size).join("");
+      if (licensedWord(word, known)) {
+        covered.fill(true, start, start + size);
       }
     }
-    return covered.some((c, i) => !c && i > 0 && !covered[i - 1]);
-  });
+  }
+  return !covered.some((c, i) => !c && i > 0 && !covered[i - 1]);
+}
+
+// Task42: a lone kanji used as a noun (「駅に」「車で」「店の」「家。」) is a place,
+// thing or person as much as a two-character word. Only a kanji with no kanji
+// next to it and a particle or the end of a clause right after it counts, so
+// verb and adjective stems (「置き」「消し」「多い」) are never read as nouns.
+// It is licensed by the same character anywhere in the draft or the topic.
+const SINGLE_KANJI_NOUN =
+  /(?<![\p{Script=Han}々])\p{Script=Han}(?![\p{Script=Han}々])(?=から|まで|より|[のをがへでにはもと]|[。、！？!?\n]|$)/gu;
+// Adverbs and relative nouns that name no new place, thing or person
+// (「特に」「後で」「前に」「他の」「気に」). 「今」「急」 are left out on purpose:
+// they add a time or a turn of events and are held unless the text has them.
+// Body parts are here for idioms (「目で拾う」「手が止まる」「頭の中」); the staged
+// reactions among them are held by the phrasing check instead.
+const FUNCTION_KANJI = new Set([..."特別逆実先次後前他何中上方気際時私笑目手頭口心"]);
+
+// Words that point back at what the text already names (「両方」「自分」), not at
+// a new thing.
+const POINTING_WORDS = new Set(["両方", "片方", "全部", "全員", "一部", "自分"]);
+
+const singleKanjiNouns = (body: string) =>
+  (body.match(SINGLE_KANJI_NOUN) ?? []).filter((c) => !FUNCTION_KANJI.has(c));
+
+/**
+ * Content words the rewrite adds that neither the draft nor the topic has:
+ * runs of two or more kanji/katakana, and lone kanji nouns (Task42).
+ */
+function unlicensedNewRuns(oldBody: string, newBody: string, source: string) {
+  const known = oldBody + "\n" + source;
+  return [
+    ...[...new Set(newBody.match(CONTENT_RUN) ?? [])].filter((run) =>
+      !runLicensed(run, known)
+    ),
+    ...new Set(singleKanjiNouns(newBody).filter((c) => !known.includes(c))),
+  ];
 }
 
 function assertFreeRewriteKeepsFacts(
@@ -404,7 +439,13 @@ function assertFreeRewriteKeepsFacts(
   );
   if (newRuns.size > MAX_NEW_CONTENT_RUNS) throw reject();
   // Task41: a new event or object is a new fact even under the count above.
-  if (unlicensedNewRuns(oldBody, newBody, source).length) {
+  // Task42: so is a lone kanji noun, or a kanji/kana count (1 included) that
+  // neither the draft nor the topic has.
+  if (
+    unlicensedNewRuns(oldBody, newBody, source).length ||
+    ungroundedQuantities(newBody, oldBody + "\n" + source, { countOnes: true })
+      .length
+  ) {
     throw new BrandContextError(AI_LAB_SOURCE_GROUNDING_REJECTED);
   }
   if (
@@ -449,6 +490,10 @@ const UNSOURCED_ASSERTIONS = [
   /(?:怖|こわ)(?:い|かっ|く)|不安(?!定)|焦(?:っ|り)|ほっと|ホッと|ヒヤ[ッリ]|ひやっ|冷や汗|嬉し|うれし|悔し|くやし|楽しかっ|しんど|びっくり|驚[いき]|がっかり|ドキッ|ドキドキ/gu,
   // intentions and plans
   /次回|次こそ|今度は|今度(?:やる|する)|(?<!て|てい|で)るつもり|[うくすつぬむぶぐ]つもり|そのうち|これから(?:やる|する)|(?:やる|する)予定/gu,
+  // Task42: results the topic does not report
+  /うまくいっ|上手くいっ|解決し|成功し|助かっ|楽にな|捗っ|はかどっ|改善し|効果が(?:あっ|出)/gu,
+  // Task42: resolutions and unreasoned verdicts
+  /誓[っいう]|二度と|肝に銘じ|心に決め|固く決|一番|間違いな|確実に|絶対|必ず/gu,
 ];
 const UNSOURCED_ASSERTION_FAMILIES = UNSOURCED_ASSERTIONS.map((pattern) =>
   [pattern, pattern] as const
@@ -555,29 +600,145 @@ function decisionTenseOverclaims(text: string, source: string): string[] {
 }
 
 // Task41: digit quantities must come from the topic, compared by value so
-// 「５分」 and 「5分」 match. Kana and kanji counts are not compared: 「ひとつずつ」
-// and 「十分」 are idioms, so they stay with the prompt and the review.
-const QUANTITY = /[0-9０-９]+/gu;
-const quantityValue = (token: string) =>
-  String(
-    Number(token.replace(/[０-９]/gu, (d) => String(d.charCodeAt(0) - 0xff10))),
-  );
+// 「５分」 and 「5分」 match.
+// Task42: kanji and kana counts are compared by the same value (「1つ」「一つ」
+// 「ひとつ」 are 1), but only in a counting context: a kanji numeral needs a
+// counter right after it and no kanji right before it (「同一人物」「一覧」「一番」
+// are not counts), and the idioms 「十分」「一時」「二度と」 and the distributive
+// 「〜ずつ」「一つ一つ」 are left out. A kanji or kana 1 is the idiomatic
+// singular as often as a count (「運用もひとつ変えた」「一回見た」), so against
+// the topic alone only 2 and more are compared; the rewrite stage compares
+// every count, 1 included, against the draft and the topic together.
+const KANJI_DIGITS: Readonly<Record<string, number>> = {
+  一: 1,
+  二: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+const KANA_COUNTS: Readonly<Record<string, number>> = {
+  ひとつ: 1,
+  ふたつ: 2,
+  みっつ: 3,
+  よっつ: 4,
+  いつつ: 5,
+  ひとり: 1,
+  ふたり: 2,
+};
+const QUANTITY = new RegExp(
+  "[0-9０-９]+|(?<![\\p{Script=Han}々])[一二三四五六七八九十百千]+" +
+    "(?=つ|個|件|回|度|人|日|分|時間|週|年|枚|本|台|冊|杯|通|秒|倍|割|ヶ月|か月|カ月)|" +
+    Object.keys(KANA_COUNTS).join("|"),
+  "gu",
+);
+const NOT_A_QUANTITY =
+  /(?<![\p{Script=Han}々])(?:十分(?!間)|一時(?!間)|二度と)|(?:[一二三四五六七八九]つ|ひとつ|ふたつ|ひとり|ふたり)ずつ|一つ一つ|ひとつひとつ/gu;
+
+function quantityValue(token: string) {
+  if (token in KANA_COUNTS) return String(KANA_COUNTS[token]);
+  if (/^[0-9０-９]+$/u.test(token)) {
+    return String(
+      Number(
+        token.replace(/[０-９]/gu, (d) => String(d.charCodeAt(0) - 0xff10)),
+      ),
+    );
+  }
+  let total = 0;
+  let digit = 0;
+  for (const char of token) {
+    const unit = ({ 十: 10, 百: 100, 千: 1000 } as Record<string, number>)[char];
+    if (unit) {
+      total += (digit || 1) * unit;
+      digit = 0;
+    } else digit = KANJI_DIGITS[char];
+  }
+  return String(total + digit);
+}
 
 // Links, handles and structured data carry ids, not counts the post claims.
 const NOT_A_COUNT =
   /(?:[a-z][a-z\d+.-]*:\/\/|www\.)\S+|[#＃@＠][\p{L}\p{M}\p{N}_]+|\{[^{}]*\}|\[[^[\]]*\]/giu;
 
-function ungroundedQuantities(text: string, source: string): string[] {
+function ungroundedQuantities(
+  text: string,
+  source: string,
+  { countOnes = false } = {},
+): string[] {
   const counts = (value: string) =>
-    value.replace(NOT_A_COUNT, " ").match(QUANTITY) ?? [];
+    value.replace(NOT_A_COUNT, " ").replace(NOT_A_QUANTITY, " ")
+      .match(QUANTITY) ?? [];
   const available = counts(source).map(quantityValue);
   const found: string[] = [];
   for (const token of counts(text)) {
+    if (
+      !countOnes && !/^[0-9０-９]+$/u.test(token) && quantityValue(token) === "1"
+    ) continue;
     const index = available.indexOf(quantityValue(token));
     if (index < 0) found.push(token);
     else available.splice(index, 1);
   }
   return found;
+}
+
+// Task42: the draft is checked before the editor sees it, and it may phrase
+// the topic in its own words, so a new kanji word alone does not hold it
+// (「自分」「説明」「途中」 are how any draft talks). Two narrower signs do:
+// - a lone kanji noun or a katakana word the topic never names, right before a
+//   particle that makes it the object, place, partner or subject of an event
+//   (「駅まで」「車で」「母が」「パソコンで」「コンビニへ」). Copulas and
+//   「〜にする」 are not events (「状態でした」「一覧にして」);
+// - a sentence that reports something done or past (ends in 〜た/〜だ) and
+//   shares no kanji or katakana with the topic at all: a new episode
+//   (「帰りに合鍵も作った。」).
+const PARTICIPANT_PARTICLE =
+  "(?=を|へ|まで|から|より|が|も|と(?!し|いう|思)|で(?![しすはもあ]))";
+const PARTICIPANT_RUN = new RegExp(
+  "(?<![\\p{Script=Han}\\p{Script=Katakana}ー])[\\p{Script=Katakana}ー]{2,}" +
+    PARTICIPANT_PARTICLE,
+  "gu",
+);
+const PARTICIPANT_KANJI = new RegExp(
+  "(?<![\\p{Script=Han}々])\\p{Script=Han}(?![\\p{Script=Han}々])" +
+    PARTICIPANT_PARTICLE,
+  "gu",
+);
+// Inside a sentence that reports something done, a kanji word the topic never
+// names as the object or destination of the act (「合鍵も作った」「通帳も見直した」).
+const EVENT_OBJECT_RUN =
+  /(?<![\p{Script=Han}\p{Script=Katakana}ー])\p{Script=Han}{2,}(?=を|も|へ|まで)/gu;
+const REPORTED_EVENT_END =
+  /(?:た|だ)(?:よ|ね|よね|けど|な)?[\s\p{Extended_Pictographic}笑]*$/u;
+const NAMING_CHARS = /[\p{Script=Han}\p{Script=Katakana}]/gu;
+
+function unsourcedParticipants(text: string, source: string): string[] {
+  const spans = protectedSpans(text);
+  const body = spans ? maskedBody(text, spans) : text;
+  const known = source.toLowerCase();
+  const sourceChars = new Set(source.match(NAMING_CHARS) ?? []);
+  return [
+    ...(body.match(PARTICIPANT_RUN) ?? []).filter((run) =>
+      !runLicensed(run, known)
+    ),
+    ...(body.match(PARTICIPANT_KANJI) ?? []).filter((c) =>
+      !FUNCTION_KANJI.has(c) && !known.includes(c)
+    ),
+    ...(body.match(SENTENCE) ?? []).filter((sentence) =>
+      REPORTED_EVENT_END.test(sentence)
+    ).flatMap((sentence) =>
+      (sentence.match(EVENT_OBJECT_RUN) ?? []).filter((run) =>
+        !POINTING_WORDS.has(run) && !runLicensed(run, known)
+      )
+    ),
+    ...(body.match(SENTENCE) ?? []).filter((sentence) => {
+      const chars = sentence.match(NAMING_CHARS) ?? [];
+      return REPORTED_EVENT_END.test(sentence) && chars.length > 0 &&
+        !chars.some((c) => sourceChars.has(c));
+    }).map((sentence) => sentence.trim()),
+  ];
 }
 
 /**
@@ -645,6 +806,12 @@ export function ungroundedClaims(text: string, source: string): string[] {
       found.push(sentence.trim());
     }
   }
+  // A participant or sentence another check already named is reported once.
+  found.push(
+    ...unsourcedParticipants(text, source).filter((word) =>
+      !found.includes(word)
+    ),
+  );
   return found;
 }
 
