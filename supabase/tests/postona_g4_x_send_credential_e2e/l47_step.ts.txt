@@ -1,0 +1,79 @@
+
+  // ---- G4-02 #19 (inserted by postona_g4_x_send_credential_e2e_run.sh into a throw-away copy of G3 PR #699's local_test.ts) ----
+  await t.step("L47 G4-02 #19: the manual send with G4's REAL credential source (003 over PostgREST, G3's adapter): G4's Vault token reaches the fake X; refresh / reconnect / disconnect / service end / signed-out session / another person refused fail-closed", async () => {
+    const SPG = "postona-x-single-post-g4cred-e2etest";
+    const h = await signUp("g4xs");
+    await firstRun(h);
+    const label1 = `g3ls-g4xs1-${h.userId}`;
+    h.account = await xConnect(h, "g4xs1", "71927");
+    // SYNTHETIC: the person turns publishing on (as L46; the product control is G1 / G4's)
+    await owner("update public.social_accounts set publish_enabled = true where id = :'a'", { a: h.account! });
+    assert.deepStrictEqual(await owner("select count(*) from g3ls_test.x_token_snapshot where social_account_id = :'a'", { a: h.account! }), "0", "no fake snapshot for this account: only G4's source can answer");
+    const send = async (text: string, token = h.token, account = h.account, client = crypto.randomUUID()) =>
+      await http(SPG, { socialAccountId: account, clientRequestId: client, text, consent: { confirmed: true, contentSha256: await sha256(text) } }, token);
+    const lastBearerIs = (token: string) => owner("select (bearer_sha256 = encode(sha256(convert_to(:'b', 'UTF8')), 'hex'))::text from g3ls_test.x_calls order by id desc limit 1", { b: `Bearer ${token}` });
+    const results: Record<string, string> = {};
+    // 1. sent with the token G4 stored in Vault at connect
+    const c0 = await xCalls();
+    const s1 = await send("G4-02 #19 send 1");
+    results.sent = `${s1.status} ${s1.body.status}`;
+    assert.deepStrictEqual([s1.status, s1.body.status, await xCalls()], [200, "sent", c0 + 1], JSON.stringify(s1.body));
+    assert.strictEqual(await lastBearerIs(`fakeXat_${label1}`), "true", "the fake X got G4's Vault token for this account");
+    // 2. the refresh core holds the account (SYNTHETIC 'refreshing' row): nothing is sent
+    await owner("insert into public.x_account_refresh_state_v2 (social_account_id) values (:'a') on conflict (social_account_id) do nothing; update public.x_account_refresh_state_v2 set status = 'refreshing' where social_account_id = :'a'", { a: h.account! });
+    const s2 = await send("G4-02 #19 while refreshing");
+    results.refreshing = `${s2.status} ${s2.body.status ?? ""} ${s2.body.code ?? ""}`;
+    assert.ok(s2.body.status !== "sent", JSON.stringify(s2.body));
+    assert.strictEqual(await xCalls(), c0 + 1, "nothing sent while refreshing");
+    await owner("update public.x_account_refresh_state_v2 set status = 'idle' where social_account_id = :'a'", { a: h.account! });
+    // 3. a completed refresh (SYNTHETIC: new value in the same Vault secret, as the core commits it): same generation, the NEW token
+    assert.strictEqual(await owner("select 1 as x from vault.update_secret((select vault_access_token_secret_id from public.social_accounts where id = :'a'), 'fakeXat_g4xs-refreshed-0001') \\gset z_\nselect 'ok';", { a: h.account! }), "ok");
+    const s3 = await send("G4-02 #19 after refresh");
+    results.refreshed = `${s3.status} ${s3.body.status}`;
+    assert.deepStrictEqual([s3.body.status, await xCalls()], ["sent", c0 + 2], JSON.stringify(s3.body));
+    assert.strictEqual(await lastBearerIs("fakeXat_g4xs-refreshed-0001"), "true", "the refreshed token, read fresh");
+    // 4. reconnect of the SAME X user: a new generation; the next send carries the reconnect's token
+    const label2 = `g3ls-g4xs2-${h.userId}`;
+    assert.strictEqual(await xConnect(h, "g4xs2", "71927"), h.account);
+    // a reconnect leaves the account's publishing switch OFF again (PR #262's fence): refused before anything is recorded or sent
+    const s4off = await send("G4-02 #19 after reconnect, switch off");
+    results.reconnectSwitchOff = `${s4off.status} ${s4off.body.code}`;
+    assert.deepStrictEqual([s4off.status, s4off.body.code, await xCalls()], [403, "POSTONA_RESV_PUBLISH_DISABLED", c0 + 2], JSON.stringify(s4off.body));
+    await owner("update public.social_accounts set publish_enabled = true where id = :'a'", { a: h.account! });   // SYNTHETIC, as above
+    const s4 = await send("G4-02 #19 after reconnect");
+    results.reconnected = `${s4.status} ${s4.body.status}`;
+    assert.deepStrictEqual([s4.body.status, await xCalls()], ["sent", c0 + 3], JSON.stringify(s4.body));
+    assert.strictEqual(await lastBearerIs(`fakeXat_${label2}`), "true", "the reconnect's token");
+    // 5. another person's JWT on this account: refused, nothing sent
+    const s5 = await send("G4-02 #19 someone else", b.token);
+    results.other = `${s5.status} ${s5.body.code ?? s5.body.status}`;
+    assert.ok(s5.status === 403 || s5.status === 404, JSON.stringify(s5.body));
+    // 6. two sessions of the same person: the signed-out one is refused, the other still sends
+    const second = await auth("token?grant_type=password", { email: h.email, password: h.password });
+    const j2 = await second.json();
+    assert.strictEqual(second.status, 200);
+    const out1 = await auth("logout?scope=local", {}, h.token);
+    await out1.body?.cancel();
+    const s6a = await send("G4-02 #19 signed-out session");
+    results.signedOut = `${s6a.status} ${s6a.body.code ?? s6a.body.status}`;
+    assert.strictEqual(s6a.status, 401, JSON.stringify(s6a.body));
+    const s6b = await send("G4-02 #19 other session", j2.access_token);
+    results.otherSession = `${s6b.status} ${s6b.body.status}`;
+    assert.deepStrictEqual([s6b.body.status, await xCalls()], ["sent", c0 + 4], JSON.stringify(s6b.body));
+    h.token = j2.access_token;
+    h.sessionId = String(claimsOf(j2.access_token).session_id);
+    // 7. disconnect through G4's SQL: refused, nothing sent
+    await owner(`begin;\n${CLAIMS}select postona_g4_x_oauth.disconnect_x_connection()::text as d \\gset d_\ncommit;\nselect 'done';`, { u: h.userId, s: h.sessionId });
+    const s7 = await send("G4-02 #19 after disconnect");
+    results.disconnected = `${s7.status} ${s7.body.code ?? s7.body.status}`;
+    assert.ok(s7.body.status !== "sent", JSON.stringify(s7.body));
+    // 8. reconnect, then the service ends (SYNTHETIC end, as G5 leaves it): refused, nothing sent
+    assert.strictEqual(await xConnect(h, "g4xs3", "71927"), h.account);
+    await owner("update public.social_accounts set publish_enabled = true where id = :'a'", { a: h.account! });
+    await owner("update public.service_entitlements set status = 'ended', ended_at = now() where user_id = :'u' and service_key = 'x_autopost'", { u: h.userId });
+    const s8 = await send("G4-02 #19 service ended");
+    results.serviceEnded = `${s8.status} ${s8.body.code ?? s8.body.status}`;
+    assert.ok(s8.body.status !== "sent", JSON.stringify(s8.body));
+    assert.strictEqual(await xCalls(), c0 + 4, "four sends in all: connect, refresh, reconnect, the other session");
+    console.log(`G4XS_L47 ${JSON.stringify(results)}`);
+  });
