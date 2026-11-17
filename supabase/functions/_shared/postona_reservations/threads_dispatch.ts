@@ -3,6 +3,8 @@
  * Edge Function, Cron, worker run or database. The two ports it needs belong to G4 (Threads Provider / OAuth / credential)
  * and are NOT implemented here; the store needs a reservation SQL generalised to Threads that does not exist yet
  * (design only: docs/postona/g3-threads-posting-reservation-gap-20261019.md §4). THREADS_DISPATCH_ENABLED = false.
+ * G3-02 #27 (2026-11-17): the store now exists (SQL 007, threads_worker_store.ts) and threads_worker_http.ts runs this module behind
+ * its own gate (OFF; G4's ports NOT CONNECTED), served only by the local stack's TEST ONLY twin with G4's pinned two-step send port.
  *
  * What G3 owns here: the order and the decisions of sending ONE claimed Threads reservation, with the same rules as the
  * X paths (PR #224 worker, PR #272/#278 single post):
