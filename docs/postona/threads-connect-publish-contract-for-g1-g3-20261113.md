@@ -67,6 +67,26 @@ approval**:
 - The manual-publish attempt table and its release / record RPCs are the manual path; a reservation path needs its own
   reviewed ledger or an explicit contract to reuse this one (G3 + central decision; not designed here).
 
+## 2.5 Threads + X: the minimal interface G1 needs for the initial release (G4-02 #18, 2026-11-17)
+
+Initial release = Threads + X (Instagram later). G4 owns the two connections and Threads' manual publish; X posting (manual and
+scheduled) is G3's path. What a G1 screen can rely on, per network — nothing else is needed from G4 for the first release:
+
+| | Threads | X |
+| --- | --- | --- |
+| Connect / reconnect | `use-threads-connect` → Edge `threads-oauth-connect-user` (start, callback). Results `connected` / `canceled` / `expired` / `failed:{code, reconcile}` / `unavailable:{code}` | `use-x-connect` → Edge `x-oauth-connect-user` (start, `/callback`) — the existing contract |
+| Connected? | `social_accounts.connection_status = identity_verified` (repository → `connected`) | same column |
+| Can post now? | the manual publish card: `account_state` → mode (`consent_required` / `busy` / `ready` / `reconnect`) | G3's send path decides (G4's X verdict `postona_g4_credential.x_publish_credential_verdict` is what it binds to) |
+| Post | publish Edge `publish` (idempotency key, text) → attempt; `resume` / `reconcile` / `status` | G3 (not G4) |
+| Unknown outcome | `uncertain` → `reconcile`; with 409 `CREDENTIALS_EXPIRED` → reconnect the same Threads user (§1.3) | G3's contract |
+| Disconnect | `use-threads-disconnect` → Edge `social-mobile-threads-disconnect` (`disconnected` / `stopped:PUBLISH_IN_FLIGHT`) | `use-x-connect` disconnect (server gate `X_DISCONNECT_NOT_ENABLED` until opened) |
+| Release gates G1 must not bypass | `THREADS_CONNECT_UI_ENABLED`, `THREADS_MANUAL_PUBLISH_UI_ENABLED` (app); the server gates in the release readiness doc | X connect / disconnect gates as in source |
+
+Measured on the real local runtime (Kong → Edge runtime → real GoTrue / PostgREST → PG 17.6), 2026-11-17: the Threads rows of
+this table through G1's own hooks for connect and through the publish Edge for posting
+(`threads-local-stack-publish-release-readiness-20261117.md`, 8/8), and X connect / refresh / disconnect through the committed
+real-stack harness (32/32). Not measured: a device / Simulator (G1 / G2's environment; not touched by G4).
+
 ## 3. What is NOT_VERIFIED (both consumers)
 
 Real Threads: a new grant's token reading a container made under the old grant; container status finality / truthfulness and
