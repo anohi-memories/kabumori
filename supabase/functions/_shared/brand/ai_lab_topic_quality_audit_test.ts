@@ -240,3 +240,132 @@ test("task41 (5): existing protected strings and the Task32 counts still hold in
   }
   assert.throws(() => rewriteOf(c, base), /REJECTED/, "dropped tag");
 });
+
+// Task42: remaining grounding gaps (合成・手書き). No provider is called; nothing is posted.
+import {
+  TASK42_DRAFT_KNOWN_GAPS,
+  TASK42_DRAFT_NEGATIVES,
+  TASK42_DRAFT_POSITIVES,
+  TASK42_REWRITE_NEGATIVES,
+  TASK42_REWRITE_POSITIVES,
+} from "./ai_lab_topic_quality_fixtures.ts";
+
+const draftVerdict = (id: string, text: string) =>
+  verdict(() =>
+    prepareAiLabVoiceRewrite({ brandId: "ai_salaryman_lab", postType: "brand_post", text: text + TAG }, caseOf(id).seed)
+  );
+
+test("task42 (B): drafts that add an event, action, person, feeling, plan, result, resolve, verdict, thing or count hold before the editor", () => {
+  const lines = ["=== task42 原案段階（合成・手書き。実モデル出力ではない）==="];
+  for (const c of TASK42_DRAFT_NEGATIVES) {
+    assert.equal(draftVerdict(c.id, c.text), AI_LAB_SOURCE_GROUNDING_REJECTED, c.why);
+    lines.push(`[保留] ${c.id} ${c.why}: ${c.text} → ${ungroundedClaims(c.text, caseOf(c.id).seed).join(" / ")}`);
+  }
+  for (const c of [...TASK42_DRAFT_POSITIVES, ...SYNTHETIC.filter((x) => x.draft).map((x) => ({ id: x.id.slice(0, 2), text: x.draft!, why: "Task41の原案" }))]) {
+    assert.deepEqual(ungroundedClaims(c.text, caseOf(c.id).seed), [], c.why);
+    assert.equal(draftVerdict(c.id, c.text), "通過", c.why);
+    lines.push(`[通過] ${c.id} ${c.why}: ${c.text}`);
+  }
+  for (const c of TASK42_DRAFT_KNOWN_GAPS) {
+    // Documented limits: not detected today. If one starts holding, move it to the negatives.
+    assert.equal(draftVerdict(c.id, c.text), "通過", c.why);
+    lines.push(`[未検出の限界] ${c.id} ${c.why}: ${c.text}`);
+  }
+  console.log(lines.join("\n"));
+});
+
+test("task42 (A): rewrites that add a lone-kanji place, thing or person, or a kanji count, hold; legitimate rewrites pass", () => {
+  const lines = ["=== task42 自然化段階（合成・手書き。実モデル出力ではない）==="];
+  for (const c of TASK42_REWRITE_NEGATIVES) {
+    const result = verdict(() => rewriteOf(caseOf(c.id), c.text + TAG));
+    assert.equal(result, AI_LAB_SOURCE_GROUNDING_REJECTED, c.why);
+    lines.push(`[保留] ${c.id} ${c.why}: ${c.text} → ${result}`);
+  }
+  for (const c of TASK42_REWRITE_POSITIVES) {
+    assert.ok(wordingSimilarity(caseOf(c.id).draft!, c.text) < 0.85, c.why);
+    assert.deepEqual(rewriteOf(caseOf(c.id), c.text + TAG), { text: c.text + TAG, decision: "edited" }, c.why);
+    lines.push(`[通過] ${c.id} ${c.why}: ${c.text}`);
+  }
+  console.log(lines.join("\n"));
+});
+
+test("task42 (A): a lone kanji is only a noun before a particle; stems, adverbs and grounded nouns pass", () => {
+  const s7 = caseOf("S7");
+  // 置き・忘れ・着い・気づ are stems; 家 is in the topic; 後で・特に are adverbs.
+  assert.deepEqual(rewriteOf(s7, s7.preview! + TAG).decision, "edited");
+  assert.deepEqual(
+    rewriteOf(s7, "家の鍵を玄関に置き忘れて、会社に着いてから気づいた。特に鞄の定位置を決めることにした。" + TAG).decision,
+    "edited",
+  );
+  // The same character anywhere in the draft or topic licenses it (家 in 「家の鍵」).
+  assert.throws(() => rewriteOf(caseOf("S6"), "家で" + caseOf("S6").preview! + TAG), new RegExp(AI_LAB_SOURCE_GROUNDING_REJECTED));
+});
+
+test("task42 (C): counts compare by value across 1/１/一/ひとつ; idioms and ids are not counts", () => {
+  const s1 = caseOf("S1").seed;
+  const s6 = caseOf("S6").seed;
+  for (const text of ["サブスクを１つだけ解約することにした。", "サブスクを一つだけ解約することにした。", "サブスクをひとつだけ解約することにした。"]) {
+    assert.deepEqual(ungroundedClaims(text, s1), [], text);
+  }
+  assert.deepEqual(ungroundedClaims("同じ投稿が二件できていた。", s6), []);
+  assert.deepEqual(ungroundedClaims("同じ投稿がふたつできていた。", s6), []);
+  assert.deepEqual(ungroundedClaims("同じ投稿が三件できていた。", s6), ["三"]);
+  assert.deepEqual(ungroundedClaims("サブスクをふたつ解約することにした。", s1), ["ふたつ"]);
+  assert.deepEqual(ungroundedClaims("同じ投稿が2件できた。もう二回押せた。", s6), ["二"]);
+  // Not counts: list, identity, distributive, idioms, a kanji word before the numeral.
+  for (
+    const text of [
+      "固定費を一覧にした。",
+      "同一の投稿が2件できた。",
+      "第三回の投稿が2件できた。",
+      "固定費をひとつずつ見直した。",
+      "固定費を一つ一つ見直した。",
+      "固定費は十分に見直した。",
+      "一時的に固定費を見直した。",
+    ]
+  ) {
+    assert.deepEqual(ungroundedClaims(text, s1 + "\n" + s6), [], text);
+  }
+  // A kanji or kana 1 against the topic alone is the idiomatic singular; 2 and more are compared.
+  assert.deepEqual(ungroundedClaims("家計もひとつ見直した。", s1.replace("1つだけ", "")), []);
+  // Tags, URLs and structured ids carry no count, and stay byte-exact through the rewrite.
+  assert.deepEqual(ungroundedClaims("固定費を見直した。\n#一日一善 https://example.test/2 {\"id\":3}", s1), []);
+});
+
+test("task42 (C): protected strings stay byte-exact; a rewrite cannot turn a digit into kana or change a tag or quote", () => {
+  const c = caseOf("S1");
+  const base = c.preview!;
+  for (
+    const [text, draft] of [
+      [base.replace("1つだけ", "ひとつだけ"), c.draft! + TAG],
+      [base.replace("1つだけ", "一つだけ"), c.draft! + TAG],
+      [base + "\n\n#一日二善", c.draft! + "\n\n#一日一善"],
+      [base.replace("固定費", "「固定費」二回"), c.draft!.replace("固定費", "「固定費」一回")],
+      [base + "\n\nhttps://example.test/2", c.draft! + "\n\nhttps://example.test/1"],
+    ] as const
+  ) {
+    assert.throws(() => rewriteOf(c, text.endsWith(TAG) || text.includes("#") ? text : text + TAG, draft), /REJECTED/, text);
+  }
+  // A kanji count the draft has may be reworded with the same value only.
+  const s6 = caseOf("S6");
+  assert.equal(rewriteOf(s6, s6.preview! + TAG).decision, "edited");
+  assert.throws(() => rewriteOf(s6, s6.preview!.replace("もう一回", "もう二回") + TAG), new RegExp(AI_LAB_SOURCE_GROUNDING_REJECTED));
+});
+
+test("task42 (B): every recorded diary seed grounds its own fact lines (実記録, no false hold)", async () => {
+  const markdown = await loadAiLabDevDiaryMarkdown();
+  let checked = 0;
+  for (const raw of parseDevDiaryMarkdown(markdown)) {
+    const entry = sanitizeDiaryEntry(raw);
+    assert.ok(entry?.eventId);
+    const unit = diaryUnitsFor(entry, diaryEventKey(entry.eventId), 1, [])[0];
+    const facts = unit.seed.split("\n").filter((line) => /^(?:できごと|詰まったこと)[:：]/u.test(line))
+      .map((line) => line.replace(/^[^:：]+[:：]\s*/u, ""));
+    for (const fact of facts) {
+      assert.deepEqual(ungroundedClaims(fact, unit.seed), [], `${entry.eventId}: ${fact}`);
+      checked += 1;
+    }
+  }
+  assert.ok(checked >= 14, String(checked));
+  console.log(`[実記録] 日記の できごと/詰まったこと ${checked}行を、そのまま原案にしても保留しない（題材の語だけの文）。`);
+});
