@@ -1656,3 +1656,325 @@ test("task32 dispatch: the checked casual rewrite of the real draft is the only 
     assert.equal(new URL(call.url).hostname, "api.anthropic.com");
   }
 });
+
+
+// ---- Task33: the second stage checks experience claims against the claimed topic ----
+// Topics and drafts below are synthetic test inputs (REAL_DRAFT_254 is the Task31
+// real Claude draft). No text here is new Claude output.
+const TOPIC_EVERGREEN =
+  "AIに任せれば一発で完成するわけではなく、指示の出し方で詰まることが多いという話";
+const TOPIC_DIARY = [
+  "project: 個人で作っているX自動投稿の仕組み",
+  "changed: 開発の進捗を投稿の題材として安全に残せる運用を整えた。",
+  "decided: 完了確認のたびに、公開してよい開発内容だけを共有メモへ残す運用にした。",
+  "今回の切り口: なぜその判断（止める・変える・決める）をしたのか",
+].join("\n");
+const TOPIC_STOCK_APP = [
+  "project: 個人で作っている株アプリ",
+  "changed: 学習画面で具体例と相場との関係まで読めるようにした。",
+].join("\n");
+const DIARY_DRAFT =
+  "完了確認のたびに、公開していい開発内容だけ共有メモに残す運用にした。あとで投稿のネタを探すとき、すぐ見つかる。\n\n#個人開発";
+const DIARY_REWRITE =
+  "完了確認のたびに共有メモへ残すようにしてる。公開していい内容だけ。ネタを探すときすぐ見つかる😊\n\n#個人開発";
+
+function sourced(
+  original: string,
+  reply: unknown,
+  topic: string | undefined,
+  engagementMode?: "choices",
+) {
+  return prepareAiLabVoiceRewrite(
+    {
+      brandId: "ai_salaryman_lab",
+      postType: "brand_post",
+      text: original,
+      engagementMode,
+    },
+    topic === undefined ? undefined : { topic },
+  ).validate(reply);
+}
+
+function candidateEdit(original: string, from: string, to: string) {
+  const { candidates } = JSON.parse(
+    prepareAiLabVoiceRewrite({
+      brandId: "ai_salaryman_lab",
+      postType: "brand_post",
+      text: original,
+    }).request.input,
+  ) as { candidates: Candidate[] };
+  const found = candidates.find((c) =>
+    c.from === from && c.options.includes(to)
+  );
+  assert.ok(found, `missing edit ${from} -> ${to}`);
+  return {
+    decision: "edited",
+    text: original.replace(from, to),
+    edits: [{ id: found.id, option: found.options.indexOf(to) }],
+  };
+}
+
+function withTopic(f: ReturnType<typeof fixture>, topic: string) {
+  f.args.topic = {
+    ...f.args.topic,
+    claim: () => {
+      f.events.push("claim");
+      return Promise.resolve({
+        claimId: "fixture-claim",
+        eventKey: "fixture-event",
+        unitKey: "fixture-unit",
+        kind: "evergreen",
+        topic,
+      });
+    },
+  };
+  return f;
+}
+
+const rewrite = (text: string) => ({ decision: "rewritten", text, edits: [] });
+const KEEPS_HABIT = R254.replace(
+  "何がどうなったらOKか先に一行書いとくとズレは減りそう。",
+  "最近は頼む前に何がどうなったらOKか一行だけ書くようにしてる。",
+);
+const KEEPS_RECOLLECTION = R254.replace(
+  "AIに頼めば一発でできるって思いがち。",
+  "AIに頼めば一発でできる。最初はそう思ってた。",
+);
+
+test("task33 (1): an experience the topic never gave holds after an edit", () => {
+  const draft = "確認を行いました。最近は朝に通知を見るようにしてる。";
+  assert.throws(
+    () =>
+      sourced(
+        draft,
+        candidateEdit(draft, "確認を行いました", "確認しました"),
+        TOPIC_EVERGREEN,
+      ),
+    /AI_LAB_VOICE_UNGROUNDED_EXPERIENCE/,
+  );
+});
+
+test("task33 (5): the real draft's invented habit and recollection cannot survive a rewrite", () => {
+  for (const text of [KEEPS_HABIT, KEEPS_RECOLLECTION]) {
+    assert.notEqual(text, R254);
+    assert.throws(
+      () => sourced(REAL_DRAFT_254, rewrite(text), TOPIC_EVERGREEN),
+      /AI_LAB_VOICE_UNGROUNDED_EXPERIENCE/,
+    );
+  }
+  assert.deepEqual(sourced(REAL_DRAFT_254, rewrite(R254), TOPIC_EVERGREEN), {
+    text: R254,
+    decision: "edited",
+  });
+});
+
+test("task33 (2): a habit the topic states may be told naturally", () => {
+  assert.deepEqual(sourced(DIARY_DRAFT, rewrite(DIARY_REWRITE), TOPIC_DIARY), {
+    text: DIARY_REWRITE,
+    decision: "edited",
+  });
+  // The same words without that topic are an invented habit.
+  for (const topic of [TOPIC_EVERGREEN, undefined]) {
+    assert.throws(
+      () => sourced(DIARY_DRAFT, rewrite(DIARY_REWRITE), topic),
+      /AI_LAB_VOICE_REWRITE_REJECTED/,
+    );
+  }
+});
+
+test("task33 (2): a grounded claim needs the topic's own time words", () => {
+  assert.throws(
+    () =>
+      sourced(
+        DIARY_DRAFT,
+        rewrite(
+          DIARY_REWRITE.replace("完了確認のたびに", "いつも完了確認のたびに"),
+        ),
+        TOPIC_DIARY,
+      ),
+    /VOICE_REWRITE_REJECTED|UNGROUNDED_EXPERIENCE/,
+  );
+});
+
+test("task33 (3): the topic does not loosen protected strings, questions or poll options", () => {
+  const draft = QUESTION_DRAFT;
+  const topic = "2台で「通知」を見比べたことがあるかを聞く話";
+  assert.equal(
+    sourced(draft, rewrite(QUESTION_FREE_REWRITE), topic).decision,
+    "edited",
+  );
+  for (
+    const text of [
+      QUESTION_FREE_REWRITE.replace("2台", "3台"),
+      QUESTION_FREE_REWRITE.replace("「通知」", "「通知設定」"),
+      QUESTION_FREE_REWRITE.replace("https://example.test/notes\n", ""),
+      QUESTION_FREE_REWRITE.replace("\n#個人開発", ""),
+      QUESTION_FREE_REWRITE.replace("あります？", "あります。"),
+    ]
+  ) {
+    assert.throws(
+      () => sourced(draft, rewrite(text), topic),
+      /VOICE_REWRITE_REJECTED/,
+    );
+  }
+  const prepared = prepareAiLabVoiceRewrite(
+    {
+      brandId: "ai_salaryman_lab",
+      postType: "brand_post",
+      text: previewCases[3].original,
+      engagementMode: "choices",
+    },
+    { topic: TOPIC_EVERGREEN },
+  );
+  const input = JSON.parse(prepared.request.input) as Record<string, unknown>;
+  assert.deepEqual(Object.keys(input).sort(), [
+    "candidates",
+    "mode",
+    "original",
+    "source",
+  ]);
+  assert.equal(input.source, TOPIC_EVERGREEN);
+  for (const option of options) {
+    assert.equal(String(input.source).includes(option), false);
+  }
+});
+
+test("task33 (4): keep and ending-only changes still hold with a topic", () => {
+  assert.throws(
+    () =>
+      sourced(
+        DIARY_DRAFT,
+        { decision: "keep", text: DIARY_DRAFT, edits: [] },
+        TOPIC_DIARY,
+      ),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  assert.throws(
+    () =>
+      sourced(
+        DIARY_DRAFT,
+        rewrite(DIARY_DRAFT.replace("すぐ見つかる。", "見つかる。")),
+        TOPIC_DIARY,
+      ),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+});
+
+test("task33 (6): other brands and people pass only when the topic names them", () => {
+  const draft =
+    "学習画面に、相場との関係まで読める説明を足した。確認を行いました。";
+  const edit = candidateEdit(draft, "確認を行いました", "確認しました");
+  assert.equal(sourced(draft, edit, TOPIC_STOCK_APP).decision, "edited");
+  for (const topic of [TOPIC_EVERGREEN, TOPIC_DIARY, undefined]) {
+    assert.throws(
+      () => sourced(draft, edit, topic),
+      /AI_LAB_VOICE_UNGROUNDED_EXPERIENCE/,
+    );
+  }
+  for (
+    const party of [
+      "日経平均の話も入れた。",
+      "上司にも見せた。",
+      "#かぶモリ も見てね。",
+    ]
+  ) {
+    const mixed = "確認を行いました。" + party;
+    assert.throws(
+      () =>
+        sourced(
+          mixed,
+          candidateEdit(mixed, "確認を行いました", "確認しました"),
+          TOPIC_DIARY,
+        ),
+      /AI_LAB_VOICE_UNGROUNDED_EXPERIENCE/,
+    );
+  }
+});
+
+test("task33: a missing or oversized topic grounds nothing and is not sent", () => {
+  const long = TOPIC_DIARY + "。".repeat(1200);
+  for (const topic of [undefined, "  ", long]) {
+    assert.throws(
+      () => sourced(DIARY_DRAFT, rewrite(DIARY_REWRITE), topic),
+      /AI_LAB_VOICE_REWRITE_REJECTED/,
+    );
+  }
+  const { request } = prepareAiLabVoiceRewrite(
+    { brandId: "ai_salaryman_lab", postType: "brand_post", text: DIARY_DRAFT },
+    { topic: long },
+  );
+  assert.equal("source" in JSON.parse(request.input), false);
+  assert.doesNotMatch(request.instructions, /sourceは投稿の題材です/u);
+});
+
+test("task33 dispatch: the claimed topic is the only source sent to stage 2", async () => {
+  const f = withTopic(
+    fixture((_call, index) =>
+      providerResponse(index ? rewrite(DIARY_REWRITE) : { text: DIARY_DRAFT })
+    ),
+    TOPIC_DIARY,
+  );
+  await dispatchAiLabScheduledBrandPost(f.args);
+  assert.deepEqual(f.payloads, [{
+    text: DIARY_REWRITE,
+    pollOptions: undefined,
+  }]);
+  const second = f.recorder.calls[1].body as {
+    system: string;
+    messages: { content: string }[];
+  };
+  const input = JSON.parse(second.messages[0].content) as Record<
+    string,
+    unknown
+  >;
+  assert.equal(input.source, TOPIC_DIARY);
+  assert.match(second.system, /sourceは投稿の題材です/u);
+  assert.match(second.system, /原案にあっても本人の話として残さず/u);
+  for (const call of f.recorder.calls) {
+    assert.equal(new URL(call.url).hostname, "api.anthropic.com");
+  }
+});
+
+test("task33 dispatch: an ungrounded habit kept from the real draft never reaches X", async () => {
+  const f = withTopic(
+    fixture((_call, index) =>
+      providerResponse(index ? rewrite(KEEPS_HABIT) : { text: REAL_DRAFT_254 })
+    ),
+    TOPIC_EVERGREEN,
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(f.args),
+    /AI_LAB_VOICE_UNGROUNDED_EXPERIENCE/,
+  );
+  assert.deepEqual(f.payloads, []);
+  assert.equal(f.events.includes("start X"), false);
+  assert.equal(f.events.at(-1), "release:PRE_X_CONTENT_REJECTED");
+});
+
+test("task33 dispatch: a poll keeps its options out of stage 2 and sends them unchanged", async () => {
+  const original = "最初に開くなら、どれを選びますか？";
+  const edited = "最初に開くなら、どれを選びます？";
+  const f = withTopic(
+    fixture(
+      (call, index) =>
+        providerResponse(
+          index
+            ? editedReply(call, edited, [[
+              "どれを選びますか？",
+              "どれを選びます？",
+            ]])
+            : { text: original, poll_options: options },
+        ),
+      { rotation: 8 },
+    ),
+    TOPIC_EVERGREEN,
+  );
+  await dispatchAiLabScheduledBrandPost(f.args);
+  assert.deepEqual(f.payloads, [{ text: edited, pollOptions: options }]);
+  const second = f.recorder.calls[1].body as {
+    messages: { content: string }[];
+  };
+  for (const option of options) {
+    assert.equal(second.messages[0].content.includes(option), false);
+  }
+});

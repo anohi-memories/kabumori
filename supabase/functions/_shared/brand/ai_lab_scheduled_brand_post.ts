@@ -49,7 +49,8 @@ export function preXReleaseReason(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (/^BRAND_POST_(GENERATION_FAILED|EMPTY_OUTPUT|LENGTH_LIMIT_EXCEEDED)/u.test(message)) return "PRE_X_GENERATION_FAILED";
   if (message === "AI_LAB_CONTENT_DIVERSITY_REJECTED" || message === "AI_LAB_VOICE_REWRITE_REJECTED" ||
-    message === "AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED" || message === AI_LAB_VOICE_STYLE_REJECTED) {
+    message === "AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED" || message === AI_LAB_VOICE_STYLE_REJECTED ||
+    message === "AI_LAB_VOICE_UNGROUNDED_EXPERIENCE") {
     return "PRE_X_CONTENT_REJECTED";
   }
   if (message === "AI_LAB_CROSS_BRAND_DUPLICATE") return "PRE_X_FINGERPRINT_BLOCKED";
@@ -184,7 +185,8 @@ export async function dispatchAiLabScheduledBrandPost({
     await assertNoCrossBrandDuplicate(draft.text);
 
     if (rewriteVoice) {
-      const { request, validate } = prepareAiLabVoiceRewrite(draft);
+      // The claimed topic is the only source of the narrator's facts; the first stage already got it.
+      const { request, validate } = prepareAiLabVoiceRewrite(draft, { topic: claim.topic });
       const { text: editedText, decision } = validate(await rewriteVoice(request));
       voiceRewriteDecision = decision;
       const edited = { ...draft, text: editedText, pollOptions };
