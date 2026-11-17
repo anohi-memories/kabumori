@@ -18,7 +18,12 @@ const INTERNAL_PROCESS =
   /運用|進捗|共有メモ|下調べ|テスト用|本番|環境|設定|連携|土台|仕組み|処理|正本|直書き|ファイル|競合テスト|同時実行|判定|実データ|整えた|進め/gu;
 /** Account and credential specifics that only make sense inside the project. */
 const OPAQUE_ACCOUNT =
-  /認証|既存の接続|接続と重な|OAuth|トークン|鍵|権限|担当者か/gu;
+  /認証|既存の接続|接続と重な|OAuth|トークン|担当者か/gu;
+/** Words that are opaque only in company (two or more): a lone 鍵 / 権限 can be an everyday story. */
+const OPAQUE_WEAK = /鍵|権限/gu;
+/** Something a reader can feel went wrong or got better: a number with a unit, or a plain consequence. */
+const CONCRETE_OUTCOME =
+  /\d+\s*(?:分|秒|時間|件|個|回|枚|%|％|倍)|助か|戻せ|消えて|消してしま|間違え|壊れ|読めな|届かな|見つからな|二重/u;
 /** A check that merely ran or finished. */
 const CONFIRMATION =
   /(?:確認|点検|検証|テスト)(?:を進め|した|を終え|が終わ|まで(?:し|行っ))/u;
@@ -53,9 +58,16 @@ export function assessAiLabTopicValue(seed: string): AiLabTopicValue {
   const all = [...facts.values()].join("\n");
   const count = (pattern: RegExp) => all.match(pattern)?.length ?? 0;
   const reasons: AiLabTopicValueReason[] = [];
-  if (count(READER_VISIBLE) === 0) {
-    const internal = count(INTERNAL_PROCESS) >= 2;
-    const opaque = count(OPAQUE_ACCOUNT) >= 1;
+  const visible = count(READER_VISIBLE);
+  // Task40: a single reader-visible word inside a heavy internal report (e.g. 「表示設定の整備を進め…」)
+  // is vocabulary, not a scene.
+  if (visible === 1 && count(INTERNAL_PROCESS) >= 4 && !CONCRETE_OUTCOME.test(all)) {
+    reasons.push("NO_READER_VISIBLE_EVENT", "INTERNAL_WORK_REPORT");
+  } else if (visible === 0) {
+    // Task40: an internal-vocabulary story that also states a concrete outcome is a lesson, not a
+    // work report, so it is no longer held on vocabulary alone. Credential words stay held.
+    const internal = count(INTERNAL_PROCESS) >= 2 && !CONCRETE_OUTCOME.test(all);
+    const opaque = count(OPAQUE_ACCOUNT) >= 1 || count(OPAQUE_WEAK) >= 2;
     if (internal || opaque) {
       reasons.push("NO_READER_VISIBLE_EVENT");
       if (internal) reasons.push("INTERNAL_WORK_REPORT");
