@@ -44,7 +44,13 @@ export function publishSettingView(account: Pick<SocialAccount, 'platform' | 'co
     return { enabled, statusLabel, statusTone, canTurnOn: false, canTurnOff: false, note: 'プレビュー表示のため、設定は切り替えられません。' };
   }
   if (account.platform !== 'x') {
-    return { enabled, statusLabel, statusTone, canTurnOn: false, canTurnOff: enabled, note: 'このプラットフォームの自動投稿はまだ利用できません。' };
+    // G1-02 TASK 2: Threads has no on/off switch here (its posts are made by hand on the account detail, or by a date on 予約の管理); Instagram comes later.
+    const note = account.platform === 'threads'
+      ? 'Threadsには、この自動投稿の切り替えはありません。手で投稿するときはこの画面、日時を決めるときは「予約の管理」から行います。'
+      : account.platform === 'instagram'
+        ? 'Instagramは後日対応します。いまは接続も投稿もできません。'
+        : 'このプラットフォームの自動投稿はまだ利用できません。';
+    return { enabled, statusLabel, statusTone, canTurnOn: false, canTurnOff: enabled, note };
   }
   const connected = account.connectionStatus === 'connected';
   if (enabled) {

@@ -31,6 +31,8 @@ const ALLOWED_IMPORTS = new Set([
   '@/features/manual-publish/manual-publish-model',
   '@/features/manual-publish/manual-publish-port',
   '@/features/manual-publish/manual-publish-storage',
+  // G1-02 TASK 2: a pure pointer to the Threads account detail (no state, no request; see threads-entry.ts)
+  '@/features/threads-publish/threads-entry',
   '@/providers/active-account-provider',
   '@/providers/auth-provider',
   '@/providers/data-provider',

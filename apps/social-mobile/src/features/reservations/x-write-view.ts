@@ -97,7 +97,10 @@ export function xOwnRefusal(input: {
 }
 
 /** connection_status is a stored record, not G4/G5's current connection verdict. Neither an earlier row nor a current row proves an account's present authority. */
+/** G1-02 TASK 2: the first release is Threads and X; Instagram is added later, so it never shows a connection or a way to use it. */
+export const INSTAGRAM_LATER_LABEL = '後日対応';
 export function connectionPill(connectionStatus: string, reconnectRequired: boolean, otherLabel: string, restartObserved = false, platform = 'x'): { label: string; tone: 'success' | 'warning' } {
+  if (platform === 'instagram') return { label: INSTAGRAM_LATER_LABEL, tone: 'warning' };
   if (reconnectRequired) return { label: RECONNECT_REQUIRED_LABEL, tone: 'warning' };
   if (restartObserved && connectionStatus === 'connected') return { label: RESTART_OBSERVED_LABEL, tone: 'warning' };
   if (platform === 'x' && connectionStatus === 'connected') return { label: X_CONNECTION_UNVERIFIED_LABEL, tone: 'warning' };

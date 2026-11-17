@@ -24,6 +24,7 @@ import * as reservationView from '../src/features/reservations/reservation-view.
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
 import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
+import * as threadsEntry from '../src/features/threads-publish/threads-entry.ts';
 
 const NETWORK = ['fetch', 'XMLHttpRequest', 'WebSocket'];
 const savedGlobals = new Map();
@@ -460,7 +461,7 @@ test('T35 home (real): the card and the ways out for a disconnected X account on
     '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getHistory: () => [] } },
     '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
     '@/domain/data-view': dataView,
-    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: account }) },
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: account ? [account] : [], activeAccount: account }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
     '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },
@@ -1093,6 +1094,7 @@ const baseStubs = () => ({
   '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
   '@/features/reservations/x-write-view': xWriteView,
   '@/features/reservations/x-row-generation': xRowGeneration,
+  '@/features/threads-publish/threads-entry': threadsEntry,
   '@/features/reservations/home-reservations': { homeCount: (fromPosts) => fromPosts, homeHasNoReservations: () => true, homeHeadline: (headline) => headline },
   '@/features/reservations/use-home-reservations': { useHomeReservations: () => ({ view: { kind: 'not_applicable' }, reload() {} }) },
   // G4 PR 617's Threads cards on the account screens (RC #42).
@@ -1174,7 +1176,7 @@ test('T33 another workspace\'s X account: a restart does not touch it, on the ac
     '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getHistory: () => [] } },
     '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
     '@/domain/data-view': dataView,
-    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: SHARED }) },
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: [SHARED], activeAccount: SHARED }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
   });
@@ -1202,7 +1204,7 @@ test('home (real): 再接続が必要 replaces 接続済み for the selected X a
     '@/data/mock-repository': { mockRepository: { getPlannedPosts: () => [], getHistory: () => [] } },
     '@/features/brand-preview/brand-post-preview': { BrandPostPreview: 'BrandPostPreview' },
     '@/domain/data-view': dataView,
-    '@/providers/active-account-provider': { useActiveAccount: () => ({ activeAccount: ACCOUNT }) },
+    '@/providers/active-account-provider': { useActiveAccount: () => ({ accounts: [ACCOUNT], activeAccount: ACCOUNT }) },
     '@/providers/data-provider': { useDataStatus: () => ({ status: 'ready', reason: null, snapshot: { plannedPosts: [], history: [] } }) },
     '@/components/sign-out-button': { SignOutButton: 'SignOutButton' },
     '@/providers/auth-provider': { useAuth: () => ({ session: { user: { id: 'person-1' } } }) },

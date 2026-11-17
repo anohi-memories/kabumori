@@ -14,6 +14,7 @@ import * as realFlow from '../src/features/manual-publish/manual-publish-flow.ts
 import * as realPort from '../src/features/manual-publish/manual-publish-port.ts';
 import * as realStore from '../src/features/manual-publish/manual-publish-store.ts';
 import * as realDraft from '../src/features/manual-publish/manual-publish-draft-store.ts';
+import * as threadsEntry from '../src/features/threads-publish/threads-entry.ts';
 
 
 /** A device storage that can fail in every way: a thrown read / write / remove, or a write that silently stores nothing. */
@@ -101,6 +102,7 @@ async function loadRoute(world) {
     '@/constants/theme': { colors: new Proxy({}, { get: (_t, name) => String(name) }), spacing: { xs: 6, sm: 10, md: 16, lg: 22, xl: 32 } },
     '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: { muted: { muted: true } } },
     '@/features/manual-publish/manual-post-preview': { ManualPostPreview: 'ManualPostPreview' },
+    '@/features/threads-publish/threads-entry': threadsEntry,
     '@/features/manual-publish/manual-publish-flow': { ...realFlow, attemptMemory: world.memory, inFlightSends: world.inflight },
     '@/features/manual-publish/manual-publish-model': model,
     '@/features/manual-publish/manual-publish-port': { ...realPort, getManualPublishPort: () => world.port },
@@ -205,6 +207,19 @@ test('no X account: the screen says so, nothing can be typed or confirmed, and n
   assert.ok(ui.button('アカウント画面を開く'));
   assertNoSentClaim(ui);
   assert.equal(ui.port.calls.check.length, 0);
+});
+
+test('G1-02: this screen is X\'s — a Threads user is pointed to the Threads account detail (or to connecting one); the pointer sends nothing and claims nothing', async () => {
+  const threads = await mount({ accounts: [account('X_A'), account('T_1', { platform: 'threads' })], active: 'X_A' });
+  assert.ok(threads.text().includes('Threadsに投稿する'));
+  assert.ok(threads.text().includes('Threadsへの投稿は、Threadsアカウントの詳細から行います'));
+  assert.ok(threads.button('Threadsアカウントの詳細を開く'));
+  const bare = await mount();
+  assert.ok(bare.text().includes('Threadsアカウントはまだ接続されていません'));
+  assert.ok(bare.button('アカウント画面を開く'));
+  assert.equal(bare.button('Threadsアカウントの詳細を開く'), null);
+  assertNoSentClaim(threads);
+  assert.equal(threads.button('Xに投稿する'), null, 'the X send is not offered by the pointer');
 });
 
 test('accounts still loading: unavailable, not "connected"', async () => {

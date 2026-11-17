@@ -15,14 +15,16 @@ import { useActiveAccount } from '@/providers/active-account-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useDataStatus } from '@/providers/data-provider';
 import { SignOutButton } from '@/components/sign-out-button';
+import { THREADS_ENTRY_TITLE, threadsEntry } from '@/features/threads-publish/threads-entry';
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function HomeScreen() {
-  const { activeAccount } = useActiveAccount();
+  const { accounts, activeAccount } = useActiveAccount();
   const { status, reason, snapshot } = useDataStatus();
+  const threads = threadsEntry(accounts, activeAccount?.id ?? null);
   useXReconnectSignal();
   const { session } = useAuth();
   const { view: personal } = usePersonalWorkspace();
@@ -112,6 +114,28 @@ export default function HomeScreen() {
           <Text style={styles.muted}>送信は、接続・利用権・投稿許可をサーバーで確認できたときだけ有効になります。</Text>
           <Link href="/manual-publish" asChild>
             <ActionButton label="投稿を作成する" onPress={() => {}} />
+          </Link>
+        </Card>
+
+        <Card>
+          <SectionTitle detail="Threadsはアカウントの詳細から投稿します">{THREADS_ENTRY_TITLE}</SectionTitle>
+          <Text style={styles.muted}>{threads.text}</Text>
+          {threads.kind === 'open' ? (
+            <Link href={{ pathname: '/accounts/[id]', params: { id: threads.accountId } }} asChild>
+              <ActionButton label={threads.label} onPress={() => {}} />
+            </Link>
+          ) : (
+            <Link href="/accounts" asChild>
+              <ActionButton label={threads.label} onPress={() => {}} />
+            </Link>
+          )}
+        </Card>
+
+        <Card>
+          <SectionTitle detail="承認の依頼と、予約の状態の変化の履歴です">お知らせ</SectionTitle>
+          <Text style={styles.muted}>投稿候補の承認待ち、承認した予約の状態の変化を、あとから読み返せます。</Text>
+          <Link href="/notifications" asChild>
+            <ActionButton label="お知らせを開く" onPress={() => {}} />
           </Link>
         </Card>
 
