@@ -55,8 +55,10 @@ test("task46 (A): recorded diary — before (Task39/40 value only) and after (va
   }
   console.log(lines.join("\n"));
   assert.equal(before.length, 10);
-  assert.deepEqual(before.filter((id) => !after.includes(id)), ["20261009-shared-account-withdrawal-safety"]);
-  assert.equal(after.length, 9);
+  // 10/09 and 10/10 are 本人判断待ち (Task47): their verdicts are printed, never pinned as the right answer.
+  const pending = ["20261009-shared-account-withdrawal-safety", "20261010-ai-consult-workspace-memory-safety"];
+  assert.deepEqual(before.filter((id) => !after.includes(id) && !pending.includes(id)), []);
+  assert.equal(after.filter((id) => !pending.includes(id)).length, 8);
   // The user-rejected Task38 topic (09/30) stays held, and is still held before the interest step.
   assert.equal(assessAiLabTopicValue(units.find((u) => u.entry.date === "2026-09-30")!.unit.seed).postable, false);
 });
@@ -142,11 +144,9 @@ test("task46 (D): non-posting list of synthetic verdicts (合成。投稿文で�
   console.log(lines.join("\n"));
 });
 
-test("task46 known gaps (合成): word-list limits stay visible, not fixed", () => {
-  // Missed: a dull progress report with one snag word and no report verb is still postable (medium).
+test("task46 known gaps (合成): the two Task46 gaps are closed in Task47 (see ai_lab_topic_interest_task47_test.ts)", () => {
   const dull = assessAiLabTopicInterest("できごと: ホーム画面を更新した。\n詰まったこと: 時間がかかった。");
-  assert.deepEqual([dull.postable, dull.tier], [true, "medium"]);
-  // False hold: a surprise said in words outside the list is not seen, so the topic has no story.
-  const unseen = assessAiLabTopicInterest("できごと: 画面の色を変えたら、思ってたのとぜんぜんちがった。");
-  assert.deepEqual([unseen.postable, unseen.weaknesses], [false, ["NO_STORY"]]);
+  assert.deepEqual([dull.postable, dull.weaknesses], [false, ["NO_STORY", "GENERIC_EFFORT"]]);
+  const spoken = assessAiLabTopicInterest("できごと: 画面の色を変えたら、思ってたのとぜんぜんちがった。");
+  assert.equal(spoken.postable, true);
 });
