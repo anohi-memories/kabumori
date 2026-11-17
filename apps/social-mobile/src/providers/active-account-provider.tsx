@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState, type PropsWithChildren } from 'react';
 import { mockRepository } from '@/data/mock-repository';
+import { isInitialReleaseProvider } from '@/domain/initial-release';
 import type { SocialAccount } from '@/domain/types';
 import { useDataStatus } from '@/providers/data-provider';
 
@@ -14,8 +15,8 @@ export function ActiveAccountProvider({ children }: PropsWithChildren) {
     () => (status === 'mock_preview' ? mockRepository.getAccounts() : status === 'ready' && snapshot ? snapshot.accounts : []),
     [snapshot, status],
   );
-  const [activeId, setActiveId] = useState(accounts[0]?.id ?? '');
-  const value = useMemo(() => ({ accounts, activeAccount: accounts.find((account) => account.id === activeId) ?? accounts[0] ?? null, selectAccount: (accountId: string) => { if (accounts.some((account) => account.id === accountId)) setActiveId(accountId); } }), [accounts, activeId]);
+  const [activeId, setActiveId] = useState(accounts.find((account) => isInitialReleaseProvider(account.platform))?.id ?? '');
+  const value = useMemo(() => ({ accounts, activeAccount: accounts.find((account) => account.id === activeId && isInitialReleaseProvider(account.platform)) ?? accounts.find((account) => isInitialReleaseProvider(account.platform)) ?? null, selectAccount: (accountId: string) => { if (accounts.some((account) => account.id === accountId && isInitialReleaseProvider(account.platform))) setActiveId(accountId); } }), [accounts, activeId]);
   return <ActiveAccountContext.Provider value={value}>{children}</ActiveAccountContext.Provider>;
 }
 
