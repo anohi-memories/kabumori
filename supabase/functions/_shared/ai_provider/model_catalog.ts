@@ -32,6 +32,23 @@ export const AI_LAB_POST_MODELS: Readonly<Record<AiProvider, string>> = Object.f
   openai: "gpt-6.1-sol",
 });
 
+/** The model of each AI Lab stage: the draft (generate) and the voice rewrite. */
+export type AiLabStageModels = {
+  readonly provider: AiProvider;
+  readonly generate: string;
+  readonly rewrite: string;
+};
+
+/**
+ * Task45: explicit AI Lab text modes beyond the single-model pair of AI_LAB_POST_MODELS. luna_sol drafts with
+ * OpenAI gpt-6-luna and rewrites with OpenAI gpt-6.1-sol. Re-checked on 2026-11-17 against
+ * developers.openai.com/api/docs/pricing: these are the newest listed Luna and Sol ids (no gpt-6.1-luna), and the
+ * prices below are unchanged. Both are priced here, so the mode never runs an unpriced model.
+ */
+export const AI_LAB_TEXT_MODES: Readonly<Record<"luna_sol", AiLabStageModels>> = Object.freeze({
+  luna_sol: Object.freeze({ provider: "openai", generate: "gpt-6-luna", rewrite: "gpt-6.1-sol" }),
+});
+
 /** USD per 1M tokens. */
 export type PriceTier = {
   /** This tier applies when the request's total prompt tokens are ABOVE this value (0 = from the first token). */

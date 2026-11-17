@@ -388,6 +388,7 @@ for (
     assert.deepEqual(f.env.reads, [
       "AI_LAB_CLAUDE_TWO_STAGE",
       "AI_LAB_TEXT_PROVIDER",
+      "AI_LAB_TEXT_MODE",
       "AI_LAB_TEXT_API_KEY",
       "AI_LAB_TEXT_API_KEY",
     ]);
@@ -1178,6 +1179,7 @@ test("other brand, missing dedicated key and oversized estimated spend never sen
   assert.deepEqual(missing.env.reads, [
     "AI_LAB_CLAUDE_TWO_STAGE",
     "AI_LAB_TEXT_PROVIDER",
+    "AI_LAB_TEXT_MODE",
     "AI_LAB_TEXT_API_KEY",
   ]);
   assert.deepEqual(missing.payloads, []);
@@ -2657,6 +2659,7 @@ for (const provider of TASK39_PROVIDERS) {
     assert.deepEqual(f.env.reads, [
       "AI_LAB_CLAUDE_TWO_STAGE",
       "AI_LAB_TEXT_PROVIDER",
+      "AI_LAB_TEXT_MODE",
       TASK39_KEY_ENV[provider],
       TASK39_KEY_ENV[provider],
     ]);
@@ -3270,4 +3273,431 @@ test("task44 (C): earlier legitimate drafts still pass and the user-rejected Tas
   ) {
     assert.throws(() => groundedRewrite(draft, TOPIC_0930, text), /AI_LAB_VOICE_STYLE_REJECTED/);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Task45: a third pattern, OpenAI gpt-6-luna draft → OpenAI gpt-6.1-sol rewrite (AI_LAB_TEXT_MODE=luna_sol).
+// fetch is a recorder (deny-net); no key is real and nothing is posted. Drafts/rewrites are 合成・手書き or
+// earlier recorded real drafts, never a Luna/Sol output and never a user voice PASS.
+import { AI_LAB_TEXT_MODES, priceTierFor } from "./model_catalog.ts";
+
+type T45Pattern = "A_opus_opus" | "B_sol_sol" | "C_luna_sol";
+const T45_PATTERNS: readonly T45Pattern[] = ["A_opus_opus", "B_sol_sol", "C_luna_sol"];
+const T45_MODELS: Record<T45Pattern, readonly [string, string]> = {
+  A_opus_opus: ["claude-opus-5-5", "claude-opus-5-5"],
+  B_sol_sol: ["gpt-6.1-sol", "gpt-6.1-sol"],
+  C_luna_sol: ["gpt-6-luna", "gpt-6.1-sol"],
+};
+const T45_PROVIDER: Record<T45Pattern, Task39Provider> = {
+  A_opus_opus: "anthropic",
+  B_sol_sol: "openai",
+  C_luna_sol: "openai",
+};
+
+/** Each stage answers as the model it was asked for (OpenAI: a dated snapshot), unless overridden. */
+function t45Body(pattern: T45Pattern, index: number, payload: unknown, model?: string) {
+  const asked = T45_MODELS[pattern][index ? 1 : 0];
+  return jsonResponse(
+    200,
+    T45_PROVIDER[pattern] === "anthropic"
+      ? anthropicBody(payload, { model: model ?? asked })
+      : openAiBody(payload, { model: model ?? `${asked}-2026-09-01` }),
+  );
+}
+
+function t45Fixture(
+  pattern: T45Pattern,
+  options: Omit<NonNullable<Parameters<typeof task39Fixture>[1]>, "respond"> & {
+    respond?: Responder;
+    draft?: string;
+    rewrite?: string;
+  } = {},
+) {
+  const draft = options.draft ?? TASK39_GOOD_DRAFT;
+  const rewrite = options.rewrite ?? TASK39_GOOD_REWRITE;
+  return task39Fixture(T45_PROVIDER[pattern], {
+    ...options,
+    respond: options.respond ??
+      ((_call, index) =>
+        t45Body(
+          pattern,
+          index,
+          index ? { decision: "rewritten", text: rewrite, edits: [] } : { text: draft },
+        )),
+    env: {
+      ...(pattern === "C_luna_sol" ? { AI_LAB_TEXT_MODE: "luna_sol" } : {}),
+      ...options.env,
+    },
+  });
+}
+
+test("task45 (A): the catalog names luna_sol as gpt-6-luna → gpt-6.1-sol, both priced OpenAI models", () => {
+  assert.deepEqual({ ...AI_LAB_TEXT_MODES.luna_sol }, {
+    provider: "openai",
+    generate: "gpt-6-luna",
+    rewrite: "gpt-6.1-sol",
+  });
+  for (const model of [AI_LAB_TEXT_MODES.luna_sol.generate, AI_LAB_TEXT_MODES.luna_sol.rewrite]) {
+    const spec = findModelSpec(model);
+    assert.equal(spec?.provider, "openai", model);
+    assert.ok(spec.priceTiers[0].inputPer1M > 0 && spec.priceTiers[0].outputPer1M > 0, model);
+    assert.ok(spec.reasoningEfforts.includes("low"), model);
+    assert.equal(spec.structuredOutput, true);
+  }
+  // Official list prices re-read on 2026-11-17 (developers.openai.com/api/docs/pricing), USD per 1M tokens.
+  assert.deepEqual(
+    [findModelSpec("gpt-6-luna")!.priceTiers[0], findModelSpec("gpt-6.1-sol")!.priceTiers[0]].map((t) => [
+      t.inputPer1M,
+      t.cacheReadPer1M,
+      t.outputPer1M,
+    ]),
+    [[0.1, 0.01, 0.5], [2, 0.1, 10]],
+  );
+  // The existing single-model pairs are unchanged.
+  assert.deepEqual({ ...AI_LAB_POST_MODELS }, { anthropic: "claude-opus-5-5", openai: "gpt-6.1-sol" });
+});
+
+for (const pattern of T45_PATTERNS) {
+  test(`task45 (A)(C) ${pattern}: each stage requests exactly its model on its provider's dedicated key`, async () => {
+    const f = t45Fixture(pattern);
+    const result = await dispatchAiLabScheduledBrandPost(f.args);
+    assert.equal(result.voiceRewriteDecision, "edited");
+    assert.deepEqual(f.payloads, [{ text: TASK39_GOOD_REWRITE, pollOptions: undefined }]);
+    const provider = T45_PROVIDER[pattern];
+    // deno-lint-ignore no-explicit-any
+    const bodies = f.recorder.calls.map((c) => c.body as Record<string, any>);
+    assert.deepEqual(bodies.map((b) => b.model), [...T45_MODELS[pattern]]);
+    for (const call of f.recorder.calls) {
+      assert.equal(call.url, TASK39_URL[provider]);
+      assert.equal(call.method, "POST");
+      const secret = provider === "anthropic" ? FAKE_ANTHROPIC_KEY : FAKE_OPENAI_KEY;
+      assert.equal(
+        provider === "anthropic" ? call.headers.get("x-api-key") : call.headers.get("authorization"),
+        provider === "anthropic" ? secret : `Bearer ${secret}`,
+      );
+      assert.doesNotMatch(JSON.stringify(call.body), new RegExp(secret));
+    }
+    if (provider === "openai") {
+      assert.deepEqual(bodies.map((b) => b.text.format.strict), [true, true]);
+      assert.deepEqual(bodies.map((b) => b.text.format.name), ["ai_lab_post_text", "ai_lab_voice_rewrite"]);
+      assert.deepEqual(bodies.map((b) => b.store), [false, false]);
+      assert.deepEqual(bodies.map((b) => b.reasoning.effort), ["low", "low"]);
+      assert.equal(bodies[1].max_output_tokens, 3072);
+    }
+    assert.deepEqual(f.env.reads, [
+      "AI_LAB_CLAUDE_TWO_STAGE",
+      "AI_LAB_TEXT_PROVIDER",
+      "AI_LAB_TEXT_MODE",
+      TASK39_KEY_ENV[provider],
+      TASK39_KEY_ENV[provider],
+    ]);
+    assert.equal(f.env.reads.includes("OPENAI_API_KEY"), false);
+    assert.equal(f.env.reads.includes("ANTHROPIC_API_KEY"), false);
+  });
+}
+
+test("task45 (B)(D): A/B/C send the identical draft and rewrite prompts, schemas and caps for the same topic", async () => {
+  const sent: ReturnType<typeof sentPrompt>[][] = [];
+  // deno-lint-ignore no-explicit-any
+  const shapes: any[] = [];
+  for (const pattern of T45_PATTERNS) {
+    const f = t45Fixture(pattern, { topic: TASK44_TOPIC_1008, draft: TASK44_HAND_DRAFT_1008, rewrite: TASK44_HAND_REWRITE_1008 });
+    await dispatchAiLabScheduledBrandPost(f.args);
+    const provider = T45_PROVIDER[pattern];
+    sent.push(f.recorder.calls.map((call) => sentPrompt(provider, call)));
+    shapes.push(f.recorder.calls.map((call) => {
+      // deno-lint-ignore no-explicit-any
+      const b = call.body as Record<string, any>;
+      return provider === "anthropic"
+        ? { max: b.max_tokens, effort: b.output_config.effort, schema: b.output_config.format.schema }
+        : { max: b.max_output_tokens, effort: b.reasoning.effort, schema: b.text.format.schema };
+    }));
+  }
+  assert.equal(sent[0].length, 2);
+  assert.deepEqual(sent[1], sent[0]);
+  assert.deepEqual(sent[2], sent[0]);
+  assert.deepEqual(shapes[1], shapes[0]);
+  assert.deepEqual(shapes[2], shapes[0]);
+  assert.equal(JSON.parse(sent[2][1].user).source, TASK44_TOPIC_1008);
+  assert.match(sent[2][0].system, /^最優先: /mu);
+  assert.match(sent[2][0].system, /読点は一文に最大1個/u);
+});
+
+test("task45 (A): luna_sol with an explicit openai provider is the same selection; anthropic conflicts before any key read", async () => {
+  const ok = t45Fixture("C_luna_sol", { env: { AI_LAB_TEXT_PROVIDER: "openai" } });
+  await dispatchAiLabScheduledBrandPost(ok.args);
+  assert.deepEqual(ok.recorder.calls.map((c) => (c.body as { model: string }).model), ["gpt-6-luna", "gpt-6.1-sol"]);
+
+  const f = task39Fixture("anthropic", { env: { AI_LAB_TEXT_PROVIDER: "anthropic", AI_LAB_TEXT_MODE: "luna_sol" } });
+  await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_TEXT_MODE_CONFLICT/);
+  assert.equal(f.recorder.calls.length, 0);
+  assert.deepEqual(f.env.reads, ["AI_LAB_CLAUDE_TWO_STAGE", "AI_LAB_TEXT_PROVIDER", "AI_LAB_TEXT_MODE"]);
+  assert.deepEqual(f.payloads, []);
+  assert.equal(f.events.includes("start X"), false);
+});
+
+for (const value of ["LUNA_SOL", "luna_sol ", "luna-sol", "sol_sol", "opus_opus", "sol_luna", "luna", "gemini"]) {
+  test(`task45 (A): unknown mode ${JSON.stringify(value)} holds before any key read, request or X`, async () => {
+    for (const provider of TASK39_PROVIDERS) {
+      const f = task39Fixture(provider, { env: { AI_LAB_TEXT_MODE: value } });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_TEXT_MODE_INVALID/);
+      assert.equal(f.recorder.calls.length, 0);
+      assert.deepEqual(f.env.reads, ["AI_LAB_CLAUDE_TWO_STAGE", "AI_LAB_TEXT_PROVIDER", "AI_LAB_TEXT_MODE"]);
+      assert.deepEqual(f.payloads, []);
+    }
+  });
+}
+
+test("task45 (A): an invalid provider still stops before the mode is read, even with luna_sol", async () => {
+  const f = task39Fixture("openai", { env: { AI_LAB_TEXT_PROVIDER: "OpenAI", AI_LAB_TEXT_MODE: "luna_sol" } });
+  await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_TEXT_PROVIDER_INVALID/);
+  assert.deepEqual(f.env.reads, ["AI_LAB_CLAUDE_TWO_STAGE", "AI_LAB_TEXT_PROVIDER"]);
+  assert.equal(f.recorder.calls.length, 0);
+});
+
+test("task45 (A): the mode alone never turns stages on, and flag-off reads nothing else", () => {
+  for (const env of [{ AI_LAB_TEXT_MODE: "luna_sol" }, { AI_LAB_CLAUDE_TWO_STAGE: "true", AI_LAB_TEXT_MODE: "luna_sol" }]) {
+    const reader = fakeEnv(env as Record<string, string>);
+    assert.deepEqual(createAiLabTextStages({ readEnv: reader.readEnv }), {});
+    assert.deepEqual(reader.reads, ["AI_LAB_CLAUDE_TWO_STAGE"]);
+  }
+  // The one-stage OpenAI path (flag off) keeps no rewrite stage even with the mode set.
+  const f = fixture(() => jsonResponse(500, {}), { flag: "disabled", extraEnv: { AI_LAB_TEXT_MODE: "luna_sol" } });
+  assert.equal(f.args.rewriteVoice, undefined);
+});
+
+test("task45 (A): the selection log names mode, provider and stage models only — no key, topic or text", () => {
+  const entries: Record<string, string>[] = [];
+  const recorder = recordingFetch((_c, index) => t45Body("C_luna_sol", index, { text: "本文" }));
+  const env = fakeEnv({
+    AI_LAB_CLAUDE_TWO_STAGE: "enabled",
+    AI_LAB_TEXT_MODE: "luna_sol",
+    AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY,
+  });
+  const stages = createAiLabTextStages({ readEnv: env.readEnv, fetch: recorder.fetch, logSelection: (e) => entries.push(e) });
+  assert.equal(stages.provider, "openai");
+  assert.equal(stages.mode, "luna_sol");
+  assert.deepEqual(entries, [{
+    status: "selected",
+    mode: "luna_sol",
+    provider: "openai",
+    generateModel: "gpt-6-luna",
+    rewriteModel: "gpt-6.1-sol",
+  }]);
+  // No key is read while choosing.
+  assert.deepEqual(env.reads, ["AI_LAB_CLAUDE_TWO_STAGE", "AI_LAB_TEXT_PROVIDER", "AI_LAB_TEXT_MODE"]);
+  const refused: Record<string, string>[] = [];
+  createAiLabTextStages({
+    readEnv: fakeEnv({ AI_LAB_CLAUDE_TWO_STAGE: "enabled", AI_LAB_TEXT_MODE: "x", AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY }).readEnv,
+    logSelection: (e) => refused.push(e),
+  });
+  assert.deepEqual(refused, [{ status: "refused", error: "AI_LAB_TEXT_MODE_INVALID" }]);
+  assert.doesNotMatch(JSON.stringify([entries, refused]), new RegExp(FAKE_OPENAI_KEY));
+  // Unchanged default: single_model on the provider's AI_LAB_POST_MODELS entry.
+  const legacy: Record<string, string>[] = [];
+  createAiLabTextStages({ readEnv: fakeEnv({ AI_LAB_CLAUDE_TWO_STAGE: "enabled" }).readEnv, logSelection: (e) => legacy.push(e) });
+  assert.deepEqual(legacy[0], {
+    status: "selected",
+    mode: "single_model",
+    provider: "anthropic",
+    generateModel: "claude-opus-5-5",
+    rewriteModel: "claude-opus-5-5",
+  });
+});
+
+for (
+  const [name, stage, model] of [
+    ["the Luna draft answered by Sol", 0, "gpt-6.1-sol-2026-09-01"],
+    ["the Luna draft answered by another Luna", 0, "gpt-6-luna-mini"],
+    ["the Sol rewrite answered by Luna", 1, "gpt-6-luna-2026-09-01"],
+    ["the Sol rewrite answered by an older Sol", 1, "gpt-6-sol"],
+  ] as const
+) {
+  test(`task45 (C): ${name} is a model mismatch held before X, with no other model tried`, async () => {
+    const f = t45Fixture("C_luna_sol", {
+      respond: (_c, index) =>
+        t45Body(
+          "C_luna_sol",
+          index,
+          index ? { decision: "rewritten", text: TASK39_GOOD_REWRITE, edits: [] } : { text: TASK39_GOOD_DRAFT },
+          index === stage ? model : undefined,
+        ),
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_OPENAI_TEXT_RESPONSE_MODEL_MISMATCH/);
+    assert.equal(f.recorder.calls.length, stage + 1);
+    assert.deepEqual(
+      f.recorder.calls.map((c) => (c.body as { model: string }).model),
+      ["gpt-6-luna", "gpt-6.1-sol"].slice(0, stage + 1),
+    );
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.at(-1), "release:PRE_X_FAILED");
+  });
+}
+
+for (
+  const [name, respond, reason] of [
+    ["HTTP 500", () => jsonResponse(500, { error: { message: "synthetic" } }), /GENERATION_FAILED/],
+    ["HTTP 429", () => jsonResponse(429, { error: { message: "synthetic" } }), /GENERATION_FAILED/],
+    ["disconnect", () => {
+      throw new TypeError("fixture disconnect");
+    }, /GENERATION_FAILED/],
+    ["timeout", (_c: RecordedCall, _i: number, init: RequestInit | undefined) => hangUntilAborted(init), /GENERATION_FAILED:TIMEOUT/],
+  ] satisfies [string, Responder, RegExp][]
+) {
+  test(`task45 (C): a Sol rewrite ${name} sends nothing to X and is never retried on Luna, Sol or Claude`, async () => {
+    const f = t45Fixture("C_luna_sol", {
+      respond: (call, index, init) =>
+        index ? respond(call, index, init) : t45Body("C_luna_sol", 0, { text: TASK39_GOOD_DRAFT }),
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), reason);
+    assert.equal(f.recorder.calls.length, 2);
+    assert.ok(f.recorder.calls.every((c) => c.url === TASK39_URL.openai));
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.at(-1), "release:PRE_X_FAILED");
+    assert.equal(f.env.reads.includes("AI_LAB_TEXT_API_KEY"), false);
+  });
+}
+
+test("task45 (C): a Luna draft failure never reaches Sol or X", async () => {
+  const f = t45Fixture("C_luna_sol", { respond: () => jsonResponse(500, { error: { message: "synthetic" } }) });
+  await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /GENERATION_FAILED/);
+  assert.deepEqual(f.recorder.calls.map((c) => (c.body as { model: string }).model), ["gpt-6-luna"]);
+  assert.deepEqual(f.payloads, []);
+});
+
+test("task45 (C): Luna and Sol are priced per role at catalog rates; caps cut off and the ledger sums both", async () => {
+  const recorder = recordingFetch((call) => {
+    const model = (call.body as { model: string }).model;
+    return jsonResponse(200, openAiBody(model === "gpt-6-luna" ? { text: "本文" } : { decision: "keep", text: "本文", edits: [] }, {
+      model: `${model}-2026-09-01`,
+    }));
+  });
+  const text = createAiLabTextProvider(
+    { readEnv: fakeEnv({ AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY }).readEnv, fetch: recorder.fetch },
+    true,
+    "openai",
+    AI_LAB_TEXT_MODES.luna_sol,
+  );
+  const request = { brandId: "ai_salaryman_lab", postType: "brand_post", instructions: "指示", input: "題材", maxOutputTokens: 2000 };
+  // openAiBody usage: 1,000 input (200 cached) + 300 output.
+  const luna = (800 * 0.1 + 200 * 0.01 + 300 * 0.5) / 1e6;
+  const sol = (800 * 2 + 200 * 0.1 + 300 * 10) / 1e6;
+  for (let i = 0; i < 3; i++) {
+    const r = await text(request);
+    assert.ok(Math.abs(r.apiCostUsd - luna) < 1e-9, String(r.apiCostUsd));
+  }
+  await assert.rejects(text(request), /BUDGET_DENIED/);
+  const rewrite = await text({ ...request, maxOutputTokens: 3072, outputSchema: { name: "ai_lab_voice_rewrite", schema: { type: "object", properties: { decision: { type: "string" }, text: { type: "string" }, edits: { type: "array" } }, required: ["decision", "text", "edits"], additionalProperties: false } } }, "rewrite");
+  assert.ok(Math.abs(rewrite.apiCostUsd - sol) < 1e-9, String(rewrite.apiCostUsd));
+  await assert.rejects(text({ ...request, maxOutputTokens: 3072 }, "rewrite"), /BUDGET_DENIED/);
+  assert.deepEqual(recorder.calls.map((c) => (c.body as { model: string }).model), [
+    "gpt-6-luna",
+    "gpt-6-luna",
+    "gpt-6-luna",
+    "gpt-6.1-sol",
+  ]);
+  const ledger = text.costLedger();
+  assert.equal(ledger.generate.model, "gpt-6-luna");
+  assert.equal(ledger.rewrite.model, "gpt-6.1-sol");
+  assert.equal(ledger.generate.calls, 3);
+  assert.equal(ledger.rewrite.calls, 1);
+  assert.equal(ledger.total.calls, 4);
+  assert.ok(Math.abs(ledger.generate.estimatedUsd - 3 * luna) < 1e-9);
+  assert.ok(Math.abs(ledger.rewrite.estimatedUsd - sol) < 1e-9);
+  assert.ok(Math.abs(ledger.total.estimatedUsd - (3 * luna + sol)) < 1e-9);
+  // An output cap above the shared 3,072 limit is refused before any request.
+  await assert.rejects(text({ ...request, maxOutputTokens: 3073 }), /AI_LAB_OPENAI_TEXT_OUTPUT_BUDGET_INVALID/);
+  assert.equal(recorder.calls.length, 4);
+});
+
+test("task45 (C): a stage model outside the selected provider's priced catalog is refused before the key is read", async () => {
+  for (
+    const models of [
+      { generate: "claude-opus-5-5", rewrite: "gpt-6.1-sol" },
+      { generate: "gpt-6-luna", rewrite: "gpt-7-sol" },
+    ]
+  ) {
+    const env = fakeEnv({ AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY });
+    const recorder = recordingFetch(() => assert.fail("no request"));
+    const text = createAiLabTextProvider({ readEnv: env.readEnv, fetch: recorder.fetch }, true, "openai", models);
+    const request = { brandId: "ai_salaryman_lab", postType: "brand_post", instructions: "指示", input: "題材", maxOutputTokens: 3072 };
+    const stage = models.generate.startsWith("claude") ? "generate" : "rewrite";
+    await assert.rejects(text(request, stage), /AI_LAB_OPENAI_TEXT_MODEL_NOT_ALLOWED/);
+    assert.deepEqual(env.reads, []);
+    assert.equal(recorder.calls.length, 0);
+  }
+});
+
+test("task45 (D): on luna_sol, legitimate drafts pass to a different rewrite and fabricated drafts are held with X payload 0", async () => {
+  const topics = { "0927": TASK44_TOPIC_0927, "1008": TASK44_TOPIC_1008 } as const;
+  for (
+    const c of [
+      { topic: TASK44_TOPIC_0927, draft: TASK43_REAL_DRAFT_206, rewrite: TASK44_HAND_REWRITE_0927 },
+      { topic: TASK44_TOPIC_1008, draft: TASK44_HAND_DRAFT_1008, rewrite: TASK44_HAND_REWRITE_1008 },
+      { topic: TASK39_GOOD_TOPIC, draft: TASK39_GOOD_DRAFT, rewrite: TASK39_GOOD_REWRITE },
+    ]
+  ) {
+    assert.notEqual(c.draft, c.rewrite);
+    const f = t45Fixture("C_luna_sol", c);
+    const result = await dispatchAiLabScheduledBrandPost(f.args);
+    assert.equal(result.voiceRewriteDecision, "edited");
+    assert.deepEqual(f.payloads, [{ text: c.rewrite, pollOptions: undefined }]);
+  }
+  for (const c of TASK44_DRAFT_NEGATIVES.filter((x) => x.topic !== "mixed")) {
+    const topic = topics[c.topic as "0927" | "1008"];
+    const f = t45Fixture("C_luna_sol", {
+      topic,
+      draft: c.text + T41_TAG,
+      rewrite: c.topic === "0927" ? TASK44_HAND_REWRITE_0927 : TASK44_HAND_REWRITE_1008,
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_SOURCE_GROUNDING_REJECTED/, c.why);
+    assert.deepEqual(f.recorder.calls.map((x) => (x.body as { model: string }).model), ["gpt-6-luna"], c.why);
+    assert.deepEqual(f.payloads, [], c.why);
+  }
+  // A Sol rewrite that adds a staged reaction / invented episode is held after the editor, before X.
+  for (
+    const rewrite of [
+      TASK39_GOOD_REWRITE.replace("昨日直した。", "気づいて手が止まったんだよね。昨日直した。"),
+      TASK39_GOOD_REWRITE.replace("昨日直した。", "最近は毎朝この画面を触ってるから昨日直した。"),
+      TASK38_REAL_REWRITE_180,
+    ]
+  ) {
+    const f = t45Fixture("C_luna_sol", { rewrite });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_(VOICE_STYLE|VOICE_REWRITE|SOURCE_GROUNDING)_REJECTED/, rewrite);
+    assert.equal(f.recorder.calls.length, 2);
+    assert.deepEqual(f.payloads, []);
+  }
+  // The user-rejected Task36/38 rewrites stay rejected by the same (provider-independent) editor check.
+  assert.throws(() => groundedRewrite(TASK38_REAL_DRAFT_200, TOPIC_0930, TASK38_REAL_REWRITE_180), /AI_LAB_VOICE_STYLE_REJECTED/);
+  assert.throws(() => groundedRewrite(REAL_DRAFT_167, TOPIC_0930, REAL_REWRITE_156), /AI_LAB_VOICE_STYLE_REJECTED/);
+});
+
+test("task45 preview: A/B/C non-posting comparison and per-stage cost estimate (deny-net, hand-written text)", async () => {
+  const lines = [
+    "=== task45 preview: 3案比較（非投稿・非課金。題材=実記録10/08、原案/自然化=合成・手書き。実モデル出力・本人の文体PASSではない）===",
+    `[題材] ${TASK44_TOPIC_1008.replaceAll("\n", " / ")}`,
+    `[合成・手書き原案 ${[...TASK44_HAND_DRAFT_1008].length}字] ${TASK44_HAND_DRAFT_1008}`,
+    `[合成・手書き自然化 ${[...TASK44_HAND_REWRITE_1008].length}字] ${TASK44_HAND_REWRITE_1008}`,
+  ];
+  for (const pattern of T45_PATTERNS) {
+    const f = t45Fixture(pattern, { topic: TASK44_TOPIC_1008, draft: TASK44_HAND_DRAFT_1008, rewrite: TASK44_HAND_REWRITE_1008 });
+    const verdict = await dispatchAiLabScheduledBrandPost(f.args).then(() => "投稿前検査を通過（fixture内のみ。X送信なし）", (e: Error) => e.message);
+    const provider = T45_PROVIDER[pattern];
+    // Estimate: prompt characters as an upper proxy of input tokens, output at each stage's cap; list prices.
+    const stageCost = f.recorder.calls.map((call, i) => {
+      const p = sentPrompt(provider, call);
+      // deno-lint-ignore no-explicit-any
+      const b = call.body as Record<string, any>;
+      const inputTokens = [...p.system].length + [...p.user].length;
+      const outputCap = provider === "anthropic" ? b.max_tokens : b.max_output_tokens;
+      const tier = priceTierFor(findModelSpec(T45_MODELS[pattern][i])!, inputTokens);
+      return (inputTokens * tier.inputPer1M + outputCap * tier.outputPer1M) / 1e6;
+    });
+    assert.equal(stageCost.length, 2);
+    lines.push(
+      `[${pattern}] 原案 ${T45_MODELS[pattern][0]} 上限概算 $${stageCost[0].toFixed(4)} / 自然化 ${T45_MODELS[pattern][1]} 上限概算 $${stageCost[1].toFixed(4)} / 合計 $${(stageCost[0] + stageCost[1]).toFixed(4)} / ${verdict}`,
+    );
+  }
+  lines.push("[注] 概算=送信プロンプト文字数を入力トークン上限の近似、出力は各段の上限トークン、catalog定価。実請求・実モデルの有効性/品質は未検証。");
+  console.log(lines.join("\n"));
 });
