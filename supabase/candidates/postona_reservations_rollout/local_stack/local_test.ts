@@ -130,6 +130,17 @@ const genGet = async (s: { get(id: string): Promise<{ ok: boolean; value?: { con
 const TRIGGER_TOGGLE = (on: boolean) => `do $g$ begin if exists (select 1 from pg_trigger where tgname = 'reservations_changed_notify') then alter table postona_x_resv.reservations ${on ? "enable" : "disable"} trigger reservations_changed_notify; end if; end $g$;`;
 const listPathChange = (sql: string, vars: Record<string, string>) => owner(`begin; ${TRIGGER_TOGGLE(false)} ${sql}; ${TRIGGER_TOGGLE(true)} commit;`, vars);
 const rowDump = (id: string) => owner("select md5(r::text) from postona_x_resv.reservations r where id = :'i'", { i: id });
+// G3-02 #26: a race step waits until the other side is really parked in pg_sleep (a barrier or a holder), not a fixed time, so a loaded
+// machine (other slots' stacks on the same podman) cannot reorder the race. `app` = the session's application_name; '' = any session.
+const sleeping = async (app: string, min = 1) => {
+  for (let i = 0; i < 300; i++) {
+    // read as the stack's superuser: other roles' wait_event is visible only to it (this throw-away stack's own default password)
+    const n = Number(await psql("supabase_admin", "postgres", "select count(*) from pg_stat_activity where wait_event = 'PgSleep' and (:'a' = '' or application_name = :'a')", { a: app }));
+    if (n >= min) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`G3LS_RACE_SETUP: no session of '${app}' parked in pg_sleep within 30 s`);
+};
 const rowState = (id: string) => owner("select status || '/' || revision || '/' || coalesce(outcome_code, '-') from postona_x_resv.reservations where id = :'i'", { i: id });
 const countOf = (sql: string) => owner(sql).then(Number);
 
@@ -1068,7 +1079,6 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
     const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
     const plus1 = (r: string) => r.split("/").map((x) => String(Number(x) + 1)).join("/");
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const sub = await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #18 race", scheduledAt: at(64) });
     const c = cands(sub)[0];
     const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
@@ -1083,7 +1093,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await owner("create function public.g3ls18_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return new; end $$; create trigger g3ls18_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls18_barrier();", {});
     const r0 = await noteRows();
     const listing = ap("notifications", { limit: 100 });
-    await sleep(1000);
+    await sleeping("postona-x-approvals");
     const t0 = Date.now();
     await owner(`set lock_timeout = '20s'; ${lose}`, { u: d.userId });
     const waited = Date.now() - t0;
@@ -1098,7 +1108,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await moved();
     const r1 = await noteRows();
     const losing = owner(`begin; ${lose} select pg_sleep(3); commit;`, { u: d.userId });
-    await sleep(1000);
+    await sleeping("psql");
     const t1 = Date.now();
     const during = await ap("notifications", { limit: 100 });
     const listMs = Date.now() - t1;
@@ -1175,7 +1185,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const dl0 = await owner("select deadlocks from pg_stat_database where datname = current_database()", {});
     const tl = Date.now();
     const listing = ap("notifications", { limit: 100 });
-    await sleep(1000);
+    await sleeping("postona-x-approvals");
     const t0 = Date.now();
     await owner("set lock_timeout = '20s'; insert into public.brand_memberships (brand_id, user_id, role) select brand_id, :'b', 'member' from public.brand_memberships where user_id = :'u' and role = 'owner';", { u: d.userId, b: b.userId });
     const waited = Date.now() - t0;
@@ -1277,7 +1287,6 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
     const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
     const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
     const c = cands(await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #21 holder", scheduledAt: at(56) }))[0];
     const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
@@ -1292,7 +1301,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await owner("create function g3ls_test.x_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(4); return new; end $$; create trigger g3ls_x_barrier before insert on g3ls_test.x_calls for each row execute function g3ls_test.x_barrier();", {});
     const t0 = Date.now();
     const running = deliver();
-    await sleep(2000);
+    await sleeping("g3ls-x-worker-e2e-test-double");   // the fake X barrier: the send is in flight
     const holder = owner("begin; select 1 from public.common_accounts where user_id = :'u' for update; select pg_sleep(20); commit;", { u: d.userId });   // a G5 lifecycle step
     const run = await running;
     const ms = Date.now() - t0;
@@ -1315,7 +1324,6 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     const ap = (action: string, payload: unknown, token = d.token) => http(AP, { action, payload }, token);
     const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
     const noteRows = async () => `${await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId })}/${await owner("select count(*) from postona_x_resv.push_outbox where user_id = :'u'", { u: d.userId })}`;
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const c = cands(await ap("submit", { socialAccountId: d.account, clientRequestId: crypto.randomUUID(), body: "G3-02 #22 held", scheduledAt: at(55) }))[0];
     const ok = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
     assert.strictEqual(ok.status, 200, JSON.stringify(ok.body));
@@ -1324,7 +1332,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await owner("insert into postona_x_resv.reservation_events (reservation_id, revision, status, user_id, brand_id, candidate_id, scheduled_at) select :'i', 3000 + g, 'planned', :'u', (select brand_id from postona_x_resv.approval_candidates where id = :'c'), :'c', now() from generate_series(1, 8) g", { i: rid, u: d.userId, c: c.candidateId as string });   // SYNTHETIC records
     const r0 = await noteRows();
     const holder = owner("begin; select 1 from public.common_accounts where user_id = :'u' for update; select pg_sleep(20); commit;", { u: d.userId });   // a G5 lifecycle step
-    await sleep(1000);
+    await sleeping("psql");
     const t0 = Date.now();
     const held = await ap("notifications", { limit: 100 });
     const ms = Date.now() - t0;
@@ -1455,7 +1463,6 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
 
   await t.step("L44 G3-02 #25 (H1 #49 P3): the session ends between the page and its limit-100 look-ahead (a real GoTrue sign-out while the first call waits): 401, no row returned; the next request is 401 too", async () => {
     const AP = "postona-x-approvals-localtest";
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const total = Number(await owner("select count(*) from postona_x_resv.notifications where user_id = :'u'", { u: d.userId }));
     assert.ok(total > 100, `d has ${total} notifications (a full first page is needed)`);
     // one pending event (SYNTHETIC record) makes the first call's drain write a notification; a test-only 3 s barrier on that write holds the
@@ -1465,7 +1472,7 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     await owner("insert into postona_x_resv.reservation_events (reservation_id, revision, status, user_id, brand_id, candidate_id, scheduled_at) select :'i', 4001, 'planned', :'u', brand_id, :'c', now() from postona_x_resv.approval_candidates where id = :'c'", { i: rid, u: d.userId, c: cid });
     await owner("create function public.g3ls25_barrier() returns trigger language plpgsql as $$ begin perform pg_sleep(3); return new; end $$; create trigger g3ls25_barrier before insert on postona_x_resv.notifications for each row execute function public.g3ls25_barrier();", {});
     const listing = http(AP, { action: "notifications", payload: { limit: 100 } }, d.token);
-    await sleep(1000);
+    await sleeping("postona-x-approvals");
     const out = await fetch(`${API}/auth/v1/logout?scope=local`, { method: "POST", headers: { apikey: PUBLISHABLE, authorization: `Bearer ${d.token}` } });
     await out.body?.cancel();
     assert.ok(out.status === 204 || out.status === 200, `logout ${out.status}`);
@@ -1474,5 +1481,88 @@ from public.social_accounts where id = :'t';`, { t: acct, u: a.userId });
     console.log(`G3LS_L44 page answered ${answered.status} ${JSON.stringify(answered.body).slice(0, 80)}`);
     assert.deepStrictEqual([answered.status, answered.body.code, "notifications" in answered.body], [401, "POSTONA_RESV_AUTH_REQUIRED", false], "the session ended before the look-ahead: refused, no rows");
     assert.deepStrictEqual(code(await http(AP, { action: "notifications", payload: { limit: 100 } }, d.token)), "401 AUTH_REQUIRED", "and stays refused");
+  });
+
+  await t.step("L45 G3-02 #26: the worker against every X refusal shape (fake X): 400 / 403 / 429 -> failed before send, never retried; 500 -> uncertain, never re-sent; each result recorded once and turned into one notification", async () => {
+    const AP = "postona-x-approvals-localtest";
+    const f = await signUp("f26");
+    await firstRun(f);
+    f.account = await xConnect(f, "f1", "62926");
+    const ap = (action: string, payload: unknown) => http(AP, { action, payload }, f.token);
+    const cands = (a: Answer) => (a.body.candidates ?? []) as Array<Record<string, unknown>>;
+    const approved = async (name: string, days: number) => {
+      const c = cands(await ap("submit", { socialAccountId: f.account, clientRequestId: crypto.randomUUID(), body: `G3-02 #26 ${name}`, scheduledAt: at(days) }))[0];
+      const a = await ap("approve", { candidateId: c.candidateId, expectedRevision: 1, contentSha256: c.contentSha256 });
+      assert.strictEqual(a.status, 200, JSON.stringify(a.body));
+      return cands(a)[0].reservationId as string;
+    };
+    const results: Record<string, string> = {};
+    for (const [mode, days, want] of [["reject_400", 50, "failed/X_REJECTED_400"], ["reject_403", 51, "failed/X_REJECTED_403"], ["reject_429", 52, "failed/X_REJECTED_429"], ["http_500", 53, "uncertain/X_HTTP_500"]] as const) {
+      const rid = await approved(mode, days);
+      await makeDue(rid);
+      await snapshot(f.account!, await generationOf(f.account!));
+      const calls = await xCalls();
+      await xMode(mode);
+      const run = await deliver();
+      await xMode("ok");
+      const again = await deliver();
+      const state = await owner("select status || '/' || coalesce(outcome_code, '-') from postona_x_resv.reservations where id = :'i'", { i: rid });
+      results[mode] = state;
+      assert.deepStrictEqual([run.report?.sends, await xCalls(), again.report?.claimed ?? 0, state], [1, calls + 1, 0, want], `${mode}: ${JSON.stringify(run.report)}`);
+    }
+    console.log(`G3LS_L45 ${JSON.stringify(results)}`);
+    // each result is one recorded event, then one notification
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    const states = await owner("select string_agg(state, ',' order by state) from postona_x_resv.notifications where user_id = :'u' and kind = 'reservation_changed'", { u: f.userId });
+    assert.deepStrictEqual(states, "failed,failed,failed,uncertain");
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservation_events where user_id = :'u'", { u: f.userId }), "0");
+    assert.strictEqual((await ap("notifications", { limit: 100 })).status, 200);
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.notifications where user_id = :'u' and kind = 'reservation_changed'", { u: f.userId }), "4", "listed twice: once each");
+  });
+
+  await t.step("L46 G3-02 #26: the manual send ('send now') over real JWT -> Kong -> Edge -> PG with the fake X: sent once (repeat = the stored answer, no second call); 429 -> failed, no retry; unknown -> uncertain, never re-sent; another person / no token refused", async () => {
+    const SP = "postona-x-single-post-e2etest";
+    const g = await signUp("g26");
+    await firstRun(g);
+    g.account = await xConnect(g, "g1", "62927");
+    await snapshot(g.account!, await generationOf(g.account!));
+    const send = async (text: string, client = crypto.randomUUID(), token = g.token, account = g.account) =>
+      ({ client, answer: await http(SP, { socialAccountId: account, clientRequestId: client, text, consent: { confirmed: true, contentSha256: await sha256(text) } }, token) });
+    // the account's publishing switch (PR #262) is OFF after a connect: the send is refused before anything is recorded or sent
+    const cOff = await xCalls();
+    const off = await send("G3-02 #26 switch off");
+    assert.deepStrictEqual([off.answer.status, off.answer.body.code, await xCalls()], [403, "POSTONA_RESV_PUBLISH_DISABLED", cOff], JSON.stringify(off.answer.body));
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservations where user_id = :'u' and draft_id like 'single:%'", { u: g.userId }), "0");
+    // SYNTHETIC: the person turns publishing on for this account (the product's own control for it is G1 / G4's, not exercised here)
+    await owner("update public.social_accounts set publish_enabled = true where id = :'a'", { a: g.account! });
+    const c0 = await xCalls();
+    const first = await send("G3-02 #26 send now 1");
+    console.log(`G3LS_L46 first ${first.answer.status} ${JSON.stringify(first.answer.body)}`);
+    assert.deepStrictEqual([first.answer.status, first.answer.body.status, first.answer.body.simulated], [200, "sent", true], JSON.stringify(first.answer.body));
+    assert.match(String(first.answer.body.xPostId), /^9[0-9]{9}$/u);
+    assert.strictEqual(await xCalls(), c0 + 1);
+    const repeat = await http(SP, { socialAccountId: g.account, clientRequestId: first.client, text: "G3-02 #26 send now 1", consent: { confirmed: true, contentSha256: await sha256("G3-02 #26 send now 1") } }, g.token);
+    assert.deepStrictEqual([repeat.status, repeat.body.status, repeat.body.xPostId, await xCalls()], [200, "sent", first.answer.body.xPostId, c0 + 1], "the same request again: the stored answer, no second X call");
+    await xMode("reject_429");
+    const limited = await send("G3-02 #26 send now 429");
+    await xMode("ok");
+    assert.deepStrictEqual([limited.answer.status, limited.answer.body.status, limited.answer.body.code, await xCalls()], [200, "failed", "X_REJECTED_429", c0 + 2], JSON.stringify(limited.answer.body));
+    const limitedAgain = await http(SP, { socialAccountId: g.account, clientRequestId: limited.client, text: "G3-02 #26 send now 429", consent: { confirmed: true, contentSha256: await sha256("G3-02 #26 send now 429") } }, g.token);
+    assert.deepStrictEqual([limitedAgain.body.status, await xCalls()], ["failed", c0 + 2], "a failed send is not retried by the same request");
+    await xMode("unknown");
+    const unsure = await send("G3-02 #26 send now unknown");
+    await xMode("ok");
+    assert.deepStrictEqual([unsure.answer.status, unsure.answer.body.status, await xCalls()], [200, "uncertain", c0 + 3], JSON.stringify(unsure.answer.body));
+    const unsureAgain = await http(SP, { socialAccountId: g.account, clientRequestId: unsure.client, text: "G3-02 #26 send now unknown", consent: { confirmed: true, contentSha256: await sha256("G3-02 #26 send now unknown") } }, g.token);
+    assert.deepStrictEqual([unsureAgain.body.status, await xCalls()], ["uncertain", c0 + 3], "uncertain is never re-sent");
+    const other = await send("G3-02 #26 someone else", crypto.randomUUID(), b.token, g.account);
+    assert.ok(other.answer.status === 404 || other.answer.status === 403, `another person on g's account: ${other.answer.status} ${JSON.stringify(other.answer.body)}`);
+    assert.strictEqual(await xCalls(), c0 + 3, "nothing sent for another person");
+    const bareText = "G3-02 #26 no token";
+    const bare = await fetch(`${API}/functions/v1/${SP}`, { method: "POST", headers: { apikey: PUBLISHABLE, "content-type": "application/json" },
+      body: JSON.stringify({ socialAccountId: g.account, clientRequestId: crypto.randomUUID(), text: bareText, consent: { confirmed: true, contentSha256: await sha256(bareText) } }) });
+    await bare.body?.cancel();
+    assert.strictEqual(bare.status, 401);
+    assert.deepStrictEqual(await owner("select count(*) from postona_x_resv.reservations where user_id = :'u' and draft_id like 'single:%'", { u: g.userId }), "3", "three send-now rows, one per request id");
   });
 });

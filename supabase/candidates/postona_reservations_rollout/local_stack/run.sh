@@ -86,7 +86,7 @@ for sec in ["realtime", "studio", "local_smtp", "analytics"]:
 s, n = re.subn(r"(\[db\.seed\]\n(?:#.*\n)*)enabled = true", r"\1enabled = false", s, count=1); assert n == 1
 s, n = re.subn(r"enable_anonymous_sign_ins = false", "enable_anonymous_sign_ins = true", s, count=1); assert n == 1
 assert 'project_id = "g3ls"' in s
-for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest", "postona-x-approvals-localtest"]:
+for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest", "postona-x-approvals-localtest", "postona-x-single-post-e2etest"]:
     s += f'\n[functions.{fn}]\nverify_jwt = true\n'
 # G3-02 #10: the worker entries are called by the scheduler (pg_net, no user JWT; the worker checks its own secret), as a deploy needs them
 for fn in ["postona-x-reservation-worker", "postona-x-reservation-worker-e2etest"]:
@@ -97,7 +97,7 @@ fns="$WORK/p/supabase/functions"
 mkdir -p "$fns/_shared" "$fns/_shared_g3ls"
 for d in postona-x-reservations postona-threads-reservations postona-x-reservation-worker postona-x-single-post postona-x-approvals; do cp -R "$REPO/supabase/functions/$d" "$fns/"; done
 cp -R "$REPO/supabase/functions/_shared/postona_reservations" "$REPO/supabase/functions/_shared/postona_approvals" "$fns/_shared/"
-cp "$here/local_transport.ts" "$fns/_shared_g3ls/"
+cp "$here/local_transport.ts" "$here/fake_x.ts" "$fns/_shared_g3ls/"
 # Mutation runs only (G3LS_MUTANT): one exact replacement in a COPY that runs (the bundle copy's manifest paths still resolve to
 # this checkout); the checkout is never changed. Without a mutant the bundle's own rollout.sh runs.
 mkdir -p "$WORK/bundle"; cp "$bundle/rollout.sh" "$bundle/preflight.sql" "$bundle/MANIFEST.tsv" "$WORK/bundle/"
@@ -126,7 +126,7 @@ case "${G3LS_MUTANT:-}" in
 esac
 STEPS=17; case "${G3LS_MUTANT:-}" in no_017) STEPS=15 ;; no_018) STEPS=16 ;; esac
 RO_SH="$bundle/rollout.sh"; case "${G3LS_MUTANT:-}" in host_any|no_017|no_018) RO_SH="$WORK/bundle/rollout.sh" ;; esac
-for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest postona-x-approvals-localtest; do
+for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest postona-x-approvals-localtest postona-x-single-post-e2etest; do
   mkdir -p "$fns/$d"; cp "$here/$d/index.ts" "$fns/$d/"
   (cd "$WORK/p" && deno check --no-config --cached-only "supabase/functions/$d/index.ts" >/dev/null 2>&1) || fail "deno check $d"
 done
@@ -256,7 +256,7 @@ own -v t="$TEST_PW" >/dev/null <<'SQL'
 create schema g3ls_test;
 create table g3ls_test.x_token_snapshot (social_account_id text primary key, token text not null, generation text not null);
 create table g3ls_test.x_calls (id bigint generated always as identity primary key, bearer_sha256 text not null, text text not null, at timestamptz not null default now());
-create table g3ls_test.x_mode (one boolean primary key default true check (one), mode text not null check (mode in ('ok', 'reject_401', 'unknown')));
+create table g3ls_test.x_mode (one boolean primary key default true check (one), mode text not null check (mode in ('ok', 'reject_400', 'reject_401', 'reject_403', 'reject_429', 'http_500', 'unknown')));
 insert into g3ls_test.x_mode (mode) values ('ok');
 create table g3ls_test.tick_target (one boolean primary key default true check (one), url text not null);
 create role g3ls_test_login login noinherit password :'t';
