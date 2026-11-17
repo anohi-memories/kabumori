@@ -3725,7 +3725,6 @@ for (const pattern of T45_PATTERNS) {
   test(`task46 (B) ${pattern}: a weak topic is held before any request; X payload 0`, async () => {
     const weak = [
       ...TASK46_NEGATIVES.map((c) => ({ id: c.id, seed: c.seed })),
-      { id: "実記録 20261009（本人判断待ち。現行の判定の記録で、正解ではない）", seed: await t46RecordedTopic("20261009-shared-account-withdrawal-safety") },
     ];
     for (const c of weak) {
       const expected = assessAiLabTopicValue(c.seed).postable ? AI_LAB_TOPIC_INTEREST_HELD : AI_LAB_TOPIC_VALUE_HELD;
@@ -3791,6 +3790,23 @@ test("task46 (B): A/B/C give the same topic audit — it is computed from the to
     }
     assert.equal(outcomes.size, 1, topic);
     assert.equal([...outcomes][0] === "past-topic-gate", assessAiLabTopicInterest(topic).postable, topic);
+  }
+});
+
+// Task49: the owner adopted the 10/09 and 10/10 topics (2026-11-18). Topic gate only: this does not claim any
+// model wording passes the owner's voice rules, and nothing here is posted (X payload 0 for every pattern).
+test("task49 (D): 10/09 and 10/10 pass the shared topic gate in A/B/C; no topic-held rejection (hand-written fixture text, recorder only)", async () => {
+  for (const id of ["20261009-shared-account-withdrawal-safety", "20261010-ai-consult-workspace-memory-safety"]) {
+    const topic = await t46RecordedTopic(id);
+    assert.equal(assessAiLabTopicValue(topic).postable, true, id);
+    assert.equal(assessAiLabTopicInterest(topic).postable, true, id);
+    for (const pattern of T45_PATTERNS) {
+      const f = t45Fixture(pattern, { topic });
+      const outcome = await dispatchAiLabScheduledBrandPost(f.args).then(() => "past-topic-gate", (e: Error) => e.message);
+      assert.doesNotMatch(outcome, /TOPIC_(VALUE|INTEREST)_HELD/u, `${pattern} ${id}`);
+      // Any send comes from the hand-written fixture text through the unchanged source/voice guards (recorder, not X).
+      assert.ok(f.payloads.length <= 1, `${pattern} ${id}`);
+    }
   }
 });
 
