@@ -1376,7 +1376,7 @@ test("preview hold: reflow-only and emoji-only edits require review", () => {
 // ---- Free rewrite (decision "rewritten"): wording may change, facts may not ----
 // Synthetic, hand-written texts. Not real Claude output.
 const SYNTHETIC_FREE_REWRITE_326 = [
-  "開発メモの見出し、書いた直後は長いほうが親切に見えるんですよね。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいな。",
+  "開発メモの見出し、書いた直後は長いほうが親切に見えるんだよね。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいな。",
   "でも後で探すとき目に入るのは最初の数文字だけ。長い見出しが一覧に並ぶと、どれも同じに見えて結局ぜんぶ開くことになる。",
   "「ログイン：ボタン無反応」くらいまで削ると画面名が頭に来るので、流し見でも引っかかる。細かい話は本文に書けばいい。",
   "ただ「修正」「バグ対応」だけだと何の話かわからない。どこで何が起きたかは残す。後で自分が検索しそうな言葉が入っていれば十分かな。",
@@ -1518,7 +1518,7 @@ const HAND_REWRITE_254 = [
   "#個人開発",
 ].join("\n\n");
 const HAND_REWRITE_326 = [
-  "開発メモの見出し、書いた直後は長いほうが親切な気がするんですよね。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいな。",
+  "開発メモの見出し、書いた直後は長いほうが親切な気がするんだよね。「ログイン画面でボタンを押しても反応しない件の原因と対応について」みたいな。",
   "でも後で探すとき見てるのは最初の数文字だけ。長いのが並ぶとどれも同じに見えて全部開くはめになる😂",
   "「ログイン：ボタン無反応」くらいがちょうどいい。画面名が頭に来るから流し見でも拾える。",
   "とはいえ「修正」「バグ対応」だけだと何の話かわからないし、どこで何が起きたかは残したい。細かい話は本文で。",
@@ -1609,7 +1609,7 @@ const task32Holds: readonly [string, string, string, RegExp][] = [
   [
     "254: ending tweaks only are not a rewrite",
     REAL_DRAFT_254,
-    REAL_DRAFT_254.replace("ほうだった。", "ほうでした。").replace("だったりする。", "だったり。"),
+    REAL_DRAFT_254.replace("ほうだった。", "ほうだったな。").replace("だったりする。", "だったり。"),
     /VOICE_REWRITE_REVIEW_REQUIRED/,
   ],
   [
@@ -2192,5 +2192,217 @@ test("task35 (2): both prompts forbid unsourced progress, reasons, feelings and 
   assert.match(
     rewrite.system,
     /進み具合（「あと少しだった」）・決めた理由（「取り消せないから」）・気持ち（「怖かった」）・次回の予定/u,
+  );
+});
+
+// ---- Task37: one register and natural rhythm after the user rejected the Task36 rewrite ----
+// REAL_DRAFT_167 and REAL_REWRITE_156 are the Task36 real Claude Opus draft and
+// second-stage rewrite (user verdict: "まだ固い。もっとフランクに"), copied from
+// the G6-01 Task37 body and used here only as fixed inputs (no API call).
+// CASUAL_REWRITE_167 is hand-written for this test and is not Claude output.
+// These static checks catch a register regression; they do not prove that a
+// text sounds natural, which only the user can judge.
+const REAL_DRAFT_167 = [
+  "iOS版で実データ接続とX認証の確認を進めてた。",
+  "途中でテスト用のXアカウントが既存の接続と重なってるのに気づいた。そのまま進めると本番に影響するかもしれない状態。",
+  "なのでそこで止めた。先に進めるより安全側を優先。",
+  "あわせて進捗の残し方も変えた。完了確認のたびに公開してよい開発内容だけを共有メモに残す運用にした。",
+  "#個人開発",
+].join("\n\n");
+const REAL_REWRITE_156 = [
+  "iOS版で実データ接続とX認証の確認してたんだけど\n途中でテスト用のXアカウントが既存の接続とかぶってるのに気づいて。\nこのまま行くと本番に影響出るかもしれないので止めました。\n進めるより安全側です。",
+  "ついでに進捗の残し方も変えた。\n完了確認のたびに公開していい開発内容だけ共有メモに残すことに。",
+  "#個人開発",
+].join("\n\n");
+const CASUAL_REWRITE_167 = [
+  "iOS版の実データ接続とX認証を見てたら途中で気づいた。テスト用のXアカウントが既存の接続とかぶってる。",
+  "このまま進めたら本番に影響出るかもだから、そこでいったん止めた。",
+  "あと完了確認のたびに公開していい開発内容だけ共有メモに残すようにした。",
+  "#個人開発",
+].join("\n\n");
+
+function task37Fixture(rewrite: string) {
+  return fixture(
+    (_call, index) =>
+      providerResponse(
+        index
+          ? { decision: "rewritten", text: rewrite, edits: [] }
+          : { text: REAL_DRAFT_167 },
+      ),
+    { topic: TOPIC_0930 },
+  );
+}
+
+test("task37: the saved real draft is grounded and the rejected real rewrite mixes registers", () => {
+  assert.equal([...REAL_DRAFT_167].length, 167);
+  assert.equal([...REAL_REWRITE_156].length, 156);
+  assert.deepEqual(ungroundedClaims(REAL_DRAFT_167, TOPIC_0930), []);
+  assert.deepEqual(ungroundedClaims(REAL_REWRITE_156, TOPIC_0930), []);
+  // Every other free-rewrite check passes, so only the register guard holds it:
+  // 「止めました」 and the fragment 「安全側です。」 in a plain-form draft.
+  assert.ok(wordingSimilarity(REAL_DRAFT_167, REAL_REWRITE_156) < 0.85);
+  assert.throws(
+    () => groundedRewrite(REAL_DRAFT_167, TOPIC_0930, REAL_REWRITE_156),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  );
+  for (
+    const text of [
+      REAL_REWRITE_156.replace("進めるより安全側です。", "進めるより安全側。"),
+      REAL_REWRITE_156.replace("止めました。", "止めた。"),
+      CASUAL_REWRITE_167.replace("いったん止めた。", "いったん止めました。"),
+      CASUAL_REWRITE_167.replace(
+        "残すようにした。",
+        "残すようにしたんですよね。",
+      ),
+      CASUAL_REWRITE_167.replace("かぶってる。", "かぶってます😂"),
+    ]
+  ) {
+    assert.throws(
+      () => groundedRewrite(REAL_DRAFT_167, TOPIC_0930, text),
+      /AI_LAB_VOICE_STYLE_REJECTED/,
+      text,
+    );
+  }
+});
+
+test("task37: the rejected real rewrite is held before X; a one-register rewrite is sent", async () => {
+  const held = task37Fixture(REAL_REWRITE_156);
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(held.args),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  );
+  assert.equal(held.recorder.calls.length, 2);
+  assert.deepEqual(held.payloads, []);
+  assert.equal(held.events.includes("start X"), false);
+
+  assert.ok([...CASUAL_REWRITE_167].length <= 167);
+  assert.deepEqual(ungroundedClaims(CASUAL_REWRITE_167, TOPIC_0930), []);
+  const sent = task37Fixture(CASUAL_REWRITE_167);
+  await dispatchAiLabScheduledBrandPost(sent.args);
+  assert.equal(sent.recorder.calls.length, 2);
+  assert.deepEqual(sent.payloads, [{
+    text: CASUAL_REWRITE_167,
+    pollOptions: undefined,
+  }]);
+});
+
+test("task37: the guard never relaxes keep, ending-only edits, grounding or protected strings", async () => {
+  const prepared = prepareAiLabVoiceRewrite({
+    brandId: "ai_salaryman_lab",
+    postType: "brand_post",
+    text: REAL_DRAFT_167,
+  }, TOPIC_0930);
+  assert.throws(
+    () =>
+      prepared.validate({ decision: "keep", text: REAL_DRAFT_167, edits: [] }),
+    /VOICE_REWRITE_REVIEW_REQUIRED/,
+  );
+  for (
+    const [label, text, pattern] of [
+      [
+        "ending only",
+        REAL_DRAFT_167.replace("かもしれない状態。", "かもな状態。"),
+        /VOICE_REWRITE_REVIEW_REQUIRED/,
+      ],
+      [
+        "invented feeling",
+        CASUAL_REWRITE_167.replace("いったん止めた。", "怖かったから止めた。"),
+        /REJECTED/,
+      ],
+      [
+        "invented plan",
+        CASUAL_REWRITE_167.replace(
+          "いったん止めた。",
+          "止めた。切り分けは次回。",
+        ),
+        /REJECTED/,
+      ],
+      [
+        "invented episode",
+        CASUAL_REWRITE_167.replace(
+          "いったん止めた。",
+          "最近はいつも止めてる。",
+        ),
+        /REJECTED/,
+      ],
+      [
+        "lost tag",
+        CASUAL_REWRITE_167.replace("\n\n#個人開発", ""),
+        /VOICE_REWRITE_REJECTED/,
+      ],
+      [
+        "changed X",
+        CASUAL_REWRITE_167.replace("X認証", "Threads認証"),
+        /VOICE_REWRITE_REJECTED/,
+      ],
+      [
+        "two commas",
+        CASUAL_REWRITE_167.replace("このまま進めたら", "このまま、進めたら"),
+        /AI_LAB_VOICE_STYLE_REJECTED/,
+      ],
+      [
+        "。笑",
+        CASUAL_REWRITE_167.replace("いったん止めた。", "いったん止めた。笑"),
+        /REJECTED/,
+      ],
+    ] as const
+  ) {
+    assert.throws(
+      () => groundedRewrite(REAL_DRAFT_167, TOPIC_0930, text),
+      pattern,
+      label,
+    );
+  }
+  // Polite drafts may stay polite or turn plain; a question keeps its 「？」.
+  assert.deepEqual(freeRewrite(QUESTION_DRAFT, QUESTION_FREE_REWRITE), {
+    text: QUESTION_FREE_REWRITE,
+    decision: "edited",
+  });
+  const plainQuestion = QUESTION_FREE_REWRITE.replace(
+    "わからないんですよね。",
+    "よくわからない。",
+  ).replace("設定の説明、よく", "設定の説明、");
+  assert.deepEqual(freeRewrite(QUESTION_DRAFT, plainQuestion), {
+    text: plainQuestion,
+    decision: "edited",
+  });
+  // An editor that leaves X outside the topic is held before X.
+  const offTopic = task37Fixture(
+    CASUAL_REWRITE_167.replace("いったん止めた。", "田中さんと止めた。"),
+  );
+  await assert.rejects(
+    dispatchAiLabScheduledBrandPost(offTopic.args),
+    /REJECTED/,
+  );
+  assert.deepEqual(offTopic.payloads, []);
+});
+
+test("task37: both prompts ask for one plain register and natural flow, not cosmetic cuts", async () => {
+  const f = task37Fixture(CASUAL_REWRITE_167);
+  await dispatchAiLabScheduledBrandPost(f.args);
+  const { system } = f.recorder.calls[0].body as { system: string };
+  const draftRules = system.slice(system.indexOf("最優先: "));
+  assert.match(
+    draftRules,
+    /語尾は常体の話し言葉でそろえ、途中で急に『〜ました』『〜です』で締めない/u,
+  );
+  assert.match(draftRules, /報告書風の体言止めを並べない/u);
+  assert.match(draftRules, /業務報告の言い方をそのまま写さず/u);
+  assert.match(draftRules, /短い文を同じ形で縦に並べるだけにしない/u);
+  // The fabrication rules still come first.
+  assert.ok(draftRules.indexOf("最優先: ") < draftRules.indexOf("語尾は常体"));
+  const rewrite = (f.recorder.calls[1].body as { system: string }).system;
+  assert.doesNotMatch(rewrite, /です・ますと常体を自然に混ぜ/u);
+  assert.match(
+    rewrite,
+    /語尾は常体の話し言葉にそろえます。原案にない「です」「ます」「ました」を足さず/u,
+  );
+  assert.match(rewrite, /「安全側です。」のような名詞だけの不自然な断片/u);
+  assert.match(rewrite, /「〜ました」を変えただけ/u);
+  assert.match(rewrite, /段落と語順を大きく組み替えて/u);
+  assert.match(rewrite, /原案の事実が少ないときは短くてかまいません/u);
+  assert.match(
+    rewrite,
+    /原文にない時期・人物・体験・実績・近況・「私」・方言を足しません/u,
   );
 });
