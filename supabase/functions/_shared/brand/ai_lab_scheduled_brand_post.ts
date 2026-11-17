@@ -22,6 +22,7 @@ import {
   prepareAiLabVoiceRewrite,
 } from "./ai_lab_voice_rewrite.ts";
 import { AI_LAB_TOPIC_VALUE_HELD, assessAiLabTopicValue } from "./ai_lab_topic_value.ts";
+import { AI_LAB_TOPIC_INTEREST_HELD, assessAiLabTopicInterest } from "./ai_lab_topic_interest.ts";
 
 // 汎用テーマ・「個人開発は、」書き出し・直近投稿との重複で弾かれた場合に、再生成する最大試行回数
 // （初回を含む）。全て不合格なら投稿せず失敗側に倒す（重複投稿を出すより1枠見送る方が安全）。
@@ -52,7 +53,8 @@ export function preXReleaseReason(error: unknown): string {
   if (/^BRAND_POST_(GENERATION_FAILED|EMPTY_OUTPUT|LENGTH_LIMIT_EXCEEDED)/u.test(message)) return "PRE_X_GENERATION_FAILED";
   if (message === "AI_LAB_CONTENT_DIVERSITY_REJECTED" || message === "AI_LAB_VOICE_REWRITE_REJECTED" ||
     message === "AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED" || message === AI_LAB_VOICE_STYLE_REJECTED ||
-    message === AI_LAB_SOURCE_GROUNDING_REJECTED || message === AI_LAB_TOPIC_VALUE_HELD) {
+    message === AI_LAB_SOURCE_GROUNDING_REJECTED || message === AI_LAB_TOPIC_VALUE_HELD ||
+    message === AI_LAB_TOPIC_INTEREST_HELD) {
     return "PRE_X_CONTENT_REJECTED";
   }
   if (message === "AI_LAB_CROSS_BRAND_DUPLICATE") return "PRE_X_FINGERPRINT_BLOCKED";
@@ -143,6 +145,10 @@ export async function dispatchAiLabScheduledBrandPost({
     // claim source from paying a provider for a topic with nothing a reader can picture.
     if (claim.kind === "diary" && !assessAiLabTopicValue(claim.topic).postable) {
       throw new BrandContextError(AI_LAB_TOPIC_VALUE_HELD);
+    }
+    // Task46: the same provider-independent interest judgement as the candidate builder.
+    if (claim.kind === "diary" && !assessAiLabTopicInterest(claim.topic).postable) {
+      throw new BrandContextError(AI_LAB_TOPIC_INTEREST_HELD);
     }
     const recentFingerprints = await loadRecentFingerprints();
     let retryViolations: readonly string[] = [];

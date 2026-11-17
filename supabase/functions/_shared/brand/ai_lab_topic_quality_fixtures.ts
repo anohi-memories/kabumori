@@ -287,3 +287,106 @@ export const TASK44_HAND_REWRITE_1008 = [
   "",
   "#個人開発",
 ].join("\n");
+
+/*
+ * Task46: synthetic (合成) diary topics for the topic-interest judgement (ai_lab_topic_interest.ts).
+ * Every seed here is invented for the test; none is a diary record, a model output or a post.
+ */
+export type Task46Case = { id: string; seed: string; why: string; weaknesses?: readonly string[] };
+
+/** Legitimate topics that must not be held: a snag, a surprise or a deliberate choice is in the facts. */
+export const TASK46_POSITIVES: readonly Task46Case[] = [
+  {
+    id: "P1 ニアミス",
+    seed: facts("できごと: 通知の設定画面を作り直した。", "詰まったこと: 古い設定を移すときに、前の設定が消えそうになった。"),
+    why: "実際に起きた「消えそうになった」（予防の「消えないよう」とは別）",
+  },
+  {
+    id: "P2 見つけた不具合",
+    seed: facts("できごと: 前回ログインしたアカウントがそのまま引き継がれる問題を見つけた。"),
+    why: "見つけた問題そのものが出来事",
+  },
+  {
+    id: "P3 選んだ理由",
+    seed: facts(
+      "できごと: 一覧画面に絞り込みボタンを足すか迷った。",
+      "決めたこと: ボタンを増やすのではなく、並び順を新しい順にするだけにとどめた。",
+    ),
+    why: "迷い＋「ではなく」「とどめた」という選択",
+  },
+  {
+    id: "P4 意外だった",
+    seed: facts("できごと: 文字を大きくしたら、かえって一画面に収まる量が減って読みにくくなった。", "詰まったこと: 実は行間の方が効いていた。"),
+    why: "意外性（実は）",
+  },
+  {
+    id: "P5 AIを使ったが話の中心は失敗",
+    seed: facts(
+      "できごと: AIで作った説明文を画面に出したら、同じ言い回しが3回続いていた。",
+      "決めたこと: 出す前に自分で1回読むことにした。",
+    ),
+    why: "「AIで作った」を含むが、失敗（同じ言い回しが3回）と決めたことがある",
+  },
+];
+
+/** Topics that must be held: progress lists, adverts, "made with AI", report tone, restating. */
+export const TASK46_NEGATIVES: readonly Task46Case[] = [
+  {
+    id: "N1 進捗の列挙",
+    seed: facts("できごと: ホーム画面と設定画面と通知画面を更新し、新しいボタンも追加した。"),
+    why: "何をしたかの列挙だけ",
+    weaknesses: ["NO_STORY"],
+  },
+  {
+    id: "N2 宣伝調",
+    seed: facts(
+      "できごと: 新しいグラフ画面をリリースしました。ぜひ使ってみてください。",
+      "詰まったこと: 色合わせに時間がかかった。",
+    ),
+    why: "宣伝（ぜひ・使ってみて）は詰まりがあっても保留",
+    weaknesses: ["PROMOTIONAL"],
+  },
+  {
+    id: "N3 AIで作った報告",
+    seed: facts("できごと: AIに頼んで投稿画面を作った。"),
+    why: "「AIで作った」だけ",
+    weaknesses: ["NO_STORY", "AI_MADE_REPORT"],
+  },
+  {
+    id: "N4 報告書調・材料1つ",
+    seed: facts(
+      "できごと: 設定画面の改修を実施し、表示の確認を完了した。",
+      "決めたこと: 項目を2つに分けた構成で対応した。",
+    ),
+    why: "工夫（分け）が1つあるだけの報告書調",
+    weaknesses: ["REPORT_TONE"],
+  },
+  {
+    id: "N5 同じ内容の言い直し",
+    seed: facts(
+      "できごと: 送信画面のボタンの色を青に変えて、押しやすくした。",
+      "決めたこと: 送信画面のボタンの色は青に変えて、押しやすくする。",
+      "詰まったこと: 色を決めるのに迷った。",
+    ),
+    why: "決めたことができごとの言い直しで、材料は「迷った」1つ",
+    weaknesses: ["REPEATED_STRUCTURE"],
+  },
+  {
+    id: "N6 予防だけ",
+    seed: facts(
+      "できごと: 保存ボタンの処理を見直した。",
+      "詰まったこと: 二重に保存されないよう、失敗した場合の扱いも考えた。",
+    ),
+    why: "「〜ないよう」「〜場合」は予防で、起きた出来事ではない",
+    weaknesses: ["NO_STORY"],
+  },
+  {
+    id: "N7 切り口だけに物語",
+    seed: facts(
+      "できごと: 一覧画面の並び順を更新した。",
+      "今回の切り口: 実は意外な失敗に気づいて、別の方法を優先した話",
+    ),
+    why: "切り口の語は数えない（題材の事実に無い物語で通さない）",
+    weaknesses: ["NO_STORY"],
+  },
+];

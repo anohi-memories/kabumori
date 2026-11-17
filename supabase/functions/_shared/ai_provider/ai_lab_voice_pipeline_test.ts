@@ -3701,3 +3701,134 @@ test("task45 preview: A/B/C non-posting comparison and per-stage cost estimate (
   lines.push("[注] 概算=送信プロンプト文字数を入力トークン上限の近似、出力は各段の上限トークン、catalog定価。実請求・実モデルの有効性/品質は未検証。");
   console.log(lines.join("\n"));
 });
+
+// ---------------------------------------------------------------------------
+// Task46: the shared topic-interest judgement through A (Claude→Claude), B (Sol→Sol), C (Luna→Sol).
+// fetch is a recorder (deny-net); nothing is posted. Topics are 実記録 (bundled diary) or 合成; drafts and
+// rewrites are 合成・手書き or earlier recorded real drafts — never a model output, never a voice PASS.
+import { AI_LAB_TOPIC_INTEREST_HELD, assessAiLabTopicInterest } from "../brand/ai_lab_topic_interest.ts";
+import { TASK46_NEGATIVES, TASK46_POSITIVES } from "../brand/ai_lab_topic_quality_fixtures.ts";
+import {
+  diaryEventKey,
+  diaryUnitsFor,
+  parseDevDiaryMarkdown,
+  sanitizeDiaryEntry,
+} from "../brand/ai_lab_dev_diary_context.ts";
+
+async function t46RecordedTopic(eventId: string): Promise<string> {
+  const raw = parseDevDiaryMarkdown(await loadAiLabDevDiaryMarkdown()).find((e) => e.eventId === eventId)!;
+  const entry = sanitizeDiaryEntry(raw)!;
+  return diaryUnitsFor(entry, diaryEventKey(entry.eventId!), 1, [])[0].seed;
+}
+
+for (const pattern of T45_PATTERNS) {
+  test(`task46 (B) ${pattern}: a weak topic is held before any request; X payload 0`, async () => {
+    const weak = [
+      ...TASK46_NEGATIVES.map((c) => ({ id: c.id, seed: c.seed })),
+      { id: "実記録 20261009", seed: await t46RecordedTopic("20261009-shared-account-withdrawal-safety") },
+    ];
+    for (const c of weak) {
+      const expected = assessAiLabTopicValue(c.seed).postable ? AI_LAB_TOPIC_INTEREST_HELD : AI_LAB_TOPIC_VALUE_HELD;
+      assert.equal(expected, AI_LAB_TOPIC_INTEREST_HELD, `${c.id} should reach the interest step`);
+      // Even a grounded, well-formed draft and rewrite cannot carry a weak topic.
+      const f = t45Fixture(pattern, { topic: c.seed });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), new RegExp(expected), c.id);
+      assert.equal(f.recorder.calls.length, 0, c.id);
+      assert.deepEqual(f.payloads, [], c.id);
+      assert.deepEqual(f.events, ["claim", "release:PRE_X_CONTENT_REJECTED"], c.id);
+    }
+  });
+
+  test(`task46 (B) ${pattern}: legitimate topics keep their two-stage result (実記録 topics, hand-written text)`, async () => {
+    for (
+      const c of [
+        { topic: TASK44_TOPIC_0927, draft: TASK43_REAL_DRAFT_206, rewrite: TASK44_HAND_REWRITE_0927 },
+        { topic: TASK44_TOPIC_1008, draft: TASK44_HAND_DRAFT_1008, rewrite: TASK44_HAND_REWRITE_1008 },
+        { topic: TASK39_GOOD_TOPIC, draft: TASK39_GOOD_DRAFT, rewrite: TASK39_GOOD_REWRITE },
+      ]
+    ) {
+      assert.equal(assessAiLabTopicInterest(c.topic).postable, true);
+      const f = t45Fixture(pattern, c);
+      const result = await dispatchAiLabScheduledBrandPost(f.args);
+      assert.equal(result.voiceRewriteDecision, "edited");
+      assert.deepEqual(f.payloads, [{ text: c.rewrite, pollOptions: undefined }]);
+      assert.equal(f.recorder.calls.length, 2);
+    }
+  });
+
+  test(`task46 (B) ${pattern}: a draft that invents a surprise, feeling or event for a postable topic is held; X payload 0`, async () => {
+    for (
+      const draft of [
+        TASK44_HAND_DRAFT_1008.replace("なので背景は", "実は友だちに言われて気づいた。なので背景は"),
+        TASK44_HAND_DRAFT_1008.replace("なので背景は", "正直ちょっと焦った。なので背景は"),
+        TASK44_HAND_DRAFT_1008.replace("なので背景は", "フォロワーさんから反響もあった。なので背景は"),
+      ]
+    ) {
+      assert.notEqual(draft, TASK44_HAND_DRAFT_1008);
+      const f = t45Fixture(pattern, { topic: TASK44_TOPIC_1008, draft, rewrite: TASK44_HAND_REWRITE_1008 });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_SOURCE_GROUNDING_REJECTED/, draft);
+      assert.equal(f.recorder.calls.length, 1, draft);
+      assert.deepEqual(f.payloads, [], draft);
+    }
+  });
+}
+
+test("task46 (B): A/B/C give the same topic audit — it is computed from the topic alone, before any provider", async () => {
+  const topics = [
+    TASK44_TOPIC_0927,
+    TASK44_TOPIC_1008,
+    TASK39_GOOD_TOPIC,
+    ...TASK46_POSITIVES.map((c) => c.seed),
+    ...TASK46_NEGATIVES.map((c) => c.seed),
+  ];
+  for (const topic of topics) {
+    const outcomes = new Set<string>();
+    for (const pattern of T45_PATTERNS) {
+      const f = t45Fixture(pattern, { topic });
+      const outcome = await dispatchAiLabScheduledBrandPost(f.args).then(() => "past-topic-gate", (e: Error) => e.message);
+      // Only topic-gate outcomes are compared; later stages may legitimately differ by draft text.
+      outcomes.add(/TOPIC_(VALUE|INTEREST)_HELD/u.test(outcome) ? outcome : "past-topic-gate");
+    }
+    assert.equal(outcomes.size, 1, topic);
+    assert.equal([...outcomes][0] === "past-topic-gate", assessAiLabTopicInterest(topic).postable, topic);
+  }
+});
+
+test("task46 (B): the OpenAI one-stage path also holds a weak topic before any request; evergreen is not judged", async () => {
+  const weak = TASK46_NEGATIVES[0];
+  const f = fixture(() => jsonResponse(500, {}), { flag: "disabled", kind: "diary", topic: weak.seed });
+  await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), new RegExp(AI_LAB_TOPIC_INTEREST_HELD));
+  assert.deepEqual(f.events, ["claim", "release:PRE_X_CONTENT_REJECTED"]);
+  assert.deepEqual(f.payloads, []);
+  const evergreen = fixture(() => jsonResponse(500, {}), { flag: "disabled", kind: "evergreen", topic: weak.seed });
+  const outcome = await dispatchAiLabScheduledBrandPost(evergreen.args).then(() => "ok", (e: Error) => e.message);
+  assert.doesNotMatch(outcome, new RegExp(AI_LAB_TOPIC_INTEREST_HELD));
+});
+
+test("task46 (C): the user-rejected Task36/38 real rewrites stay held; their 09/30 topic stays held (実記録)", () => {
+  assert.equal(assessAiLabTopicValue(TOPIC_0930).postable, false);
+  assert.throws(() => groundedRewrite(TASK38_REAL_DRAFT_200, TOPIC_0930, TASK38_REAL_REWRITE_180), /AI_LAB_VOICE_STYLE_REJECTED/);
+  assert.throws(() => groundedRewrite(REAL_DRAFT_167, TOPIC_0930, REAL_REWRITE_156), /AI_LAB_VOICE_STYLE_REJECTED/);
+});
+
+test("task46 (D): non-posting list — recorded topics, verdict, reason and safety (no model output, not a voice PASS)", async () => {
+  const lines = ["=== task46 本人確認用一覧（非投稿・非課金。題材=実記録、本文なし。採用は面白さの保証ではない）==="];
+  for (const raw of parseDevDiaryMarkdown(await loadAiLabDevDiaryMarkdown())) {
+    const seed = await t46RecordedTopic(raw.eventId!);
+    const value = assessAiLabTopicValue(seed);
+    const interest = assessAiLabTopicInterest(seed);
+    const verdicts = new Set<string>();
+    for (const pattern of T45_PATTERNS) {
+      const f = t45Fixture(pattern, { topic: seed });
+      const outcome = await dispatchAiLabScheduledBrandPost(f.args).then(() => "gate-pass", (e: Error) => e.message);
+      verdicts.add(/TOPIC_(VALUE|INTEREST)_HELD/u.test(outcome) ? `${outcome} calls=${f.recorder.calls.length} X=${f.payloads.length}` : "gate-pass");
+    }
+    assert.equal(verdicts.size, 1, raw.eventId!);
+    const held = [...verdicts][0] !== "gate-pass";
+    lines.push(
+      `[実記録] ${raw.eventId}: ${!value.postable ? "保留（題材価値）" : interest.postable ? `採用(${interest.tier})` : "保留（面白さ）"}` +
+        ` / A・B・C同一: ${held ? [...verdicts][0] : "題材ゲート通過"} / ${interest.summary}`,
+    );
+  }
+  console.log(lines.join("\n"));
+});

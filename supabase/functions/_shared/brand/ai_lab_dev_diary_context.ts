@@ -24,6 +24,7 @@
 import { AI_LAB_DEV_DIARY_MARKDOWN_SNAPSHOT } from "./ai_lab_dev_diary_context.snapshot.ts";
 import { type AiLabGenericThemeId, detectGenericThemes } from "./ai_lab_theme_guard.ts";
 import { assessAiLabTopicValue } from "./ai_lab_topic_value.ts";
+import { assessAiLabTopicInterest } from "./ai_lab_topic_interest.ts";
 
 export type DevDiaryEntry = {
   date: string; // YYYY-MM-DD
@@ -535,6 +536,13 @@ export function buildAiLabTopicCandidates({
     const value = assessAiLabTopicValue(unit.seed);
     if (!value.postable) {
       exclusions.push({ candidate: eventKey, stage: "post_value", reason: `WEAK_POST_VALUE:${value.reasons.join(",")}` });
+      continue;
+    }
+    // Task46: a postable event still needs a story in its facts (a snag, a surprise or a deliberate
+    // choice) and must not read as an advert or a work report. Held events fall to evergreen as above.
+    const interest = assessAiLabTopicInterest(unit.seed);
+    if (!interest.postable) {
+      exclusions.push({ candidate: eventKey, stage: "post_value", reason: `WEAK_TOPIC_INTEREST:${interest.weaknesses.join(",").toLowerCase()}` });
       continue;
     }
     candidates.push({ kind: "diary", eventKey, unitKey: unit.key, themeTags: [], topic: unit.seed });
