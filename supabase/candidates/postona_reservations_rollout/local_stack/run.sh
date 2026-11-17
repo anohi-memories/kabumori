@@ -16,6 +16,9 @@
 #   test    local_test.ts (phases L0-L12, real HTTP; G3-02 #2: create / reschedule / reconfirm decided in the database).
 #   e2e     G3-02 #9: a TEST ONLY worker twin (postona-x-reservation-worker-e2etest) with a FAKE credential snapshot and a fake X in a
 #           g3ls_test schema (a throw-away login reaches only that schema; both dropped before RB); L19-L24.
+#   threads G3-02 #27: threads_worker_local_test.ts (L47-L58): the Threads reservation ledger (007) and its delivery worker as one flow: the
+#           person's real JWT -> Kong -> the Threads reservations twin -> PG; the TEST ONLY worker twin (postona-threads-reservation-worker-
+#           e2etest: G3's createThreadsWorkerHandler + G4's REAL two-step send port, G4 PR #701 blob-pinned) -> a fake Threads Graph API.
 #   g1      G3-02 #13: g1_screen_integration.test.mjs: G1's real screen (PR #606, pinned, read only) over G3's real stores on this runtime.
 #   tick    G3-02 #10 / #11: 016 (worker tick: a signed one-use ticket, the target pinned to a project ref) + pg_net / pg_cron on this
 #           stack only, a TEST ONLY target (g3ls_test.tick_target: this stack's kong entries) and Vault key; L25-L31, then the real
@@ -89,7 +92,8 @@ assert 'project_id = "g3ls"' in s
 for fn in ["postona-x-reservations-localtest", "postona-threads-reservations-localtest", "postona-x-reservation-worker-localtest", "postona-x-approvals-localtest", "postona-x-single-post-e2etest"]:
     s += f'\n[functions.{fn}]\nverify_jwt = true\n'
 # G3-02 #10: the worker entries are called by the scheduler (pg_net, no user JWT; the worker checks its own secret), as a deploy needs them
-for fn in ["postona-x-reservation-worker", "postona-x-reservation-worker-e2etest"]:
+# G3-02 #27: the Threads worker twin too (the scheduler's secret, no user JWT)
+for fn in ["postona-x-reservation-worker", "postona-x-reservation-worker-e2etest", "postona-threads-reservation-worker-e2etest"]:
     s += f'\n[functions.{fn}]\nverify_jwt = false\n'
 open(p, "w").write(s)
 PY
@@ -97,7 +101,14 @@ fns="$WORK/p/supabase/functions"
 mkdir -p "$fns/_shared" "$fns/_shared_g3ls"
 for d in postona-x-reservations postona-threads-reservations postona-x-reservation-worker postona-x-single-post postona-x-approvals; do cp -R "$REPO/supabase/functions/$d" "$fns/"; done
 cp -R "$REPO/supabase/functions/_shared/postona_reservations" "$REPO/supabase/functions/_shared/postona_approvals" "$fns/_shared/"
-cp "$here/local_transport.ts" "$here/fake_x.ts" "$fns/_shared_g3ls/"
+cp "$here/local_transport.ts" "$here/fake_x.ts" "$here/fake_threads.ts" "$fns/_shared_g3ls/"
+# G3-02 #27: G4's two-step Threads send port (G4 PR #701 HEAD, blob-pinned, read only) for the Threads worker twin; G4's tree is not changed
+G4TH=1c2b239e86c5b7b56991bdb26105409b317291d2
+mkdir -p "$fns/_shared_g4pin"
+for pin in threads_send_port.ts:783cd431371b39a4790438cac3d2abade3990cfd threads_publish_contract.ts:7c9e7109fdc97fb1a2ea863a499db6c0e1dccc8d; do
+  [ "$(git -C "$REPO" rev-parse "$G4TH:supabase/functions/_shared/social/${pin%%:*}" 2>/dev/null)" = "${pin#*:}" ] || fail "G4 pin ${pin%%:*} moved or missing (git fetch origin claude/g4-gen2-18-threads-launch-preflight-20261117)"
+  git -C "$REPO" show "$G4TH:supabase/functions/_shared/social/${pin%%:*}" > "$fns/_shared_g4pin/${pin%%:*}"
+done
 # Mutation runs only (G3LS_MUTANT): one exact replacement in a COPY that runs (the bundle copy's manifest paths still resolve to
 # this checkout); the checkout is never changed. Without a mutant the bundle's own rollout.sh runs.
 mkdir -p "$WORK/bundle"; cp "$bundle/rollout.sh" "$bundle/preflight.sql" "$bundle/MANIFEST.tsv" "$WORK/bundle/"
@@ -126,7 +137,7 @@ case "${G3LS_MUTANT:-}" in
 esac
 STEPS=17; case "${G3LS_MUTANT:-}" in no_017) STEPS=15 ;; no_018) STEPS=16 ;; esac
 RO_SH="$bundle/rollout.sh"; case "${G3LS_MUTANT:-}" in host_any|no_017|no_018) RO_SH="$WORK/bundle/rollout.sh" ;; esac
-for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest postona-x-approvals-localtest postona-x-single-post-e2etest; do
+for d in postona-x-reservations-localtest postona-threads-reservations-localtest postona-x-reservation-worker-localtest postona-x-reservation-worker-e2etest postona-x-approvals-localtest postona-x-single-post-e2etest postona-threads-reservation-worker-e2etest; do
   mkdir -p "$fns/$d"; cp "$here/$d/index.ts" "$fns/$d/"
   (cd "$WORK/p" && deno check --no-config --cached-only "supabase/functions/$d/index.ts" >/dev/null 2>&1) || fail "deno check $d"
 done
@@ -263,6 +274,15 @@ create role g3ls_test_login login noinherit password :'t';
 grant usage on schema g3ls_test to g3ls_test_login;
 grant select on g3ls_test.x_token_snapshot, g3ls_test.x_mode to g3ls_test_login;
 grant select, insert on g3ls_test.x_calls to g3ls_test_login;
+-- G3-02 #27: the Threads worker twin's fake snapshot and fake Graph API record
+create table g3ls_test.threads_token_snapshot (social_account_id text primary key, threads_user_id text not null, token text not null, generation text not null);
+create table g3ls_test.threads_calls (id bigint generated always as identity primary key, step text not null check (step in ('container', 'status', 'publish', 'readback')),
+  bearer_sha256 text not null, text text, at timestamptz not null default now());
+create table g3ls_test.threads_mode (one boolean primary key default true check (one), mode text not null check (mode in ('ok', 'container_reject',
+  'container_unknown', 'status_hold', 'publish_reject', 'publish_unknown', 'readback_unknown')));
+insert into g3ls_test.threads_mode (mode) values ('ok');
+grant select on g3ls_test.threads_token_snapshot, g3ls_test.threads_mode to g3ls_test_login;
+grant select, insert on g3ls_test.threads_calls to g3ls_test_login;
 SQL
 ENV_FILE="$WORK/functions.env"
 (umask 077; {
@@ -286,6 +306,13 @@ env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLI
   deno test --no-config --no-check --cached-only \
     --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_API_PW,G3LS_WORKER_PW,G3LS_WORKER_SECRET,G3LS_JWT_SECRET \
     --allow-net="127.0.0.1:$API_PORT" --allow-run=psql "$here/local_test.ts"
+
+# ---- G3-02 #27: the Threads reservation ledger + delivery worker as one flow (real JWT -> Kong -> Edge -> PG; G4's send port; fake Threads)
+env -u PGPASSWORD G3LS_API="http://127.0.0.1:$API_PORT" G3LS_PUBLISHABLE="$PUBLISHABLE" G3LS_DB_PORT="$DB_PORT" \
+    G3LS_WORKER_PW="$WORKER_PW" G3LS_WORKER_SECRET="$WORKER_SECRET" \
+  deno test --no-config --no-check --cached-only \
+    --allow-env=G3LS_API,G3LS_PUBLISHABLE,G3LS_DB_PORT,G3LS_WORKER_PW,G3LS_WORKER_SECRET \
+    --allow-net="127.0.0.1:$API_PORT" --allow-run=psql "$here/threads_worker_local_test.ts"
 
 # ---- G3-02 #13: G1's real reservations screen (PR #606, pinned, read only) over G3's real stores and this runtime -----------------------
 G1PIN=f0c5148d20e7e54654375b93591539eb8f99bf9c
@@ -361,10 +388,16 @@ rb_refused() {  # <label> <code> [env...]: refused with the code, G3's functions
 rb_refused "planned + uncertain rows (L6 / L8)" G3_ROLLOUT_ROLLBACK_LIVE_ROWS
 # operator; 'expired' too: G3-02 #9's delivery runs sweep L17's send-now-shaped row to expired, which a send now's retry could re-arm (008 counts it live)
 own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END' where status in ('planned', 'claimed', 'expired')" >/dev/null
+# G3-02 #27: the Threads rows the test left planned (far in the future) end the same way (operator)
+own -c "update postona_threads_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END', lease_token = null, lease_expires_at = null where status in ('planned', 'claimed')" >/dev/null
 unsure="$(own -A -t -c "select count(*) from postona_x_resv.reservations where status = 'uncertain'")"   # L9 (+ L22's unknown send)
+tunsure="$(own -A -t -c "select count(*) from postona_threads_resv.reservations where status = 'uncertain'")"   # L52 (2) + L55 (1)
 [ "$unsure" -ge 1 ] || fail "the test left no uncertain row (L9)"
-rb_refused "the uncertain rows alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads $unsure/0"
+[ "$tunsure" = 3 ] || fail "the Threads test left $tunsure uncertain rows, not 3 (L52 / L55)"
+rb_refused "the uncertain rows alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads $unsure/$tunsure"
 own -c "update postona_x_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END_RESOLVED' where status = 'uncertain'" >/dev/null   # operator, after checking X
+rb_refused "the Threads uncertain rows alone" "G3_ROLLOUT_ROLLBACK_LIVE_ROWS: X/Threads 0/$tunsure"
+own -c "update postona_threads_resv.reservations set status = 'failed', outcome_code = 'G3LS_TEST_END_RESOLVED' where status = 'uncertain'" >/dev/null   # operator, after checking Threads
 xrows="$(own -A -t -c "select (select count(*) from postona_x_resv.reservations) || ':' || (select count(*) from postona_x_resv.batches) || ':' || (select count(*) from postona_x_resv.audit)")"
 trows="$(own -A -t -c "select (select count(*) from postona_threads_resv.reservations) || ':' || (select count(*) from postona_threads_resv.audit)")"
 arows=0:0:0   # G3-02 #17 (H1 #37 P3): the existence check is its own statement (a CASE still parses the missing tables)
