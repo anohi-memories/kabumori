@@ -22,6 +22,7 @@ import * as scheduleLabels from '../src/features/schedule/schedule-labels.ts';
 import * as serverState from '../src/features/schedule/server-reservations-state.ts';
 import * as reservationView from '../src/features/reservations/reservation-view.ts';
 import * as xWriteView from '../src/features/reservations/x-write-view.ts';
+import * as initialRelease from '../src/domain/initial-release.ts';
 import * as signal from '../src/features/reservations/x-reconnect-signal.ts';
 import * as xRowGeneration from '../src/features/reservations/x-row-generation.ts';
 import * as threadsEntry from '../src/features/threads-publish/threads-entry.ts';
@@ -1093,6 +1094,7 @@ const baseStubs = () => ({
   '@/components/ui': { ActionButton: 'ActionButton', Card: 'Card', EmptyState: 'EmptyState', Pill: 'Pill', Screen: 'Screen', SectionTitle: 'SectionTitle', styles: {} },
   '@/features/reservations/x-reconnect-signal': { ...signal, useXReconnectSignal: () => 0 },
   '@/features/reservations/x-write-view': xWriteView,
+  '@/domain/initial-release': initialRelease,
   '@/features/reservations/x-row-generation': xRowGeneration,
   '@/features/threads-publish/threads-entry': threadsEntry,
   '@/features/reservations/home-reservations': { homeCount: (fromPosts) => fromPosts, homeHasNoReservations: () => true, homeHeadline: (headline) => headline },

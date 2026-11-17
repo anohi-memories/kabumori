@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors } from '@/constants/theme';
+import { DEFERRED_PROVIDER_LABEL, DEFERRED_PROVIDER_TEXT, isDeferredProvider } from '@/domain/initial-release';
 import { ActionButton, Card, Pill, Screen, SectionTitle, styles } from '@/components/ui';
 import { usePersonalWorkspace } from '@/features/personal-workspace/personal-workspace-provider';
 import { clearAllXReconnectRequired, clearXServiceRestarted, isXReconnectRequired, isXServiceRestarted, useXReconnectSignal } from '@/features/reservations/x-reconnect-signal';
@@ -45,10 +46,25 @@ export default function AccountsScreen() {
           <Card><Text style={styles.muted}>{status === 'loading' ? 'アカウントを読み込んでいます…' : 'アカウント情報を確認できません。'}</Text></Card>
         ) : null}
         {status === 'ready' && accounts.length === 0 ? (
-          <Card><Text style={styles.muted}>まだ接続済みのアカウントはありません。下のボタンからXアカウントを接続してください。</Text></Card>
+          <Card><Text style={styles.muted}>まだ接続済みのアカウントはありません。下のボタンからXまたはThreadsのアカウントを接続してください。</Text></Card>
         ) : null}
         {accounts.map((account) => {
           const pill = connectionPill(account.connectionStatus, account.platform === 'x' && isXReconnectRequired(account.id), '要再接続', restarted && restartAppliesTo(account, personalId), status === 'mock_preview' ? 'preview' : account.platform);
+          if (isDeferredProvider(account.platform)) {
+            return (
+              <Card key={account.id}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: account.profile.avatarColor }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.ink, fontWeight: '800' }}>{account.profile.displayName}</Text>
+                    <Text style={styles.muted}>{account.profile.handle} ・ {account.platform.toUpperCase()}</Text>
+                  </View>
+                  <Pill tone="neutral">{DEFERRED_PROVIDER_LABEL}</Pill>
+                </View>
+                <Text style={styles.muted}>{DEFERRED_PROVIDER_TEXT}</Text>
+              </Card>
+            );
+          }
           return (
           <Card key={account.id}>
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/accounts/[id]', params: { id: account.id } })} style={({ pressed }) => pressed && styles.buttonPressed}>
