@@ -369,3 +369,115 @@ test("task42 (B): every recorded diary seed grounds its own fact lines (実記�
   assert.ok(checked >= 14, String(checked));
   console.log(`[実記録] 日記の できごと/詰まったこと ${checked}行を、そのまま原案にしても保留しない（題材の語だけの文）。`);
 });
+
+// ---------------------------------------------------------------------------
+// Task44: the 「所」 and mixed-decision-line false holds. Topics are 実記録 (checked against the bundled
+// diary below); the Task43 draft is the recorded real Claude draft; every other text is 手書き.
+import {
+  TASK43_REAL_DRAFT_206,
+  TASK44_DRAFT_NEGATIVES,
+  TASK44_DRAFT_POSITIVES,
+  TASK44_HAND_DRAFT_1008,
+  TASK44_HAND_REWRITE_0927,
+  TASK44_HAND_REWRITE_1008,
+  TASK44_TOPIC_0927,
+  TASK44_TOPIC_1008,
+  TASK44_TOPIC_MIXED,
+} from "./ai_lab_topic_quality_fixtures.ts";
+
+const T44_TOPICS = { "0927": TASK44_TOPIC_0927, "1008": TASK44_TOPIC_1008, mixed: TASK44_TOPIC_MIXED } as const;
+const t44Prepare = (draft: string, topic: string) =>
+  prepareAiLabVoiceRewrite({ brandId: "ai_salaryman_lab", postType: "brand_post", text: draft }, topic);
+
+test("task44: the 09/27 and 10/08 topics are the bundled diary #decided units (実記録)", async () => {
+  const markdown = await loadAiLabDevDiaryMarkdown();
+  const seeds = parseDevDiaryMarkdown(markdown).map((raw) => sanitizeDiaryEntry(raw)!)
+    .flatMap((entry) => diaryUnitsFor(entry, diaryEventKey(entry.eventId!), 1, []))
+    .filter((unit) => unit.key.endsWith("#decided")).map((unit) => unit.seed);
+  assert.ok(seeds.includes(TASK44_TOPIC_0927));
+  assert.ok(seeds.includes(TASK44_TOPIC_1008));
+  assert.equal(assessAiLabTopicValue(TASK44_TOPIC_0927).postable, true);
+  assert.equal(assessAiLabTopicValue(TASK44_TOPIC_1008).postable, true);
+});
+
+test("task44 (A): the Task43 real draft's 「見えちゃう所があって」 is no longer a new participant", () => {
+  assert.deepEqual(ungroundedClaims(TASK43_REAL_DRAFT_206, TASK44_TOPIC_0927), []);
+  assert.equal(verdict(() => t44Prepare(TASK43_REAL_DRAFT_206, TASK44_TOPIC_0927)), "通過");
+  // Only a topic that speaks of a part (部分・ところ・箇所) licenses the formal noun.
+  assert.deepEqual(
+    ungroundedClaims(TASK43_REAL_DRAFT_206, TASK44_TOPIC_0927.replace("部分", "画面")),
+    ["所"],
+  );
+});
+
+test("task44 (A)(B)(C): legitimate drafts pass; unsourced places, things, people, feelings, plans, decisions and counts hold", () => {
+  const lines = ["=== task44 原案段階（実記録の題材＋手書きの原案。実モデル出力ではない）==="];
+  for (const c of TASK44_DRAFT_POSITIVES) {
+    assert.deepEqual(ungroundedClaims(c.text, T44_TOPICS[c.topic]), [], c.why);
+    assert.equal(verdict(() => t44Prepare(c.text + TAG, T44_TOPICS[c.topic])), "通過", c.why);
+    lines.push(`[通過] ${c.topic} ${c.why}: ${c.text}`);
+  }
+  for (const c of TASK44_DRAFT_NEGATIVES) {
+    assert.equal(verdict(() => t44Prepare(c.text + TAG, T44_TOPICS[c.topic])), AI_LAB_SOURCE_GROUNDING_REJECTED, c.why);
+    lines.push(`[保留] ${c.topic} ${c.why}: ${c.text} → ${ungroundedClaims(c.text, T44_TOPICS[c.topic]).join(" / ")}`);
+  }
+  console.log(lines.join("\n"));
+});
+
+test("task44 (A): 「所」 is a part only before 「があ／もあ」 after a plain kana ending, never a place", () => {
+  for (const text of ["動かない所があった。", "見えちゃう所もあって。", "気になる所がある。"]) {
+    assert.ok(!ungroundedClaims(text, TASK44_TOPIC_0927).includes("所"), text);
+  }
+  for (
+    const text of [
+      "その所で会った。",
+      "見えちゃう所で止まった。",
+      "見えちゃう所を直した。",
+      "見えた所があった。",
+      "帰る所がある。",
+      "会う所があった。",
+      "所があった。",
+    ]
+  ) {
+    assert.ok(ungroundedClaims(text, TASK44_TOPIC_0927).includes("所"), text);
+  }
+});
+
+test("task44 (B): a mixed 決めたこと line grounds one affirmative decision, never its negative or a finished act", () => {
+  const ok = "資産推移の線だけ実データで描くことにした。";
+  assert.deepEqual(ungroundedClaims(ok, TASK44_TOPIC_1008), []);
+  // one decision line still grounds one retelling, even with two affirmative clauses
+  assert.notDeepEqual(ungroundedClaims(ok + "背景は控えめな植物のイラストにとどめることにした。", TASK44_TOPIC_1008), []);
+  // no decision line at all, or a line whose decision is only negative
+  assert.notDeepEqual(ungroundedClaims(ok, TASK44_TOPIC_1008.replace(/決めたこと: .*\n/u, "")), []);
+  assert.notDeepEqual(
+    ungroundedClaims(ok, TASK44_TOPIC_1008.replace(/決めたこと: .*/u, "決めたこと: うその上昇グラフは出さない。")),
+    [],
+  );
+  // the finished act of either sentence's verb is refused (描いた), as before for the last verb
+  assert.deepEqual(ungroundedClaims("資産推移の線だけ実データで描いた。", TASK44_TOPIC_1008), ["描いた"]);
+});
+
+test("task44 (C): the Task43 real draft and the 10/08 hand draft reach a grounded hand rewrite (手書き, not a real rewrite)", () => {
+  assert.deepEqual(
+    t44Prepare(TASK43_REAL_DRAFT_206, TASK44_TOPIC_0927).validate({ decision: "rewritten", text: TASK44_HAND_REWRITE_0927, edits: [] }),
+    { text: TASK44_HAND_REWRITE_0927, decision: "edited" },
+  );
+  assert.deepEqual(
+    t44Prepare(TASK44_HAND_DRAFT_1008, TASK44_TOPIC_1008).validate({ decision: "rewritten", text: TASK44_HAND_REWRITE_1008, edits: [] }),
+    { text: TASK44_HAND_REWRITE_1008, decision: "edited" },
+  );
+  // A rewrite that turns the part into a place or meeting, or the decision into its negative, is still held.
+  for (
+    const [draft, topic, text] of [
+      [TASK43_REAL_DRAFT_206, TASK44_TOPIC_0927, TASK44_HAND_REWRITE_0927.replace("見えちゃう所があって", "駅の所で会って")],
+      [TASK44_HAND_DRAFT_1008, TASK44_TOPIC_1008, TASK44_HAND_REWRITE_1008.replace("描くことにした", "描かないことにした")],
+    ]
+  ) {
+    assert.equal(
+      verdict(() => t44Prepare(draft, topic).validate({ decision: "rewritten", text, edits: [] })),
+      AI_LAB_SOURCE_GROUNDING_REJECTED,
+      text,
+    );
+  }
+});

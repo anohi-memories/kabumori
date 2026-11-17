@@ -3207,3 +3207,67 @@ test("task42 (D): the user-rejected Task36/38 real rewrites stay held; real draf
   assert.notDeepEqual(ungroundedClaims(REAL_DRAFT_278, TOPIC_0930), []);
   assert.deepEqual(ungroundedClaims(GROUNDED_DRAFT_0930, TOPIC_0930), []);
 });
+
+// ---------------------------------------------------------------------------
+// Task44: the 「所」 and mixed-decision-line false holds, through the two-stage dispatch on both providers.
+// The Task43 draft is the recorded real Claude draft (実記録, Issue #321 REPORT 6950081582); every rewrite is
+// hand-written (合成・手書き). fetch is a recorder; nothing is posted. Not a real rewrite or a voice PASS.
+import {
+  TASK43_REAL_DRAFT_206,
+  TASK44_DRAFT_NEGATIVES,
+  TASK44_HAND_DRAFT_1008,
+  TASK44_HAND_REWRITE_0927,
+  TASK44_HAND_REWRITE_1008,
+  TASK44_TOPIC_0927,
+  TASK44_TOPIC_1008,
+} from "../brand/ai_lab_topic_quality_fixtures.ts";
+
+test("task44 (C)(D): pass and hold counts on both providers (deny-net preview, not a real rewrite or voice PASS)", async () => {
+  const topics = { "0927": TASK44_TOPIC_0927, "1008": TASK44_TOPIC_1008 } as const;
+  const legit = [
+    { topic: TASK44_TOPIC_0927, draft: TASK43_REAL_DRAFT_206, rewrite: TASK44_HAND_REWRITE_0927, why: "第43TASK実Claude原案（実記録）→手書きの自然化" },
+    { topic: TASK44_TOPIC_1008, draft: TASK44_HAND_DRAFT_1008, rewrite: TASK44_HAND_REWRITE_1008, why: "10/08 手書き原案→手書きの自然化" },
+  ];
+  const fabricated = TASK44_DRAFT_NEGATIVES.filter((c) => c.topic !== "mixed").map((c) => ({
+    topic: topics[c.topic as "0927" | "1008"],
+    draft: c.text + T41_TAG,
+    rewrite: c.topic === "0927" ? TASK44_HAND_REWRITE_0927 : TASK44_HAND_REWRITE_1008,
+    why: c.why,
+  }));
+  const lines = ["=== task44 両provider 二段階 deny-net（題材=実記録、自然化=手書き。実API未実施・本人の文体PASSではない）==="];
+  for (const provider of TASK39_PROVIDERS) {
+    for (const c of legit) {
+      const f = task39Fixture(provider, { topic: c.topic, draft: c.draft, rewrite: c.rewrite });
+      const result = await dispatchAiLabScheduledBrandPost(f.args);
+      assert.equal(result.voiceRewriteDecision, "edited", c.why);
+      assert.deepEqual(f.payloads, [{ text: c.rewrite, pollOptions: undefined }], c.why);
+      assert.equal(f.recorder.calls.length, 2, c.why);
+    }
+    for (const c of fabricated) {
+      const f = task39Fixture(provider, { topic: c.topic, draft: c.draft, rewrite: c.rewrite });
+      await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /AI_LAB_SOURCE_GROUNDING_REJECTED/, c.why);
+      assert.deepEqual(f.payloads, [], c.why);
+      // A draft-stage hold never reaches the editor.
+      assert.equal(f.recorder.calls.length, 1, c.why);
+    }
+    lines.push(
+      `[${provider}] 正当 ${legit.length}/${legit.length} 通過、捏造 ${fabricated.length}/${fabricated.length} 原案段階で保留（SOURCE_GROUNDING_REJECTED、X payload 0）`,
+    );
+  }
+  console.log(lines.join("\n"));
+});
+
+test("task44 (C): earlier legitimate drafts still pass and the user-rejected Task36/38 rewrites stay VOICE_STYLE_REJECTED", () => {
+  assert.deepEqual(ungroundedClaims(GROUNDED_DRAFT_0930, TOPIC_0930), []);
+  assert.deepEqual(ungroundedClaims(REAL_DRAFT_254, TOPIC_254), []);
+  assert.deepEqual(ungroundedClaims(REAL_DRAFT_254, TOPIC_254_TASK32), ["色"]);
+  assert.notDeepEqual(ungroundedClaims(REAL_DRAFT_278, TOPIC_0930), []);
+  for (
+    const [draft, text] of [
+      [TASK38_REAL_DRAFT_200, TASK38_REAL_REWRITE_180],
+      [REAL_DRAFT_167, REAL_REWRITE_156],
+    ]
+  ) {
+    assert.throws(() => groundedRewrite(draft, TOPIC_0930, text), /AI_LAB_VOICE_STYLE_REJECTED/);
+  }
+});

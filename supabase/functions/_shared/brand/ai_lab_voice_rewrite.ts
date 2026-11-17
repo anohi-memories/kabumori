@@ -526,19 +526,40 @@ const DECISION_CLAIM = /ことにし(?:た|ました)/gu;
 const DECISION_PLAIN_VERB =
   /[\p{Script=Han}\p{Script=Katakana}ー]+(?:にする|する|[\p{Script=Hiragana}]?[るうくすつぬむぶぐ])$/u;
 
-type DecisionLine = {
+// Task44: a 「決めたこと」 line may hold an affirmative decision and then a
+// separate negative one (10/08: 「…資産推移の線だけを実データで描く。下がって
+// いるときも、うその上昇グラフは出さない。」). Each sentence of the line is read on
+// its own, so the negative last sentence no longer hides the plain decision
+// before it. A verb is taken from the clause it ends (after the last 「、」), and
+// a retelling must carry that very verb and every content word of that clause.
+// Negative, intended or planned endings never match DECISION_PLAIN_VERB, so
+// 「出さないことにした」「描くつもり」 stay held, and one line still grounds one
+// retelling only.
+type DecisionUnit = {
   runs: Set<string>;
-  /** Plain present verb at the end of the line, when the line has one. */
+  /** Plain present verb at the end of the sentence, when it has one. */
   verb?: string;
+  /** Content words of the clause that verb ends. */
+  clauseRuns: Set<string>;
   stated: boolean;
 };
 
-function decisionLines(source: string): DecisionLine[] {
-  return [...source.matchAll(DECISION_LINE)].map(([, raw]) => ({
-    runs: new Set(raw.match(CONTENT_RUN) ?? []),
-    verb: raw.replace(/[。.]$/u, "").match(DECISION_PLAIN_VERB)?.[0],
-    stated: DECISION_STATED.test(raw),
-  }));
+function decisionLines(source: string): DecisionUnit[][] {
+  return [...source.matchAll(DECISION_LINE)].map(([, raw]) =>
+    raw.split(/[。.]/u).map((part) => part.trim()).filter(Boolean).map(
+      (sentence) => {
+        const verb = sentence.match(DECISION_PLAIN_VERB)?.[0];
+        return {
+          runs: new Set(sentence.match(CONTENT_RUN) ?? []),
+          verb,
+          clauseRuns: new Set(
+            sentence.split("、").at(-1)!.match(CONTENT_RUN) ?? [],
+          ),
+          stated: DECISION_STATED.test(sentence),
+        };
+      },
+    )
+  );
 }
 
 function decisionLineGrounds(text: string, source: string): number {
@@ -548,11 +569,14 @@ function decisionLineGrounds(text: string, source: string): number {
     for (const claim of sentence.matchAll(DECISION_CLAIM)) {
       const runs = new Set(sentence.match(CONTENT_RUN) ?? []);
       const before = sentence.slice(0, claim.index);
-      const index = lines.findIndex((line) =>
-        (line.stated &&
-          [...runs].filter((run) => line.runs.has(run)).length >= 2) ||
-        (!!line.verb && before.endsWith(line.verb) && line.runs.size > 0 &&
-          [...line.runs].every((run) => runs.has(run)))
+      const index = lines.findIndex((units) =>
+        units.some((unit) =>
+          (unit.stated &&
+            [...runs].filter((run) => unit.runs.has(run)).length >= 2) ||
+          (!!unit.verb && before.endsWith(unit.verb) &&
+            unit.clauseRuns.size > 0 &&
+            [...unit.clauseRuns].every((run) => runs.has(run)))
+        )
       );
       if (index < 0) continue;
       lines.splice(index, 1);
@@ -591,7 +615,7 @@ function decisionTenseOverclaims(text: string, source: string): string[] {
   // The 「決めたこと:」 label itself is not a past 「決めた」 the topic states.
   const stated = source.replace(/^[ \t]*[^:：\n]{1,12}[:：]/gmu, "");
   const found: string[] = [];
-  for (const { verb } of decisionLines(source)) {
+  for (const { verb } of decisionLines(source).flat()) {
     for (const form of verb ? pastForms(verb) : []) {
       if (text.includes(form) && !stated.includes(form)) found.push(form);
     }
@@ -713,19 +737,39 @@ const EVENT_OBJECT_RUN =
 const REPORTED_EVENT_END =
   /(?:た|だ)(?:よ|ね|よね|けど|な)?[\s\p{Extended_Pictographic}笑]*$/u;
 const NAMING_CHARS = /[\p{Script=Han}\p{Script=Katakana}]/gu;
+// Task44: the Task43 real draft wrote 「見えちゃう所があって」 for the topic's
+// 「…見えてしまう部分を直した」 and was held as a new participant 「所」. 「所」 is
+// the formal noun ところ (a part, a point) only in the existential 「〜する所が
+// ある／〜ない所もあって」: right after a plain non-past kana ending and before
+// 「があ」「もあ」. It is accepted there only when the topic itself speaks of a
+// part (部分・ところ・箇所). A place or meeting (「所で会った」「所に行った」
+// 「行く所があった」), and any other lone kanji noun, is still held.
+const PART_TOKORO =
+  /(?<=\p{Script=Hiragana})(?<=[うくすつぬむるい])(?<!(?:行く|来る|くる|帰る|寄る|戻る|通う|住む|泊まる|会う|座る|置く))所(?=[がも]あ[るっり])/gu;
+// Task44: a kanji word the topic never names as where the narrator went or met
+// someone (「場所に行った」「現地で会った」) is a new place, whatever the tense.
+const PLACE_RUN =
+  /(?<![\p{Script=Han}\p{Script=Katakana}ー])\p{Script=Han}{2,}(?=に(?:行|来|寄|着|戻|向か|出かけ)|で会)/gu;
+const PART_WORDS = /部分|ところ|箇所/u;
 
 function unsourcedParticipants(text: string, source: string): string[] {
   const spans = protectedSpans(text);
   const body = spans ? maskedBody(text, spans) : text;
+  const parts = new Set(
+    PART_WORDS.test(source)
+      ? [...body.matchAll(PART_TOKORO)].map((m) => m.index)
+      : [],
+  );
   const known = source.toLowerCase();
   const sourceChars = new Set(source.match(NAMING_CHARS) ?? []);
   return [
     ...(body.match(PARTICIPANT_RUN) ?? []).filter((run) =>
       !runLicensed(run, known)
     ),
-    ...(body.match(PARTICIPANT_KANJI) ?? []).filter((c) =>
-      !FUNCTION_KANJI.has(c) && !known.includes(c)
-    ),
+    ...[...body.matchAll(PARTICIPANT_KANJI)].filter((m) =>
+      !FUNCTION_KANJI.has(m[0]) && !known.includes(m[0]) && !parts.has(m.index)
+    ).map((m) => m[0]),
+    ...(body.match(PLACE_RUN) ?? []).filter((run) => !runLicensed(run, known)),
     ...(body.match(SENTENCE) ?? []).filter((sentence) =>
       REPORTED_EVENT_END.test(sentence)
     ).flatMap((sentence) =>
