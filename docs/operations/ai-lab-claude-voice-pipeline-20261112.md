@@ -353,3 +353,47 @@ S1・S2・S6・S7の原案と自然化（どちらも手書き。実モデル出
 - 実Claudeの自然化（第2段）の出力は得ていない。上の「自然化」はすべて手書きで、実Claude自然化の合格や本人の話し方PASSを示すものではない。
 - 次の非投稿の有料実験には、本人の新しい直接承認が必要（第43TASKの承認は流用しない）。
 - 残る限界: 「行く所」の除外は語の一覧で、一覧に無い移動・居場所の動詞（「歩く所」など）は「所」として通る。「近い所がある」のような場所寄りの形容詞＋所も、題材に「部分」があれば通る。場所への移動の検査は「に＋移動の動詞」「で会」だけで、「〜で過ごした」などは見ない。
+
+## Task45: OpenAI Luna原案→Sol自然化の第3パターン追加（2026-11-17、非課金）
+
+ソースとmockだけの変更。実API呼出・実X投稿・本番設定変更・deployはしていない。本番採用は宣言しない（NO_GO）。
+
+### モデルID・料金の照合
+
+- 2026-11-17 に OpenAI 公式料金ページ（developers.openai.com/api/docs/pricing。platform.openai.com/pricing はWebFetchが403）を確認。Solの最新は `gpt-6.1-sol`（$2.00 / キャッシュ $0.10 / 出力 $10.00 per 1M）、Lunaは `gpt-6-luna`（$0.10 / $0.01 / $0.50）。`gpt-6.1-luna` などの後継IDは載っていない。
+- 両モデルとも既存 catalog（`model_catalog.ts`）の単価と一致するため、単価は変更していない。追加したのは `AI_LAB_TEXT_MODES.luna_sol`（provider openai、原案 `gpt-6-luna`、自然化 `gpt-6.1-sol`）だけ。
+
+### 選択の設定と優先順位（`ai_lab_post.ts`）
+
+| `AI_LAB_CLAUDE_TWO_STAGE` | `AI_LAB_TEXT_PROVIDER` | `AI_LAB_TEXT_MODE` | 結果 |
+| --- | --- | --- | --- |
+| `enabled` 以外 | 何でも | 何でも | 二段なし（従来の一段。フラグ以外は読まない） |
+| `enabled` | 未設定 / `anthropic` | 未設定 | A: Opus→Opus（従来どおり） |
+| `enabled` | `openai` | 未設定 | B: Sol→Sol（従来どおり） |
+| `enabled` | 未設定 / `openai` | `luna_sol` | C: Luna原案→Sol自然化（追加） |
+| `enabled` | `anthropic` | `luna_sol` | `AI_LAB_TEXT_MODE_CONFLICT` で停止 |
+| `enabled` | 上記以外の値 | （読まない） | `AI_LAB_TEXT_PROVIDER_INVALID` で停止（従来どおり） |
+| `enabled` | 有効な値 | `luna_sol` 以外の値 | `AI_LAB_TEXT_MODE_INVALID` で停止 |
+
+- 停止はすべて key 読取・HTTP・X より前。別のprovider・モデルへのfallbackはしない。
+- 読む順は FLAG → PROVIDER → MODE → 専用key（PROVIDERが無効ならMODEは読まない）。従来の二段（A/B）は MODE の読取が1つ増えただけで、モデル・key・プロンプトは同じ。
+- C は B と同じ `AI_LAB_OPENAI_TEXT_API_KEY` と `/v1/responses`、strict schema、`store:false`、effort low、上限トークン、timeout（原案25秒・自然化20秒、再送なし）を使う。原案だけ Luna、自然化だけ Sol。
+- 返却 model は段ごとに検査（要求したIDそのもの、またはその日付付きsnapshotのみ）。Luna原案に Sol が返る、Sol自然化に Luna や旧Sol が返る、などは `AI_LAB_OPENAI_TEXT_RESPONSE_MODEL_MISMATCH` でX前に停止。
+- 段のモデルが選んだproviderの価格付きcatalogに無ければ `..._MODEL_NOT_ALLOWED`（key読取前）。
+- 費用: budget は従来と同じ上限（合計4回・$0.60、原案3回・$0.45、自然化1回、1回あたり$0.15）。各段の推定費用はその段のモデルの catalog 単価で計算される。`createAiLabTextStages(...).costLedger()` で原案・自然化・合計の回数と推定USDを返す（本文・keyは含まない）。
+- 選択ログ: `logSelection` を渡すと `{status, mode, provider, generateModel, rewriteModel}` か `{status:"refused", error}` を1回だけ渡す。共通AI層は `console` を使わない規則（isolation_test）なので既定は出力なし。x-test-post（本番入口）への配線は本TASKではしていない。
+
+### 3案で同一のもの
+
+題材選択→原案→自然化→共通安全検査→投稿判定の順、原案と自然化のプロンプト（本人文体規則・架空体験禁止・出典照合）、schema、上限トークン、effort、URL/タグ/引用/数字/質問/投票/跨ブランド重複の検査は A/B/C で同じ（`task45 (B)(D)` がプロンプト・schema・上限の一致を確認）。
+
+### 非課金の結果（deny-net。題材は実記録、原案・自然化は合成・手書き。実モデル出力ではない）
+
+- C（luna_sol）: 正当3/3（第43TASK実Claude原案→手書き自然化、10/08手書き原案→手書き自然化、Task39の読者に見える題材）が唯一のX payload。第44TASKの捏造原案20本は Luna 原案段階で保留（Sol は呼ばない、X payload 0）。Sol 自然化での演出した反応・架空の日課・第38TASK不合格稿は自然化後に保留。第36/38TASK不合格稿は `AI_LAB_VOICE_STYLE_REJECTED` のまま。
+- 自然化段の HTTP 500 / 429 / 切断 / timeout は、再送も Luna・Claude への切替もせず X 前に停止。
+- `task45 preview` の上限概算（送信プロンプト文字数を入力トークン上限の近似、出力は各段の上限トークン、catalog定価。10/08題材）: A Opus→Opus 約 $0.126、B Sol→Sol 約 $0.063、C Luna→Sol 約 $0.037（Luna原案 約 $0.0013）。上限側の概算で、実請求ではない。
+
+### 証明していないこと
+
+- 実アカウントでの `gpt-6-luna` の有効性・Responses互換・認証、実際の品質、実請求は未検証（mockのみ）。
+- 次の実Claude/OpenAI比較には、本人の実行チャットでの直接承認が必要（前TASKの承認は流用しない）。

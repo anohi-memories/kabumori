@@ -1,6 +1,11 @@
 import { InMemoryBudgetGuard } from "./budget.ts";
 import { executeAiRequest, type ExecuteDeps } from "./execute.ts";
-import { AI_LAB_POST_MODELS } from "./model_catalog.ts";
+import {
+  AI_LAB_POST_MODELS,
+  AI_LAB_TEXT_MODES,
+  type AiLabStageModels,
+  findModelSpec,
+} from "./model_catalog.ts";
 import { PROVIDER_API_KEY_ENV } from "./secrets.ts";
 import type { AiProvider, JsonSchema } from "./types.ts";
 
@@ -8,6 +13,13 @@ import type { AiProvider, JsonSchema } from "./types.ts";
 // selection; any other value than these two is refused before a key is read or a request is sent.
 export const AI_LAB_TWO_STAGE_FLAG_ENV = "AI_LAB_CLAUDE_TWO_STAGE";
 export const AI_LAB_TEXT_PROVIDER_ENV = "AI_LAB_TEXT_PROVIDER";
+/**
+ * Task45: an explicit pair of stage models. Unset keeps the Task39 selection (both stages on the provider's
+ * AI_LAB_POST_MODELS entry). "luna_sol" = OpenAI gpt-6-luna draft → OpenAI gpt-6.1-sol rewrite; it needs the
+ * two-stage flag and an unset or "openai" AI_LAB_TEXT_PROVIDER. Any other value, or "anthropic" with luna_sol, is
+ * refused before a key read or request, and no other mode or provider is tried.
+ */
+export const AI_LAB_TEXT_MODE_ENV = "AI_LAB_TEXT_MODE";
 /** Each provider reads only its own dedicated AI Lab key, never the shared OPENAI_API_KEY / ANTHROPIC_API_KEY. */
 export const AI_LAB_TEXT_KEY_ENV: Readonly<Record<AiProvider, string>> = Object.freeze({
   anthropic: "AI_LAB_TEXT_API_KEY",
@@ -26,6 +38,37 @@ export function resolveAiLabTextProvider(
   const raw = readEnv(AI_LAB_TEXT_PROVIDER_ENV);
   if (raw === undefined || raw === "") return "anthropic";
   return raw === "anthropic" || raw === "openai" ? raw : null;
+}
+
+export type AiLabTextSelection =
+  | { ok: true; mode: "single_model" | "luna_sol"; models: AiLabStageModels }
+  | {
+    ok: false;
+    error: "AI_LAB_TEXT_PROVIDER_INVALID" | "AI_LAB_TEXT_MODE_INVALID" | "AI_LAB_TEXT_MODE_CONFLICT";
+  };
+
+/**
+ * Both stage models from the server settings. AI_LAB_TEXT_PROVIDER is read first and an invalid value stops there
+ * (Task39 read order); AI_LAB_TEXT_MODE is read only after a valid provider value.
+ */
+export function resolveAiLabTextSelection(
+  readEnv: (name: string) => string | undefined,
+): AiLabTextSelection {
+  const rawProvider = readEnv(AI_LAB_TEXT_PROVIDER_ENV);
+  const provider = resolveAiLabTextProvider(() => rawProvider);
+  if (!provider) return { ok: false, error: "AI_LAB_TEXT_PROVIDER_INVALID" };
+  const mode = readEnv(AI_LAB_TEXT_MODE_ENV);
+  if (mode === undefined || mode === "") {
+    const model = AI_LAB_POST_MODELS[provider];
+    return { ok: true, mode: "single_model", models: { provider, generate: model, rewrite: model } };
+  }
+  if (mode !== "luna_sol") return { ok: false, error: "AI_LAB_TEXT_MODE_INVALID" };
+  const models = AI_LAB_TEXT_MODES[mode];
+  // An explicit provider must agree with the mode; an unset provider defers to it.
+  if (rawProvider !== undefined && rawProvider !== "" && provider !== models.provider) {
+    return { ok: false, error: "AI_LAB_TEXT_MODE_CONFLICT" };
+  }
+  return { ok: true, mode, models };
 }
 
 /** OpenAI answers with a dated snapshot of the requested alias (gpt-6.1-sol-2026-09-01). */
@@ -104,8 +147,12 @@ export function createAiLabTextProvider(
   deps: Pick<ExecuteDeps, "readEnv" | "fetch">,
   twoStage = false,
   provider: AiProvider = "anthropic",
+  // Task45: the model of each stage. Default = the provider's single AI Lab model for both (Task39 behavior).
+  stageModels: Pick<AiLabStageModels, "generate" | "rewrite"> = {
+    generate: AI_LAB_POST_MODELS[provider],
+    rewrite: AI_LAB_POST_MODELS[provider],
+  },
 ) {
-  const model = AI_LAB_POST_MODELS[provider];
   const code = ERROR_PREFIX[provider];
   const scope = {
     provider,
@@ -130,7 +177,7 @@ export function createAiLabTextProvider(
     maxCalls: twoStage ? 1 : 0,
   }]);
   // Same prompts, schemas, caps and timeouts for both providers; the adapters absorb the wire differences.
-  return async (
+  const call = async (
     request: TextRequest,
     stage: "generate" | "rewrite" = "generate",
   ) => {
@@ -145,6 +192,11 @@ export function createAiLabTextProvider(
       request.maxOutputTokens < 1 || request.maxOutputTokens > 3072
     ) {
       throw new Error(`${code}_OUTPUT_BUDGET_INVALID`);
+    }
+    const model = stage === "rewrite" ? stageModels.rewrite : stageModels.generate;
+    // Only a priced catalog model of the selected provider; refused before any key read or request.
+    if (findModelSpec(model)?.provider !== provider) {
+      throw new Error(`${code}_MODEL_NOT_ALLOWED`);
     }
     const result = await executeAiRequest({
       provider,
@@ -202,6 +254,20 @@ export function createAiLabTextProvider(
       apiCostUsd: result.estimatedCostUsd,
     };
   };
+  /** Estimated USD per stage and in total (catalog list prices, not the invoice). Counts only, no text. */
+  const costLedger = () => {
+    const state = new Map(budget.state().map((s) => [s.id, s]));
+    const entry = (id: string) => ({
+      calls: state.get(id)?.calls ?? 0,
+      estimatedUsd: state.get(id)?.estimatedUsd ?? 0,
+    });
+    return {
+      generate: { model: stageModels.generate, ...entry("ai_lab_brand_post_generate") },
+      rewrite: { model: stageModels.rewrite, ...entry("ai_lab_brand_post_rewrite") },
+      total: entry("ai_lab_brand_post"),
+    };
+  };
+  return Object.assign(call, { costLedger });
 }
 
 /**
@@ -209,19 +275,42 @@ export function createAiLabTextProvider(
  * Task39: AI_LAB_TEXT_PROVIDER picks the provider of BOTH stages (unset = anthropic, as before). An unknown value
  * returns stages that refuse every call before any key read or request, so the reservation is held pre-X and
  * no other provider is tried.
+ * Task45: AI_LAB_TEXT_MODE=luna_sol then picks the stage models (Luna draft, Sol rewrite) on the same OpenAI key;
+ * an invalid or conflicting mode is refused the same way.
  */
 export function createAiLabTextStages(
-  deps: Pick<ExecuteDeps, "readEnv" | "fetch">,
+  deps: Pick<ExecuteDeps, "readEnv" | "fetch"> & {
+    /** Selection log (mode, provider, stage models). Never a key or text. This module does not log by itself. */
+    logSelection?: (entry: Record<string, string>) => void;
+  },
 ) {
   if (deps.readEnv(AI_LAB_TWO_STAGE_FLAG_ENV) !== "enabled") return {};
-  const selected = resolveAiLabTextProvider(deps.readEnv);
-  if (!selected) {
-    const refuse = () => Promise.reject(new Error("AI_LAB_TEXT_PROVIDER_INVALID"));
+  const selection = resolveAiLabTextSelection(deps.readEnv);
+  const log = deps.logSelection ?? (() => {});
+  if (!selection.ok) {
+    log({ status: "refused", error: selection.error });
+    const refuse = () => Promise.reject(new Error(selection.error));
     return { provider: null, textProvider: refuse, rewriteVoice: refuse };
   }
-  const provider = createAiLabTextProvider(deps, true, selected);
+  const { mode, models } = selection;
+  log({
+    status: "selected",
+    mode,
+    provider: models.provider,
+    generateModel: models.generate,
+    rewriteModel: models.rewrite,
+  });
+  const provider = createAiLabTextProvider(
+    { readEnv: deps.readEnv, fetch: deps.fetch },
+    true,
+    models.provider,
+    models,
+  );
   return {
-    provider: selected,
+    provider: models.provider,
+    mode,
+    models,
+    costLedger: provider.costLedger,
     textProvider: (request: TextRequest) => provider(request),
     rewriteVoice: async (
       { brandId, postType, instructions, input }: Omit<
@@ -242,5 +331,5 @@ export function createAiLabTextStages(
   };
 }
 
-/** Kept for the existing x-test-post import; the provider is chosen by AI_LAB_TEXT_PROVIDER. */
+/** Kept for the existing x-test-post import; the stages are chosen by AI_LAB_TEXT_PROVIDER / AI_LAB_TEXT_MODE. */
 export const createAiLabClaudeStages = createAiLabTextStages;
