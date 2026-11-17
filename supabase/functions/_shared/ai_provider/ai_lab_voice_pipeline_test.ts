@@ -1,13 +1,27 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { createAiLabClaudeStages } from "./ai_lab_post.ts";
+import {
+  createAiLabClaudeStages,
+  createAiLabTextProvider,
+  createAiLabTextStages,
+} from "./ai_lab_post.ts";
+import {
+  AI_LAB_TOPIC_VALUE_HELD,
+  assessAiLabTopicValue,
+} from "../brand/ai_lab_topic_value.ts";
+import {
+  buildAiLabTopicCandidates,
+  loadAiLabDevDiaryMarkdown,
+} from "../brand/ai_lab_dev_diary_context.ts";
 import {
   anthropicBody,
   FAKE_ANTHROPIC_KEY,
+  FAKE_OPENAI_KEY,
   fakeEnv,
   hangUntilAborted,
   jsonResponse,
+  openAiBody,
   type RecordedCall,
   recordingFetch,
   type Responder,
@@ -167,12 +181,16 @@ function fixture(
     key = FAKE_ANTHROPIC_KEY,
     publishError,
     topic = FIXTURE_TOPIC,
+    extraEnv = {},
+    kind = "evergreen",
   }: {
     rotation?: number;
     flag?: string;
     key?: string;
     publishError?: Error;
     topic?: string;
+    extraEnv?: Record<string, string | undefined>;
+    kind?: "diary" | "evergreen";
   } = {},
 ) {
   const events: string[] = [];
@@ -184,6 +202,7 @@ function fixture(
     AI_LAB_CLAUDE_TWO_STAGE: flag,
     AI_LAB_TEXT_API_KEY: key,
     ANTHROPIC_API_KEY: "shared-key-must-never-be-used",
+    ...extraEnv,
   });
   const { textProvider, rewriteVoice } = createAiLabClaudeStages({
     readEnv: env.readEnv,
@@ -230,7 +249,7 @@ function fixture(
           claimId: "fixture-claim",
           eventKey: "fixture-event",
           unitKey: "fixture-unit",
-          kind: "evergreen",
+          kind,
           topic,
         });
       },
@@ -368,6 +387,7 @@ for (
     assert.equal(Object.hasOwn(input, "poll_options"), false);
     assert.deepEqual(f.env.reads, [
       "AI_LAB_CLAUDE_TWO_STAGE",
+      "AI_LAB_TEXT_PROVIDER",
       "AI_LAB_TEXT_API_KEY",
       "AI_LAB_TEXT_API_KEY",
     ]);
@@ -1154,6 +1174,7 @@ test("other brand, missing dedicated key and oversized estimated spend never sen
   );
   assert.deepEqual(missing.env.reads, [
     "AI_LAB_CLAUDE_TWO_STAGE",
+    "AI_LAB_TEXT_PROVIDER",
     "AI_LAB_TEXT_API_KEY",
   ]);
   assert.deepEqual(missing.payloads, []);
@@ -2405,4 +2426,503 @@ test("task37: both prompts ask for one plain register and natural flow, not cosm
     rewrite,
     /原文にない時期・人物・体験・実績・近況・「私」・方言を足しません/u,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Task39: topic value, plain conversational voice, and one contract for
+// Claude and OpenAI. TASK38_REAL_DRAFT_200 and TASK38_REAL_REWRITE_180 are the
+// real Claude two-stage output the user rejected in G6-01 Task38 (REPORT
+// 6943139570: 「もっと普通の会話の方がいい」「手が止まった…は使わない」「そもそも
+// 内容があんまり」), used only as fixed inputs. Every other text here is
+// hand-written; no provider is called. These checks catch regressions; they
+// never stand in for the user's own PASS.
+const TASK38_REAL_DRAFT_200 = [
+  "昨日はiOS版で実データにつないで、Xの認証がちゃんと通るか見てた。",
+  "途中でテスト用のXアカウントが既存の接続とかぶってるのに気づいて手が止まった。そのまま進めたら本番に影響するかもしれなかったから、先に進めるより止めるほうを選んだ。",
+  "それとは別に、完了を確認するたびに公開していい開発内容だけを共有メモに残すようにした。こういう日記のネタも、そこから拾えば変なものを出さずに済む。",
+  "#個人開発",
+].join("\n\n");
+const TASK38_REAL_REWRITE_180 = [
+  "昨日はiOS版を実データにつないでXの認証が通るか試してた。",
+  "でも途中でテスト用のXアカウントが既存の接続とかぶってるのに気づいて手が止まったんだよね。そのままいくと本番に響くかもしれないから進めるのはやめておいた。",
+  "あと完了を確かめるたびに出していい開発内容だけ共有メモに書いとくことにした。日記のネタもそこから拾えば変なもの出さずに済むし",
+  "#個人開発",
+].join("\n\n");
+// Hand-written: one plain register, no staged reaction, no trailing 「〜し」.
+const TASK39_PLAIN_REWRITE_0930 = [
+  "昨日はiOS版を実データにつないで、Xの認証が通るか見てた。",
+  "そしたらテスト用のXアカウントが既存の接続とかぶってて、このまま進めると本番に影響しそうだったからそこで止めた。",
+  "あと公開していい開発内容だけ共有メモに残すことにした。",
+  "#個人開発",
+].join("\n\n");
+
+// A topic with something a reader can picture (bundled diary 2026-10-10).
+const TASK39_GOOD_TOPIC = [
+  "開発日記（2026-10-10、昨日の出来事）より。",
+  "できごと: AIと投稿の相談をする画面で、使うアカウントを素早く切り替えても、前の相談内容が別の相談に混ざらないよう直した。",
+  "詰まったこと: 一度別のアカウントに切り替えて元へ戻ったとき、古いAIの返事が後から届く可能性があった。",
+  "決めたこと: 「今開いている相談なのか」を確認してから返事を画面へ表示する。",
+  "今回の切り口: どこで詰まり、何に気づいたのか",
+].join("\n");
+const TASK39_GOOD_DRAFT = [
+  "昨日はAIに投稿の相談をする画面を直してた。",
+  "アカウントを切り替えて元に戻ると、古いAIの返事があとから届くことがあって前の相談が混ざりそうだった。",
+  "なので今開いてる相談かどうかを見てから返事を出すようにした。",
+  "#個人開発",
+].join("\n\n");
+const TASK39_GOOD_REWRITE = [
+  "AIに投稿の相談をする画面でアカウントを切り替えて戻ったら、古いAIの返事があとから届くことがあった。",
+  "前の相談が混ざるのはまずいから、昨日直した。返事は今開いてる相談のときだけ出す。",
+  "#個人開発",
+].join("\n\n");
+
+type Task39Provider = "anthropic" | "openai";
+const TASK39_PROVIDERS: readonly Task39Provider[] = ["anthropic", "openai"];
+const TASK39_URL = {
+  anthropic: "https://api.anthropic.com/v1/messages",
+  openai: "https://api.openai.com/v1/responses",
+} as const;
+const TASK39_KEY_ENV = {
+  anthropic: "AI_LAB_TEXT_API_KEY",
+  openai: "AI_LAB_OPENAI_TEXT_API_KEY",
+} as const;
+
+function providerBody(provider: Task39Provider, payload: unknown) {
+  return jsonResponse(
+    200,
+    provider === "anthropic" ? anthropicBody(payload) : openAiBody(payload),
+  );
+}
+
+/** The system text and the user content as each provider received them. */
+function sentPrompt(provider: Task39Provider, call: RecordedCall) {
+  if (provider === "anthropic") {
+    const body = call.body as {
+      system: string;
+      messages: { content: string }[];
+    };
+    return { system: body.system, user: body.messages[0].content };
+  }
+  const body = call.body as { instructions: string; input: string };
+  return { system: body.instructions, user: body.input };
+}
+
+function task39Fixture(
+  provider: Task39Provider,
+  {
+    draft = TASK39_GOOD_DRAFT,
+    rewrite = TASK39_GOOD_REWRITE,
+    topic = TASK39_GOOD_TOPIC,
+    kind = "diary" as "diary" | "evergreen",
+    env = {} as Record<string, string | undefined>,
+    respond,
+    publishError,
+  }: {
+    draft?: string;
+    rewrite?: string;
+    topic?: string;
+    kind?: "diary" | "evergreen";
+    env?: Record<string, string | undefined>;
+    respond?: Responder;
+    publishError?: Error;
+  } = {},
+) {
+  return fixture(
+    respond ??
+      ((_call, index) =>
+        providerBody(
+          provider,
+          index
+            ? { decision: "rewritten", text: rewrite, edits: [] }
+            : { text: draft },
+        )),
+    {
+      topic,
+      kind,
+      publishError,
+      extraEnv: {
+        ...(provider === "openai"
+          ? {
+            AI_LAB_TEXT_PROVIDER: "openai",
+            AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY,
+          }
+          : {}),
+        OPENAI_API_KEY: "shared-openai-key-must-never-be-used",
+        ...env,
+      },
+    },
+  );
+}
+
+test("task39 (A): the Task38 topic is held as weak; a reader-visible topic is postable", () => {
+  assert.deepEqual(assessAiLabTopicValue(TOPIC_0930), {
+    postable: false,
+    reasons: [
+      "NO_READER_VISIBLE_EVENT",
+      "INTERNAL_WORK_REPORT",
+      "OPAQUE_ACCOUNT_DETAIL",
+    ],
+  });
+  assert.deepEqual(assessAiLabTopicValue(TASK39_GOOD_TOPIC), {
+    postable: true,
+    reasons: [],
+  });
+  // A finished check with nothing that went wrong and nothing decided.
+  assert.deepEqual(
+    assessAiLabTopicValue(
+      "開発日記（2026-10-10、昨日の出来事）より。\nできごと: 通知画面の表示を確認した。\n今回の切り口: 何を作った・直したのか",
+    ).reasons,
+    ["CONFIRMATION_ONLY"],
+  );
+  // The same check becomes a topic once something happened on the screen.
+  assert.equal(
+    assessAiLabTopicValue(
+      "できごと: 通知画面の表示を確認した。\n詰まったこと: 小さいiPhoneだと日付の文字が切れていた。",
+    ).postable,
+    true,
+  );
+  // Evergreen seeds carry no diary fact lines and are curated separately.
+  assert.equal(assessAiLabTopicValue("仕事の合間にできる小さな工夫").postable, true);
+  // The 切り口 line never counts: a reader-visible angle cannot rescue weak facts.
+  assert.equal(
+    assessAiLabTopicValue(
+      TOPIC_0930.replace(/今回の切り口: .*/u, "今回の切り口: 画面とボタンの話"),
+    ).postable,
+    false,
+  );
+});
+
+test("task39 (A): the bundled diary skips weak events by reason code and keeps the evergreen tier", async () => {
+  const { candidates, exclusions } = buildAiLabTopicCandidates({
+    markdown: await loadAiLabDevDiaryMarkdown(),
+    now: new Date("2026-10-01T03:00:00Z"),
+    rotationIndex: 0,
+  });
+  const diary = candidates.filter((c) => c.kind === "diary").map((c) =>
+    c.eventKey
+  );
+  assert.deepEqual(diary, ["diary:20260928-honest-unavailable-buttons"]);
+  const held = exclusions.filter((e) => e.stage === "post_value");
+  assert.ok(
+    held.some((e) =>
+      e.candidate === "diary:20260930-x-auth-test-account-overlap" &&
+      e.reason.startsWith("WEAK_POST_VALUE:NO_READER_VISIBLE_EVENT")
+    ),
+    JSON.stringify(held),
+  );
+  // No text in the exclusion log, and the schedule is not stopped.
+  assert.ok(held.every((e) => !/[ぁ-ん]/u.test(e.reason)));
+  assert.ok(candidates.some((c) => c.kind === "evergreen"));
+});
+
+for (const provider of TASK39_PROVIDERS) {
+  test(`task39 (A) ${provider}: a weak diary claim is released before any provider call or X`, async () => {
+    const f = task39Fixture(provider, { topic: TOPIC_0930 });
+    await assert.rejects(
+      dispatchAiLabScheduledBrandPost(f.args),
+      new RegExp(AI_LAB_TOPIC_VALUE_HELD),
+    );
+    assert.equal(f.recorder.calls.length, 0);
+    assert.deepEqual(f.payloads, []);
+    assert.deepEqual(f.events, ["claim", "release:PRE_X_CONTENT_REJECTED"]);
+  });
+
+  test(`task39 (C) ${provider}: both stages run on the selected provider and the checked text is the only X payload`, async () => {
+    const f = task39Fixture(provider);
+    const result = await dispatchAiLabScheduledBrandPost(f.args);
+    assert.equal(result.voiceRewriteDecision, "edited");
+    assert.deepEqual(f.payloads, [{
+      text: TASK39_GOOD_REWRITE,
+      pollOptions: undefined,
+    }]);
+    assert.equal(f.recorder.calls.length, 2);
+    for (const call of f.recorder.calls) {
+      assert.equal(call.url, TASK39_URL[provider]);
+    }
+    const model = (f.recorder.calls[0].body as { model: string }).model;
+    assert.equal(
+      model,
+      provider === "anthropic" ? "claude-opus-5-5" : "gpt-6.1-sol",
+    );
+    // Only the selected provider's dedicated key is read; never a shared key.
+    assert.deepEqual(f.env.reads, [
+      "AI_LAB_CLAUDE_TWO_STAGE",
+      "AI_LAB_TEXT_PROVIDER",
+      TASK39_KEY_ENV[provider],
+      TASK39_KEY_ENV[provider],
+    ]);
+  });
+}
+
+test("task39 (C): Claude and OpenAI receive the same prompts, topic and voice contract", async () => {
+  const sent = [];
+  for (const provider of TASK39_PROVIDERS) {
+    const f = task39Fixture(provider);
+    await dispatchAiLabScheduledBrandPost(f.args);
+    sent.push(f.recorder.calls.map((call) => sentPrompt(provider, call)));
+  }
+  assert.deepEqual(sent[0], sent[1]);
+  const [draftPrompt, rewritePrompt] = sent[0];
+  assert.match(draftPrompt.system, /『手が止まった』『頭を抱えた』のような演出した反応/u);
+  assert.match(draftPrompt.system, /読んだ人が場面を思い浮かべられる出来事か気づきを一つ選んで/u);
+  assert.ok(
+    draftPrompt.system.indexOf("最優先: ") <
+      draftPrompt.system.indexOf("普通に友達へ話すX投稿にする"),
+  );
+  assert.match(rewritePrompt.system, /「手が止まった」「頭を抱えた」のような演出した反応/u);
+  assert.match(rewritePrompt.system, /唐突に「〜し」で切れる終わり方/u);
+  assert.match(rewritePrompt.system, /強引な会話調のために事実をねじ曲げません/u);
+  assert.equal(JSON.parse(rewritePrompt.user).source, TASK39_GOOD_TOPIC);
+});
+
+test("task39 (C): flag unset keeps the existing generator; the provider setting alone never turns stages on", () => {
+  for (
+    const env of [
+      {},
+      { AI_LAB_TEXT_PROVIDER: "openai" },
+      { AI_LAB_CLAUDE_TWO_STAGE: "true", AI_LAB_TEXT_PROVIDER: "anthropic" },
+    ]
+  ) {
+    const reader = fakeEnv(env as Record<string, string>);
+    assert.deepEqual(
+      createAiLabTextStages({ readEnv: reader.readEnv, fetch: () => {
+        throw new Error("no request");
+      } }),
+      {},
+    );
+    assert.deepEqual(reader.reads, ["AI_LAB_CLAUDE_TWO_STAGE"]);
+  }
+  // The x-test-post import is the same factory.
+  assert.equal(createAiLabClaudeStages, createAiLabTextStages);
+  // Flag ON without a provider setting is today's Claude selection.
+  const reader = fakeEnv({ AI_LAB_CLAUDE_TWO_STAGE: "enabled" });
+  const stages = createAiLabTextStages({ readEnv: reader.readEnv });
+  assert.equal(stages.provider, "anthropic");
+});
+
+for (const value of ["gemini", "OpenAI", "claude", " openai", "anthropic,openai"]) {
+  test(`task39 (C): unknown provider ${JSON.stringify(value)} holds before any key read, request or X`, async () => {
+    const f = task39Fixture("anthropic", {
+      env: { AI_LAB_TEXT_PROVIDER: value },
+    });
+    await assert.rejects(
+      dispatchAiLabScheduledBrandPost(f.args),
+      /AI_LAB_TEXT_PROVIDER_INVALID/,
+    );
+    assert.equal(f.recorder.calls.length, 0);
+    assert.deepEqual(f.env.reads, [
+      "AI_LAB_CLAUDE_TWO_STAGE",
+      "AI_LAB_TEXT_PROVIDER",
+    ]);
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.includes("start X"), false);
+  });
+}
+
+test("task39 (C): a selected provider without its own key never falls back to the other key", async () => {
+  for (const provider of TASK39_PROVIDERS) {
+    const f = task39Fixture(provider, {
+      env: { [TASK39_KEY_ENV[provider]]: undefined },
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args), /KEY_MISSING/);
+    assert.equal(f.recorder.calls.length, 0);
+    assert.deepEqual(f.payloads, []);
+    const other = provider === "anthropic" ? "openai" : "anthropic";
+    assert.equal(f.env.reads.includes(TASK39_KEY_ENV[other]), false);
+    assert.equal(f.env.reads.includes("OPENAI_API_KEY"), false);
+    assert.equal(f.env.reads.includes("ANTHROPIC_API_KEY"), false);
+  }
+});
+
+for (const provider of TASK39_PROVIDERS) {
+  test(`task39 (C) ${provider}: a failed second stage sends nothing and is not retried elsewhere`, async () => {
+    const f = task39Fixture(provider, {
+      respond: (_call, index) =>
+        index
+          ? jsonResponse(500, { error: { message: "synthetic" } })
+          : providerBody(provider, { text: TASK39_GOOD_DRAFT }),
+    });
+    await assert.rejects(
+      dispatchAiLabScheduledBrandPost(f.args),
+      /GENERATION_FAILED/,
+    );
+    assert.equal(f.recorder.calls.length, 2);
+    assert.ok(f.recorder.calls.every((c) => c.url === TASK39_URL[provider]));
+    assert.deepEqual(f.payloads, []);
+    assert.equal(f.events.at(-1), "release:PRE_X_FAILED");
+  });
+
+  test(`task39 (C) ${provider}: an ambiguous X write is never replayed through either stage`, async () => {
+    const f = task39Fixture(provider, {
+      publishError: new Error("synthetic lost response"),
+    });
+    await assert.rejects(dispatchAiLabScheduledBrandPost(f.args));
+    assert.equal(f.recorder.calls.length, 2);
+    assert.equal(f.payloads.length, 1);
+    assert.equal(f.events.at(-1), "ambiguous X");
+  });
+
+  test(`task39 (C) ${provider}: call caps, per-call cost and timeout signal are the same contract`, async () => {
+    const recorder = recordingFetch((_call) =>
+      providerBody(provider, { text: "本文" })
+    );
+    const env = fakeEnv({
+      AI_LAB_TEXT_API_KEY: FAKE_ANTHROPIC_KEY,
+      AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY,
+    });
+    const text = createAiLabTextProvider(
+      { readEnv: env.readEnv, fetch: recorder.fetch },
+      true,
+      provider,
+    );
+    const request = {
+      brandId: "ai_salaryman_lab",
+      postType: "brand_post",
+      instructions: "指示",
+      input: "題材",
+      maxOutputTokens: 2000,
+    };
+    for (let i = 0; i < 3; i++) {
+      const result = await text(request);
+      assert.ok(result.apiCostUsd > 0 && result.apiCostUsd <= 0.15);
+    }
+    await assert.rejects(text(request), /BUDGET_DENIED/);
+    await text({ ...request, maxOutputTokens: 3072 }, "rewrite");
+    await assert.rejects(
+      text({ ...request, maxOutputTokens: 3072 }, "rewrite"),
+      /BUDGET_DENIED/,
+    );
+    assert.equal(recorder.calls.length, 4);
+    assert.ok(recorder.calls.every((c) => c.url === TASK39_URL[provider]));
+    assert.ok(
+      recorder.calls.every((c) => c.headers.get("authorization") !== null ||
+        c.headers.get("x-api-key") !== null),
+    );
+  });
+}
+
+test("task39 (C): OpenAI accepts only the dated snapshot of the requested model", async () => {
+  for (
+    const [model, ok] of [
+      ["gpt-6.1-sol", true],
+      ["gpt-6.1-sol-2026-09-01", true],
+      ["gpt-6-luna", false],
+      ["gpt-6.1-sol-mini", false],
+      ["gpt-6.1-sol-2026-09-01-x", false],
+    ] as const
+  ) {
+    const recorder = recordingFetch(() =>
+      jsonResponse(200, openAiBody({ text: "本文" }, { model }))
+    );
+    const text = createAiLabTextProvider({
+      readEnv: fakeEnv({ AI_LAB_OPENAI_TEXT_API_KEY: FAKE_OPENAI_KEY }).readEnv,
+      fetch: recorder.fetch,
+    }, true, "openai");
+    const run = text({
+      brandId: "ai_salaryman_lab",
+      postType: "brand_post",
+      instructions: "指示",
+      input: "題材",
+      maxOutputTokens: 2000,
+    });
+    if (ok) await run;
+    else await assert.rejects(run, /AI_LAB_OPENAI_TEXT_RESPONSE_MODEL_MISMATCH/);
+  }
+});
+
+test("task39 (B)(D): the Task38 rewrite is grounded now but held for its staged reaction and abrupt ending", () => {
+  assert.equal([...TASK38_REAL_DRAFT_200].length, 200);
+  assert.equal([...TASK38_REAL_REWRITE_180].length, 180);
+  // Task38 held only on 「ことにした」; the 「決めたこと: …運用にした」 line grounds it now.
+  assert.deepEqual(ungroundedClaims(TASK38_REAL_REWRITE_180, TOPIC_0930), []);
+  assert.throws(
+    () =>
+      groundedRewrite(TASK38_REAL_DRAFT_200, TOPIC_0930, TASK38_REAL_REWRITE_180),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  );
+  for (
+    const text of [
+      // Either flaw alone still holds.
+      TASK38_REAL_REWRITE_180.replace("気づいて手が止まったんだよね。", "気づいた。"),
+      TASK38_REAL_REWRITE_180.replace("済むし", "済む。"),
+      // Fillers piled up for effect.
+      TASK39_PLAIN_REWRITE_0930.replace("そしたら", "まあなんか"),
+    ]
+  ) {
+    assert.throws(
+      () => groundedRewrite(TASK38_REAL_DRAFT_200, TOPIC_0930, text),
+      /AI_LAB_VOICE_STYLE_REJECTED/,
+      text,
+    );
+  }
+  const accepted = groundedRewrite(
+    TASK38_REAL_DRAFT_200,
+    TOPIC_0930,
+    TASK39_PLAIN_REWRITE_0930,
+  );
+  assert.equal(accepted.text, TASK39_PLAIN_REWRITE_0930);
+  // A staged reaction the topic itself states is not invented.
+  assert.doesNotThrow(() =>
+    groundedRewrite(
+      TASK38_REAL_DRAFT_200,
+      TOPIC_0930 + "\n気持ち: 重なりに気づいて手が止まった。",
+      TASK39_PLAIN_REWRITE_0930.replace("そしたら", "手が止まったのは"),
+    )
+  );
+});
+
+test("task39 (B): the Task36 rejected 156-character rewrite is still held", () => {
+  assert.throws(
+    () => groundedRewrite(REAL_DRAFT_167, TOPIC_0930, REAL_REWRITE_156),
+    /AI_LAB_VOICE_STYLE_REJECTED/,
+  );
+});
+
+test("task39 (D): 「ことにした」 is grounded only by the stated decision it retells", () => {
+  const without = TOPIC_0930.replace(/決めたこと: .*\n/u, "");
+  const notStated = TOPIC_0930.replace(
+    /決めたこと: .*/u,
+    "決めたこと: 公開してよい開発内容と共有メモの扱いは、まだ決めていない。",
+  );
+  const kept = "あと公開していい開発内容だけ共有メモに残すことにした。";
+  assert.deepEqual(ungroundedClaims(kept, TOPIC_0930), []);
+  const held: readonly [string, string][] = [
+    // no decision line, or a line that states no decision
+    [kept, without],
+    [kept, notStated],
+    // a new decision the line does not mention
+    ["ブログも毎週書くことにした。", TOPIC_0930],
+    // one shared word is not the same decision
+    ["共有メモはもう使わないことにした。", TOPIC_0930],
+    // one decision line grounds one retelling, not two
+    [kept + "公開する開発内容は共有メモで先に選ぶことにした。", TOPIC_0930],
+    // a reason, feeling or plan the topic does not state
+    ["怖かったから公開していい開発内容だけ共有メモに残すことにした。", TOPIC_0930],
+    ["次回から公開していい開発内容だけ共有メモに残すことにした。", TOPIC_0930],
+    ["取り消せないから公開していい開発内容だけ共有メモに残すことにした。", TOPIC_0930],
+  ];
+  for (const [text, source] of held) {
+    assert.notDeepEqual(ungroundedClaims(text, source), [], text);
+  }
+});
+
+test("task39 preview: Task38 real two-stage vs hand-written plain rewrite (manual review only, not a user PASS)", () => {
+  const lines = [
+    "=== task39 preview（非課金fixture。本人PASSの代わりにならない）===",
+    "[題材の判定] Task38の題材: " +
+    JSON.stringify(assessAiLabTopicValue(TOPIC_0930)) +
+    " → 保留（内部作業の報告・読者に伝わらない認証の事情）",
+    "[Task38 実Claude原案 200字]",
+    TASK38_REAL_DRAFT_200,
+    "[Task38 実Claude自然化 180字] → AI_LAB_VOICE_STYLE_REJECTED（手が止まった・済むし）",
+    TASK38_REAL_REWRITE_180,
+    `[手書きの言い換え ${[...TASK39_PLAIN_REWRITE_0930].length}字] 文体検査は通るが、題材自体が弱いため実フローでは保留`,
+    TASK39_PLAIN_REWRITE_0930,
+    `[読者に見える題材の手書き原案 ${[...TASK39_GOOD_DRAFT].length}字]`,
+    TASK39_GOOD_DRAFT,
+    `[同・手書き自然化 ${[...TASK39_GOOD_REWRITE].length}字]`,
+    TASK39_GOOD_REWRITE,
+  ];
+  console.log(lines.join("\n"));
+  assert.equal(assessAiLabTopicValue(TOPIC_0930).postable, false);
 });

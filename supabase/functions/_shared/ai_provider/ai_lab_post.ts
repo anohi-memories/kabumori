@@ -1,8 +1,44 @@
 import { InMemoryBudgetGuard } from "./budget.ts";
 import { executeAiRequest, type ExecuteDeps } from "./execute.ts";
-import { AI_LAB_POST_MODEL } from "./model_catalog.ts";
+import { AI_LAB_POST_MODELS } from "./model_catalog.ts";
 import { PROVIDER_API_KEY_ENV } from "./secrets.ts";
-import type { JsonSchema } from "./types.ts";
+import type { AiProvider, JsonSchema } from "./types.ts";
+
+// Task39: the provider of both AI Lab stages is an explicit server setting. Unset keeps today's Claude
+// selection; any other value than these two is refused before a key is read or a request is sent.
+export const AI_LAB_TWO_STAGE_FLAG_ENV = "AI_LAB_CLAUDE_TWO_STAGE";
+export const AI_LAB_TEXT_PROVIDER_ENV = "AI_LAB_TEXT_PROVIDER";
+/** Each provider reads only its own dedicated AI Lab key, never the shared OPENAI_API_KEY / ANTHROPIC_API_KEY. */
+export const AI_LAB_TEXT_KEY_ENV: Readonly<Record<AiProvider, string>> = Object.freeze({
+  anthropic: "AI_LAB_TEXT_API_KEY",
+  openai: "AI_LAB_OPENAI_TEXT_API_KEY",
+});
+/** Error-code prefix per provider; the Anthropic codes keep their Task15 names. */
+const ERROR_PREFIX: Readonly<Record<AiProvider, string>> = {
+  anthropic: "AI_LAB_OPUS",
+  openai: "AI_LAB_OPENAI_TEXT",
+};
+
+/** The selected provider, or null for a value that is neither (fail closed, no fallback). */
+export function resolveAiLabTextProvider(
+  readEnv: (name: string) => string | undefined,
+): AiProvider | null {
+  const raw = readEnv(AI_LAB_TEXT_PROVIDER_ENV);
+  if (raw === undefined || raw === "") return "anthropic";
+  return raw === "anthropic" || raw === "openai" ? raw : null;
+}
+
+/** OpenAI answers with a dated snapshot of the requested alias (gpt-6.1-sol-2026-09-01). */
+function isRequestedModel(
+  provider: AiProvider,
+  requested: string,
+  actual: string | null,
+): actual is string {
+  if (actual === requested) return true;
+  return provider === "openai" && actual !== null &&
+    /^-\d{4}-\d{2}-\d{2}$/u.test(actual.slice(requested.length)) &&
+    actual.startsWith(requested);
+}
 
 type TextRequest = {
   brandId: string;
@@ -37,6 +73,8 @@ const DRAFT_VOICE_INSTRUCTIONS = [
   // short noun-stop lines; the user rejected the result as still stiff.
   "語尾は常体の話し言葉でそろえ、途中で急に『〜ました』『〜です』で締めない。『安全側を優先。』『〜な状態。』のような報告書風の体言止めを並べない。題材の『運用』『進捗』『〜の確認を進めた』『あわせて』のような業務報告の言い方をそのまま写さず、友達に話すときの言い方に直す。言い換えても事実の範囲は変えない。",
   "短い文を同じ形で縦に並べるだけにしない。流れでつながる話は『〜してたら』『〜けど』『〜から』で一文にまとめてよい。説明のための『なので』『あわせて』を文頭に置き続けない。",
+  // Task39: the Task38 real draft said 「手が止まった」 and the user found it unnatural.
+  "普通に友達へ話すX投稿にする。『手が止まった』『頭を抱えた』のような演出した反応や題材にない気持ちを書かない。唐突に『〜し』で切れる終わり方、意味のないフィラー、内輪の手順や認証の事情の説明はしない。題材の中で読んだ人が場面を思い浮かべられる出来事か気づきを一つ選んで、それを中心に書く。そういう出来事が題材に無ければ、無理に膨らませず短く書く。",
 ].join("\n");
 
 const VOICE_REWRITE_SCHEMA = {
@@ -65,9 +103,12 @@ const VOICE_REWRITE_SCHEMA = {
 export function createAiLabTextProvider(
   deps: Pick<ExecuteDeps, "readEnv" | "fetch">,
   twoStage = false,
+  provider: AiProvider = "anthropic",
 ) {
+  const model = AI_LAB_POST_MODELS[provider];
+  const code = ERROR_PREFIX[provider];
   const scope = {
-    provider: "anthropic",
+    provider,
     application: "ai_salaryman_lab",
     feature: "brand_post",
   } as const;
@@ -88,6 +129,7 @@ export function createAiLabTextProvider(
     scope: { ...scope, logicalRole: REWRITE_ROLE },
     maxCalls: twoStage ? 1 : 0,
   }]);
+  // Same prompts, schemas, caps and timeouts for both providers; the adapters absorb the wire differences.
   return async (
     request: TextRequest,
     stage: "generate" | "rewrite" = "generate",
@@ -96,17 +138,17 @@ export function createAiLabTextProvider(
       request.brandId !== "ai_salaryman_lab" ||
       request.postType !== "brand_post"
     ) {
-      throw new Error("AI_LAB_OPUS_SCOPE_MISMATCH");
+      throw new Error(`${code}_SCOPE_MISMATCH`);
     }
     if (
       !Number.isSafeInteger(request.maxOutputTokens) ||
       request.maxOutputTokens < 1 || request.maxOutputTokens > 3072
     ) {
-      throw new Error("AI_LAB_OPUS_OUTPUT_BUDGET_INVALID");
+      throw new Error(`${code}_OUTPUT_BUDGET_INVALID`);
     }
     const result = await executeAiRequest({
-      provider: "anthropic",
-      model: AI_LAB_POST_MODEL,
+      provider,
+      model,
       logicalRole: stage === "rewrite" ? REWRITE_ROLE : GENERATE_ROLE,
       systemInstructions: request.instructions +
         (twoStage && stage === "generate"
@@ -133,20 +175,20 @@ export function createAiLabTextProvider(
       ...deps,
       // Keep the shared credential untouched; only this workload uses its verified key alias.
       readEnv: (name) =>
-        name === PROVIDER_API_KEY_ENV.anthropic
-          ? deps.readEnv("AI_LAB_TEXT_API_KEY")
+        name === PROVIDER_API_KEY_ENV[provider]
+          ? deps.readEnv(AI_LAB_TEXT_KEY_ENV[provider])
           : undefined,
       budget,
     });
     if (!result.ok) {
-      throw new Error(`AI_LAB_OPUS_GENERATION_FAILED:${result.errorCode}`);
+      throw new Error(`${code}_GENERATION_FAILED:${result.errorCode}`);
     }
-    if (result.actualModel !== AI_LAB_POST_MODEL) {
-      throw new Error("AI_LAB_OPUS_RESPONSE_MODEL_MISMATCH");
+    if (!isRequestedModel(provider, model, result.actualModel)) {
+      throw new Error(`${code}_RESPONSE_MODEL_MISMATCH`);
     }
     const payload = result.parsedPayload as { text?: unknown };
     if (typeof payload.text !== "string" || !payload.text.trim()) {
-      throw new Error("AI_LAB_OPUS_EMPTY_TEXT");
+      throw new Error(`${code}_EMPTY_TEXT`);
     }
     return {
       text: request.outputSchema
@@ -162,13 +204,24 @@ export function createAiLabTextProvider(
   };
 }
 
-/** The server flag selects both stages together. OFF leaves the existing generator selected. */
-export function createAiLabClaudeStages(
+/**
+ * The server flag selects both stages together. OFF leaves the existing generator selected.
+ * Task39: AI_LAB_TEXT_PROVIDER picks the provider of BOTH stages (unset = anthropic, as before). An unknown value
+ * returns stages that refuse every call before any key read or request, so the reservation is held pre-X and
+ * no other provider is tried.
+ */
+export function createAiLabTextStages(
   deps: Pick<ExecuteDeps, "readEnv" | "fetch">,
 ) {
-  if (deps.readEnv("AI_LAB_CLAUDE_TWO_STAGE") !== "enabled") return {};
-  const provider = createAiLabTextProvider(deps, true);
+  if (deps.readEnv(AI_LAB_TWO_STAGE_FLAG_ENV) !== "enabled") return {};
+  const selected = resolveAiLabTextProvider(deps.readEnv);
+  if (!selected) {
+    const refuse = () => Promise.reject(new Error("AI_LAB_TEXT_PROVIDER_INVALID"));
+    return { provider: null, textProvider: refuse, rewriteVoice: refuse };
+  }
+  const provider = createAiLabTextProvider(deps, true, selected);
   return {
+    provider: selected,
     textProvider: (request: TextRequest) => provider(request),
     rewriteVoice: async (
       { brandId, postType, instructions, input }: Omit<
@@ -188,3 +241,6 @@ export function createAiLabClaudeStages(
     },
   };
 }
+
+/** Kept for the existing x-test-post import; the provider is chosen by AI_LAB_TEXT_PROVIDER. */
+export const createAiLabClaudeStages = createAiLabTextStages;

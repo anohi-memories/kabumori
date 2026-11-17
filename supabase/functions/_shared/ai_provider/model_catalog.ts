@@ -23,6 +23,15 @@ export const AI_PROVIDER_CATALOG_VERSION = "ai-provider-catalog/2026-10-10.1";
 /** Explicit AI Lab selection; other workloads keep their existing model policy. */
 export const AI_LAB_POST_MODEL = "claude-opus-5-5";
 
+/**
+ * Task39: the AI Lab two-stage model per provider. Anthropic stays AI_LAB_POST_MODEL; OpenAI uses the catalog's
+ * gpt-6.1-sol. Both are priced above, so a switch never runs an unpriced model.
+ */
+export const AI_LAB_POST_MODELS: Readonly<Record<AiProvider, string>> = Object.freeze({
+  anthropic: AI_LAB_POST_MODEL,
+  openai: "gpt-6.1-sol",
+});
+
 /** USD per 1M tokens. */
 export type PriceTier = {
   /** This tier applies when the request's total prompt tokens are ABOVE this value (0 = from the first token). */
