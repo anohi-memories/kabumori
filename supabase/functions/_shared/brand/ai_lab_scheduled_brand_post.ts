@@ -17,6 +17,7 @@ import { collectAiLabContentViolations } from "./ai_lab_theme_guard.ts";
 import type { AiLabTopicPort } from "./ai_lab_brand_post_store.ts";
 import { AiLabProviderNoPostError } from "./ai_lab_provider_outcome.ts";
 import {
+  AI_LAB_SOURCE_GROUNDING_REJECTED,
   AI_LAB_VOICE_STYLE_REJECTED,
   prepareAiLabVoiceRewrite,
 } from "./ai_lab_voice_rewrite.ts";
@@ -49,7 +50,8 @@ export function preXReleaseReason(error: unknown): string {
   const message = error instanceof Error ? error.message : "";
   if (/^BRAND_POST_(GENERATION_FAILED|EMPTY_OUTPUT|LENGTH_LIMIT_EXCEEDED)/u.test(message)) return "PRE_X_GENERATION_FAILED";
   if (message === "AI_LAB_CONTENT_DIVERSITY_REJECTED" || message === "AI_LAB_VOICE_REWRITE_REJECTED" ||
-    message === "AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED" || message === AI_LAB_VOICE_STYLE_REJECTED) {
+    message === "AI_LAB_VOICE_REWRITE_REVIEW_REQUIRED" || message === AI_LAB_VOICE_STYLE_REJECTED ||
+    message === AI_LAB_SOURCE_GROUNDING_REJECTED) {
     return "PRE_X_CONTENT_REJECTED";
   }
   if (message === "AI_LAB_CROSS_BRAND_DUPLICATE") return "PRE_X_FINGERPRINT_BLOCKED";
@@ -184,7 +186,9 @@ export async function dispatchAiLabScheduledBrandPost({
     await assertNoCrossBrandDuplicate(draft.text);
 
     if (rewriteVoice) {
-      const { request, validate } = prepareAiLabVoiceRewrite(draft);
+      // The claimed topic is the only fact source: the draft is checked against it before the
+      // editor call, and the edited text again inside validate.
+      const { request, validate } = prepareAiLabVoiceRewrite(draft, claim.topic);
       const { text: editedText, decision } = validate(await rewriteVoice(request));
       voiceRewriteDecision = decision;
       const edited = { ...draft, text: editedText, pollOptions };
