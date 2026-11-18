@@ -10,8 +10,9 @@
 //   PREVENTION 防止意図   kept from happening (「混ざらないよう直した」)
 //   UNKNOWN    未確認・曖昧 hearsay, a question, a failed or unclear outcome
 // A candidate may not claim a stronger state than the topic gives the same
-// event. Anything the reader below does not recognise is UNKNOWN and held;
-// nothing is passed on a guess. No network, no model, no dictionary file.
+// event. An inflection or a later clause the reader does not recognise is
+// UNKNOWN and held; only quotes, indirect questions, nouns and plain noun
+// modifiers count as no claim. No network, no model, no dictionary file.
 
 export type ClaimState = "DONE" | "DECIDED" | "POSSIBLE" | "PREVENTION" | "UNKNOWN";
 export type ClaimDecision = "PASS_CANDIDATE" | "HOLD" | "REJECT";
@@ -87,7 +88,6 @@ interface Parsed {
   end: number;
 }
 
-const COMPOUND_BEFORE = /[\p{Script=Han}\p{Script=Katakana}ー々]$/u;
 const KANJI = /[\p{Script=Han}\p{Script=Katakana}]/u;
 
 function ending(text: string, at: number, table: readonly (readonly [string, Cat])[]) {
@@ -153,7 +153,7 @@ function godan(text: string, at: number, row: keyof typeof ROWS, strict = false)
     if (text.startsWith("きれ", at + 1)) return ichidan(text, at + 3, true);
     const hit = ending(text, at + 1, [...MASU, ["たかった", "DESIRE"], ["たい", "DESIRE"]]);
     if (hit) return hit;
-    if (text[at + 1] === "、") return { cat: "RENYOU", end: at + 1 };
+    if (text[at + 1] === "、" || KANJI.test(text[at + 1] ?? "")) return { cat: "RENYOU", end: at + 1 };
     return strict ? null : { cat: "NOUN", end: at + 1 };
   }
   if (c === r.u) return { cat: "DICT", end: at + 1 };
@@ -231,6 +231,8 @@ const UNSURE = /^(?:らしい|らしかった|そう(?:だ|です)|みたい|よ
 const PAST_END = /(?:(?<![まあ])た|(?<![うくすつぬむぶぐるのないけ])だ|でした)$/u;
 const TRAILING = /(?:ん(?:だ|です))?(?:よね|よ|ね|な|わ)?[。！!…]*$/u;
 const FAILED_PAST = /(?:なかった|ませんでした)$|失敗し(?:た|ました)/u;
+const FAILED_CLAUSE =
+  /(?:防|止め|避け|間に合|でき|備え)\p{Script=Hiragana}*?(?:なかった|ませんでした)$|失敗し(?:た|ました)$/u;
 const BOUNDARY = /[。！？!?\n]|ので|けど|のに|(?<![てで])から(?!だ)|(?<=た|だ|ます|です)が、/u;
 
 function stripQuotes(text: string) {
@@ -274,7 +276,7 @@ function laterOutcome(rest: string): { state: ClaimState; reason: string } | nul
   for (const raw of stripQuotes(rest).split(/、|ので|けど|のに|(?<![てで])から|が(?=、)/u)) {
     const clause = raw.replace(TRAILING, "").trim();
     if (!clause) continue;
-    if (/(?:防|止め|避け|間に合|でき|備え)\p{Script=Hiragana}*?(?:なかった|ませんでした)$|失敗し(?:た|ました)$/u.test(clause)) {
+    if (FAILED_CLAUSE.test(clause)) {
       return { state: "DONE", reason: `後続節「${clause}」で防止の失敗＝発生を述べている` };
     }
     if (/(?:防|止め|避け|間に合|でき)\p{Script=Hiragana}*?(?:ない|ません)$/u.test(clause)) {
@@ -294,9 +296,19 @@ function laterOutcome(rest: string): { state: ClaimState; reason: string } | nul
       hold(`後続節「${clause}」が逆接の過去で結果を述べている`);
       continue;
     }
+    // Review 2/3 (6e6aeda9): a later past is safe only when it is plainly the
+    // writer's response — an act on an object (「確認を足した」), a thought
+    // (「と思った」) or a decision/design. Any other past (「効かなかった」「遅かった」
+    // 「名前になった」「本当に起きた」「安心した」) may report the outcome and is held.
     // 「考える必要があった」 states a need, not an outcome.
-    if (past && /[がは]/u.test(clause) && !/を/u.test(clause) && !/(?:必要|余地)があ(?:った|りました)$/u.test(clause)) {
-      hold(`後続節「${clause}」が主語つきの過去（出来事の結果かもしれない）`);
+    if (/(?:なかった|ませんでした)$/u.test(clause)) {
+      hold(`後続節「${clause}」が否定の過去（防止の結果かもしれない）`);
+      continue;
+    }
+    const response = /を/u.test(clause) || /(?:と|って)(?:思|考)/u.test(clause) || DECIDED_END.test(clause) ||
+      /(?:必要|余地)があ(?:った|りました)$/u.test(clause);
+    if ((past || /(?:かった|だった)$/u.test(clause)) && !response) {
+      hold(`後続節「${clause}」が対応行動と言い切れない過去（結果かもしれない）`);
       continue;
     }
     if (/[てで][\p{Script=Han}\p{Script=Katakana}ー]+$/u.test(clause)) {
@@ -368,7 +380,8 @@ function preventionHead(rest: string): Read {
     /(?:た|ました|する|します|してる|している|しています)$/u.test(seg) || /^する/u.test(head) ||
     /^[\p{Script=Han}]{1,4}$/u.test(seg)
   ) {
-    return framed("PREVENTION", `「〜ないよう${seg}」＝防止`, head);
+    const cut = stripQuotes(head).search(BOUNDARY);
+    return framed("PREVENTION", `「〜ないよう${seg}」＝防止`, cut < 0 ? "" : head.slice(cut));
   }
   return { state: "UNKNOWN", reason: `防止の後ろ「${seg}」を読めない` };
 }
@@ -394,7 +407,8 @@ function readMention(m: Mention, sentence: string, link: (skip?: number) => Read
           : { state: null, reason: `「${said}か」＝間接疑問` };
       }
       if (/^(?:かも|可能性)/u.test(after)) return { state: "POSSIBLE", reason: `「${said}かも」` };
-      if (/^(?:と|って)(?:表示|出|書|言|伝)/u.test(after)) return { state: null, reason: "表示文言の引用" };
+      if (/^(?:と|って)(?:言|伝|聞)/u.test(after)) return { state: "UNKNOWN", reason: `「${said}と言われた」＝伝聞` };
+      if (/^(?:と|って)(?:表示|出|書)/u.test(after)) return { state: null, reason: "表示文言の引用" };
       if (/^、?(?:と|って)思/u.test(after) || /^[？?]/u.test(after)) {
         return { state: "UNKNOWN", reason: `「${said}${after.slice(0, 4)}」＝思い込み・疑問` };
       }
@@ -425,9 +439,18 @@ function readMention(m: Mention, sentence: string, link: (skip?: number) => Read
       if (DECIDED_AFTER.test(after)) return { state: "DECIDED", reason: `「${said}${after.slice(0, 6)}」＝決定・作り` };
       if (/^(?:前に|まえに)/u.test(after)) return link();
       if (/^ことにな(?:った|りました)/u.test(after)) return { state: "DECIDED", reason: `「${said}ことになった」` };
-      if (/^(?:ので|から|ため|けど|し[、。]|ことにな(?:る|ります))/u.test(after)) return { state: "POSSIBLE", reason: `「${said}${after.slice(0, 2)}」＝非過去の理由` };
+      const reason = after.match(/^(?:ので|から|ため|けど|し(?=[、。])|ことにな(?:る|ります))/u);
+      if (reason) {
+        return framed("POSSIBLE", `「${said}${reason[0]}」＝非過去の理由`, after.slice(reason[0].length));
+      }
       if (/^(?:ん(?:だ|です))?(?:よね|よ|ね)?[。！!]?$/u.test(after)) return { state: "DECIDED", reason: `「${said}」＝現在形の方針` };
       if (/^(?:の(?![をもは])|という)/u.test(after) || KANJI.test(after[0] ?? "")) {
+        // Review 4: 「混ざる事態が起きた」「混ざるのが防げなかった」 are claims.
+        const clause = clauseEnd(stripQuotes(after));
+        if (FAILED_CLAUSE.test(clause)) return { state: "DONE", reason: `「${said}${clause}」＝防止の失敗` };
+        if (/^(?:の|という|[\p{Script=Han}\p{Script=Katakana}ー]+)[がは]/u.test(after) && PAST_END.test(clause)) {
+          return { state: "UNKNOWN", reason: `「${said}${clause}」＝修飾された名詞が主語の過去` };
+        }
         return { state: null, reason: `「${said}」は名詞の修飾` };
       }
       return { state: "UNKNOWN", reason: `「${said}${after.slice(0, 4)}」を読めない` };
@@ -465,7 +488,8 @@ function mentionsIn(sentence: string): Mention[] {
   for (const q of sentence.matchAll(/「[^」]*」|『[^』]*』/gu)) quotes.push([q.index!, q.index! + q[0].length]);
   const found: Mention[] = [];
   for (let at = 0; at < sentence.length; at++) {
-    if (COMPOUND_BEFORE.test(sentence.slice(0, at))) continue;
+    // Review 1 (6e6aeda9): a kanji right before the stem (「一度混ざった」「結局出た」)
+    // is read, not skipped; a compound read as the event only holds more.
     for (const verb of EVENTS) {
       if (!sentence.startsWith(verb.stem, at)) continue;
       const p = parse(sentence, at, verb);
@@ -494,7 +518,8 @@ export interface ClaimMention {
 
 /** Every claim-bearing mention of a tracked event, with its state and why. */
 export function readClaims(text: string): ClaimMention[] {
-  const body = text.replace(/^[ \t]*[^:：\n]{1,12}[:：][ \t]*/gmu, "");
+  // Only the topic seed's own labels are removed (review 6: not any 「…：」).
+  const body = text.replace(/^[ \t]*(?:できごと|詰まったこと|決めたこと|今回の切り口)[:：][ \t]*/gmu, "");
   const out: ClaimMention[] = [];
   for (const sentence of body.match(/[^。！？!?\n]+[。！？!?]*/gu) ?? []) {
     const mentions = mentionsIn(sentence);

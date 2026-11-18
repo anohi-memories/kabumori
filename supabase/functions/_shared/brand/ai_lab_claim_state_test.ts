@@ -30,6 +30,8 @@ interface Case {
   evidence_span: string;
   /** Task59 held these four right sentences on its conservative rule. */
   task59_held_right?: true;
+  /** A right sentence the prototype holds on purpose (recorded false stop). */
+  known_false_stop?: true;
 }
 
 const S10 = SOURCE_1010;
@@ -110,6 +112,23 @@ export const CLAIM_STATE_CASES: readonly Case[] = [
   c("fixed-then-wrong-name", "review717", S10, "前の相談が混ざってしまわないよう直したので、安心していたが、結局名前が違っていた。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
   // A present form says it is happening, which the prevented event is not.
   c("present-mixing", "review717", S10, "前の相談が混ざってる。", "混ざる", "PREVENTION", "DECIDED", "REJECT", E_MIXED),
+  // AutoReview 6e6aeda9: a kanji right before the verb, subjectless failures,
+  // 「と」 as a past discovery, null readings, reasons, labels.
+  c("r2-kanji-before", "review717", S10, "前の相談が混ざらないよう直しました。前に一度混ざった。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
+  c("r2-kekkyoku", "review717", S10, "結局出た。", "表示する", "DECIDED", "DONE", "REJECT", E_SHOWN),
+  c("r2-kikanakatta", "review717", S10, "前の相談が混ざってしまうのを防いだけど、効かなかった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-umaku", "review717", S10, "混ざらないよう直したが、うまくいかなかった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-dame", "review717", S10, "混ざらないよう直したのに、ダメだった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-osokatta", "review717", S10, "後から届いて混ざるときに備えて、確認を足したが、遅かった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-to-discovery", "review717", S10, "古い返事が後から届くと、別の人の名前になった。", "届く", "POSSIBLE", "UNKNOWN", "HOLD", E_POSSIBLE),
+  c("r2-really", "review717", S10, "後から届く可能性があったが、本当に起きた。", "届く", "POSSIBLE", "UNKNOWN", "HOLD", E_POSSIBLE),
+  c("r2-noga-fail", "review717", S10, "前の相談が混ざらないよう直した。前の相談が混ざるのが防げなかった。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
+  c("r2-noga-found", "review717", S10, "前の相談が混ざらないよう直した。混ざってしまうのが見つかった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-jitai", "review717", S10, "前の相談が混ざらないよう直した。混ざる事態が起きた。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-hajimeta", "review717", S10, "前の相談が混ざらないよう直した。混ざり始めた。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
+  c("r2-iwareta", "review717", S10, "前の相談が混ざらないよう直した。前の返事が出たと言われた。", "表示する", "DECIDED", "UNKNOWN", "HOLD", E_SHOWN),
+  c("r2-habit-reason", "review717", S10, "前の相談がよく混ざるので、ずっと困っていた。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r2-colon", "review717", S10, "前の相談が混ざった：原因は古い返事。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
   // A fix the topic never names for that event.
   c("invented-fix", "review717", S10, "後から届くのを防いだ。", "届く", "POSSIBLE", "PREVENTION", "HOLD", E_POSSIBLE),
   c("negated-check", "review717", S10, "今開いてる相談かを確かめずに返事を画面に出すことにした。", "確認する", "DONE", "UNKNOWN", "HOLD", E_TESTED),
@@ -122,7 +141,9 @@ export const CLAIM_STATE_CASES: readonly Case[] = [
   c("tested-done", "right", S10, "順番を入れ替えたテストでも確かめた。", "確認する", "DONE", "DONE", "PASS_CANDIDATE", E_TESTED),
   c("prevented-done", "right", S10, "前の相談が混ざってしまうのを防いだ。", "混ざる", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_MIXED),
   c("prevented-polite", "right", S10, "前の相談が混ざってしまうのを防げました。", "混ざる", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_MIXED),
-  c("prevented-relief", "right", S10, "前の相談が混ざってしまうのを防いだので、安心した。", "混ざる", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_MIXED),
+  // Review 6e6aeda9: a later past without an object may be the outcome, so
+  // 「安心した」 is held too (safe-side false stop, counted in measure()).
+  c("prevented-relief", "right", S10, "前の相談が混ざってしまうのを防いだので、安心した。", "混ざる", "PREVENTION", "UNKNOWN", "PASS_CANDIDATE", E_MIXED, { known_false_stop: true }),
   c("prevent-decided", "right", S10, "前の相談が混ざってしまうのを防ぐことにしました。", "混ざる", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_MIXED),
   c("sent-twice-stopped", "right", S10, "同じ保存が二重に送られるのも止めた。", "送る", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_SENT),
   c("decided-casual", "right", S10, "返事を画面に出すことにしたんだ。", "表示する", "DECIDED", "DECIDED", "PASS_CANDIDATE", E_SHOWN),
@@ -153,7 +174,8 @@ test("task60: every case keeps its source state, candidate state, decision and e
     assert.ok(j, `${item.id}: no judgement for ${item.event} (${JSON.stringify(result)})`);
     assert.equal(j.sourceState, item.expected_claim_state, `${item.id}: source state`);
     assert.equal(j.candidateState, item.candidate_claim_state, `${item.id}: candidate state (${j.reason})`);
-    assert.equal(result.decision, item.expected_decision, `${item.id}: decision ${JSON.stringify(result.judgements)}`);
+    const actual = item.known_false_stop ? "HOLD" : item.expected_decision;
+    assert.equal(result.decision, actual, `${item.id}: decision ${JSON.stringify(result.judgements)}`);
     assert.ok(j.evidence.includes(item.evidence_span), `${item.id}: evidence ${j.evidence}`);
     assert.ok(j.reason.length > 0, `${item.id}: a reason is given`);
   }
@@ -226,6 +248,6 @@ test("task60: measured against the old guard (no dangerous pass, the Task59 four
   const m = measure();
   console.log(JSON.stringify(m));
   assert.equal(m.new_false_pass, 0);
-  assert.equal(m.new_false_stop, 0);
+  assert.equal(m.new_false_stop, CLAIM_STATE_CASES.filter((x) => x.known_false_stop).length);
   assert.equal(m.task59_four_new_passed, 4);
 });
