@@ -333,7 +333,8 @@ const EVERYDAY_PARAPHRASES: Readonly<Record<string, readonly string[]>> = {
   ネタ: ["題材"],
 };
 // Evaluative words that state no event, person, time or count.
-const EVALUATIVE_WORDS = new Set(["十分", "大事", "便利", "正直", "普通", "結局"]);
+// Task54: 「本当に消えたか」 (the Task53 rewrite for 「ちゃんと消えたか」) states none either.
+const EVALUATIVE_WORDS = new Set(["十分", "大事", "便利", "正直", "普通", "結局", "本当"]);
 
 const licensedWord = (word: string, known: string) =>
   known.includes(word) || EVALUATIVE_WORDS.has(word) ||
@@ -426,13 +427,23 @@ function assertFreeRewriteKeepsFacts(
   if (count(newBody, POLITE_ENDING) > count(oldBody, POLITE_ENDING)) {
     throw new BrandContextError(AI_LAB_VOICE_STYLE_REJECTED);
   }
+  // Task54: a 「ようにしてる」 that retells the topic's stated design is the
+  // draft's own 「〜作りにしてる」 in other words, not a new habit.
+  let stateRetold = DRAFT_STATES_DESIGN.test(oldBody)
+    ? designRetellings(text, source)
+    : 0;
   for (
     const marker of [
       ...newBody.match(NEW_FACT_MARKERS) ?? [],
       ...newBody.match(NEW_EPISODE_MARKERS) ?? [],
     ]
   ) {
-    if (!oldBody.includes(marker)) throw reject();
+    if (oldBody.includes(marker)) continue;
+    if (marker === "ようにして" && stateRetold > 0) {
+      stateRetold -= 1;
+      continue;
+    }
+    throw reject();
   }
   const newRuns = new Set(
     (newBody.match(CONTENT_RUN) ?? []).filter((run) => !oldBody.includes(run)),
@@ -494,6 +505,13 @@ const UNSOURCED_ASSERTIONS = [
   /うまくいっ|上手くいっ|解決し|成功し|助かっ|楽にな|捗っ|はかどっ|改善し|効果が(?:あっ|出)/gu,
   // Task42: resolutions and unreasoned verdicts
   /誓[っいう]|二度と|肝に銘じ|心に決め|固く決|一番|間違いな|確実に|絶対|必ず/gu,
+  // Task54: a prototype or a plan retold as finished or shipped (10/09 「試作した」
+  // → 「完成した」「公開した」).
+  /(?:完成(?:させ|し)|完了し|仕上げ|リリースし|公開し)(?:た|ました)|仕上がっ|出来上がっ|できあがっ|本番(?:に|へ)(?:入れ|出し|反映し)(?:た|ました)/gu,
+  // Task54: a deletion reported as done. 10/09 says the screen shows 「削除した」
+  // only after checking the result; a quoted screen text (「削除しました」), a
+  // condition (「消したら」) or a reported label (「削除したと表示」) is not the claim.
+  /(?<!「)(?:削除|消去|消)し(?:た|ました)(?![」から]|と(?:表示|出|言)|って)|削除済み/gu,
 ];
 const UNSOURCED_ASSERTION_FAMILIES = UNSOURCED_ASSERTIONS.map((pattern) =>
   [pattern, pattern] as const
@@ -542,6 +560,10 @@ type DecisionUnit = {
   /** Content words of the clause that verb ends. */
   clauseRuns: Set<string>;
   stated: boolean;
+  /** Task54: the sentence states a finished design (「…設計にした」). */
+  design: boolean;
+  /** Task54: the sentence negates an act (「…せずに」). */
+  negated: boolean;
 };
 
 function decisionLines(source: string): DecisionUnit[][] {
@@ -556,10 +578,86 @@ function decisionLines(source: string): DecisionUnit[][] {
             sentence.split("、").at(-1)!.match(CONTENT_RUN) ?? [],
           ),
           stated: DECISION_STATED.test(sentence),
+          design: DESIGN_STATED.test(sentence),
+          negated: NEGATED_ACT.test(sentence),
         };
       },
     )
   );
+}
+
+// Task54: the Task53 10/10 draft retold 「…確認してから返事を画面へ表示する。」
+// as 「…見てから画面に出すことにした」 and was held. A topic word in a decision
+// may be retold with these everyday words only (「表示」 → 「出す」), and its
+// 「〜する」 verb with these plain verbs. Anything else must be the topic's word.
+const DECISION_PARAPHRASES: Readonly<
+  Record<string, { words: readonly string[]; verbs: readonly string[] }>
+> = {
+  表示: { words: ["出す", "出し", "出せ", "見せ"], verbs: ["出す", "見せる"] },
+  確認: { words: ["確かめ", "見て", "見る", "チェック"], verbs: ["確かめる", "見る"] },
+};
+
+// Task54: 「確かめずに出す」「確認しないで表示」 keeps the words and flips the act.
+// A retelling that negates an act is grounded only by a decision that does too.
+const NEGATED_ACT = /ずに|せず|ないで|ないまま|なしで/u;
+
+const coversRun = (run: string, runs: Set<string>, sentence: string) =>
+  runs.has(run) ||
+  (DECISION_PARAPHRASES[run]?.words ?? []).some((word) =>
+    sentence.includes(word)
+  );
+
+/** The decision's own verb and its everyday plain retellings. */
+function retoldVerbs(verb: string): string[] {
+  const noun = verb.endsWith("する") ? verb.slice(0, -2) : "";
+  const tail = Object.keys(DECISION_PARAPHRASES).find((word) =>
+    noun.endsWith(word)
+  );
+  return [verb, ...(tail ? DECISION_PARAPHRASES[tail].verbs : [])];
+}
+
+// Task54: the Task53 10/09 rewrite said 「確かめてから出すようにしてる」 for the
+// draft's 「確認してから表示する作りにしてる」. The topic's 「決めたこと」 says it was
+// designed so (「…確認する設計にした」), so describing how the thing is built is
+// not a habit. Only a 「決めたこと」 sentence that states a finished design may
+// ground it, once, and only for a sentence whose verb right before ようにして is
+// that design's own act (or its everyday word) and that carries all but one of
+// the design clause's words. A plain decision (「…表示する。」) does not ground it:
+// deciding is not having built it.
+const DESIGN_STATED =
+  /(?:設計|作り|仕組み|構成|形|ように)にした[。.]?$|ようにした[。.]?$/u;
+const DESIGN_NOUNS = new Set(["設計", "仕組", "構成"]);
+const DESIGN_RETELLING =
+  /([\p{Script=Han}\p{Script=Katakana}ー]*\p{Script=Hiragana}*?[るうくすつぬむぶぐ])ようにして(?:る|い)/u;
+/** The draft itself says how the thing is built. */
+const DRAFT_STATES_DESIGN =
+  /(?:作り|設計|仕組み|構成|形)に(?:して|した)|ようにして(?:る|い)/u;
+
+function designRetellings(text: string, source: string): number {
+  const designs = decisionLines(source).flat().filter((unit) => unit.design);
+  let grounded = 0;
+  for (const sentence of text.match(SENTENCE) ?? []) {
+    const match = sentence.match(DESIGN_RETELLING);
+    if (!match || /ない$/u.test(match[1])) continue;
+    const runs = new Set(sentence.match(CONTENT_RUN) ?? []);
+    const index = designs.findIndex((unit) => {
+      if (NEGATED_ACT.test(sentence) && !unit.negated) return false;
+      const words = [...unit.clauseRuns].filter((run) => !DESIGN_NOUNS.has(run));
+      const covered = words.filter((run) => coversRun(run, runs, sentence));
+      const actVerbs = words.flatMap((run) => [
+        run,
+        ...(DECISION_PARAPHRASES[run]?.verbs ?? []),
+      ]);
+      return covered.length >= 2 && covered.length >= words.length - 1 &&
+        actVerbs.some((verb) =>
+          match[1].endsWith(verb) || match[1].startsWith(verb)
+        );
+    });
+    if (index < 0) continue;
+    designs.splice(index, 1);
+    grounded += 1;
+  }
+  return grounded;
 }
 
 function decisionLineGrounds(text: string, source: string): number {
@@ -573,9 +671,13 @@ function decisionLineGrounds(text: string, source: string): number {
         units.some((unit) =>
           (unit.stated &&
             [...runs].filter((run) => unit.runs.has(run)).length >= 2) ||
-          (!!unit.verb && before.endsWith(unit.verb) &&
+          (!!unit.verb &&
+            (unit.negated || !NEGATED_ACT.test(sentence)) &&
+            retoldVerbs(unit.verb).some((verb) => before.endsWith(verb)) &&
             unit.clauseRuns.size > 0 &&
-            [...unit.clauseRuns].every((run) => runs.has(run)))
+            [...unit.clauseRuns].every((run) =>
+              coversRun(run, runs, sentence)
+            ))
         )
       );
       if (index < 0) continue;
@@ -802,7 +904,8 @@ export function ungroundedClaims(text: string, source: string): string[] {
   const found: string[] = [];
   for (const pattern of [NEW_FACT_MARKERS, NEW_EPISODE_MARKERS]) {
     for (const marker of new Set(body.match(pattern) ?? [])) {
-      if (count(body, marker) > count(src, marker)) found.push(marker);
+      const retold = marker === "ようにして" ? designRetellings(text, source) : 0;
+      if (count(body, marker) > count(src, marker) + retold) found.push(marker);
     }
   }
   // A family is grounded by any of its forms in the topic, counted as a whole.
