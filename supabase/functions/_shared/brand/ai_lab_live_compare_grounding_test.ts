@@ -291,3 +291,39 @@ test("task58 review: casual and mixed-mood retellings", () => {
     assert.ok(!found.includes("見た") && !found.includes("見ました"), `${sentence}: ${found}`);
   }
 });
+
+// Task58 review 2 (AutoReview rv-g6-grounding-decision-hypothesis-f3618e33).
+test("task58 review 2: a possibility after a finished clause, the act done in the topic, and conditions", () => {
+  const closed = REWRITE_1010.replace(
+    "後から届くかもしれなかった。",
+    "後から届いて別の相談に混ざったから、名前だけでは大丈夫とはいえないかもしれない。",
+  );
+  const found = ungroundedClaims(closed, SOURCE_1010);
+  assert.ok(found.includes("届いて") && found.includes("混ざった"), `${found}`);
+  for (
+    const sentence of [
+      "後から届いて、混ざるかもしれなかった。",
+      "後から届いて混ざると困る。",
+      "相談を送って返事を待つ間に切り替えると混ざるかもしれない。",
+      "後から届いちゃったら混ざる。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(
+      !claims.some((word) => /^(?:届い|混ざっ|送っ)/u.test(word)),
+      `${sentence}: ${claims}`,
+    );
+  }
+  // 「確認する」 decided, 「確認した」 reported: 「確かめた」 is the act done; 「見ました」 is never read as it.
+  const confirmTopic = [
+    "開発日記（2026-10-10、昨日の出来事）より。",
+    "できごと: 送信の前に宛先をテストで確認した。",
+    "決めたこと: 送る前に宛先を確認する。",
+  ].join("\n");
+  for (const sentence of ["宛先をテストで確かめた。", "宛先の夢を見ました。"]) {
+    const claims = ungroundedClaims(sentence, confirmTopic);
+    assert.ok(!claims.includes("確かめた") && !claims.includes("見ました"), `${sentence}: ${claims}`);
+  }
+  const undone = confirmTopic.replace("できごと: 送信の前に宛先をテストで確認した。", "できごと: 送信画面を直した。");
+  assert.ok(ungroundedClaims("宛先を確かめた。", undone).includes("確かめた"));
+});

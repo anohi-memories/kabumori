@@ -726,7 +726,31 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   だ: /^(?:ら|り)/u,
   て: /^(?:も|は|な|いな|から)/u,
   で: /^(?:も|は|な|いな|から)/u,
+  // 「届いちゃったら」
+  っ: /^(?:たら|たり|ても|ては)/u,
 };
+// Task58 review 2: a possibility governs the form only up to the end of its
+// clause. A finished past clause (「混ざったから、」「届いたけど」) or a comma
+// after a non-te form closes it; a te-form's comma links to what follows.
+const CLAUSE_DONE = /[ただ](?=ので|から|けど|が|し、)|[ただ]、/u;
+// 「届いて混ざると困る」「消してしまうとまずい」: a te-form that leads into a
+// condition, before any past ending, reports nothing that happened.
+const HYPOTHETICAL_LEAD =
+  /[うくすつぬむぶぐる]と|[えけせてねべめれげ]ば|たら|なら/u;
+
+function clauseAfter(form: string, rest: string): string {
+  const linked = /[てで]$/u.test(form) ? rest.replace(/^、/u, "") : rest;
+  // The form itself closes its clause (「混ざったから、」「届いたけど」).
+  if (/^(?:ので|から|けど|が|し、|、)/u.test(linked)) return "";
+  const done = linked.search(CLAUSE_DONE);
+  return done < 0 ? linked : linked.slice(0, done + 1);
+}
+
+function leadsIntoCondition(form: string, clause: string): boolean {
+  if (!/[てで]$/u.test(form)) return false;
+  const lead = clause.search(HYPOTHETICAL_LEAD);
+  return lead >= 0 && !/[ただ]/u.test(clause.slice(0, lead));
+}
 
 function assertedForms(
   text: string,
@@ -741,9 +765,12 @@ function assertedForms(
     if (JOINED_BEFORE.test(before) && !(run && sourceRuns.has(run))) continue;
     const rest = text.slice(at + form.length);
     if (after?.test(rest)) continue;
-    // 「届いて混ざるかもしれなかった」: a possibility later in the sentence
-    // governs the form; one before it (「かもと思ったら届いた」) does not.
-    if (possibleAfter && KEEPS_POSSIBILITY.test(rest)) continue;
+    // 「届いて混ざるかもしれなかった」: a possibility later in the same clause
+    // governs the form; one before it (「かもと思ったら届いた」) or past a
+    // finished clause (「混ざったから、…かもしれない」) does not.
+    const clause = clauseAfter(form, rest);
+    if (possibleAfter && KEEPS_POSSIBILITY.test(clause)) continue;
+    if (possibleAfter && leadsIntoCondition(form, clause)) continue;
     return true;
   }
   return false;
@@ -758,15 +785,19 @@ function decisionTenseOverclaims(text: string, source: string): string[] {
     for (const form of verb ? pastForms(verb) : []) {
       if (text.includes(form) && !stated.includes(form)) found.push(form);
     }
+    // Task58 review 2: the topic reporting the act done (「確認した」) grounds
+    // its everyday past too (「確かめた」).
+    if (verb && pastForms(verb).some((form) => stated.includes(form))) continue;
     // Task58: 「表示する」 retold as 「出すことにした」 is grounded, but its
     // everyday verb in the past (「出した」「見せた」) says it was done. The
     // 「〜ようにした」 forms stay out: the accepted Task39 draft's
     // 「見てから返事を出すようにした」 retells the decision as how it is built.
     for (const retold of verb ? retoldVerbs(verb).slice(1) : []) {
-      // A two-letter form (「見た」) is too short to tell from 「見た目」.
-      const forms = pastForms(retold).filter((form) =>
-        !form.includes("ように") && [...form].length >= 3
-      );
+      // A verb with a two-letter past (「見る」→「見た」) cannot be told from
+      // 「見た目」「夢を見ました」, so it is left out whole.
+      const pasts = pastForms(retold).filter((form) => !form.includes("ように"));
+      if (pasts.some((form) => [...form].length < 3)) continue;
+      const forms = pasts;
       for (const form of forms) {
         if (
           assertedForms(text, form, sourceRuns) && !stated.includes(form) &&
