@@ -259,3 +259,35 @@ test("task58 boundary: another verb or an unasserted form is not the decision do
     assert.ok(!found.includes("届いて"), `${sentence}: ${found}`);
   }
 });
+
+// Task58 review (AutoReview rv-g6-grounding-decision-hypothesis-d693809e): a
+// dropped particle, a possibility before the event, and 「ちゃった」 are still
+// the event; a possibility after it, and 「見た目」 under a 「確認する」 decision,
+// are not.
+test("task58 review: casual and mixed-mood retellings", () => {
+  for (
+    const [label, from, to, word] of [
+      ["dropped particle (decision)", "画面に出すことにした。", "画面出した。", "出した"],
+      ["dropped particle (event)", "返事が後から届くかもしれなかった。", "返事後から届いた。", "届いた"],
+      ["ちゃった", "後から届くかもしれなかった。", "後から届いちゃった。", "届いちゃっ"],
+      ["possibility before the event", "後から届くかもしれなかった。", "後から届くかもと思ったら届いた。", "届いた"],
+      ["possibility then occurred, no comma", "後から届くかもしれなかった。", "後から届く可能性があったが実際に混ざった。", "混ざった"],
+    ] as const
+  ) {
+    const text = REWRITE_1010.replace(from, to);
+    assert.notEqual(text, REWRITE_1010, label);
+    const found = ungroundedClaims(text, SOURCE_1010);
+    assert.ok(found.includes(word), `${label}: ${found}`);
+    assert.notEqual(rewriteVerdict(DRAFT_1010, text, SOURCE_1010), "edited", label);
+  }
+  const kept = REWRITE_1010.replace("後から届くかもしれなかった。", "後から届いて、混ざるかもしれなかった。");
+  assert.deepEqual(ungroundedClaims(kept, SOURCE_1010), []);
+  const confirmTopic = SOURCE_1010.replace(
+    /決めたこと: .*/u,
+    "決めたこと: 返事を画面へ出す前に、今開いている相談かを確認する。",
+  ).replace("見た目は同じアカウントでも、", "");
+  for (const sentence of ["見た目は同じでも今開いてる相談か確認する。", "そんな返事は見たことない。"]) {
+    const found = ungroundedClaims(sentence, confirmTopic);
+    assert.ok(!found.includes("見た") && !found.includes("見ました"), `${sentence}: ${found}`);
+  }
+});

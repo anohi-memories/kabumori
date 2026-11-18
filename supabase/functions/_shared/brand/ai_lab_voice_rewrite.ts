@@ -716,9 +716,11 @@ function pastForms(verb: string): string[] {
 // Task58: a form counts only where it stands as its own verb and is asserted.
 // A kanji or a joining kana right before it makes another verb (「提出した」
 // 「思い出した」); 「〜たら」「〜たり」「〜たい」「〜ても」「〜てない」 do not report
-// that it happened, and 「〜てから」 only orders steps.
+// that it happened, and 「〜てから」 only orders steps. A topic word right
+// before it is a dropped particle, not a compound (「画面出した」「返事届いた」).
 const JOINED_BEFORE =
   /(?:[\p{Script=Han}\p{Script=Katakana}ー]|[いきしちひみりぎびえけせねめれげべ])$/u;
+const RUN_BEFORE = /[\p{Script=Han}\p{Script=Katakana}ー]{2,}$/u;
 const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   た: /^(?:ら|り|い|く)/u,
   だ: /^(?:ら|り)/u,
@@ -726,11 +728,22 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   で: /^(?:も|は|な|いな|から)/u,
 };
 
-function assertedForms(text: string, form: string): boolean {
+function assertedForms(
+  text: string,
+  form: string,
+  sourceRuns: ReadonlySet<string>,
+  { possibleAfter = false } = {},
+): boolean {
   const after = NOT_ASSERTED_AFTER[form.at(-1)!];
   for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) {
-    if (JOINED_BEFORE.test(text.slice(0, at))) continue;
-    if (after?.test(text.slice(at + form.length))) continue;
+    const before = text.slice(0, at);
+    const run = before.match(RUN_BEFORE)?.[0];
+    if (JOINED_BEFORE.test(before) && !(run && sourceRuns.has(run))) continue;
+    const rest = text.slice(at + form.length);
+    if (after?.test(rest)) continue;
+    // 「届いて混ざるかもしれなかった」: a possibility later in the sentence
+    // governs the form; one before it (「かもと思ったら届いた」) does not.
+    if (possibleAfter && KEEPS_POSSIBILITY.test(rest)) continue;
     return true;
   }
   return false;
@@ -739,6 +752,7 @@ function assertedForms(text: string, form: string): boolean {
 function decisionTenseOverclaims(text: string, source: string): string[] {
   // The 「決めたこと:」 label itself is not a past 「決めた」 the topic states.
   const stated = source.replace(/^[ \t]*[^:：\n]{1,12}[:：]/gmu, "");
+  const sourceRuns = new Set(source.match(CONTENT_RUN) ?? []);
   const found: string[] = [];
   for (const { verb } of decisionLines(source).flat()) {
     for (const form of verb ? pastForms(verb) : []) {
@@ -749,10 +763,13 @@ function decisionTenseOverclaims(text: string, source: string): string[] {
     // 「〜ようにした」 forms stay out: the accepted Task39 draft's
     // 「見てから返事を出すようにした」 retells the decision as how it is built.
     for (const retold of verb ? retoldVerbs(verb).slice(1) : []) {
-      const forms = pastForms(retold).filter((form) => !form.includes("ように"));
+      // A two-letter form (「見た」) is too short to tell from 「見た目」.
+      const forms = pastForms(retold).filter((form) =>
+        !form.includes("ように") && [...form].length >= 3
+      );
       for (const form of forms) {
         if (
-          assertedForms(text, form) && !stated.includes(form) &&
+          assertedForms(text, form, sourceRuns) && !stated.includes(form) &&
           !found.includes(form)
         ) found.push(form);
       }
@@ -772,8 +789,6 @@ const PREVENTED_EVENT =
   /([\p{Script=Han}\p{Script=Katakana}ー]+\p{Script=Hiragana}?)[かがさたなばまらわ]ない(?:よう|ように)/gu;
 const KEEPS_POSSIBILITY =
   /可能性|かもしれ|かも(?:[。、！!?？\s]|$)|恐れ|おそれ|あり[得え]る?|ありうる|かねない/u;
-const POSSIBILITY_CLAUSE_END =
-  /、|(?<=(?:しれなく|可能性があっ|恐れがあっ|おそれがあっ)て)/u;
 const GODAN_REALIZED: Readonly<Record<string, readonly string[]>> = {
   う: ["った", "って", "いました"],
   つ: ["った", "って", "ちました"],
@@ -797,18 +812,25 @@ const NEGATIVE_TO_PLAIN: Readonly<Record<string, string>> = {
   わ: "う",
 };
 
-/** The past, te and polite past of a plain verb (「届く」 → 届いた・届いて). */
+/**
+ * The past, te, polite past and 「ちゃった」 of a plain verb (「届く」 → 届いた・
+ * 届いて・届いちゃっ).
+ */
 function realizedForms(verb: string): string[] {
+  let forms: string[];
   if (verb.endsWith("する")) {
     const noun = verb.slice(0, -2);
-    return [noun + "した", noun + "して", noun + "しました"];
+    forms = [noun + "した", noun + "して", noun + "しました"];
+  } else {
+    const stem = verb.slice(0, -1);
+    forms = (GODAN_REALIZED[verb.at(-1)!] ?? []).map((end) => stem + end);
+    // A final る may be ichidan (「見せる」 → 見せた).
+    if (verb.endsWith("る")) forms.push(stem + "た", stem + "て", stem + "ました");
   }
-  const stem = verb.slice(0, -1);
-  const godan = (GODAN_REALIZED[verb.at(-1)!] ?? []).map((end) => stem + end);
-  // A final る may be ichidan (「見せる」 → 見せた).
-  return verb.endsWith("る")
-    ? [...godan, stem + "た", stem + "て", stem + "ました"]
-    : godan;
+  const casual = forms.filter((form) => /[てで]$/u.test(form)).map((form) =>
+    form.slice(0, -1) + (form.endsWith("て") ? "ちゃっ" : "じゃっ")
+  );
+  return [...forms, ...casual];
 }
 
 function unsourcedOccurrences(text: string, source: string): string[] {
@@ -820,17 +842,14 @@ function unsourcedOccurrences(text: string, source: string): string[] {
     verbs.add(stem + (NEGATIVE_TO_PLAIN[ending] ?? ""));
   }
   const stated = source.replace(/^[ \t]*[^:：\n]{1,12}[:：]/gmu, "");
+  const sourceRuns = new Set(source.match(CONTENT_RUN) ?? []);
   const found: string[] = [];
-  // 「届くかもしれなくて、別の相談に混ざった」: each clause keeps its own mood.
-  const clauses = (text.match(SENTENCE) ?? []).flatMap((s) =>
-    s.split(POSSIBILITY_CLAUSE_END)
-  );
-  for (const clause of clauses) {
-    if (KEEPS_POSSIBILITY.test(clause)) continue;
+  for (const sentence of text.match(SENTENCE) ?? []) {
     for (const verb of verbs) {
       for (const form of realizedForms(verb)) {
         if (
-          assertedForms(clause, form) && !stated.includes(form) &&
+          assertedForms(sentence, form, sourceRuns, { possibleAfter: true }) &&
+          !stated.includes(form) &&
           !found.includes(form)
         ) found.push(form);
       }
