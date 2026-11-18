@@ -16,6 +16,7 @@ import {
   LIVE_COMPARE_PAID_URL,
   type LiveCompareResult,
   type LiveCompareRun,
+  type LiveCompareStage,
   runLiveCompare,
 } from "./ai_lab_live_compare.ts";
 import type {
@@ -116,14 +117,19 @@ const topicOf = (label: string): RigTopic => label.endsWith("1010") ? "1010" : "
 export function createLocalRigRunOne(rig: { setRun: (label: string) => void }) {
   return async (
     run: LiveCompareRun,
-    deps: { fetch: FetchLike; readEnv: (name: string) => string | undefined },
+    deps: {
+      fetchFor: (stage: LiveCompareStage) => FetchLike;
+      readEnv: (name: string) => string | undefined;
+    },
   ): Promise<string> => {
     const source = RIG_SOURCES[topicOf(run.label)];
     rig.setRun(run.label);
-    const stages = createAiLabTextStages(deps);
-    if (!stages.textProvider || !stages.rewriteVoice) return "RIG_STAGES_UNAVAILABLE";
+    // Task57: each stage gets the fetch bound to its own operation ("<run>/draft", "<run>/rewrite").
+    const drafting = createAiLabTextStages({ readEnv: deps.readEnv, fetch: deps.fetchFor("draft") });
+    const editing = createAiLabTextStages({ readEnv: deps.readEnv, fetch: deps.fetchFor("rewrite") });
+    if (!drafting.textProvider || !editing.rewriteVoice) return "RIG_STAGES_UNAVAILABLE";
     try {
-      const draft = await stages.textProvider({
+      const draft = await drafting.textProvider({
         brandId: "ai_salaryman_lab",
         postType: "brand_post",
         instructions: "fixture",
@@ -135,7 +141,7 @@ export function createLocalRigRunOne(rig: { setRun: (label: string) => void }) {
         postType: "brand_post",
         text: draft.text.trim(),
       }, source);
-      const { decision } = validate(await stages.rewriteVoice(request));
+      const { decision } = validate(await editing.rewriteVoice(request));
       // Reaching here means the real pipeline would hand the text to X; the rig has no X step.
       return `READY_FOR_X_DISPATCH:${decision}`;
     } catch (error) {
@@ -153,7 +159,8 @@ export type RigFaults = {
   paid?: (model: string, stage: "draft" | "rewrite", index: number) => Response | Error | undefined;
 };
 
-export type RigRecord = { method: string; url: string };
+/** `body` is kept for paid sends only (test inspection; never part of a runner result). */
+export type RigRecord = { method: string; url: string; run?: string; body?: string };
 
 /** The in-process mock: records every request, refuses any other URL, never touches the network. */
 export function createLocalRigFetch(replies: RigReplies, faults: RigFaults = {}) {
@@ -172,6 +179,7 @@ export function createLocalRigFetch(replies: RigReplies, faults: RigFaults = {})
     }
     if (!isPaid || method !== "POST") throw new Error("RIG_NET_REFUSED");
     const raw = typeof init?.body === "string" ? init.body : await (input as Request).clone().text();
+    Object.assign(records.at(-1)!, { run: currentRun, body: raw });
     const body = JSON.parse(raw) as { model: string };
     const stage = raw.includes('"decision"') ? "rewrite" : "draft";
     const index = paidIndex++;

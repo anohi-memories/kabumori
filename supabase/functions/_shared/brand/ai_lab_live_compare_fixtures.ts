@@ -53,3 +53,20 @@ export const DRAFT_1010 = `AIと投稿の相談をする画面で、アカウン
 順番を入れ替えたテストで確かめて、アカウント名だけじゃなく「今開いてる相談への返事か」を見てから画面に出すことにした。
 
 #個人開発`;
+
+/**
+ * Task57: a hand-written retelling of DRAFT_1010 for the rewrite stage. NOT a
+ * model output and NOT a text the user adopted: it exists only to show that a
+ * free rewrite of 10/10 grounded in the topic can pass the real checks. The
+ * source line behind each sentence is in
+ * docs/operations/ai-lab-compare-operation-id-1010-grounding-20261118.md.
+ */
+export const REWRITE_1010 = `AIと投稿の相談をする画面で、アカウントを素早く切り替えても前の相談内容や覚えた設定が別の相談に混ざらないよう直した。保存ボタンの続け押しで同じ保存が二重に送られるのも止めた。
+
+詰まったのは、一度別のアカウントに切り替えて元へ戻ったとき。
+見た目は同じアカウントでも、前に頼んだAIの返事が後から届くかもしれなかった。
+名前が同じなら大丈夫、とはいかないんだよね。
+
+だから「今開いてる相談への返事か」まで見てから画面に出すことにした。順番を入れ替えたテストでも確かめた。
+
+#個人開発`;
