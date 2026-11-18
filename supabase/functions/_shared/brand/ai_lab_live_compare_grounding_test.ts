@@ -423,6 +423,17 @@ test("task59: ambiguous possibility and prevention retellings are held", () => {
       // The task: 「届くかもしれなかった」 retold as an event; a habit is not a possibility.
       "後から届いて混ざった。",
       "後から届いて混ざるときもある。",
+      // Task59 review 1: failures after a prevention, loose endings, no preparation.
+      "前の相談が混ざってしまうのを防ぐことに失敗した。",
+      "前の相談が混ざってしまうのを防ぐようにはできなかった。",
+      "前の相談が混ざってしまうのを防ぐようにしたかったが、間に合わなかった。",
+      "前の相談が混ざってしまわないようにできなかった。",
+      "前の相談が混ざってしまうのを防げたようだったが、実際は防げていなかった。",
+      "前の相談が混ざってしまうのを防いだように見えた。",
+      "前の相談が混ざってしまうのを防げた、と思っていた。",
+      "前の相談が混ざってしまうのを防げた？",
+      "後から届いて混ざるときに備えていなかった。",
+      "後から届いて混ざるときのためにはなっていなかった。",
     ]
   ) {
     const claims = ungroundedClaims(sentence, SOURCE_1010);
@@ -439,6 +450,8 @@ test("task59: ambiguous possibility and prevention retellings are held", () => {
       "前の相談が混ざってしまうのを防げました。",
       "前の相談が混ざってしまうのを止めた。",
       "前の相談が混ざってしまうのを防ぐようにした。",
+      "前の相談が混ざってしまうのを防ぐことにしました。",
+      "前の相談が混ざってしまうのを防いだので、安心した。",
       "後から届いて、混ざるかもしれなかった。",
     ]
   ) {

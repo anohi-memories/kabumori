@@ -721,9 +721,13 @@ function pastForms(verb: string): string[] {
 const JOINED_BEFORE =
   /(?:[\p{Script=Han}\p{Script=Katakana}ー]|[いきしちひみりぎびえけせねめれげべ])$/u;
 const RUN_BEFORE = /[\p{Script=Han}\p{Script=Katakana}ー]{2,}$/u;
+// Task59 review 1: every allowed prevention ends the sentence (or a reason
+// link) in an affirmative past; 「防げたようだった」「防いだように見えた」
+// 「防ぐことに失敗した」「しまわないようにできなかった」 are held.
 const PREVENTION_DONE =
-  "しまうのを(?:(?:防いだ|防げた|防ぎました|防げました|止めた|止めました|避けた|避けました)" +
-  "(?=[。、！!？?」\\s]|$|ので|から|よ|ね)|(?:防ぐ|止める|避ける)(?:よう|ことに))";
+  "(?:しまうのを(?:防いだ|防げた|防ぎました|防げました|止めた|止めました|避けた|避けました|" +
+  "(?:防ぐ|止める|避ける)(?:ように?|ことに)し(?:た|ました))" +
+  "|しまわないように?(?:\\p{Script=Han}{0,3}[しえ])?(?:た|ました))(?=。|$|ので、|から、)";
 const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   た: /^(?:ら|り|い|く)/u,
   だ: /^(?:ら|り)/u,
@@ -733,8 +737,8 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   // Task59: only a finished, affirmative prevention is left out; every other
   // ending (「防げませんでした」「止めきれなかった」「防いでいなかった」
   // 「防いだつもり」) may report the event and is held.
-  て: new RegExp(`^(?:も|は|な|いな|から|しまわ[なず]|${PREVENTION_DONE}|ほしくな|欲しくな)`, "u"),
-  で: new RegExp(`^(?:も|は|な|いな|から|しまわ[なず]|${PREVENTION_DONE}|ほしくな|欲しくな)`, "u"),
+  て: new RegExp(`^(?:も|は|な|いな|から|${PREVENTION_DONE}|ほしくな|欲しくな)`, "u"),
+  で: new RegExp(`^(?:も|は|な|いな|から|${PREVENTION_DONE}|ほしくな|欲しくな)`, "u"),
   // 「届いちゃったら」
   っ: /^(?:たら|たり|ても|ては)/u,
 };
@@ -771,8 +775,11 @@ function leadsIntoCondition(form: string, clause: string): boolean {
   const match = clause.match(HYPOTHETICAL_LEAD);
   if (!match || match.index === undefined) return false;
   if (/[ただ]/u.test(clause.slice(0, match.index))) return false;
-  // 「混ざるときに備えて、確認を足した」: what follows is the preparation.
-  if (/^.と(?:きに備えて|きのために)$/u.test(match[0])) return true;
+  // 「混ざるときに備えて、確認を足した」: what follows the comma is the
+  // preparation; 「備えていなかった」 or no comma is held (Task59 review 1).
+  if (/^.と(?:きに備えて|きのために)$/u.test(match[0])) {
+    return clause.startsWith("、", match.index + match[0].length);
+  }
   return !CONDITION_RESULT_PAST.test(clause.slice(match.index + match[0].length));
 }
 
@@ -899,7 +906,8 @@ function unsourcedOccurrences(text: string, source: string): string[] {
   const stated = source.replace(/^[ \t]*[^:：\n]{1,12}[:：]/gmu, "");
   const sourceRuns = new Set(source.match(CONTENT_RUN) ?? []);
   const found: string[] = [];
-  for (const sentence of text.match(SENTENCE) ?? []) {
+  // Task59 review 1: the sentence keeps its end mark, so 「防げた？」 is not 「防げた。」.
+  for (const sentence of text.match(/[^。！？!?\n]+[。！？!?]*/gu) ?? []) {
     for (const verb of verbs) {
       for (const form of realizedForms(verb)) {
         if (
