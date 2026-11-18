@@ -20,6 +20,17 @@
 //    before (a retry), or a call over the paid-call cap is refused unsent and
 //    stops the trial.
 //
+// Task57: a retry is told by its operation, not by its body. Each run has two
+// operations, "<run label>/draft" (the generate model) and
+// "<run label>/rewrite" (the rewrite model); runOne gets a fetch per stage, so
+// the operation is bound before anything is sent. Each operation may send
+// once in the whole trial: a second send for it — the same body, a changed
+// body, or the SDK's own retry (kept at 0) — is refused unsent and stops the
+// trial. Two different runs may send the very same body (B and C both edit
+// with Sol), because each is that run's own first send. A plan with an empty
+// or repeated run label, or a stage the runner does not know, has no
+// trustworthy operation and is refused (fail closed).
+//
 // Task55 adds the money side (ai_lab_live_compare_budget.ts): no paid call
 // without an explicitly approved budget, a price check of every planned model
 // made within 24 hours against this catalog, and a plan worst case that fits
@@ -86,6 +97,8 @@ export type LiveCompareStop =
   | "REQUEST_NOT_ALLOWED"
   | "REQUEST_MODEL_NOT_PLANNED"
   | "RETRY_REFUSED"
+  | "PLAN_RUN_ID_INVALID"
+  | "OPERATION_UNKNOWN"
   | "PAID_CALL_CAP"
   | LiveCompareBudgetStop;
 
@@ -126,10 +139,19 @@ function sameModel(provider: AiProvider, requested: string, actual: unknown) {
     /^-\d{4}-\d{2}-\d{2}$/u.test(actual.slice(requested.length));
 }
 
+/** The two operations of a run, one send each. */
+export const LIVE_COMPARE_STAGES = ["draft", "rewrite"] as const;
+export type LiveCompareStage = typeof LIVE_COMPARE_STAGES[number];
+
 /** Runs whose server selection does not name exactly the planned models. */
 export function checkLiveComparePlan(
   runs: readonly LiveCompareRun[],
 ): LiveCompareStop | null {
+  const labels = runs.map((run) => run.label);
+  if (
+    labels.some((label) => typeof label !== "string" || !label.trim()) ||
+    new Set(labels).size !== labels.length
+  ) return "PLAN_RUN_ID_INVALID";
   for (const run of runs) {
     const selection = resolveAiLabTextSelection((name) => run.env[name]);
     if (
@@ -242,8 +264,9 @@ async function bodyText(input: string | URL | Request, init?: RequestInit) {
 }
 
 /**
- * One gate shared by every run of a trial. `forRun` returns the fetch a run's
- * provider stages must use; the gate decides before each send and reads each
+ * One gate shared by every run of a trial. `forRun(run)(stage)` returns the
+ * fetch that stage of that run must use, bound to the operation
+ * "<label>/<stage>"; the gate decides before each send and reads each
  * answer's status and model before handing it on.
  */
 export function createLiveCompareGate(
@@ -254,14 +277,20 @@ export function createLiveCompareGate(
   let stopped: LiveCompareStop | null = null;
   let paidCalls = 0;
   let reservedUsd = 0;
-  const sentBodies = new Set<string>();
+  // Operations that already sent (or tried to): never sent again.
+  const sentOperations = new Set<string>();
   const stop = (reason: LiveCompareStop): never => {
     stopped ??= reason;
     throw new LiveCompareStopped(stopped);
   };
 
-  const forRun = (run: LiveCompareRun): FetchLike => async (input, init) => {
+  const forRun = (run: LiveCompareRun) => (stage: LiveCompareStage): FetchLike => async (input, init) => {
     if (stopped) throw new LiveCompareStopped(stopped);
+    if (
+      typeof run.label !== "string" || !run.label.trim() ||
+      !(LIVE_COMPARE_STAGES as readonly unknown[]).includes(stage)
+    ) return stop("OPERATION_UNKNOWN");
+    const operation = JSON.stringify([run.label, stage]);
     const url = input instanceof Request ? input.url : String(input);
     const method = (init?.method ?? (input instanceof Request ? input.method : "GET"))
       .toUpperCase();
@@ -276,17 +305,17 @@ export function createLiveCompareGate(
     } catch {
       model = undefined;
     }
-    if (model !== run.generateModel && model !== run.rewriteModel) {
+    if (sentOperations.has(operation)) return stop("RETRY_REFUSED");
+    if (model !== (stage === "draft" ? run.generateModel : run.rewriteModel)) {
       return stop("REQUEST_MODEL_NOT_PLANNED");
     }
-    if (sentBodies.has(raw!)) return stop("RETRY_REFUSED");
     if (paidCalls >= budget.maxPaidCalls) return stop("PAID_CALL_CAP");
     const bounds = requestBounds(run.provider, raw!, budget);
     if (typeof bounds === "string") return stop(bounds);
     const spec = findModelSpec(model as string)!;
     const reservation = worstCallCostUsd(spec, bounds.inputTokens, bounds.outputTokens);
     if (reservedUsd + reservation > budget.ceilingUsd) return stop("BUDGET_EXCEEDED");
-    sentBodies.add(raw!);
+    sentOperations.add(operation);
     paidCalls += 1;
     // Reserved before the send and kept whatever happens next.
     reservedUsd += reservation;
@@ -380,7 +409,11 @@ export async function runLiveCompare(
     now?: () => number;
     runOne: (
       run: LiveCompareRun,
-      deps: { fetch: FetchLike; readEnv: (name: string) => string | undefined },
+      deps: {
+        /** The fetch for one stage of this run; each stage sends once. */
+        fetchFor: (stage: LiveCompareStage) => FetchLike;
+        readEnv: (name: string) => string | undefined;
+      },
     ) => Promise<string>;
   },
 ): Promise<LiveCompareResult> {
@@ -435,7 +468,7 @@ export async function runLiveCompare(
       name in run.env ? run.env[name] : deps.readEnv(name);
     let outcome: string;
     try {
-      outcome = await deps.runOne(run, { fetch: gate.forRun(run), readEnv });
+      outcome = await deps.runOne(run, { fetchFor: gate.forRun(run), readEnv });
     } catch (error) {
       outcome = error instanceof Error ? error.message.slice(0, 120) : "UNKNOWN";
     }

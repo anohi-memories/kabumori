@@ -11,6 +11,7 @@ import {
   DRAFT_1009,
   DRAFT_1010,
   REWRITE_1009,
+  REWRITE_1010,
   SOURCE_1009,
   SOURCE_1010,
 } from "./ai_lab_live_compare_fixtures.ts";
@@ -153,5 +154,35 @@ test("task54 voice contract unchanged on the accepted 10/09 rewrite", () => {
     const verdict = rewriteVerdict(DRAFT_1009, text, SOURCE_1009);
     assert.notEqual(verdict, "edited", label);
     if (expected) assert.match(verdict, /AI_LAB_(VOICE|SOURCE)_/u, label);
+  }
+});
+
+test("task57 10/10 allowed: a free retelling of the draft grounded in the topic reaches edited", () => {
+  // Hand-written fixture, not a model text. Basis per sentence: docs/operations/ai-lab-compare-operation-id-1010-grounding-20261118.md
+  assert.deepEqual(ungroundedClaims(REWRITE_1010, SOURCE_1010), []);
+  for (const sentence of REWRITE_1010.match(/[^。\n]+/gu)!) {
+    assert.deepEqual(ungroundedClaims(sentence, SOURCE_1010), [], sentence);
+  }
+  assert.equal(rewriteVerdict(DRAFT_1010, REWRITE_1010, SOURCE_1010), "edited");
+  // The decision keeps 確認(見て)→表示(出す), 今開・相談・返事・画面, and stays a decision (ことにした).
+  assert.match(REWRITE_1010, /「今開いてる相談への返事か」まで見てから画面に出すことにした。/u);
+});
+
+test("task57 10/10 held: the same retelling with a changed fact is not edited", () => {
+  for (
+    const [label, from, to] of [
+      ["unchecked", "まで見てから画面に出す", "を見ずに画面に出す"],
+      ["shipped", "混ざらないよう直した。", "混ざらないよう直して公開した。"],
+      ["finished", "混ざらないよう直した。", "混ざらないよう直して完成させた。"],
+      ["to everyone", "混ざらないよう直した。", "混ざらないよう直して全員に配った。"],
+      ["habit", "画面に出すことにした。", "画面に出すようにしてる。"],
+      ["number", "後から届くかもしれなかった。", "後から3回届いた。"],
+      ["person", "とはいかないんだよね。", "とはいかないんだよね。上司にも言われた。"],
+      ["feeling", "とはいかないんだよね。", "とはいかなくて怖かった。"],
+    ] as const
+  ) {
+    const text = REWRITE_1010.replace(from, to);
+    assert.notEqual(text, REWRITE_1010, label);
+    assert.notEqual(rewriteVerdict(DRAFT_1010, text, SOURCE_1010), "edited", label);
   }
 });

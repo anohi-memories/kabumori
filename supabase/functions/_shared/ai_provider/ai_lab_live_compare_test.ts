@@ -10,6 +10,7 @@ import {
   createLiveCompareGate,
   LIVE_COMPARE_PAID_URL,
   type LiveCompareRun,
+  type LiveCompareStage,
   runLiveCompare,
 } from "./ai_lab_live_compare.ts";
 import type { FetchLike } from "./adapter.ts";
@@ -115,9 +116,12 @@ function modelCheck(call: RecordedCall, status = 200) {
 /** Drives the real AI Lab stages (adapters, SDK, transport policy) with the gate's fetch. */
 async function runOne(
   run: LiveCompareRun,
-  deps: { fetch: FetchLike; readEnv: (name: string) => string | undefined },
+  deps: { fetchFor: (stage: LiveCompareStage) => FetchLike; readEnv: (name: string) => string | undefined },
 ) {
-  const stages = createAiLabTextStages(deps);
+  // Task57: one fetch per stage, bound to "<run>/draft" and "<run>/rewrite" before any send.
+  const drafting = createAiLabTextStages({ readEnv: deps.readEnv, fetch: deps.fetchFor("draft") });
+  const editing = createAiLabTextStages({ readEnv: deps.readEnv, fetch: deps.fetchFor("rewrite") });
+  const stages = { textProvider: drafting.textProvider, rewriteVoice: editing.rewriteVoice };
   assert(stages.textProvider && stages.rewriteVoice);
   const request = {
     brandId: "ai_salaryman_lab",
@@ -293,56 +297,140 @@ test("an answer from another model is never accepted as a fallback", async () =>
   assert.deepEqual([stopped.stop, stopped.paidCalls], ["PAID_MODEL_SUBSTITUTED", 1]);
 });
 
-test("a run asking for an unplanned model, a re-sent body or a call over the cap is refused unsent", async () => {
-  const sendOnce = (run: LiveCompareRun) => {
-    const body = JSON.stringify({ model: run.generateModel, max_tokens: 100, input: "同じ" });
-    return { body, run };
-  };
+type StageDeps = { fetchFor: (stage: LiveCompareStage) => FetchLike };
+const usageAnswer = (call: RecordedCall) =>
+  isPaid(call)
+    ? jsonResponse(200, {
+      model: (call.body as { model: string }).model,
+      usage: { input_tokens: 10, output_tokens: 10 },
+    })
+    : modelCheck(call);
+const post = (fetch: FetchLike, run: LiveCompareRun, body: Record<string, unknown>) =>
+  fetch(LIVE_COMPARE_PAID_URL[run.provider], { method: "POST", body: JSON.stringify(body) });
+
+test("a run asking for an unplanned model, the other stage's model, a re-sent operation or an unknown stage is refused unsent", async () => {
+  const same = (run: LiveCompareRun) => ({ model: run.generateModel, max_tokens: 100, input: "同じ" });
   for (
-    const [runOne2, expected, sent] of [
-      [async (run: LiveCompareRun, d: { fetch: FetchLike }) => {
-        await d.fetch(LIVE_COMPARE_PAID_URL[run.provider], {
-          method: "POST",
-          body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 100 }),
-        });
+    const [label, runOne2, expected, sent] of [
+      ["unplanned model", async (run: LiveCompareRun, d: StageDeps) => {
+        await post(d.fetchFor("draft"), run, { model: "claude-sonnet-5-5", max_tokens: 100 });
         return "SENT";
       }, "REQUEST_MODEL_NOT_PLANNED", 0],
-      [async (run: LiveCompareRun, d: { fetch: FetchLike }) => {
-        const { body } = sendOnce(run);
-        await d.fetch(LIVE_COMPARE_PAID_URL[run.provider], { method: "POST", body });
-        await d.fetch(LIVE_COMPARE_PAID_URL[run.provider], { method: "POST", body });
+      // C plans Luna for the draft: the rewrite model (Sol) on the draft operation is not that operation's model.
+      ["stage model", async (run: LiveCompareRun, d: StageDeps) => {
+        await post(d.fetchFor("draft"), run, { model: run.rewriteModel, max_tokens: 100 });
+        return "SENT";
+      }, "REQUEST_MODEL_NOT_PLANNED", 0],
+      // Task57: the same operation again — same body, changed body, or a fresh fetch for the same stage.
+      ["same body", async (run: LiveCompareRun, d: StageDeps) => {
+        const draft = d.fetchFor("draft");
+        await post(draft, run, same(run));
+        await post(draft, run, same(run));
         return "SENT";
       }, "RETRY_REFUSED", 1],
-      [async (_run: LiveCompareRun, d: { fetch: FetchLike }) => {
-        await d.fetch(LIVE_COMPARE_PAID_URL.anthropic.replace("messages", "complete"), { method: "POST", body: "{}" });
+      ["changed body", async (run: LiveCompareRun, d: StageDeps) => {
+        await post(d.fetchFor("draft"), run, same(run));
+        await post(d.fetchFor("draft"), run, { ...same(run), input: "変えた" });
+        return "SENT";
+      }, "RETRY_REFUSED", 1],
+      ["rewrite twice", async (run: LiveCompareRun, d: StageDeps) => {
+        await post(d.fetchFor("draft"), run, same(run));
+        await post(d.fetchFor("rewrite"), run, { model: run.rewriteModel, max_tokens: 100, n: 1 });
+        await post(d.fetchFor("rewrite"), run, { model: run.rewriteModel, max_tokens: 100, n: 2 });
+        return "SENT";
+      }, "RETRY_REFUSED", 2],
+      ["unknown stage", async (run: LiveCompareRun, d: StageDeps) => {
+        await post(d.fetchFor("review" as LiveCompareStage), run, same(run));
+        return "SENT";
+      }, "OPERATION_UNKNOWN", 0],
+      ["other endpoint", async (_run: LiveCompareRun, d: StageDeps) => {
+        await d.fetchFor("draft")(LIVE_COMPARE_PAID_URL.anthropic.replace("messages", "complete"), { method: "POST", body: "{}" });
         return "SENT";
       }, "REQUEST_NOT_ALLOWED", 0],
-      [async (run: LiveCompareRun, d: { fetch: FetchLike }) => {
-        for (let i = 0; i < 5; i += 1) {
-          await d.fetch(LIVE_COMPARE_PAID_URL[run.provider], {
-            method: "POST",
-            body: JSON.stringify({ model: run.generateModel, max_tokens: 100, n: i }),
-          });
-        }
-        return "SENT";
-      }, "PAID_CALL_CAP", 4],
     ] as const
   ) {
-    const { fetch, calls } = recordingFetch((call) =>
-      isPaid(call)
-        ? jsonResponse(200, {
-          model: (call.body as { model: string }).model,
-          usage: { input_tokens: 10, output_tokens: 10 },
-        })
-        : modelCheck(call)
-    );
-    const result = await runLiveCompare([A("1009"), B("1009")], {
-      fetch,
-      readEnv,
-      ...go(4),
-      runOne: runOne2,
+    const plan = label === "stage model" ? [C("1009")] : [A("1009"), B("1009")];
+    const { fetch, calls } = recordingFetch(usageAnswer);
+    const result = await runLiveCompare(plan, { fetch, readEnv, ...go(4), runOne: runOne2 });
+    assert.deepEqual([result.stop, calls.filter(isPaid).length], [expected, sent], label);
+    // The stop ends the trial: the next run (another provider) never starts.
+    assert.deepEqual(result.runs.length, 1, label);
+    assert.deepEqual(paidTo(calls, label === "stage model" ? "anthropic" : "openai"), 0, label);
+  }
+});
+
+test("Task57: two runs may send the very same body as their own first send (B and C both edit with Sol)", async () => {
+  const body = { model: "gpt-6.1-sol", max_output_tokens: 100, input: "同じ下書き" };
+  const runOne2 = async (run: LiveCompareRun, d: StageDeps) => {
+    await post(d.fetchFor("draft"), run, { model: run.generateModel, max_output_tokens: 100, input: "同じ題材" });
+    await post(d.fetchFor("rewrite"), run, body);
+    return "SENT";
+  };
+  const { fetch, calls } = recordingFetch(usageAnswer);
+  const result = await runLiveCompare([B("1009"), C("1009"), B("1010"), C("1010")], {
+    fetch,
+    readEnv,
+    ...go(8),
+    runOne: runOne2,
+  });
+  assert.deepEqual([result.status, result.stop, result.paidCalls], ["completed", null, 8]);
+  const rewrites = calls.filter((c) => isPaid(c) && JSON.stringify(c.body) === JSON.stringify(body));
+  assert.deepEqual(rewrites.length, 4);
+  assert.deepEqual(
+    result.ledger.filter((e) => e.kind === "paid").map((e) => e.run),
+    ["B-1009", "B-1009", "C-1009", "C-1009", "B-1010", "B-1010", "C-1010", "C-1010"],
+  );
+});
+
+test("Task57: a plan without a usable run id is refused before any request; a gate shared by one label sends each operation once", async () => {
+  for (const plan of [[A("1009"), { ...A("1010"), label: "A-1009" }], [{ ...A("1009"), label: " " }]]) {
+    const { fetch, calls } = recordingFetch(usageAnswer);
+    const result = await runLiveCompare(plan, { fetch, readEnv, ...go(4), runOne });
+    assert.deepEqual([result.stop, result.stoppedAt, calls.length], ["PLAN_RUN_ID_INVALID", "plan", 0]);
+  }
+  // The gate alone (no plan check): two run objects under one label share their operations — fail closed.
+  const { fetch, calls } = recordingFetch(usageAnswer);
+  const gate = createLiveCompareGate({ fetch, budget: budgetFor(4) });
+  const body = JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100 });
+  await gate.forRun(A("1009"))("draft")(LIVE_COMPARE_PAID_URL.anthropic, { method: "POST", body });
+  await assert.rejects(
+    gate.forRun({ ...A("1010"), label: "A-1009" })("draft")(LIVE_COMPARE_PAID_URL.anthropic, { method: "POST", body: body.replace("100", "99") }),
+    /RETRY_REFUSED/,
+  );
+  assert.deepEqual([gate.paidCalls(), calls.length], [1, 1]);
+});
+
+test("Task57: the paid-call cap still refuses a send over it (gate alone)", async () => {
+  const { fetch, calls } = recordingFetch(usageAnswer);
+  const gate = createLiveCompareGate({ fetch, budget: budgetFor(1) });
+  const send = (stage: LiveCompareStage) =>
+    gate.forRun(A("1009"))(stage)(LIVE_COMPARE_PAID_URL.anthropic, {
+      method: "POST",
+      body: JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100, stage }),
     });
-    assert.deepEqual([result.stop, calls.filter(isPaid).length], [expected, sent]);
+  await send("draft");
+  await assert.rejects(send("rewrite"), /PAID_CALL_CAP/);
+  assert.deepEqual([gate.paidCalls(), calls.length, gate.stopped()], [1, 1, "PAID_CALL_CAP"]);
+});
+
+test("Task57: after a timeout or 401 the same operation is never re-sent, even with a fresh fetch for it", async () => {
+  for (const [answer, expected] of [[new TypeError("timeout"), "PAID_UNKNOWN_OUTCOME"], [jsonResponse(401, {}), "PAID_AUTH_FAILED"]] as const) {
+    const { fetch, calls } = recordingFetch((call) => {
+      if (!isPaid(call)) return modelCheck(call);
+      if (answer instanceof Error) throw answer;
+      return answer;
+    });
+    const runOne2 = async (run: LiveCompareRun, d: StageDeps) => {
+      const body = { model: run.generateModel, max_tokens: 100 };
+      await post(d.fetchFor("draft"), run, body).catch(() => {});
+      // A caller that swallows the stop and tries again: refused unsent.
+      await post(d.fetchFor("draft"), run, body).catch(() => {});
+      await post(d.fetchFor("rewrite"), run, { model: run.rewriteModel, max_tokens: 100 }).catch(() => {});
+      return "SWALLOWED";
+    };
+    const result = await runLiveCompare([A("1009"), B("1009")], { fetch, readEnv, ...go(4), runOne: runOne2 });
+    assert.deepEqual([result.stop, result.stoppedAt, calls.filter(isPaid).length], [expected, "A-1009", 1], expected);
+    assert.deepEqual(result.runs.map((r) => r.outcome), [`STOPPED:${expected}`]);
     assert.deepEqual(paidTo(calls, "openai"), 0);
   }
 });
@@ -477,8 +565,8 @@ test("Task55: ceiling boundary — plan worst case equal passes, one unit below 
 
 test("Task55: a body without an output limit, with tools or over the declared limits is refused unsent", async () => {
   const send = (body: Record<string, unknown>) =>
-  async (run: LiveCompareRun, d: { fetch: FetchLike }) => {
-    await d.fetch(LIVE_COMPARE_PAID_URL[run.provider], {
+  async (run: LiveCompareRun, d: StageDeps) => {
+    await d.fetchFor("draft")(LIVE_COMPARE_PAID_URL[run.provider], {
       method: "POST",
       body: JSON.stringify({ model: run.generateModel, ...body }),
     });
@@ -564,7 +652,7 @@ test("Task55: the running ceiling refuses a send that would exceed it (gate alon
   });
   const body = JSON.stringify({ model: "claude-opus-5-5", max_tokens: 100 });
   await assert.rejects(
-    gate.forRun(A("1009"))(LIVE_COMPARE_PAID_URL.anthropic, { method: "POST", body }),
+    gate.forRun(A("1009"))("draft")(LIVE_COMPARE_PAID_URL.anthropic, { method: "POST", body }),
     /BUDGET_EXCEEDED/,
   );
   assert.deepEqual([gate.paidCalls(), gate.reservedUsd(), calls.length], [0, 0, 0]);

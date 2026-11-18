@@ -16,6 +16,7 @@ import {
   DRAFT_1009,
   DRAFT_1010,
   REWRITE_1009,
+  REWRITE_1010,
 } from "../brand/ai_lab_live_compare_fixtures.ts";
 import { LIVE_COMPARE_CAP_KIND } from "./ai_lab_live_compare_budget.ts";
 import { FAKE_ANTHROPIC_KEY, FAKE_OPENAI_KEY, jsonResponse, openAiBody } from "./test_support.ts";
@@ -32,25 +33,16 @@ const EDITED_1010: RigReply = {
   rewrite: rewritten(DRAFT_1010.replace("詰まったのは", "一番詰まったのは")),
 };
 
-// The gate refuses a request body it already sent. Two runs that share a stage model and a fixture draft (B and C
-// both edit with Sol) would collide, so each method gets its own whitespace variant of the same fixture draft.
-const VARIANT: Record<string, (text: string) => string> = {
-  A: (t) => t,
-  B: (t) => t.replace("。", "。\n"),
-  C: (t) => t.replace("\n\n#", "\n\n\n#"),
-};
-const forMethod = (method: string, reply: RigReply): RigReply => {
-  const draft = VARIANT[method](reply.draft);
-  const rewrite = reply.rewrite as { decision: string; text: string; edits: unknown[] };
-  // "keep" must return the very draft; a free rewrite carries its own text.
-  return rewrite.decision === "keep" ? { draft, rewrite: { ...rewrite, text: draft } } : { draft, rewrite };
-};
+// Task57: a hand-written free retelling of the 10/10 draft (not a model text); its basis is in the docs.
+const PASS_1010: RigReply = { draft: DRAFT_1010, rewrite: rewritten(REWRITE_1010) };
 
+// Task57: every method gets the very same fixture texts — no whitespace variants. B and C therefore send the same
+// Sol rewrite request body for a topic; each is its own run's first send of its own operation and goes through.
 const all = (r1009: RigReply, r1010: RigReply): RigReplies => {
   const replies: Record<string, RigReply> = {};
   for (const method of ["A", "B", "C"]) {
-    replies[`${method}-1009`] = forMethod(method, r1009);
-    replies[`${method}-1010`] = forMethod(method, r1010);
+    replies[`${method}-1009`] = r1009;
+    replies[`${method}-1010`] = r1010;
   }
   return replies;
 };
@@ -194,4 +186,73 @@ test("task56 net: the mock refuses every URL other than the model checks and pai
   const rig = createLocalRigFetch({});
   await assert.rejects(rig.fetch("https://example.com/x", { method: "GET" }), /RIG_NET_REFUSED/);
   await assert.rejects(rig.fetch("https://api.openai.com/v1/chat/completions", { method: "POST", body: "{}" }), /RIG_NET_REFUSED/);
+});
+
+const SIX = ["A-1009", "A-1010", "B-1009", "B-1010", "C-1009", "C-1010"];
+
+test("task57: 10/09 and 10/10 × A/B/C with identical fixtures (no whitespace variants) — 12 sends, all READY", async () => {
+  const result = await runLocalRigTrial(all(PASS_1009, PASS_1010));
+  assert.deepEqual([result.status, result.stop], ["completed", null]);
+  assert.deepEqual(result.runs.map((r) => [r.label, r.outcome]), SIX.map((l) => [l, "READY_FOR_X_DISPATCH:edited"]));
+  assert.equal(paidCount(result.rig.records), 12);
+  assert.equal(result.paidCalls, 12);
+  // B and C sent byte-identical Sol rewrite requests for each topic, and both passed as independent operations.
+  const paid = result.ledger.filter((e) => e.kind === "paid");
+  assert.deepEqual(paid.map((e) => `${e.run}:${e.model}`).filter((x) => /^[BC]-1010/.test(x)), [
+    "B-1010:gpt-6.1-sol", "B-1010:gpt-6.1-sol", "C-1010:gpt-6-luna", "C-1010:gpt-6.1-sol",
+  ]);
+  // The rig has no X step; nothing returned holds post text or a key.
+  const dump = JSON.stringify({ ...result, rig: undefined });
+  for (const text of [DRAFT_1010, REWRITE_1010, FAKE_OPENAI_KEY]) assert.equal(dump.includes(text), false);
+});
+
+test("task57: B and C send the byte-identical Sol rewrite body for one topic and both are accepted", async () => {
+  const result = await runLocalRigTrial(all(PASS_1009, PASS_1010), {
+    plan: localRigPlan().filter((r) => r.label === "B-1010" || r.label === "C-1010"),
+  });
+  assert.deepEqual(result.runs.map((r) => r.outcome), Array(2).fill("READY_FOR_X_DISPATCH:edited"));
+  const rewriteOf = (run: string) =>
+    result.rig.records.filter((r) => r.method === "POST" && r.run === run && r.body!.includes('"decision"'));
+  const [b, c] = [rewriteOf("B-1010"), rewriteOf("C-1010")];
+  assert.deepEqual([b.length, c.length], [1, 1]);
+  assert.equal(b[0].body, c[0].body);
+  assert.equal(paidCount(result.rig.records), 4);
+});
+
+test("task57 10/10 hold: a free rewrite that changes a fact of the topic is not READY", async () => {
+  for (
+    const [label, from, to] of [
+      // 確認してから表示 → 確認せずに表示
+      ["unchecked", "まで見てから画面に出す", "を見ずに画面に出す"],
+      // 直した (作業) → 公開済み・完成済み
+      ["shipped", "混ざらないよう直した。", "混ざらないよう直して公開した。"],
+      ["finished", "混ざらないよう直した。", "混ざらないよう直して完成させた。"],
+      ["to everyone", "混ざらないよう直した。", "混ざらないよう直して全員に配った。"],
+      // A decision retold as a habit
+      ["habit", "画面に出すことにした。", "画面に出すようにしてる。"],
+      // Invented experience / number / feeling
+      ["number", "後から届くかもしれなかった。", "後から3回届いた。"],
+      ["person", "とはいかないんだよね。", "とはいかないんだよね。上司にも言われた。"],
+      ["feeling", "とはいかないんだよね。", "とはいかなくて怖かった。"],
+    ] as const
+  ) {
+    const text = REWRITE_1010.replace(from, to);
+    assert.notEqual(text, REWRITE_1010, label);
+    const result = await runLocalRigTrial(all(PASS_1009, { draft: DRAFT_1010, rewrite: rewritten(text) }), {
+      plan: localRigPlan().filter((r) => r.label === "B-1010"),
+    });
+    assert.equal(result.status, "completed", label);
+    assert.match(result.runs[0].outcome, /^HOLD:AI_LAB_(SOURCE_GROUNDING|VOICE_REWRITE)_REJECTED$/u, label);
+    assert.equal(paidCount(result.rig.records), 2, label);
+  }
+});
+
+test("task57 gate in the rig: an unknown outcome on C's draft never starts another provider or re-sends", async () => {
+  // index 8 = C-1009 draft (A: 0-3, B: 4-7).
+  const result = await runLocalRigTrial(all(PASS_1009, PASS_1010), {
+    faults: { paid: (_m, _s, i) => i === 8 ? new TypeError("timeout") : undefined },
+  });
+  assert.deepEqual([result.stop, result.stoppedAt, result.paidCalls], ["PAID_UNKNOWN_OUTCOME", "C-1009", 9]);
+  assert.equal(paidCount(result.rig.records), 9);
+  assert.deepEqual(result.runs.map((r) => r.label), ["A-1009", "A-1010", "B-1009", "B-1010", "C-1009"]);
 });
