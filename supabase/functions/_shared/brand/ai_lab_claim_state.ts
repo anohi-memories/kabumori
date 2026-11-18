@@ -153,7 +153,10 @@ function godan(text: string, at: number, row: keyof typeof ROWS, strict = false)
     if (text.startsWith("きれ", at + 1)) return ichidan(text, at + 3, true);
     const hit = ending(text, at + 1, [...MASU, ["たかった", "DESIRE"], ["たい", "DESIRE"]]);
     if (hit) return hit;
-    if (text[at + 1] === "、" || KANJI.test(text[at + 1] ?? "")) return { cat: "RENYOU", end: at + 1 };
+    // Review 717 #2 (b381b95a) 6: 「混ざりはじめた」「届きかけた」 link to what follows.
+    if (text[at + 1] === "、" || /[\p{Script=Han}\p{Script=Hiragana}]/u.test(text[at + 1] ?? "")) {
+      return { cat: "RENYOU", end: at + 1 };
+    }
     return strict ? null : { cat: "NOUN", end: at + 1 };
   }
   if (c === r.u) return { cat: "DICT", end: at + 1 };
@@ -183,6 +186,10 @@ const SAHEN: readonly (readonly [string, Cat])[] = [
 function sahen(text: string, at: number): Parsed {
   for (const link of ["され", "させ", "しきれ"]) {
     if (text.startsWith(link, at)) return ichidan(text, at + link.length, true) ?? { cat: "NOUN", end: at };
+  }
+  // Review 717 #2 (b381b95a) 4: 「表示できた」「削除できなかった」 are the act, not a noun.
+  if (text.startsWith("でき", at)) {
+    return ichidan(text, at + 2, true) ?? { cat: "RENYOU", end: at + 2 };
   }
   if (text.startsWith("しちゃ", at)) return aux(text, { cat: "TE", end: at + 1 });
   if (text.startsWith("し", at)) {
@@ -305,7 +312,11 @@ function laterOutcome(rest: string): { state: ClaimState; reason: string } | nul
       hold(`後続節「${clause}」が否定の過去（防止の結果かもしれない）`);
       continue;
     }
-    const response = /を/u.test(clause) || /(?:と|って)(?:思|考)/u.test(clause) || DECIDED_END.test(clause) ||
+    // Review 717 #2 (b381b95a) 3: 「ユーザーが別の人の名前を見た」 has its own
+    // subject; only an object with no subject before it is the writer's act.
+    const object = clause.indexOf("を");
+    const response = (object >= 0 && !/[がは]/u.test(clause.slice(0, object))) ||
+      /(?:と|って)(?:思|考)/u.test(clause) || DECIDED_END.test(clause) ||
       /(?:必要|余地)があ(?:った|りました)$/u.test(clause);
     if ((past || /(?:かった|だった)$/u.test(clause)) && !response) {
       hold(`後続節「${clause}」が対応行動と言い切れない過去（結果かもしれない）`);
@@ -380,8 +391,12 @@ function preventionHead(rest: string): Read {
     /(?:た|ました|する|します|してる|している|しています)$/u.test(seg) || /^する/u.test(head) ||
     /^[\p{Script=Han}]{1,4}$/u.test(seg)
   ) {
-    const cut = stripQuotes(head).search(BOUNDARY);
-    return framed("PREVENTION", `「〜ないよう${seg}」＝防止`, cut < 0 ? "" : head.slice(cut));
+    // Review 717 #2 (b381b95a) 1: everything after the prevention's own
+    // predicate is read (「直したが遅かった」「直したのが遅かった」), not only
+    // what follows a boundary.
+    const own = head.match(/^.*?(?:しました|しています|している|してる|します|する|た)/u);
+    const rest = own ? head.slice(own[0].length) : head.slice(seg.length);
+    return framed("PREVENTION", `「〜ないよう${seg}」＝防止`, rest);
   }
   return { state: "UNKNOWN", reason: `防止の後ろ「${seg}」を読めない` };
 }
@@ -448,8 +463,13 @@ function readMention(m: Mention, sentence: string, link: (skip?: number) => Read
         // Review 4: 「混ざる事態が起きた」「混ざるのが防げなかった」 are claims.
         const clause = clauseEnd(stripQuotes(after));
         if (FAILED_CLAUSE.test(clause)) return { state: "DONE", reason: `「${said}${clause}」＝防止の失敗` };
-        if (/^(?:の|という|[\p{Script=Han}\p{Script=Katakana}ー]+)[がは]/u.test(after) && PAST_END.test(clause)) {
-          return { state: "UNKNOWN", reason: `「${said}${clause}」＝修飾された名詞が主語の過去` };
+        // Review 717 #2 (b381b95a) 5: any past on the modified noun
+        // (「混ざる事態になった」「混ざる不具合を見つけた」「混ざるという報告があった」)
+        // may report the event, whatever its particle.
+        // 「削除する順番も考える必要があった」 states a need, as in laterOutcome.
+        const need = /(?:必要|余地)があ(?:った|りました)$/u.test(clause);
+        if (!need && (PAST_END.test(clause) || /(?:なかった|ませんでした)$/u.test(clause))) {
+          return { state: "UNKNOWN", reason: `「${said}${clause}」＝修飾された名詞の過去` };
         }
         return { state: null, reason: `「${said}」は名詞の修飾` };
       }
@@ -516,12 +536,15 @@ export interface ClaimMention {
   sentence: string;
 }
 
+const CONTINUES = /^(?:でも|しかし|けど|だけど|けれど|ところが|なのに|それでも|実際|結局|実は|やっぱり|ただ|が、)/u;
+
 /** Every claim-bearing mention of a tracked event, with its state and why. */
 export function readClaims(text: string): ClaimMention[] {
   // Only the topic seed's own labels are removed (review 6: not any 「…：」).
   const body = text.replace(/^[ \t]*(?:できごと|詰まったこと|決めたこと|今回の切り口)[:：][ \t]*/gmu, "");
   const out: ClaimMention[] = [];
-  for (const sentence of body.match(/[^。！？!?\n]+[。！？!?]*/gu) ?? []) {
+  const sentences = body.match(/[^。！？!?\n]+[。！？!?]*/gu) ?? [];
+  for (const [index, sentence] of sentences.entries()) {
     const mentions = mentionsIn(sentence);
     const reads: Read[] = new Array(mentions.length);
     for (let i = mentions.length - 1; i >= 0; i--) {
@@ -537,6 +560,18 @@ export function readClaims(text: string): ClaimMention[] {
         return { state: headState(rest), reason: `つながる述語「${clauseEnd(stripQuotes(rest))}」に従う` };
       };
       reads[i] = readMention(m, sentence, link);
+    }
+    // Review 717 #2 (b381b95a) 2: a next sentence that opens as a contrast or
+    // an outcome (「でも効かなかった。」「実際に起きた。」) continues a possibility
+    // or a prevention; its outcome is read the same way as a later clause.
+    const next = (sentences[index + 1] ?? "").trim();
+    if (CONTINUES.test(next)) {
+      const later = laterOutcome(next);
+      reads.forEach((read, i) => {
+        if (later && (read.state === "PREVENTION" || read.state === "POSSIBLE")) {
+          reads[i] = { state: later.state, reason: `${read.reason}／次の文: ${later.reason}` };
+        }
+      });
     }
     mentions.forEach((m, i) => {
       const { state, reason } = reads[i];
