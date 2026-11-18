@@ -724,8 +724,10 @@ const RUN_BEFORE = /[\p{Script=Han}\p{Script=Katakana}ー]{2,}$/u;
 const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   た: /^(?:ら|り|い|く)/u,
   だ: /^(?:ら|り)/u,
-  て: /^(?:も|は|な|いな|から)/u,
-  で: /^(?:も|は|な|いな|から)/u,
+  // Task58 review 3: 「混ざってしまわないよう直した」「混ざってしまうのを防いだ」
+  // 「混ざってほしくない」 retell the prevention, not an event.
+  て: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防|止|避)|ほしくな|欲しくな)/u,
+  で: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防|止|避)|ほしくな|欲しくな)/u,
   // 「届いちゃったら」
   っ: /^(?:たら|たり|ても|ては)/u,
 };
@@ -735,8 +737,17 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
 const CLAUSE_DONE = /[ただ](?=ので|から|けど|が|し、)|[ただ]、/u;
 // 「届いて混ざると困る」「消してしまうとまずい」: a te-form that leads into a
 // condition, before any past ending, reports nothing that happened.
+// Task58 review 3: 「〜るとき」「〜るという」 and 「ならな(い)」 are not conditions.
 const HYPOTHETICAL_LEAD =
-  /[うくすつぬむぶぐる]と|[えけせてねべめれげ]ば|たら|なら/u;
+  /[うくすつぬむぶぐる]と(?!き|いう|ころ)|[えけせてねべめれげ]ば|たら|なら(?!な)/u;
+// Task58 review 3: the result of the condition runs to the next reason or
+// contrast link or a quoted thought (「混ざると困るから、」「混ざるとまずいと思った」).
+const CONDITION_RESULT_END = /から|ので|けど|けれど|が、|し、|と思|って思|と考|って考/u;
+// A past ending there (「混ざると、前の返事が出てきた」「混ざったら、名前が違っていた」)
+// reports what happened; 「たら」「たり」「たい」「また」 and the copula of
+// 「困るんだよね」「まずいんだ」「大変なんだ」 do not.
+const CONDITION_RESULT_PAST =
+  /(?<!ま)た(?![らりい])|(?<![うくすつぬむぶぐるのない])[いん]だ(?![らり])/u;
 
 function clauseAfter(form: string, rest: string): string {
   const linked = /[てで]$/u.test(form) ? rest.replace(/^、/u, "") : rest;
@@ -748,8 +759,12 @@ function clauseAfter(form: string, rest: string): string {
 
 function leadsIntoCondition(form: string, clause: string): boolean {
   if (!/[てで]$/u.test(form)) return false;
-  const lead = clause.search(HYPOTHETICAL_LEAD);
-  return lead >= 0 && !/[ただ]/u.test(clause.slice(0, lead));
+  const match = clause.match(HYPOTHETICAL_LEAD);
+  if (!match || match.index === undefined) return false;
+  if (/[ただ]/u.test(clause.slice(0, match.index))) return false;
+  const result = clause.slice(match.index + match[0].length);
+  const end = result.search(CONDITION_RESULT_END);
+  return !CONDITION_RESULT_PAST.test(end < 0 ? result : result.slice(0, end));
 }
 
 function assertedForms(

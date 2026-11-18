@@ -327,3 +327,42 @@ test("task58 review 2: a possibility after a finished clause, the act done in th
   const undone = confirmTopic.replace("できごと: 送信の前に宛先をテストで確認した。", "できごと: 送信画面を直した。");
   assert.ok(ungroundedClaims("宛先を確かめた。", undone).includes("確かめた"));
 });
+
+// Task58 review 3 (AutoReview rv-g6-grounding-decision-hypothesis-670c1d0a).
+test("task58 review 3: a condition with a past result, and retold preventions", () => {
+  const occurred = /^(?:届い|混ざっ|送っ)/u;
+  // A condition whose result is past reports the event (review 3 issue 1).
+  for (
+    const sentence of [
+      "後から届いて混ざると、前の相談の返事が出てきた。",
+      "後から届いて別の相談に混ざったら、名前が違っていた。",
+      "後から届いて、使い物にならなかった。",
+      "後から届いて混ざるときがあった。",
+      "後から届いて混ざるという不具合が出た。",
+      "前の相談が別の相談に混ざってしまった。",
+      // 「〜るとき」「ならない」 are not conditions even with a present result.
+      "後から届いて混ざるときもある。",
+      "後から届いて、使い物にならない。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
+  }
+  // Retold preventions and real conditions keep the topic (review 3 issue 2).
+  for (
+    const sentence of [
+      "前の相談が別の相談に混ざってしまわないよう直した。",
+      "前の相談が混ざってしまうのを防いだ。",
+      "前の相談が混ざってほしくない。",
+      "同じ保存を二重に送ってしまわないようにした。",
+      "後から届いて混ざると困るんだよね。",
+      "後から届いて混ざるとまずいと思った。",
+      "後から届いて混ざると困るから、画面に出す前に確かめるようにした。",
+      "後から届いて混ざったら困る。",
+      "後から届いて混ざるとまた面倒になる。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(!claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
+  }
+});
