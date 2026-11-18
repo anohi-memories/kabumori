@@ -726,8 +726,9 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   だ: /^(?:ら|り)/u,
   // Task58 review 3: 「混ざってしまわないよう直した」「混ざってしまうのを防いだ」
   // 「混ざってほしくない」 retell the prevention, not an event.
-  て: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防|止|避)|ほしくな|欲しくな)/u,
-  で: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防|止|避)|ほしくな|欲しくな)/u,
+  // Review 4: 「しまうのを防げなかった」「止められなかった」 report the event.
+  て: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防[いぐげ]|止め|避け)(?!な|ず|られな|られず)|ほしくな|欲しくな)/u,
+  で: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防[いぐげ]|止め|避け)(?!な|ず|られな|られず)|ほしくな|欲しくな)/u,
   // 「届いちゃったら」
   っ: /^(?:たら|たり|ても|ては)/u,
 };
@@ -737,12 +738,18 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
 const CLAUSE_DONE = /[ただ](?=ので|から|けど|が|し、)|[ただ]、/u;
 // 「届いて混ざると困る」「消してしまうとまずい」: a te-form that leads into a
 // condition, before any past ending, reports nothing that happened.
-// Task58 review 3: 「〜るとき」「〜るという」 and 「ならな(い)」 are not conditions.
+// Task58 review 3: 「〜るとき」「〜るという」 and 「ならな(い)」 are not conditions;
+// review 4: 「〜るときに備えて」「〜るときのため」 still are.
 const HYPOTHETICAL_LEAD =
-  /[うくすつぬむぶぐる]と(?!き|いう|ころ)|[えけせてねべめれげ]ば|たら|なら(?!な)/u;
+  /[うくすつぬむぶぐる]と(?:きに備え|きのため)|[うくすつぬむぶぐる]と(?!き|いう|ころ)|[えけせてねべめれげ]ば|たら|なら(?!な)/u;
 // Task58 review 3: the result of the condition runs to the next reason or
 // contrast link or a quoted thought (「混ざると困るから、」「混ざるとまずいと思った」).
-const CONDITION_RESULT_END = /から|ので|けど|けれど|が、|し、|と思|って思|と考|って考/u;
+const CONDITION_RESULT_END = /から|ので|ため|けど|けれど|が、|し、|と思|って思|と考|って考/u;
+// Review 4: past such a link, only an evaluation (「混ざると困るから、確かめるように
+// した」) keeps the rest a response to the hypothetical; any other result
+// (「混ざると、前の返事が出てくるので焦った」) is checked to the end of the clause.
+const CONDITION_RESULT_EVALUATION =
+  /(?:困る|まずい|危ない|危険|大変|面倒|厄介|怖い|こわい|だめ|ダメ|よくない|良くない|いけない|おかしい|ややこしい|嫌)(?:ん|の|な|だ)?$/u;
 // A past ending there (「混ざると、前の返事が出てきた」「混ざったら、名前が違っていた」)
 // reports what happened; 「たら」「たり」「たい」「また」 and the copula of
 // 「困るんだよね」「まずいんだ」「大変なんだ」 do not.
@@ -762,9 +769,14 @@ function leadsIntoCondition(form: string, clause: string): boolean {
   const match = clause.match(HYPOTHETICAL_LEAD);
   if (!match || match.index === undefined) return false;
   if (/[ただ]/u.test(clause.slice(0, match.index))) return false;
+  // 「混ざるときに備えて、確認を足した」: what follows is the preparation.
+  if (/^.と(?:きに備え|きのため)/u.test(match[0])) return true;
   const result = clause.slice(match.index + match[0].length);
   const end = result.search(CONDITION_RESULT_END);
-  return !CONDITION_RESULT_PAST.test(end < 0 ? result : result.slice(0, end));
+  const head = end < 0 ? result : result.slice(0, end);
+  if (CONDITION_RESULT_PAST.test(head)) return false;
+  if (end < 0 || CONDITION_RESULT_EVALUATION.test(head)) return true;
+  return !CONDITION_RESULT_PAST.test(result.slice(end));
 }
 
 function assertedForms(

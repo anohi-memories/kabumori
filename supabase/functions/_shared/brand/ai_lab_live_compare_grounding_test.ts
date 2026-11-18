@@ -366,3 +366,32 @@ test("task58 review 3: a condition with a past result, and retold preventions", 
     assert.ok(!claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
   }
 });
+
+// Task58 review 4 (AutoReview rv-g6-grounding-decision-hypothesis-b359917a).
+test("task58 review 4: failed preventions and reactions after a link, reasons and preparations", () => {
+  const occurred = /^(?:届い|混ざっ|送っ)/u;
+  for (
+    const sentence of [
+      "前の相談が混ざってしまうのを防げなかった。",
+      "前の相談が混ざってしまうのを止められなかった。",
+      "前の相談が混ざってしまうのを避けられなかった。",
+      "後から届いて混ざると、前の返事が出てくるので焦った。",
+      "後から届いて混ざると、前の返事が出てきて、名前も違うし、困った。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
+  }
+  for (
+    const sentence of [
+      "後から届いて混ざると困るため、画面に出す前に確かめるようにした。",
+      "後から届いて混ざるときに備えて、確認を足した。",
+      "後から届いて混ざるとまずいので、順番を入れ替えたテストで確かめた。",
+      "前の相談が混ざってしまうのを防いだ。",
+      "前の相談が混ざってしまうのを止めた。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(!claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
+  }
+});
