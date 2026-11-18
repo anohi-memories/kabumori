@@ -20,6 +20,13 @@
 //    before (a retry), or a call over the paid-call cap is refused unsent and
 //    stops the trial.
 //
+// Task55 adds the money side (ai_lab_live_compare_budget.ts): no paid call
+// without an explicitly approved budget, a price check of every planned model
+// made within 24 hours against this catalog, and a plan worst case that fits
+// the ceiling; each send reserves its own worst case, and an answer without
+// usage or above the reserved bound stops the trial. The ceiling is a client
+// estimate, NOT a hard cap (see that module).
+//
 // Keys are taken from readEnv (the AI Lab key names) and only placed in the
 // request header. This module never reads a keychain, logs a key, or prints
 // response text; the ledger holds statuses, models and counts only.
@@ -29,6 +36,18 @@ import type { FetchLike } from "./adapter.ts";
 import { ANTHROPIC_BASE_URL } from "./anthropic_adapter.ts";
 import { OPENAI_RESPONSES_URL } from "./openai_adapter.ts";
 import { findModelSpec } from "./model_catalog.ts";
+import {
+  billedTokens,
+  checkBudgetApproval,
+  checkPriceConfirmation,
+  LIVE_COMPARE_CAP_KIND,
+  type LiveCompareBudget,
+  type LiveCompareBudgetStop,
+  type LiveComparePriceCheck,
+  planWorstCaseUsd,
+  requestBounds,
+  worstCallCostUsd,
+} from "./ai_lab_live_compare_budget.ts";
 import type { AiProvider } from "./types.ts";
 
 // Hosts come from the adapters only (isolation_test).
@@ -67,7 +86,8 @@ export type LiveCompareStop =
   | "REQUEST_NOT_ALLOWED"
   | "REQUEST_MODEL_NOT_PLANNED"
   | "RETRY_REFUSED"
-  | "PAID_CALL_CAP";
+  | "PAID_CALL_CAP"
+  | LiveCompareBudgetStop;
 
 export class LiveCompareStopped extends Error {
   constructor(readonly reason: LiveCompareStop) {
@@ -83,6 +103,19 @@ export type LiveCompareLedgerEntry = {
   /** HTTP status, or null when no response arrived. */
   httpStatus: number | null;
   responseModel?: string | null;
+  /**
+   * Free check only: whether the key was accepted ("forbidden" = 403, which
+   * may be the key or this model) and whether this very model is usable.
+   * null = not known from this answer.
+   */
+  auth?: "ok" | "rejected" | "forbidden" | null;
+  modelAvailable?: boolean | null;
+  /** Paid only: the worst case reserved before the send (never refunded). */
+  reservedUsd?: number;
+  /** Paid only: the same formula on the reported usage, when readable. */
+  measuredUsd?: number | null;
+  /** Paid only: the token bounds the reservation was priced at (request bytes + overhead, max output). */
+  boundTokens?: { input: number; output: number };
 };
 
 /** OpenAI answers with a dated snapshot of the requested alias (gpt-6.1-sol-2026-09-01). */
@@ -153,21 +186,50 @@ export async function preflightLiveCompare(
         { method: "GET", headers: authHeaders(provider, key) },
       );
     } catch {
-      ledger.push({ kind: "model_check", run: null, provider, model, httpStatus: null });
+      ledger.push({
+        kind: "model_check",
+        run: null,
+        provider,
+        model,
+        httpStatus: null,
+        auth: null,
+        modelAvailable: null,
+      });
       return "PREFLIGHT_NETWORK";
     }
-    ledger.push({ kind: "model_check", run: null, provider, model, httpStatus: response.status });
-    if (response.status === 401 || response.status === 403) {
+    const entry: LiveCompareLedgerEntry = {
+      kind: "model_check",
+      run: null,
+      provider,
+      model,
+      httpStatus: response.status,
+      auth: null,
+      modelAvailable: null,
+    };
+    ledger.push(entry);
+    if (response.status === 401) {
+      entry.auth = "rejected";
       return "PREFLIGHT_AUTH_FAILED";
     }
-    if (response.status === 404) return "PREFLIGHT_MODEL_UNAVAILABLE";
+    if (response.status === 403) {
+      entry.auth = "forbidden";
+      return "PREFLIGHT_AUTH_FAILED";
+    }
+    if (response.status === 404) {
+      // The key was accepted; this model is not available to it.
+      entry.auth = "ok";
+      entry.modelAvailable = false;
+      return "PREFLIGHT_MODEL_UNAVAILABLE";
+    }
     if (response.status !== 200) return "PREFLIGHT_UNEXPECTED";
+    entry.auth = "ok";
     let id: unknown;
     try {
       id = ((await response.json()) as { id?: unknown })?.id;
     } catch {
       return "PREFLIGHT_UNEXPECTED";
     }
+    entry.modelAvailable = id === model;
     if (id !== model) return "PREFLIGHT_MODEL_UNAVAILABLE";
   }
   return null;
@@ -185,11 +247,13 @@ async function bodyText(input: string | URL | Request, init?: RequestInit) {
  * answer's status and model before handing it on.
  */
 export function createLiveCompareGate(
-  options: { fetch: FetchLike; maxPaidCalls: number },
+  options: { fetch: FetchLike; budget: LiveCompareBudget },
   ledger: LiveCompareLedgerEntry[] = [],
 ) {
+  const { budget } = options;
   let stopped: LiveCompareStop | null = null;
   let paidCalls = 0;
+  let reservedUsd = 0;
   const sentBodies = new Set<string>();
   const stop = (reason: LiveCompareStop): never => {
     stopped ??= reason;
@@ -216,15 +280,25 @@ export function createLiveCompareGate(
       return stop("REQUEST_MODEL_NOT_PLANNED");
     }
     if (sentBodies.has(raw!)) return stop("RETRY_REFUSED");
-    if (paidCalls >= options.maxPaidCalls) return stop("PAID_CALL_CAP");
+    if (paidCalls >= budget.maxPaidCalls) return stop("PAID_CALL_CAP");
+    const bounds = requestBounds(run.provider, raw!, budget);
+    if (typeof bounds === "string") return stop(bounds);
+    const spec = findModelSpec(model as string)!;
+    const reservation = worstCallCostUsd(spec, bounds.inputTokens, bounds.outputTokens);
+    if (reservedUsd + reservation > budget.ceilingUsd) return stop("BUDGET_EXCEEDED");
     sentBodies.add(raw!);
     paidCalls += 1;
+    // Reserved before the send and kept whatever happens next.
+    reservedUsd += reservation;
     const entry: LiveCompareLedgerEntry = {
       kind: "paid",
       run: run.label,
       provider: run.provider,
       model: model as string,
       httpStatus: null,
+      reservedUsd: reservation,
+      measuredUsd: null,
+      boundTokens: { input: bounds.inputTokens, output: bounds.outputTokens },
     };
     ledger.push(entry);
     let response: Response;
@@ -240,16 +314,25 @@ export function createLiveCompareGate(
       return stop("PAID_AUTH_FAILED");
     }
     if (response.status !== 200) return stop("PAID_UNEXPECTED_RESPONSE");
-    let answered: unknown;
+    let answer: unknown;
     try {
-      answered = ((await response.clone().json()) as { model?: unknown })?.model;
+      answer = await response.clone().json();
     } catch {
       return stop("PAID_UNKNOWN_OUTCOME");
     }
+    const answered = (answer as { model?: unknown } | null)?.model;
     entry.responseModel = typeof answered === "string" ? answered : null;
     if (!sameModel(run.provider, model as string, answered)) {
       return stop("PAID_MODEL_SUBSTITUTED");
     }
+    // Without usage the spend cannot be checked against the reservation.
+    const billed = billedTokens(run.provider, answer);
+    if (!billed) return stop("PAID_USAGE_MISSING");
+    entry.measuredUsd = worstCallCostUsd(spec, billed.inputTokens, billed.outputTokens);
+    if (
+      billed.inputTokens > bounds.inputTokens ||
+      billed.outputTokens > bounds.outputTokens
+    ) return stop("PAID_COST_OVERRUN");
     return response;
   };
 
@@ -257,6 +340,7 @@ export function createLiveCompareGate(
     forRun,
     stopped: () => stopped,
     paidCalls: () => paidCalls,
+    reservedUsd: () => reservedUsd,
   };
 }
 
@@ -268,12 +352,19 @@ export type LiveCompareResult = {
   /** "plan" | "preflight" | the run label the stop happened in. */
   stoppedAt: string | null;
   paidCalls: number;
+  budget: {
+    capKind: typeof LIVE_COMPARE_CAP_KIND;
+    ceilingUsd: number | null;
+    planWorstCaseUsd: number | null;
+    /** Sum of the per-send reservations, failures and unknown outcomes included. */
+    reservedUsd: number;
+  };
   runs: LiveCompareRunResult[];
   ledger: LiveCompareLedgerEntry[];
 };
 
 /**
- * Plan check → all model checks → runs one after another through one gate.
+ * Budget approval → plan check → price check → plan worst case → all model checks → runs one after another through one gate.
  * `runOne` drives the real AI Lab stages with the fetch it is given and
  * returns a short outcome code (never post text). A content hold thrown by a
  * run (grounding, voice) is that run's outcome; a gate stop ends the trial.
@@ -283,7 +374,10 @@ export async function runLiveCompare(
   deps: {
     fetch: FetchLike;
     readEnv: (name: string) => string | undefined;
-    maxPaidCalls: number;
+    /** Required: there is no default budget. */
+    budget?: LiveCompareBudget;
+    priceCheck?: LiveComparePriceCheck;
+    now?: () => number;
     runOne: (
       run: LiveCompareRun,
       deps: { fetch: FetchLike; readEnv: (name: string) => string | undefined },
@@ -292,6 +386,8 @@ export async function runLiveCompare(
 ): Promise<LiveCompareResult> {
   const ledger: LiveCompareLedgerEntry[] = [];
   const results: LiveCompareRunResult[] = [];
+  let worstCase: number | null = null;
+  let reserved = () => 0;
   const done = (
     stop: LiveCompareStop | null,
     stoppedAt: string | null,
@@ -301,21 +397,39 @@ export async function runLiveCompare(
     stop,
     stoppedAt,
     paidCalls,
+    budget: {
+      capKind: LIVE_COMPARE_CAP_KIND,
+      ceilingUsd: deps.budget?.ceilingUsd ?? null,
+      planWorstCaseUsd: worstCase,
+      reservedUsd: reserved(),
+    },
     runs: results,
     ledger,
   });
-  if (
-    !Number.isSafeInteger(deps.maxPaidCalls) || deps.maxPaidCalls < 1
-  ) return done("PAID_CALL_CAP", "plan", 0);
+  const budgetStop = checkBudgetApproval(deps.budget);
+  if (budgetStop) return done(budgetStop, "plan", 0);
+  const budget = deps.budget!;
   const planStop = checkLiveComparePlan(runs);
   if (planStop) return done(planStop, "plan", 0);
+  const plannedCalls = runs.flatMap((run) => [run.generateModel, run.rewriteModel]);
+  if (budget.maxPaidCalls < plannedCalls.length) {
+    return done("PLAN_EXCEEDS_CALL_CAP", "plan", 0);
+  }
+  const priceStop = checkPriceConfirmation(
+    [...new Set(plannedCalls)],
+    deps.priceCheck,
+    (deps.now ?? Date.now)(),
+  );
+  if (priceStop) return done(priceStop, "plan", 0);
+  worstCase = planWorstCaseUsd(plannedCalls, budget);
+  if (worstCase > budget.ceilingUsd) {
+    return done("BUDGET_INSUFFICIENT_FOR_PLAN", "plan", 0);
+  }
   const preflightStop = await preflightLiveCompare(runs, deps, ledger);
   if (preflightStop) return done(preflightStop, "preflight", 0);
 
-  const gate = createLiveCompareGate(
-    { fetch: deps.fetch, maxPaidCalls: deps.maxPaidCalls },
-    ledger,
-  );
+  const gate = createLiveCompareGate({ fetch: deps.fetch, budget }, ledger);
+  reserved = gate.reservedUsd;
   for (const run of runs) {
     const readEnv = (name: string) =>
       name in run.env ? run.env[name] : deps.readEnv(name);
