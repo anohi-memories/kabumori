@@ -721,14 +721,20 @@ function pastForms(verb: string): string[] {
 const JOINED_BEFORE =
   /(?:[\p{Script=Han}\p{Script=Katakana}ー]|[いきしちひみりぎびえけせねめれげべ])$/u;
 const RUN_BEFORE = /[\p{Script=Han}\p{Script=Katakana}ー]{2,}$/u;
+const PREVENTION_DONE =
+  "しまうのを(?:(?:防いだ|防げた|防ぎました|防げました|止めた|止めました|避けた|避けました)" +
+  "(?=[。、！!？?」\\s]|$|ので|から|よ|ね)|(?:防ぐ|止める|避ける)(?:よう|ことに))";
 const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
   た: /^(?:ら|り|い|く)/u,
   だ: /^(?:ら|り)/u,
   // Task58 review 3: 「混ざってしまわないよう直した」「混ざってしまうのを防いだ」
   // 「混ざってほしくない」 retell the prevention, not an event.
   // Review 4: 「しまうのを防げなかった」「止められなかった」 report the event.
-  て: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防[いぐげ]|止め|避け)(?!な|ず|られな|られず)|ほしくな|欲しくな)/u,
-  で: /^(?:も|は|な|いな|から|しまわ[なず]|しまうのを(?:防[いぐげ]|止め|避け)(?!な|ず|られな|られず)|ほしくな|欲しくな)/u,
+  // Task59: only a finished, affirmative prevention is left out; every other
+  // ending (「防げませんでした」「止めきれなかった」「防いでいなかった」
+  // 「防いだつもり」) may report the event and is held.
+  て: new RegExp(`^(?:も|は|な|いな|から|しまわ[なず]|${PREVENTION_DONE}|ほしくな|欲しくな)`, "u"),
+  で: new RegExp(`^(?:も|は|な|いな|から|しまわ[なず]|${PREVENTION_DONE}|ほしくな|欲しくな)`, "u"),
   // 「届いちゃったら」
   っ: /^(?:たら|たり|ても|ては)/u,
 };
@@ -738,23 +744,19 @@ const NOT_ASSERTED_AFTER: Readonly<Record<string, RegExp>> = {
 const CLAUSE_DONE = /[ただ](?=ので|から|けど|が|し、)|[ただ]、/u;
 // 「届いて混ざると困る」「消してしまうとまずい」: a te-form that leads into a
 // condition, before any past ending, reports nothing that happened.
-// Task58 review 3: 「〜るとき」「〜るという」 and 「ならな(い)」 are not conditions;
-// review 4: 「〜るときに備えて」「〜るときのため」 still are.
+// Task58 review 3: 「〜るとき」「〜るという」 and 「ならな(い)」 are not conditions.
+// Task59: only the exact 「〜るときに備えて」「〜るときのために」 name a
+// preparation (「ときのためか」 does not).
 const HYPOTHETICAL_LEAD =
-  /[うくすつぬむぶぐる]と(?:きに備え|きのため)|[うくすつぬむぶぐる]と(?!き|いう|ころ)|[えけせてねべめれげ]ば|たら|なら(?!な)/u;
-// Task58 review 3: the result of the condition runs to the next reason or
-// contrast link or a quoted thought (「混ざると困るから、」「混ざるとまずいと思った」).
-const CONDITION_RESULT_END = /から|ので|ため|けど|けれど|が、|し、|と思|って思|と考|って考/u;
-// Review 4: past such a link, only an evaluation (「混ざると困るから、確かめるように
-// した」) keeps the rest a response to the hypothetical; any other result
-// (「混ざると、前の返事が出てくるので焦った」) is checked to the end of the clause.
-const CONDITION_RESULT_EVALUATION =
-  /(?:困る|まずい|危ない|危険|大変|面倒|厄介|怖い|こわい|だめ|ダメ|よくない|良くない|いけない|おかしい|ややこしい|嫌)(?:ん|の|な|だ)?$/u;
-// A past ending there (「混ざると、前の返事が出てきた」「混ざったら、名前が違っていた」)
-// reports what happened; 「たら」「たり」「たい」「また」 and the copula of
-// 「困るんだよね」「まずいんだ」「大変なんだ」 do not.
+  /[うくすつぬむぶぐる]と(?:きに備えて|きのために)|[うくすつぬむぶぐる]と(?!き|いう|ころ)|[えけせてねべめれげ]ば|たら|なら(?!な)/u;
+// Task59 (conservative HOLD): when anything after the condition is past, the
+// sentence may report that the event happened (「混ざると、前の返事が出てくるので
+// 焦った」) or only the response to it (「混ざると困るので、確認を足した」). The two
+// cannot be told apart reliably, so both are held for a person to check; no
+// list of evaluation words makes the second safe. 「たら」「たり」「たい」「また」
+// 「ため」「あらためて」 and the copula of 「困るんだよね」「まずいんだ」 are not past.
 const CONDITION_RESULT_PAST =
-  /(?<!ま)た(?![らりい])|(?<![うくすつぬむぶぐるのない])[いん]だ(?![らり])/u;
+  /(?<!ま)た(?![らりいめ])|(?<![うくすつぬむぶぐるのない])[いん]だ(?![らり])/u;
 
 function clauseAfter(form: string, rest: string): string {
   const linked = /[てで]$/u.test(form) ? rest.replace(/^、/u, "") : rest;
@@ -770,13 +772,8 @@ function leadsIntoCondition(form: string, clause: string): boolean {
   if (!match || match.index === undefined) return false;
   if (/[ただ]/u.test(clause.slice(0, match.index))) return false;
   // 「混ざるときに備えて、確認を足した」: what follows is the preparation.
-  if (/^.と(?:きに備え|きのため)/u.test(match[0])) return true;
-  const result = clause.slice(match.index + match[0].length);
-  const end = result.search(CONDITION_RESULT_END);
-  const head = end < 0 ? result : result.slice(0, end);
-  if (CONDITION_RESULT_PAST.test(head)) return false;
-  if (end < 0 || CONDITION_RESULT_EVALUATION.test(head)) return true;
-  return !CONDITION_RESULT_PAST.test(result.slice(end));
+  if (/^.と(?:きに備えて|きのために)$/u.test(match[0])) return true;
+  return !CONDITION_RESULT_PAST.test(clause.slice(match.index + match[0].length));
 }
 
 function assertedForms(

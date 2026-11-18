@@ -349,6 +349,7 @@ test("task58 review 3: a condition with a past result, and retold preventions", 
     assert.ok(claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
   }
   // Retold preventions and real conditions keep the topic (review 3 issue 2).
+  // Task59: a condition followed by a past response is held (see the task59 test).
   for (
     const sentence of [
       "前の相談が別の相談に混ざってしまわないよう直した。",
@@ -356,8 +357,6 @@ test("task58 review 3: a condition with a past result, and retold preventions", 
       "前の相談が混ざってほしくない。",
       "同じ保存を二重に送ってしまわないようにした。",
       "後から届いて混ざると困るんだよね。",
-      "後から届いて混ざるとまずいと思った。",
-      "後から届いて混ざると困るから、画面に出す前に確かめるようにした。",
       "後から届いて混ざったら困る。",
       "後から届いて混ざるとまた面倒になる。",
     ]
@@ -384,11 +383,63 @@ test("task58 review 4: failed preventions and reactions after a link, reasons an
   }
   for (
     const sentence of [
-      "後から届いて混ざると困るため、画面に出す前に確かめるようにした。",
       "後から届いて混ざるときに備えて、確認を足した。",
-      "後から届いて混ざるとまずいので、順番を入れ替えたテストで確かめた。",
       "前の相談が混ざってしまうのを防いだ。",
       "前の相談が混ざってしまうのを止めた。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(!claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
+  }
+});
+
+// Task59 (AutoReview rv-g6-grounding-decision-hypothesis-5ba88544, review 5):
+// an ambiguous retelling of a possibility or prevention is held, never passed.
+test("task59: ambiguous possibility and prevention retellings are held", () => {
+  const occurred = /^(?:届い|混ざっ|送っ)/u;
+  for (
+    const sentence of [
+      // Review 5 issue 2 and the task: polite and auxiliary negatives.
+      "前の相談が混ざってしまうのを防げませんでした。",
+      "前の相談が混ざってしまうのを止められませんでした。",
+      "前の相談が混ざってしまうのを防げていなかった。",
+      "前の相談が混ざってしまうのを止めきれなかった。",
+      "前の相談が混ざってしまうのを防いでいなかった。",
+      "前の相談が混ざってしまうのを防いだつもりだった。",
+      "前の相談が混ざってしまうのを止めたかった。",
+      // Review 5 issue 3: a hypothetical result and a past response are held.
+      "後から届いて混ざると前の返事が出てしまうので、順番を確かめるようにした。",
+      "後から届いて混ざると困りますので、確認を足しました。",
+      "後から届いて混ざるとまずいですから、確認を足した。",
+      "後から届いて混ざるとまずいことになるので、確認を足した。",
+      "後から届いて混ざると困るから、画面に出す前に確かめるようにした。",
+      "後から届いて混ざると困るため、画面に出す前に確かめるようにした。",
+      "後から届いて混ざるとまずいので、順番を入れ替えたテストで確かめた。",
+      "後から届いて混ざるとまずいと思った。",
+      // Review 5 issue 4: 「あとから」 does not cut the result short.
+      "後から届いて混ざると、あとから直すのが面倒なので先に確かめるようにした。",
+      // Review 5 issue 5: only the exact preparation passes.
+      "後から届いて混ざるときのためか、確認が入っていた。",
+      // The task: 「届くかもしれなかった」 retold as an event; a habit is not a possibility.
+      "後から届いて混ざった。",
+      "後から届いて混ざるときもある。",
+    ]
+  ) {
+    const claims = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(claims.some((word) => occurred.test(word)), `${sentence}: ${claims}`);
+  }
+  for (
+    const sentence of [
+      // Review 5 issue 1: the link 「ため」 itself is not a past ending.
+      "後から届いて混ざると別の人の名前が出るため、確認を足すことにする。",
+      "後から届いて混ざると、あらためて確かめることになる。",
+      "後から届いて混ざるときに備えて、確認を足した。",
+      "後から届いて混ざるときのために、確認を足した。",
+      "前の相談が混ざってしまうのを防いだ。",
+      "前の相談が混ざってしまうのを防げました。",
+      "前の相談が混ざってしまうのを止めた。",
+      "前の相談が混ざってしまうのを防ぐようにした。",
+      "後から届いて、混ざるかもしれなかった。",
     ]
   ) {
     const claims = ungroundedClaims(sentence, SOURCE_1010);
