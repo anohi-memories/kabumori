@@ -186,3 +186,76 @@ test("task57 10/10 held: the same retelling with a changed fact is not edited", 
     assert.notEqual(rewriteVerdict(DRAFT_1010, text, SOURCE_1010), "edited", label);
   }
 });
+
+// Task58: the two fact changes Task57 found the guard let through. Both are
+// built from REWRITE_1010 and must be held with the grounding code.
+const GROUNDING = "AI_LAB_SOURCE_GROUNDING_REJECTED";
+
+test("task58 held: a decision retold as done and a possibility retold as an event", () => {
+  for (
+    const [label, from, to, words] of [
+      ["decision → done (出す)", "画面に出すことにした。", "画面に出した。", ["出した"]],
+      ["decision → done (polite)", "画面に出すことにした。", "画面に出しました。", ["出しました"]],
+      ["decision → done (見せる)", "画面に出すことにした。", "画面に見せた。", ["見せた"]],
+      ["possible → occurred", "後から届くかもしれなかった。", "後から届いて別の画面に混ざった。", ["届いて", "混ざった"]],
+      ["possible → arrived", "後から届くかもしれなかった。", "後から届いた。", ["届いた"]],
+      ["prevented → occurred", "後から届くかもしれなかった。", "後から届くかもしれなくて混ざった。", ["混ざった"]],
+    ] as const
+  ) {
+    const text = REWRITE_1010.replace(from, to);
+    assert.notEqual(text, REWRITE_1010, label);
+    const found = ungroundedClaims(text, SOURCE_1010);
+    for (const word of words) assert.ok(found.includes(word), `${label}: ${found}`);
+    // The polite form is refused earlier, by the plain-voice check.
+    const expected = label.includes("polite") ? "AI_LAB_VOICE_STYLE_REJECTED" : GROUNDING;
+    assert.equal(rewriteVerdict(DRAFT_1010, text, SOURCE_1010), expected, label);
+  }
+});
+
+test("task58 allowed: retellings that keep the decision, the possibility and what was really done", () => {
+  for (
+    const [label, from, to] of [
+      ["fixture as is", "", ""],
+      ["checked then shown", "まで見てから画面に出すことにした。", "を確認してから画面に出す。"],
+      ["possibility kept", "後から届くかもしれなかった。", "後から届く可能性があった。"],
+      ["arrival kept possible", "後から届くかもしれなかった。", "後から届いて混ざるかもしれなかった。"],
+      ["could arrive", "後から届くかもしれなかった。", "後から届くこともあり得た。"],
+      ["fixed (done in the topic)", "混ざらないよう直した。", "混ざらないように直した。"],
+      ["stopped (done in the topic)", "同じ保存が二重に送られるのも止めた。", "同じ保存が二重に送られないようにもした。"],
+      ["tested (done in the topic)", "順番を入れ替えたテストでも確かめた。", "順番を入れ替えたテストで確かめた。"],
+    ] as const
+  ) {
+    const text = from ? REWRITE_1010.replace(from, to) : REWRITE_1010;
+    assert.notEqual(from ? text : "", from ? REWRITE_1010 : "x", label);
+    assert.deepEqual(ungroundedClaims(text, SOURCE_1010), [], label);
+    assert.equal(rewriteVerdict(DRAFT_1010, text, SOURCE_1010), "edited", label);
+  }
+  // 10/09: 「分けた」 and the design are done in the topic; the draft keeps them.
+  assert.deepEqual(ungroundedClaims(DRAFT_1009, SOURCE_1009), []);
+  assert.deepEqual(ungroundedClaims(DRAFT_1010, SOURCE_1010), []);
+});
+
+test("task58 boundary: another verb or an unasserted form is not the decision done", () => {
+  for (
+    const sentence of [
+      "前の相談を思い出した。",
+      "画面に出したら混ざるかもしれなかった。",
+      "画面に出したくなかった。",
+      "後から届いたら別の相談に混ざるかもしれなかった。",
+    ]
+  ) {
+    const found = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(!found.includes("出した"), `${sentence}: ${found}`);
+    assert.ok(!found.includes("届いた"), `${sentence}: ${found}`);
+  }
+  for (
+    const sentence of [
+      "後から届いても混ざらない。",
+      "後から届いてないか確かめた。",
+      "返事が届いてから今の相談か確かめる。",
+    ]
+  ) {
+    const found = ungroundedClaims(sentence, SOURCE_1010);
+    assert.ok(!found.includes("届いて"), `${sentence}: ${found}`);
+  }
+});
