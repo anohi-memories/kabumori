@@ -129,6 +129,22 @@ export const CLAIM_STATE_CASES: readonly Case[] = [
   c("r2-iwareta", "review717", S10, "前の相談が混ざらないよう直した。前の返事が出たと言われた。", "表示する", "DECIDED", "UNKNOWN", "HOLD", E_SHOWN),
   c("r2-habit-reason", "review717", S10, "前の相談がよく混ざるので、ずっと困っていた。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
   c("r2-colon", "review717", S10, "前の相談が混ざった：原因は古い返事。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
+  // Review 717 #2 (b381b95a): paths that reached PASS_CANDIDATE.
+  c("r3-ga-osokatta", "review717", S10, "混ざらないよう直したが遅かった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-ga-shippai", "review717", S10, "混ざらないよう直したが失敗した。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
+  c("r3-noga-osokatta", "review717", S10, "混ざらないよう直したのが遅かった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-next-demo", "review717", S10, "前の相談が混ざらないよう直した。でも効かなかった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-next-jissai", "review717", S10, "後から届く可能性があった。実際に起きた。", "届く", "POSSIBLE", "UNKNOWN", "HOLD", E_POSSIBLE),
+  c("r3-other-subject", "review717", S10, "混ざらないよう直したが、ユーザーが別の人の名前を見た。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-sahen-dekita", "review717", S10, "前の相談が混ざらないよう直した。返事を画面に表示できた。", "表示する", "DECIDED", "DONE", "REJECT", E_SHOWN),
+  c("r3-jitai-ni", "review717", S10, "前の相談が混ざらないよう直した。混ざる事態になった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-fuguai-wo", "review717", S10, "前の相談が混ざらないよう直した。混ざる不具合を見つけた。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-houkoku", "review717", S10, "前の相談が混ざらないよう直した。混ざるという報告があった。", "混ざる", "PREVENTION", "UNKNOWN", "HOLD", E_MIXED),
+  c("r3-hajime-kana", "review717", S10, "前の相談が混ざらないよう直した。混ざりはじめた。", "混ざる", "PREVENTION", "DONE", "REJECT", E_MIXED),
+  // ... and the right retellings next to them stay reachable.
+  c("r3-next-response", "right", S10, "前の相談が混ざらないよう直した。でも確認を足した。", "混ざる", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_MIXED),
+  c("r3-next-tested", "right", S10, "前の相談が混ざらないよう直した。順番を入れ替えたテストで確かめた。", "混ざる", "PREVENTION", "PREVENTION", "PASS_CANDIDATE", E_MIXED),
+  c("r3-dakara-decided", "right", S10, "古いAIの返事が後から届く可能性があった。だから確認してから画面に出すことにした。", "届く", "POSSIBLE", "POSSIBLE", "PASS_CANDIDATE", E_POSSIBLE),
   // A fix the topic never names for that event.
   c("invented-fix", "review717", S10, "後から届くのを防いだ。", "届く", "POSSIBLE", "PREVENTION", "HOLD", E_POSSIBLE),
   c("negated-check", "review717", S10, "今開いてる相談かを確かめずに返事を画面に出すことにした。", "確認する", "DONE", "UNKNOWN", "HOLD", E_TESTED),
